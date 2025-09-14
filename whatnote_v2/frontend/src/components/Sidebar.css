@@ -1,0 +1,167 @@
+.sidebar {
+  width: 300px;
+  background: #34495e;
+  color: white;
+  overflow-y: auto;
+  border-right: 1px solid #2c3e50;
+}
+
+.sidebar-header {
+  padding: 1rem;
+  border-bottom: 1px solid #2c3e50;
+}
+
+.sidebar-header h3 {
+  margin: 0 0 1rem 0;
+}
+
+.create-btn {
+  width: 100%;
+  padding: 0.5rem;
+  background: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.create-btn:hover {
+  background: #229954;
+}
+
+.courses-list {
+  padding: 1rem;
+}
+
+.course-item {
+  margin-bottom: 1rem;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.course-item.selected {
+  background: #2c3e50;
+}
+
+.course-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background: #3498db;
+  cursor: pointer;
+}
+
+.course-header:hover {
+  background: #2980b9;
+}
+
+.create-board-btn {
+  padding: 0.25rem 0.5rem;
+  background: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.create-board-btn:hover {
+  background: #229954;
+}
+
+.boards-list {
+  background: #2c3e50;
+}
+
+.board-item {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  border-bottom: 1px solid #34495e;
+}
+
+.board-item:hover {
+  background: #34495e;
+}
+
+.board-item.selected {
+  background: #3498db;
+}
+
+.no-boards {
+  padding: 0.5rem 1rem;
+  color: #95a5a6;
+  font-style: italic;
+  text-align: center;
+}
+
+.no-courses {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #95a5a6;
+}
+
+.no-courses p {
+  margin: 0.5rem 0;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  min-width: 300px;
+  color: #333;
+}
+
+.modal h3 {
+  margin: 0 0 1rem 0;
+}
+
+.modal input, .modal textarea {
+  width: 100%;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.modal textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+.modal-buttons button {
+  flex: 1;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.modal-buttons button:first-child {
+  background: #27ae60;
+  color: white;
+}
+
+.modal-buttons button:last-child {
+  background: #95a5a6;
+  color: white;
+} 

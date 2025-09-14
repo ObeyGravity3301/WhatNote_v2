@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatNote V2 - 基于真实文件系统的笔记软件</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 800px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .status {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #28a745;
+        }
+
+        .status h3 {
+            color: #28a745;
+            margin-bottom: 10px;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .feature {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .feature h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .api-info {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #2196f3;
+        }
+
+        .api-info h3 {
+            color: #2196f3;
+            margin-bottom: 10px;
+        }
+
+        .endpoint {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 10px;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background: #5a6fd8;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📝 WhatNote V2</div>
+        <div class="subtitle">基于真实文件系统的笔记软件</div>
+        
+        <div class="status">
+            <h3>✅ 系统状态</h3>
+            <p>后端API服务器正在运行</p>
+            <p>端口: 8082 | 状态: 正常</p>
+        </div>
+
+        <div class="features">
+            <div class="feature">
+                <h4>🗂️ 真实文件系统</h4>
+                <p>所有内容都存储在对应的文件夹中，不使用JSON文件模拟</p>
+            </div>
+            <div class="feature">
+                <h4>🔒 内容隔离</h4>
+                <p>每个展板的内容完全独立存储，互不干扰</p>
+            </div>
+            <div class="feature">
+                <h4>🗑️ 删除即消失</h4>
+                <p>删除文件夹后，软件中对应内容立即消失</p>
+            </div>
+            <div class="feature">
+                <h4>⚡ 无全局缓存</h4>
+                <p>直接使用文件系统，不依赖内存缓存</p>
+            </div>
+        </div>
+
+        <div class="api-info">
+            <h3>🔗 API接口</h3>
+            <p>以下API端点可供使用：</p>
+            <div class="endpoint">GET /api/health - 健康检查</div>
+            <div class="endpoint">GET /api/courses - 获取所有课程</div>
+            <div class="endpoint">POST /api/courses - 创建新课程</div>
+            <div class="endpoint">GET /api/courses/{id}/boards - 获取课程展板</div>
+            <div class="endpoint">POST /api/courses/{id}/boards - 创建新展板</div>
+            <div class="endpoint">GET /api/boards/{id} - 获取展板信息</div>
+            <div class="endpoint">DELETE /api/boards/{id} - 删除展板</div>
+        </div>
+
+        <div>
+            <button class="btn" onclick="testAPI()">🧪 测试API</button>
+            <button class="btn btn-secondary" onclick="openDocs()">📚 查看文档</button>
+        </div>
+    </div>
+
+    <script>
+        async function testAPI() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                alert(`API测试成功！\n状态: ${data.status}\n服务: ${data.service}`);
+            } catch (error) {
+                alert('API测试失败: ' + error.message);
+            }
+        }
+
+        function openDocs() {
+            window.open('/docs', '_blank');
+        }
+    </script>
+</body>
+</html> 

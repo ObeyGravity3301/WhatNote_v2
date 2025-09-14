@@ -1,0 +1,17 @@
+{
+  "type": "generic",
+  "title": "新建窗口(2)",
+  "position": {
+    "x": 125,
+    "y": 223
+  },
+  "size": {
+    "width": 300,
+    "height": 200
+  },
+  "id": "window_1757503173894",
+  "created_at": "2025-09-10T19:19:33.894625",
+  "updated_at": "2025-09-10T19:19:35.679593",
+  "file_path": null,
+  "hidden": true
+}

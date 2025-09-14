@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whatnote_v2"
+version = "2.0.0"
+description = "WhatNote V2 - 基于真实文件系统的笔记软件"
+authors = [{name = "WhatNote Team"}]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "websockets>=12.0",
+    "python-multipart>=0.0.6",
+    "requests>=2.31.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "frontend*"]
+
+[tool.pytest.ini_options]
+pythonpath = [
+    ".",
+    "backend",
+] 

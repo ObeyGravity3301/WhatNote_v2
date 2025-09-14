@@ -1,0 +1,17 @@
+{
+  "type": "generic",
+  "title": "新建项目",
+  "position": {
+    "x": 241,
+    "y": 249
+  },
+  "size": {
+    "width": 300,
+    "height": 200
+  },
+  "id": "window_1757430339090",
+  "created_at": "2025-09-09T23:05:39.090726",
+  "updated_at": "2025-09-10T19:40:35.590397",
+  "file_path": null,
+  "hidden": true
+}

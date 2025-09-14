@@ -1,0 +1,1037 @@
+/* Windows 98 经典字体定义 */
+@import url('https://fonts.googleapis.com/css2?family=MS+Sans+Serif:wght@400;700&display=swap');
+
+/* 桌面和画布基础样式 */
+.board-canvas {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #3a6ea5; /* 真正的Windows 98桌面蓝色 */
+  position: relative;
+}
+
+.canvas-header {
+  background: #c0c0c0;
+  padding: 4px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+  border-top: 1px solid #ffffff;
+  border-left: 1px solid #ffffff;
+  border-right: 1px solid #808080;
+  border-bottom: 1px solid #808080;
+  height: 24px;
+}
+
+.canvas-header h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: normal;
+  color: #000000;
+}
+
+.canvas-toolbar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.create-window-btn {
+  background: #c0c0c0;
+  border: 1px outset #c0c0c0;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  color: #000000;
+  height: 18px;
+}
+
+.create-window-btn:hover {
+  background: #dfdfdf;
+}
+
+.create-window-btn:active {
+  border: 1px inset #c0c0c0;
+  background: #a6a6a6;
+}
+
+.canvas-area {
+  flex: 1;
+  position: relative;
+  background: #3a6ea5; /* 桌面背景色 */
+  overflow: hidden;
+}
+
+.welcome-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #ffffff;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+}
+
+.welcome-screen h2 {
+  margin-bottom: 1rem;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: normal;
+}
+
+.welcome-screen p {
+  color: #ffffff;
+  font-size: 11px;
+}
+
+/* 桌面图标样式 */
+.desktop-icon {
+  position: absolute;
+  width: 64px;
+  height: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px;
+}
+
+.desktop-icon:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.desktop-icon.selected {
+  background: #316ac5;
+  border: 1px dotted #ffffff;
+}
+
+/* 选中时显示完整文件名的扩展样式 */
+.desktop-icon.selected.expanded {
+  height: auto; /* 允许高度自动调整 */
+  min-height: 76px; /* 保持最小高度 */
+}
+
+.desktop-icon.hidden-window {
+  opacity: 0.7;
+}
+
+.desktop-icon-image {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.desktop-icon-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.desktop-icon-emoji {
+  font-size: 24px;
+}
+
+.desktop-icon-label {
+  color: #ffffff;
+  font-size: 11px;
+  text-align: center;
+  line-height: 13px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+  max-width: 100%;
+  margin-top: 2px;
+  min-height: 17px; /* 确保有足够的高度容纳输入框 */
+  display: flex;
+  align-items: flex-start; /* 改为顶部对齐，避免文字被截断 */
+  justify-content: center;
+  overflow: visible; /* 改为可见，让完整文件名显示时能超出 */
+  position: relative; /* 为绝对定位的完整文件名提供相对定位基准 */
+}
+
+/* 扩展状态下的标签样式 */
+.desktop-icon.expanded .desktop-icon-label {
+  max-height: none; /* 移除高度限制 */
+  height: auto; /* 允许自动调整高度 */
+}
+
+.desktop-icon-title-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3; /* 最多显示3行 */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  hyphens: auto;
+  max-width: 100%;
+  line-height: 13px;
+  padding-top: 1px; /* 添加少量顶部padding确保第一行完整显示 */
+}
+
+/* 扩展状态下显示完整文件名 */
+.desktop-icon.expanded .desktop-icon-title-text {
+  -webkit-line-clamp: none; /* 移除行数限制 */
+  overflow: visible; /* 显示所有内容 */
+  text-overflow: clip; /* 不使用省略号 */
+  display: block; /* 改为块级显示 */
+}
+
+.desktop-icon-rename-input {
+  background: transparent; /* 透明背景，让选中框的背景显示 */
+  color: #ffffff;
+  border: none; /* 移除边框，使用选中框的边框 */
+  font-size: 11px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  text-align: center;
+  padding: 1px; /* 减少内边距 */
+  width: 100%; /* 填满标签区域 */
+  height: auto; /* 允许高度自动调整 */
+  min-height: 17px; /* 最小高度确保可见 */
+  outline: none;
+  box-sizing: border-box;
+  resize: none;
+  overflow: visible; /* 允许内容可见，避免滚动条 */
+  line-height: 13px;
+  word-wrap: break-word;
+  white-space: pre-wrap; /* 保留换行符 */
+  vertical-align: top; /* 顶部对齐 */
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8); /* 添加文字阴影，与普通文本一致 */
+  
+  /* 确保输入过程中样式稳定 */
+  transition: none;
+}
+
+/* 窗口样式 */
+.canvas-window {
+  position: absolute;
+  background: #c0c0c0;
+  border-top: 2px solid #dfdfdf;
+  border-left: 2px solid #dfdfdf;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  box-shadow: 1px 1px 0px #000000;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  min-width: 200px;
+  min-height: 120px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-window.focused {
+  z-index: 1000;
+}
+
+.canvas-window.dragging {
+  z-index: 1001;
+}
+
+/* 窗口标题栏样式 */
+.window-header {
+  background: linear-gradient(to right, #0a246a, #a6caf0);
+  color: #ffffff;
+  padding: 1px 2px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: move;
+  height: 18px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+}
+
+.canvas-window:not(.focused) .window-header {
+  background: linear-gradient(to right, #404040, #c0c0c0);
+  color: #c0c0c0;
+}
+
+.window-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'MS Sans Serif', sans-serif;
+}
+
+.window-title-input {
+  background: #ffffff;
+  border: 1px inset #c0c0c0;
+  font-size: 11px;
+  font-family: 'MS Sans Serif', sans-serif;
+  padding: 1px 2px;
+  color: #000000;
+  flex: 1;
+}
+
+.window-controls {
+  display: flex;
+  gap: 1px;
+}
+
+.minimize-btn, .close-btn {
+  width: 16px;
+  height: 14px;
+  background: #c0c0c0;
+  border-top: 1px solid #dfdfdf;
+  border-left: 1px solid #dfdfdf;
+  border-right: 1px solid #404040;
+  border-bottom: 1px solid #404040;
+  font-size: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000000;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  margin: 1px;
+  line-height: 1;
+}
+
+.close-btn {
+  font-size: 10px;
+  padding-bottom: 1px;
+}
+
+.minimize-btn:hover, .close-btn:hover {
+  background: #dfdfdf;
+}
+
+.minimize-btn:active, .close-btn:active {
+  border-top: 1px solid #404040;
+  border-left: 1px solid #404040;
+  border-right: 1px solid #dfdfdf;
+  border-bottom: 1px solid #dfdfdf;
+  background: #a6a6a6;
+}
+
+/* 窗口内容区域 */
+.window-content {
+  flex: 1;
+  overflow: hidden; /* 让子组件控制滚动 */
+  padding: 0; /* 移除padding，让TextEditor完全控制 */
+  background: #c0c0c0;
+}
+
+/* 窗口内的各种内容样式 */
+.text-editor {
+  width: 100%;
+  height: 100%;
+  border-top: 1px solid #808080;
+  border-left: 1px solid #808080;
+  border-right: 1px solid #dfdfdf;
+  border-bottom: 1px solid #dfdfdf;
+  background: #ffffff;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+  padding: 4px;
+  resize: none;
+  color: #000000;
+  outline: none;
+}
+
+.image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  border-top: 1px solid #808080;
+  border-left: 1px solid #808080;
+  border-right: 1px solid #dfdfdf;
+  border-bottom: 1px solid #dfdfdf;
+  background: #ffffff;
+  cursor: pointer;
+  color: #808080;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+}
+
+.video-placeholder, .audio-placeholder, .pdf-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  border-top: 1px solid #808080;
+  border-left: 1px solid #808080;
+  border-right: 1px solid #dfdfdf;
+  border-bottom: 1px solid #dfdfdf;
+  background: #ffffff;
+  cursor: pointer;
+  color: #808080;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 窗口缩放手柄 */
+.resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nw-resize;
+  background-image: 
+    linear-gradient(135deg, transparent 46%, #404040 46%, #404040 54%, transparent 54%),
+    linear-gradient(45deg, transparent 46%, #404040 46%, #404040 54%, transparent 54%);
+  background-size: 3px 3px;
+  background-position: 0 0, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+/* 空画布提示 */
+.empty-canvas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #ffffff;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+}
+
+.empty-canvas p {
+  margin: 6px 0;
+  font-size: 11px;
+}
+
+/* Windows 98 风格右键菜单 */
+.context-menu {
+  position: absolute;
+  background: #c0c0c0;
+  border-top: 2px solid #dfdfdf;
+  border-left: 2px solid #dfdfdf;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  box-shadow: 1px 1px 0px #000000;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+  min-width: 140px;
+  z-index: 9999;
+  user-select: none;
+  padding: 2px;
+}
+
+.context-menu-item {
+  padding: 3px 20px 3px 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  color: #000000;
+  position: relative;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  margin: 1px;
+}
+
+.context-menu-item:hover {
+  background: #316ac5;
+  color: #ffffff;
+}
+
+.context-menu-item.disabled {
+  color: #808080;
+  cursor: default;
+}
+
+.context-menu-item.disabled:hover {
+  background: transparent;
+  color: #808080;
+}
+
+.context-menu-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: #808080;
+  border-top: 1px solid #dfdfdf;
+  margin: 3px 6px;
+}
+
+
+
+.context-menu-submenu-arrow {
+  position: absolute;
+  right: 8px;
+  font-size: 8px;
+  color: inherit;
+}
+
+.context-menu-submenu-arrow::before {
+  content: '▶';
+}
+
+/* 子菜单样式 */
+.context-submenu {
+  position: absolute;
+  left: 100%;
+  top: -2px;
+  background: #c0c0c0;
+  border-top: 2px solid #dfdfdf;
+  border-left: 2px solid #dfdfdf;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  box-shadow: 1px 1px 0px #000000;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+  min-width: 160px;
+  z-index: 10001;
+  user-select: none;
+  display: none;
+  padding: 2px;
+}
+
+.context-menu-item.has-submenu {
+  position: relative;
+}
+
+.context-menu-item.has-submenu:hover .context-submenu {
+  display: block;
+}
+
+.context-submenu .context-menu-item {
+  padding: 3px 20px 3px 6px;
+  position: relative;
+  margin: 1px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+}
+
+.context-submenu .context-menu-item:hover {
+  background: #316ac5;
+  color: #ffffff;
+}
+
+/* 确保有子菜单的项目有箭头空间 */
+.context-menu-item.has-submenu {
+  padding-right: 24px;
+}
+
+/* 文件拖放样式 */
+.canvas-area {
+  transition: background-color 0.2s ease;
+}
+
+.canvas-area:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* 拖放时的视觉反馈 */
+.canvas-area.drag-over {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 2px dashed rgba(255, 255, 255, 0.5);
+}
+
+.empty-canvas {
+  transition: all 0.2s ease;
+}
+
+.empty-canvas:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* 通用窗口样式 */
+.generic-window-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px;
+}
+
+.generic-options {
+  text-align: center;
+  background: #f0f0f0;
+  border: 2px inset #c0c0c0;
+  padding: 20px;
+  border-radius: 4px;
+}
+
+.generic-options h3 {
+  margin: 0 0 15px 0;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 12px;
+  font-weight: bold;
+  color: #000000;
+}
+
+.option-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.option-btn {
+  background: #c0c0c0;
+  border: 2px outset #c0c0c0;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  color: #000000;
+  min-width: 120px;
+  transition: all 0.1s ease;
+}
+
+.option-btn:hover {
+  background: #d0d0d0;
+}
+
+.option-btn:active {
+  border: 2px inset #c0c0c0;
+  background: #b0b0b0;
+}
+
+.option-btn:focus {
+  outline: 1px dotted #000000;
+  outline-offset: -3px;
+}
+
+/* Markdown编辑器样式 */
+.markdown-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #ffffff;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+}
+
+.markdown-toolbar {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: #c0c0c0;
+  border-bottom: 1px solid #808080;
+  border-top: 1px solid #ffffff;
+  border-left: 1px solid #ffffff;
+  border-right: 1px solid #808080;
+}
+
+.toolbar-btn {
+  background: #c0c0c0;
+  border: 1px outset #c0c0c0;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  color: #000000;
+  min-width: 60px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolbar-btn:hover {
+  background: #d4d0c8;
+}
+
+.toolbar-btn:active,
+.toolbar-btn.active {
+  border: 1px inset #c0c0c0;
+  background: #b0b0b0;
+}
+
+.toolbar-btn:focus {
+  outline: 1px dotted #000000;
+  outline-offset: -3px;
+}
+
+.markdown-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.markdown-textarea {
+  flex: 1;
+  border: none;
+  padding: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  background: #ffffff;
+  color: #000000;
+  resize: none;
+  outline: none;
+  overflow-y: auto;
+}
+
+.markdown-textarea:focus {
+  background: #ffffff;
+}
+
+.markdown-preview {
+  flex: 1;
+  padding: 12px;
+  background: #ffffff;
+  overflow-y: auto;
+  font-family: 'Times New Roman', serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #000000;
+}
+
+/* Markdown预览内容样式 */
+.markdown-preview h1 {
+  font-size: 20px;
+  font-weight: bold;
+  margin: 16px 0 12px 0;
+  color: #000080;
+  border-bottom: 2px solid #c0c0c0;
+  padding-bottom: 4px;
+}
+
+.markdown-preview h2 {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 14px 0 10px 0;
+  color: #000080;
+}
+
+.markdown-preview h3 {
+  font-size: 14px;
+  font-weight: bold;
+  margin: 12px 0 8px 0;
+  color: #000080;
+}
+
+.markdown-preview p {
+  margin: 8px 0;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.markdown-preview li {
+  margin: 4px 0;
+}
+
+.markdown-preview code {
+  background: #f0f0f0;
+  border: 1px solid #c0c0c0;
+  padding: 2px 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.markdown-preview pre {
+  background: #f8f8f8;
+  border: 1px inset #c0c0c0;
+  padding: 8px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.markdown-preview pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.markdown-preview blockquote {
+  border-left: 4px solid #c0c0c0;
+  margin: 8px 0;
+  padding-left: 12px;
+  color: #666666;
+  font-style: italic;
+}
+
+.markdown-preview table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid #c0c0c0;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.markdown-preview th {
+  background: #e0e0e0;
+  font-weight: bold;
+}
+
+.markdown-preview a {
+  color: #0000ee;
+  text-decoration: underline;
+}
+
+.markdown-preview a:visited {
+  color: #551a8b;
+}
+
+/* 数学公式样式 */
+.markdown-preview .katex {
+  font-size: 1em;
+}
+
+.markdown-preview .katex-display {
+  margin: 12px 0;
+  text-align: center;
+}
+
+/* 简化实时编辑器 - 分屏设计 */
+.simple-live-editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+.live-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  background: #f0f0f0;
+  border-bottom: 1px solid #c0c0c0;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+}
+
+.typewriter-btn {
+  background: #c0c0c0;
+  border: 1px outset #c0c0c0;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  color: #000000;
+  min-width: 120px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.typewriter-btn:hover {
+  background: #d4d0c8;
+}
+
+.typewriter-btn:active,
+.typewriter-btn.active {
+  border: 1px inset #c0c0c0;
+  background: #b0b0b0;
+}
+
+.typewriter-btn.active {
+  color: #0066cc;
+  font-weight: bold;
+}
+
+.cursor-info {
+  color: #666666;
+  font-size: 10px;
+  padding: 2px 4px;
+  background: #ffffff;
+  border: 1px inset #c0c0c0;
+  min-width: 80px;
+  text-align: center;
+}
+
+.editor-split {
+  display: flex;
+  height: 100%;
+  border-top: 1px solid #c0c0c0;
+}
+
+.editor-pane,
+.preview-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.editor-pane {
+  border-right: 1px solid #c0c0c0;
+}
+
+.editor-pane h4,
+.preview-pane h4 {
+  margin: 0;
+  padding: 4px 8px;
+  background: #e0e0e0;
+  font-size: 11px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  color: #000000;
+  border-bottom: 1px solid #c0c0c0;
+  font-weight: normal;
+}
+
+.live-editor-textarea {
+  flex: 1;
+  border: none;
+  padding: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  background: #ffffff;
+  color: #000000;
+  resize: none;
+  outline: none;
+  overflow-y: auto;
+}
+
+.live-editor-textarea:focus {
+  background: #ffffff;
+}
+
+.live-preview-content {
+  flex: 1;
+  padding: 8px;
+  background: #ffffff;
+  overflow-y: auto;
+  font-family: 'Times New Roman', serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #000000;
+}
+
+/* 预览区域的Markdown样式 */
+.live-preview-content h1 {
+  font-size: 20px;
+  font-weight: bold;
+  margin: 16px 0 12px 0;
+  color: #000080;
+  border-bottom: 2px solid #c0c0c0;
+  padding-bottom: 4px;
+}
+
+.live-preview-content h2 {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 14px 0 10px 0;
+  color: #000080;
+}
+
+.live-preview-content h3 {
+  font-size: 14px;
+  font-weight: bold;
+  margin: 12px 0 8px 0;
+  color: #000080;
+}
+
+.live-preview-content p {
+  margin: 8px 0;
+}
+
+.live-preview-content ul,
+.live-preview-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.live-preview-content li {
+  margin: 4px 0;
+}
+
+.live-preview-content code {
+  background: #f0f0f0;
+  border: 1px solid #c0c0c0;
+  padding: 2px 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.live-preview-content pre {
+  background: #f8f8f8;
+  border: 1px inset #c0c0c0;
+  padding: 8px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.live-preview-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.live-preview-content blockquote {
+  border-left: 4px solid #c0c0c0;
+  margin: 8px 0;
+  padding-left: 12px;
+  color: #666666;
+  font-style: italic;
+}
+
+.live-preview-content table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.live-preview-content th,
+.live-preview-content td {
+  border: 1px solid #c0c0c0;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.live-preview-content th {
+  background: #e0e0e0;
+  font-weight: bold;
+}
+
+.live-preview-content a {
+  color: #0000ee;
+  text-decoration: underline;
+}
+
+.live-preview-content a:visited {
+  color: #551a8b;
+}
+
+/* 滚动条样式 */
+.live-editor-textarea::-webkit-scrollbar,
+.live-preview-content::-webkit-scrollbar {
+  width: 12px;
+}
+
+.live-editor-textarea::-webkit-scrollbar-track,
+.live-preview-content::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+
+.live-editor-textarea::-webkit-scrollbar-thumb,
+.live-preview-content::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border: 1px inset #c0c0c0;
+}
+
+.live-editor-textarea::-webkit-scrollbar-thumb:hover,
+.live-preview-content::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}

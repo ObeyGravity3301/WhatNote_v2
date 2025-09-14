@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>省略号显示效果测试</title>
+    <style>
+        body {
+            font-family: 'MS Sans Serif', Tahoma, sans-serif;
+            background: #3a6ea5;
+            padding: 20px;
+            color: white;
+        }
+        
+        .test-container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .icons-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .desktop-icon {
+            position: relative;
+            width: 64px;
+            height: 76px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            padding: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+        
+        .desktop-icon:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .desktop-icon-image {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+        
+        .desktop-icon-label {
+            color: #ffffff;
+            font-size: 11px;
+            text-align: center;
+            line-height: 13px;
+            font-family: 'MS Sans Serif', Tahoma, sans-serif;
+            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+            max-width: 100%;
+            margin-top: 2px;
+            min-height: 17px;
+            max-height: 39px; /* 最大3行文本的高度 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .desktop-icon-title-text {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: break-word;
+            hyphens: auto;
+            max-width: 100%;
+            line-height: 13px;
+        }
+        
+        .test-info {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        
+        .length-info {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 5px;
+            margin-top: 5px;
+            border-radius: 2px;
+            font-size: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>✂️ 长文件名省略号显示测试</h1>
+    
+    <div class="test-info">
+        <h3>测试说明：</h3>
+        <p>下面展示了不同长度文件名的显示效果，长文件名会自动截断并显示省略号</p>
+        <p>悬停鼠标可以查看完整的文件名</p>
+        <p>图标宽度固定为64px，最多显示3行文本</p>
+    </div>
+    
+    <div class="test-container">
+        <h3>📁 文件名长度测试：</h3>
+        <div class="icons-grid" id="iconsGrid">
+            <!-- 图标将通过JavaScript动态生成 -->
+        </div>
+    </div>
+
+    <script>
+        // 测试用例数据
+        const testCases = [
+            {
+                title: "短文件",
+                icon: "📝",
+                description: "短文件名 (3字符)"
+            },
+            {
+                title: "中等长度文件名",
+                icon: "📄",
+                description: "中等长度 (8字符)"
+            },
+            {
+                title: "这是一个较长的中文文件名",
+                icon: "📋",
+                description: "较长中文 (13字符)"
+            },
+            {
+                title: "This is a long English filename",
+                icon: "📊",
+                description: "长英文名 (33字符)"
+            },
+            {
+                title: "这是一个非常非常长的中文文件名，应该会被截断并显示省略号",
+                icon: "📈",
+                description: "超长中文 (30字符)"
+            },
+            {
+                title: "This is a very very long English filename that should be truncated with ellipsis and not cover the icon",
+                icon: "📉",
+                description: "超长英文 (103字符)"
+            },
+            {
+                title: "混合语言文件名 Mixed Language Filename 中英文混合显示测试",
+                icon: "🌐",
+                description: "混合语言 (35字符)"
+            },
+            {
+                title: "特殊字符_file-name@with#symbols$and%numbers123(2024).final.version",
+                icon: "⚙️",
+                description: "特殊字符 (65字符)"
+            }
+        ];
+        
+        // 智能截断函数（与React组件中相同的逻辑）
+        function truncateIconTitle(title, maxLines = 3) {
+            if (!title) return '';
+            
+            const avgCharWidth = 6;
+            const maxWidth = 64;
+            const charsPerLine = Math.floor(maxWidth / avgCharWidth);
+            const maxChars = charsPerLine * maxLines;
+            
+            if (title.length <= maxChars) {
+                return title;
+            }
+            
+            const truncated = title.substring(0, maxChars - 3);
+            
+            const lastSpace = truncated.lastIndexOf(' ');
+            const lastPunctuation = Math.max(
+                truncated.lastIndexOf('.'),
+                truncated.lastIndexOf(','),
+                truncated.lastIndexOf('-'),
+                truncated.lastIndexOf('_')
+            );
+            
+            const cutPoint = Math.max(lastSpace, lastPunctuation);
+            if (cutPoint > maxChars * 0.7) {
+                return truncated.substring(0, cutPoint) + '...';
+            }
+            
+            return truncated + '...';
+        }
+        
+        // 生成图标
+        function generateIcons() {
+            const grid = document.getElementById('iconsGrid');
+            
+            testCases.forEach((testCase, index) => {
+                const iconDiv = document.createElement('div');
+                iconDiv.className = 'desktop-icon';
+                
+                const truncatedTitle = truncateIconTitle(testCase.title);
+                const isTruncated = truncatedTitle !== testCase.title;
+                
+                iconDiv.innerHTML = `
+                    <div class="desktop-icon-image">${testCase.icon}</div>
+                    <div class="desktop-icon-label">
+                        <span class="desktop-icon-title-text" title="${testCase.title}">
+                            ${truncatedTitle}
+                        </span>
+                    </div>
+                    <div class="length-info">
+                        ${testCase.description}<br>
+                        ${isTruncated ? '已截断' : '未截断'}
+                    </div>
+                `;
+                
+                grid.appendChild(iconDiv);
+            });
+        }
+        
+        // 页面加载完成后生成图标
+        document.addEventListener('DOMContentLoaded', generateIcons);
+    </script>
+</body>
+</html>
+

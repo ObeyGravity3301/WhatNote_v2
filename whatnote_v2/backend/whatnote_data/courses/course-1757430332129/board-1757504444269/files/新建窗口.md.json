@@ -1,0 +1,16 @@
+{
+  "type": "text",
+  "title": "新建窗口",
+  "position": {
+    "x": 149,
+    "y": 261
+  },
+  "size": {
+    "width": 300,
+    "height": 200
+  },
+  "id": "window_1757504449968",
+  "created_at": "2025-09-10T19:40:49.968810",
+  "updated_at": "2025-09-10T19:40:51.194678",
+  "file_path": "files/新建窗口.md"
+}

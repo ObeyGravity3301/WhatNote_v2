@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试键盘输入 - 重命名功能</title>
+    <style>
+        body {
+            font-family: 'MS Sans Serif', Tahoma, sans-serif;
+            background: #3a6ea5;
+            padding: 20px;
+            color: white;
+        }
+        
+        .test-container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .desktop-icon {
+            position: relative;
+            width: 64px;
+            height: 76px;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            padding: 2px;
+            margin: 20px;
+            background: #316ac5;
+            border: 1px dotted #ffffff;
+        }
+        
+        .desktop-icon-image {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+        
+        .desktop-icon-label {
+            color: #ffffff;
+            font-size: 11px;
+            text-align: center;
+            line-height: 13px;
+            font-family: 'MS Sans Serif', Tahoma, sans-serif;
+            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+            word-wrap: break-word;
+            max-width: 100%;
+            margin-top: 2px;
+            min-height: 17px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .desktop-icon-rename-input {
+            background: #316ac5;
+            color: #ffffff;
+            border: 1px solid #ffffff;
+            font-size: 11px;
+            font-family: 'MS Sans Serif', Tahoma, sans-serif;
+            text-align: center;
+            padding: 1px 2px;
+            width: 64px;
+            min-height: 17px;
+            max-height: 47px;
+            outline: none;
+            box-sizing: border-box;
+            resize: none;
+            overflow: hidden;
+            overflow-y: hidden;
+            line-height: 13px;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            vertical-align: top;
+            transition: none;
+        }
+        
+        .test-info {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        
+        button {
+            background: #c0c0c0;
+            border: 1px outset #c0c0c0;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: 'MS Sans Serif', Tahoma, sans-serif;
+            margin: 5px;
+        }
+        
+        button:active {
+            border: 1px inset #c0c0c0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 键盘输入测试 - 重命名功能</h1>
+    
+    <div class="test-info">
+        <h3>测试说明：</h3>
+        <p>1. 点击"开始重命名"按钮激活输入框</p>
+        <p>2. 尝试用英文输入法逐个字符输入，观察是否出现每次只显示一个字符的问题</p>
+        <p>3. 也可以尝试中文输入法进行对比测试</p>
+        <p>4. 按Enter确认，按Esc取消</p>
+    </div>
+    
+    <div class="test-container">
+        <h3>测试图标：</h3>
+        <div class="desktop-icon" id="testIcon">
+            <div class="desktop-icon-image">📝</div>
+            <div class="desktop-icon-label">
+                <span id="iconTitle">测试文件名称</span>
+            </div>
+        </div>
+        
+        <button onclick="startRename()">开始重命名</button>
+        <button onclick="resetTest()">重置测试</button>
+    </div>
+    
+    <div class="test-info">
+        <h3>实时监控：</h3>
+        <p>当前值长度: <span id="valueLength">0</span></p>
+        <p>当前值内容: <span id="valueContent">""</span></p>
+        <p>输入事件次数: <span id="inputCount">0</span></p>
+        <p>高度调整次数: <span id="heightAdjustCount">0</span></p>
+    </div>
+
+    <script>
+        let isRenaming = false;
+        let inputCount = 0;
+        let heightAdjustCount = 0;
+        let heightAdjustTimeout = null;
+        
+        function startRename() {
+            if (isRenaming) return;
+            
+            isRenaming = true;
+            inputCount = 0;
+            heightAdjustCount = 0;
+            updateMonitor();
+            
+            const labelDiv = document.querySelector('.desktop-icon-label');
+            const currentTitle = document.getElementById('iconTitle').textContent;
+            
+            labelDiv.innerHTML = `
+                <textarea 
+                    class="desktop-icon-rename-input" 
+                    id="renameInput"
+                    rows="1"
+                    style="resize: none; overflow: hidden;"
+                >${currentTitle}</textarea>
+            `;
+            
+            const textarea = document.getElementById('renameInput');
+            
+            // 选中所有文本
+            textarea.select();
+            textarea.focus();
+            
+            // 监听输入事件
+            textarea.addEventListener('input', function(e) {
+                inputCount++;
+                updateMonitor();
+                console.log('输入事件:', e.target.value);
+                
+                // 防抖的高度调整
+                debouncedAdjustHeight(e.target);
+            });
+            
+            // 监听键盘事件
+            textarea.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    finishRename();
+                } else if (e.key === 'Escape') {
+                    cancelRename();
+                }
+            });
+            
+            // 监听失焦事件
+            textarea.addEventListener('blur', function() {
+                if (isRenaming) {
+                    finishRename();
+                }
+            });
+            
+            // 初始高度调整
+            setTimeout(() => adjustTextareaHeight(textarea), 0);
+        }
+        
+        function adjustTextareaHeight(textarea) {
+            if (!textarea) return;
+            
+            heightAdjustCount++;
+            updateMonitor();
+            
+            // 保存当前光标位置
+            const selectionStart = textarea.selectionStart;
+            const selectionEnd = textarea.selectionEnd;
+            
+            // 临时重置高度以获取真实的scrollHeight
+            const originalHeight = textarea.style.height;
+            textarea.style.height = 'auto';
+            
+            // 计算需要的行数，最小1行，最大3行
+            const lineHeight = 13;
+            const padding = 2;
+            const minHeight = lineHeight + padding * 2;
+            const maxHeight = lineHeight * 3 + padding * 2;
+            
+            let newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
+            
+            // 只有当高度确实需要改变时才更新
+            if (!originalHeight || Math.abs(parseInt(originalHeight) - newHeight) > 1) {
+                textarea.style.height = newHeight + 'px';
+            } else {
+                textarea.style.height = originalHeight;
+            }
+            
+            // 恢复光标位置
+            textarea.setSelectionRange(selectionStart, selectionEnd);
+            
+            // 如果内容超过最大高度，显示滚动条
+            textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+        }
+        
+        function debouncedAdjustHeight(textarea) {
+            if (heightAdjustTimeout) {
+                clearTimeout(heightAdjustTimeout);
+            }
+            
+            heightAdjustTimeout = setTimeout(() => {
+                adjustTextareaHeight(textarea);
+            }, 10);
+        }
+        
+        function finishRename() {
+            if (!isRenaming) return;
+            
+            const textarea = document.getElementById('renameInput');
+            const newTitle = textarea.value.trim();
+            
+            if (newTitle) {
+                document.getElementById('iconTitle').textContent = newTitle;
+            }
+            
+            resetRenameUI();
+        }
+        
+        function cancelRename() {
+            if (!isRenaming) return;
+            resetRenameUI();
+        }
+        
+        function resetRenameUI() {
+            isRenaming = false;
+            const labelDiv = document.querySelector('.desktop-icon-label');
+            const title = document.getElementById('iconTitle').textContent;
+            labelDiv.innerHTML = `<span id="iconTitle">${title}</span>`;
+            updateMonitor();
+        }
+        
+        function resetTest() {
+            cancelRename();
+            document.getElementById('iconTitle').textContent = '测试文件名称';
+            inputCount = 0;
+            heightAdjustCount = 0;
+            updateMonitor();
+        }
+        
+        function updateMonitor() {
+            const textarea = document.getElementById('renameInput');
+            const value = textarea ? textarea.value : '';
+            
+            document.getElementById('valueLength').textContent = value.length;
+            document.getElementById('valueContent').textContent = `"${value}"`;
+            document.getElementById('inputCount').textContent = inputCount;
+            document.getElementById('heightAdjustCount').textContent = heightAdjustCount;
+        }
+        
+        // 初始化监控显示
+        updateMonitor();
+    </script>
+</body>
+</html>
+

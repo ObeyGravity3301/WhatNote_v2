@@ -1,0 +1,17 @@
+{
+  "type": "image",
+  "title": "新建图片.jpg.jpg",
+  "position": {
+    "x": 105,
+    "y": 290
+  },
+  "size": {
+    "width": 300,
+    "height": 200
+  },
+  "id": "window_1757411380099",
+  "created_at": "2025-09-09T17:49:40.099945",
+  "updated_at": "2025-09-09T17:52:17.775493",
+  "file_path": "files/新建图片.jpg.jpg",
+  "hidden": true
+}

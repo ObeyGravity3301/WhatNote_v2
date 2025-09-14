@@ -1,0 +1,337 @@
+[
+  {
+    "id": "trash_1757409589970",
+    "original_name": "新建图片",
+    "trash_filename": "1757409589970_新建图片",
+    "window_data": {
+      "type": "image",
+      "title": "新建图片",
+      "position": {
+        "x": 266,
+        "y": 209
+      },
+      "size": {
+        "width": 728,
+        "height": 442
+      },
+      "id": "window_1757387033582",
+      "created_at": "2025-09-09T11:03:53.582584",
+      "updated_at": "2025-09-09T17:17:04.273223",
+      "file_path": "files/新建图片",
+      "hidden": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-09T17:19:49.973862",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 60
+  },
+  {
+    "id": "trash_1757409589977",
+    "original_name": "新建图片.json",
+    "trash_filename": "1757409589977_新建图片.json",
+    "window_data": {
+      "type": "image",
+      "title": "新建图片",
+      "position": {
+        "x": 266,
+        "y": 209
+      },
+      "size": {
+        "width": 728,
+        "height": 442
+      },
+      "id": "window_1757387033582",
+      "created_at": "2025-09-09T11:03:53.582584",
+      "updated_at": "2025-09-09T17:17:04.273223",
+      "file_path": "files/新建图片",
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-09T17:19:50.007829",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 344
+  },
+  {
+    "id": "trash_1757411540940",
+    "original_name": "新建图片.jpg.jpg",
+    "trash_filename": "1757411540940_新建图片.jpg.jpg",
+    "window_data": {
+      "type": "image",
+      "title": "新建图片.jpg.jpg",
+      "position": {
+        "x": 105,
+        "y": 290
+      },
+      "size": {
+        "width": 300,
+        "height": 200
+      },
+      "id": "window_1757411380099",
+      "created_at": "2025-09-09T17:49:40.099945",
+      "updated_at": "2025-09-09T17:52:17.775493",
+      "file_path": "files/新建图片.jpg.jpg",
+      "hidden": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-09T17:52:20.940756",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 105634
+  },
+  {
+    "id": "trash_1757411540942",
+    "original_name": "新建图片.jpg.jpg.json",
+    "trash_filename": "1757411540942_新建图片.jpg.jpg.json",
+    "window_data": {
+      "type": "image",
+      "title": "新建图片.jpg.jpg",
+      "position": {
+        "x": 105,
+        "y": 290
+      },
+      "size": {
+        "width": 300,
+        "height": 200
+      },
+      "id": "window_1757411380099",
+      "created_at": "2025-09-09T17:49:40.099945",
+      "updated_at": "2025-09-09T17:52:17.775493",
+      "file_path": "files/新建图片.jpg.jpg",
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-09T17:52:20.953106",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 360
+  },
+  {
+    "id": "trash_1757415298917",
+    "original_name": "final_final_test.png.jpg",
+    "trash_filename": "1757415298917_final_final_test.png.jpg",
+    "window_data": {
+      "id": "window_1757413811990",
+      "title": "final_final_test.png.jpg",
+      "type": "image",
+      "x": 100,
+      "y": 100,
+      "width": 400,
+      "height": 300,
+      "hidden": true,
+      "file_path": "files/final_final_test.png.jpg"
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-09T18:54:58.921562",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 67
+  },
+  {
+    "id": "trash_1757415298929",
+    "original_name": "final_final_test.png.jpg.json",
+    "trash_filename": "1757415298929_final_final_test.png.jpg.json",
+    "window_data": {
+      "id": "window_1757413811990",
+      "title": "final_final_test.png.jpg",
+      "type": "image",
+      "x": 100,
+      "y": 100,
+      "width": 400,
+      "height": 300,
+      "hidden": true,
+      "file_path": "files/final_final_test.png.jpg",
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-09T18:54:58.975700",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 226
+  },
+  {
+    "id": "trash_1757430000320",
+    "original_name": "无标题.jpg.json",
+    "trash_filename": "1757430000320_无标题.jpg.json",
+    "window_data": {
+      "type": "image",
+      "title": "无标题.jpg",
+      "position": {
+        "x": 534,
+        "y": 319
+      },
+      "size": {
+        "width": 300,
+        "height": 200
+      },
+      "id": "window_1757427936545",
+      "created_at": "2025-09-09T22:25:36.545605",
+      "updated_at": "2025-09-09T22:59:57.418382",
+      "file_path": "files/无标题.jpg",
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-09T23:00:00.321452",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 346
+  },
+  {
+    "id": "trash_1757502197521",
+    "original_name": "河津桜は綺麗ですよね.jpg",
+    "trash_filename": "1757502197521_河津桜は綺麗ですよね.jpg",
+    "window_data": {
+      "type": "image",
+      "title": "河津桜は綺麗ですよね",
+      "position": {
+        "x": 271,
+        "y": 260
+      },
+      "size": {
+        "width": 300,
+        "height": 200
+      },
+      "id": "window_1757502186150",
+      "created_at": "2025-09-10T19:03:06.150403",
+      "updated_at": "2025-09-10T19:03:12.403393",
+      "hidden": true,
+      "file_path": "files/河津桜は綺麗ですよね.jpg"
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-10T19:03:17.548047",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 233657
+  },
+  {
+    "id": "trash_1757502197555",
+    "original_name": "河津桜は綺麗ですよね.jpg.json",
+    "trash_filename": "1757502197555_河津桜は綺麗ですよね.jpg.json",
+    "window_data": {
+      "type": "image",
+      "title": "河津桜は綺麗ですよね",
+      "position": {
+        "x": 271,
+        "y": 260
+      },
+      "size": {
+        "width": 300,
+        "height": 200
+      },
+      "id": "window_1757502186150",
+      "created_at": "2025-09-10T19:03:06.150403",
+      "updated_at": "2025-09-10T19:03:12.403393",
+      "hidden": true,
+      "file_path": "files/河津桜は綺麗ですよね.jpg",
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-10T19:03:17.588776",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 384
+  },
+  {
+    "id": "trash_1757503450917",
+    "original_name": "新建窗口(1).json",
+    "trash_filename": "1757503450917_新建窗口(1).json",
+    "window_data": {
+      "type": "generic",
+      "title": "新建窗口(1)",
+      "position": {
+        "x": 147,
+        "y": 144
+      },
+      "size": {
+        "width": 300,
+        "height": 200
+      },
+      "id": "window_1757503162581",
+      "created_at": "2025-09-10T19:19:22.581807",
+      "updated_at": "2025-09-10T19:19:51.932955",
+      "file_path": null,
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-10T19:24:10.920008",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 333
+  },
+  {
+    "id": "trash_1757503454313",
+    "original_name": "新建窗口(2).json",
+    "trash_filename": "1757503454313_新建窗口(2).json",
+    "window_data": {
+      "type": "generic",
+      "title": "新建窗口(2)",
+      "position": {
+        "x": 125,
+        "y": 223
+      },
+      "size": {
+        "width": 300,
+        "height": 200
+      },
+      "id": "window_1757503173894",
+      "created_at": "2025-09-10T19:19:33.894625",
+      "updated_at": "2025-09-10T19:19:35.679593",
+      "file_path": null,
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-10T19:24:14.346671",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 333
+  },
+  {
+    "id": "trash_1757503458348",
+    "original_name": "新建窗口.json",
+    "trash_filename": "1757503458348_新建窗口.json",
+    "window_data": {
+      "type": "generic",
+      "title": "新建窗口",
+      "position": {
+        "x": 122,
+        "y": 275
+      },
+      "size": {
+        "width": 300,
+        "height": 200
+      },
+      "id": "window_1757502632959",
+      "created_at": "2025-09-10T19:10:32.959952",
+      "updated_at": "2025-09-10T19:10:35.091985",
+      "file_path": null,
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-10T19:24:18.380115",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 330
+  },
+  {
+    "id": "trash_1757505732678",
+    "original_name": "新建窗口.json",
+    "trash_filename": "1757505732678_新建窗口.json",
+    "window_data": {
+      "type": "generic",
+      "title": "新建窗口",
+      "position": {
+        "x": 208,
+        "y": 182
+      },
+      "size": {
+        "width": 300,
+        "height": 200
+      },
+      "id": "window_1757503476405",
+      "created_at": "2025-09-10T19:24:36.405026",
+      "updated_at": "2025-09-10T19:43:13.606870",
+      "file_path": null,
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-10T20:02:12.682563",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 330
+  }
+]
