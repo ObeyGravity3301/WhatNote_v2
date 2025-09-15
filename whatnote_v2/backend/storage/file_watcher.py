@@ -12,6 +12,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from datetime import datetime
 import re
+import time
 
 class FileWatcherHandler(FileSystemEventHandler):
     def __init__(self, file_watcher):
@@ -71,6 +72,10 @@ class FileWatcher:
         self.file_manager = None
         self.content_manager = None
         self.loop = None
+        
+        # 防抖机制：避免频繁的文件修改通知
+        self.modified_files = {}  # 存储文件路径和最后修改时间
+        self.debounce_delay = 2.0  # 2秒防抖延迟
         
         # 支持的文件类型映射
         self.file_type_mapping = {
@@ -217,10 +222,23 @@ class FileWatcher:
         await self._create_window_for_file(path_info)
     
     async def handle_file_modified(self, file_path: str):
-        """处理文件修改事件"""
+        """处理文件修改事件（带防抖机制）"""
         path_info = self._parse_file_path(file_path)
         if not path_info:
             return
+        
+        current_time = time.time()
+        file_path_str = str(file_path)
+        
+        # 检查是否需要防抖
+        if file_path_str in self.modified_files:
+            last_modified = self.modified_files[file_path_str]
+            if current_time - last_modified < self.debounce_delay:
+                # 还在防抖期内，忽略此次修改
+                return
+        
+        # 更新最后修改时间
+        self.modified_files[file_path_str] = current_time
         
         print(f"检测到文件修改: {path_info['filename']}")
         

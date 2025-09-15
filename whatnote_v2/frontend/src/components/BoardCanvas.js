@@ -53,17 +53,18 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
   };
 
 
-  // 简化的保存函数
+  // 优化的防抖保存函数
   const debouncedSave = useCallback((content) => {
     // 清除之前的定时器
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     
-    // 300毫秒防抖保存
+    // 1秒防抖保存，避免过于频繁的保存请求
     saveTimeoutRef.current = setTimeout(() => {
+      console.log('💾 执行自动保存，内容长度:', content.length);
       onContentChange(content);
-    }, 300);
+    }, 1000);
   }, [onContentChange]);
 
   // 处理内容变化
@@ -73,6 +74,16 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
     updateCursorPosition();
     debouncedSave(newContent);
   };
+
+  // 立即保存函数（用于失去焦点时）
+  const saveImmediately = useCallback(() => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    console.log('⚡ 立即保存内容，长度:', localContent.length);
+    onContentChange(localContent);
+  }, [localContent, onContentChange]);
 
   // 同步外部内容变化
   useEffect(() => {
@@ -702,6 +713,52 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
       flexDirection: 'column',
       overflow: 'hidden' // 防止整体滚动
     }}>
+      {/* 工具栏 - Windows 98 风格 */}
+      <div style={{
+        backgroundColor: '#c0c0c0',
+        borderBottom: '2px outset #c0c0c0',
+        padding: '2px 4px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        height: '24px'
+      }}>
+        <button
+          onClick={() => {
+            console.log('上传功能被点击');
+            // TODO: 实现上传功能
+          }}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '60px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onMouseDown={(e) => {
+            e.target.style.border = '2px inset #c0c0c0';
+            e.target.style.backgroundColor = '#a0a0a0';
+          }}
+          onMouseUp={(e) => {
+            e.target.style.border = '2px outset #c0c0c0';
+            e.target.style.backgroundColor = '#c0c0c0';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.border = '2px outset #c0c0c0';
+            e.target.style.backgroundColor = '#c0c0c0';
+          }}
+        >
+          上传...
+        </button>
+      </div>
+
       {/* 调试面板 */}
       {isDebugMode && (
         <div style={{
@@ -872,6 +929,7 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
             onKeyUp={handleCursorEvents}
             onClick={handleCursorEvents}
             onFocus={handleCursorEvents}
+            onBlur={saveImmediately}
             onSelect={handleCursorEvents}
             onScroll={handleEditorScroll}
             style={{
@@ -1746,6 +1804,52 @@ function BoardCanvas({
     }
   };
 
+  // 创建新的打字机模式项目窗口
+  const handleCreateProject = async () => {
+    try {
+      const baseTitle = '新建项目';
+      const uniqueTitle = generateUniqueWindowName(baseTitle);
+      
+      const windowData = {
+        type: 'text',  // 固定为文本类型，支持打字机模式
+        title: uniqueTitle,
+        content: '',   // 初始内容为空
+        position: { 
+          x: Math.round(100 + Math.random() * 200), 
+          y: Math.round(100 + Math.random() * 200) 
+        },
+        size: { width: 800, height: 600 }  // 更大的窗口尺寸，适合打字机模式
+      };
+
+      console.log('🎯 创建新项目窗口:', windowData);
+
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(windowData),
+      });
+
+      if (response.ok) {
+        const newWindow = await response.json();
+        console.log('✅ 创建项目窗口成功:', newWindow);
+        
+        // 直接添加到本地状态，避免重新加载所有窗口
+        setWindows(prev => [...prev, newWindow]);
+        
+        // 新创建的窗口自动获得焦点
+        setTimeout(() => {
+          handleWindowFocusLocal(newWindow.id);
+        }, 100);
+      } else {
+        console.error('❌ 创建项目窗口失败:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ 创建项目窗口异常:', error);
+    }
+  };
+
   const handleCreateWindow = async (type) => {
     try {
       const baseTitle = `新建${getWindowTypeName(type)}`;
@@ -1914,12 +2018,10 @@ function BoardCanvas({
             : (hiddenWindows && hiddenWindows.has(windowId) ? true : false)
         };
         
-        console.log('保存窗口数据:');
-        console.log('  窗口ID:', windowId);
-        console.log('  隐藏状态:', updatedWindow.hidden);
-        console.log('  位置:', `x:${updatedWindow.position?.x}, y:${updatedWindow.position?.y}`);
-        console.log('  大小:', `w:${updatedWindow.size?.width}, h:${updatedWindow.size?.height}`);
-        console.log('  更新内容:', updates);
+        // 只在非内容更新时输出详细日志
+        if (!updates.hasOwnProperty('content')) {
+          console.log('💾 保存窗口状态:', windowId, '更新:', Object.keys(updates));
+        }
         
         const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
           method: 'PUT',
@@ -1943,8 +2045,26 @@ function BoardCanvas({
     }
   };
 
+  // 优化的窗口内容保存函数
   const handleWindowContentChange = async (windowId, newContent) => {
-    await saveWindowState(windowId, { content: newContent });
+    try {
+      console.log('📝 保存窗口内容:', windowId, '内容长度:', newContent.length);
+      
+      // 更新本地状态
+      setWindows(prevWindows => 
+        prevWindows.map(w => 
+          w.id === windowId 
+            ? { ...w, content: newContent }
+            : w
+        )
+      );
+      
+      // 保存到后端
+      await saveWindowState(windowId, { content: newContent });
+      console.log('✅ 窗口内容保存成功:', windowId);
+    } catch (error) {
+      console.error('❌ 窗口内容保存失败:', error);
+    }
   };
 
   // 关闭窗口（隐藏而不删除）- 使用App传来的处理函数
@@ -2196,24 +2316,9 @@ function BoardCanvas({
     hideContextMenu();
     
     switch (action) {
-      case 'new':
-        // 显示新建菜单（这个现在不会被调用，因为有子菜单）
-        setShowCreateMenu(true);
-        break;
-      case 'new-text':
-        handleCreateWindow('text');
-        break;
-      case 'new-image':
-        handleCreateWindow('image');
-        break;
-      case 'new-video':
-        handleCreateWindow('video');
-        break;
-      case 'new-audio':
-        handleCreateWindow('audio');
-        break;
-      case 'new-pdf':
-        handleCreateWindow('pdf');
+      case 'new-project':
+        // 创建新的打字机模式文本窗口
+        handleCreateProject();
         break;
       case 'rename':
         if (targetId) {
@@ -2585,42 +2690,11 @@ function BoardCanvas({
   const ContextMenu = ({ visible, x, y, type, onAction }) => {
     if (!visible) return null;
 
-    // 新建窗口的子菜单项
-    const newWindowSubmenuItems = [
-      { 
-        label: '文本窗口', 
-        action: 'new-text',
-        icon: '📝'
-      },
-      { 
-        label: '图片窗口', 
-        action: 'new-image',
-        icon: '🖼️'
-      },
-      { 
-        label: '视频窗口', 
-        action: 'new-video',
-        icon: '🎥'
-      },
-      { 
-        label: '音频窗口', 
-        action: 'new-audio',
-        icon: '🎵'
-      },
-      { 
-        label: 'PDF窗口', 
-        action: 'new-pdf',
-        icon: '📄'
-      }
-    ];
-
     const desktopMenuItems = [
       { 
-        label: '新建...', 
-        action: 'new',
-        icon: '📄',
-        hasSubmenu: true,
-        submenuItems: newWindowSubmenuItems
+        label: '新建项目', 
+        action: 'new-project',
+        icon: '📝'
       }
     ];
 

@@ -14,7 +14,7 @@ class ContentManager:
         self.trash_manager = TrashManager()
     
     def save_window_content(self, board_id: str, window_data: Dict) -> bool:
-        """保存窗口内容到展板文件夹"""
+        """保存窗口内容到展板文件夹（新存储结构：内容存储到.md文件，配置存储到.json文件）"""
         board_info = self.file_manager.get_board_info(board_id)
         if not board_info:
             return False
@@ -32,6 +32,47 @@ class ContentManager:
             return False
         
         # 统一使用files目录存储所有文件（JSON和实际文件）
+        files_dir = board_dir / "files"
+        files_dir.mkdir(exist_ok=True)
+        
+        window_type = window_data.get("type", "text")
+        window_title = window_data.get("title", "新建项目")
+        safe_name = self._sanitize_filename(window_title)
+        
+        # 新存储逻辑：文本类型窗口
+        if window_type == "text":
+            # 1. 保存内容到.md文件
+            md_file_name = f"{safe_name}.md"
+            md_file_path = files_dir / md_file_name
+            
+            # 获取内容并保存到.md文件
+            content = window_data.get("content", "")
+            with open(md_file_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            
+            # 2. 保存配置到.json文件（不包含content）
+            json_file_name = f"{safe_name}.md.json"
+            json_file_path = files_dir / json_file_name
+            
+            # 准备存储的窗口数据（移除content，设置file_path指向.md文件）
+            storage_data = {k: v for k, v in window_data.items() if k != 'content'}
+            storage_data['file_path'] = f"files/{md_file_name}"
+            
+            with open(json_file_path, "w", encoding="utf-8") as f:
+                json.dump(storage_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"保存窗口内容: {window_title}")
+            print(f"  内容文件: {md_file_name}")
+            print(f"  配置文件: {json_file_name}")
+            
+            return True
+        
+        # 其他类型窗口的兼容处理
+        else:
+            return self._handle_legacy_window_storage(board_dir, window_data)
+    
+    def _handle_legacy_window_storage(self, board_dir: Path, window_data: Dict) -> bool:
+        """处理非文本类型窗口的存储（兼容旧逻辑）"""
         files_dir = board_dir / "files"
         files_dir.mkdir(exist_ok=True)
         
@@ -70,8 +111,6 @@ class ContentManager:
             
             with open(json_file_path, "w", encoding="utf-8") as f:
                 json.dump(storage_data, f, ensure_ascii=False, indent=2)
-            
-            # 不再更新 board_info.json 中的窗口信息，只使用 files/ 目录中的JSON文件
             
             return True
         
@@ -499,12 +538,14 @@ class ContentManager:
                             try:
                                 # 根据文件类型决定如何加载内容
                                 if window_type == 'text':
+                                    # 文本类型：从.md文件读取内容
                                     with open(content_file_path, "r", encoding="utf-8") as f:
                                         window_data['content'] = f.read()
                                 else:
                                     # 对于媒体文件，content存储文件路径或URL
                                     window_data['content'] = str(content_file_path)
-                            except Exception:
+                            except Exception as e:
+                                print(f"读取内容文件失败: {content_file_path}, 错误: {e}")
                                 window_data['content'] = ""
                         else:
                             window_data['content'] = ""
@@ -698,8 +739,8 @@ class ContentManager:
         except Exception as e:
             print(f"更新JSON配置文件失败: {e}")
     
-    def update_window_content_only(self, board_id: str, window_id: str, content_url: str):
-        """只更新窗口的content字段，不处理文件路径（避免重复处理）"""
+    def update_window_content_only(self, board_id: str, window_id: str, content: str):
+        """更新窗口的文字内容（新存储结构：更新.md文件）"""
         try:
             # 找到展板目录
             board_dir = None
@@ -726,16 +767,38 @@ class ContentManager:
                         data = json.load(f)
                     
                     if data.get("id") == window_id:
-                        # 只更新content字段
-                        data["content"] = content_url
-                        data["updated_at"] = datetime.now().isoformat()
+                        window_type = data.get("type", "text")
                         
-                        # 保存更新的JSON文件
-                        with open(json_file, "w", encoding="utf-8") as f:
-                            json.dump(data, f, ensure_ascii=False, indent=2)
-                        
-                        print(f"更新窗口内容: {window_id} -> {content_url}")
-                        return
+                        if window_type == "text":
+                            # 文本类型：更新对应的.md文件
+                            if 'file_path' in data and data['file_path']:
+                                content_file_path = board_dir / data['file_path']
+                                if content_file_path.exists():
+                                    # 更新.md文件内容
+                                    with open(content_file_path, "w", encoding="utf-8") as f:
+                                        f.write(content)
+                                    
+                                    # 更新JSON文件的时间戳
+                                    data["updated_at"] = datetime.now().isoformat()
+                                    with open(json_file, "w", encoding="utf-8") as f:
+                                        json.dump(data, f, ensure_ascii=False, indent=2)
+                                    
+                                    print(f"更新窗口内容: {window_id} -> {content_file_path.name}")
+                                    return
+                                else:
+                                    print(f"内容文件不存在: {content_file_path}")
+                            else:
+                                print(f"窗口 {window_id} 没有关联的内容文件")
+                        else:
+                            # 非文本类型：保持原有逻辑
+                            data["content"] = content
+                            data["updated_at"] = datetime.now().isoformat()
+                            
+                            with open(json_file, "w", encoding="utf-8") as f:
+                                json.dump(data, f, ensure_ascii=False, indent=2)
+                            
+                            print(f"更新窗口内容: {window_id} -> {content}")
+                            return
                         
                 except Exception as e:
                     print(f"读取JSON文件失败: {json_file}, 错误: {e}")

@@ -1,17 +1,16 @@
 {
   "type": "text",
-  "title": "新建项目",
+  "title": "新建项目(2)",
   "position": {
-    "x": 754,
-    "y": 358
+    "x": 215,
+    "y": 290
   },
   "size": {
-    "width": 507,
-    "height": 515
+    "width": 800,
+    "height": 600
   },
-  "id": "window_1757504176719",
-  "created_at": "2025-09-10T19:36:16.719430",
-  "updated_at": "2025-09-10T23:05:59.630695",
-  "file_path": "files/新建项目(2).md",
-  "hidden": true
+  "id": "window_1757914179132",
+  "created_at": "2025-09-15T13:29:39.132742",
+  "updated_at": "2025-09-15T13:38:49.531740",
+  "file_path": "files/新建项目(2).md"
 }

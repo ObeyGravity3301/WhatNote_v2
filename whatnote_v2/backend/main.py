@@ -231,13 +231,20 @@ async def update_window(board_id: str, window_id: str, window_data: Dict):
         window_data["id"] = window_id
         window_data["updated_at"] = datetime.now().isoformat()
         
-        # 如果标题改变了，先重命名文件
-        if old_title:
-            content_manager.rename_window_file(board_id, window_id, old_title, window_data["title"])
-        
-        success = content_manager.save_window_content(board_id, window_data)
-        if not success:
-            raise HTTPException(status_code=404, detail="展板不存在")
+        # 检查是否是内容更新
+        if "content" in window_data:
+            # 内容更新：直接更新.md文件
+            content = window_data["content"]
+            content_manager.update_window_content_only(board_id, window_id, content)
+            info(f"更新窗口内容成功: {window_id}")
+        else:
+            # 非内容更新：处理标题重命名等
+            if old_title:
+                content_manager.rename_window_file(board_id, window_id, old_title, window_data["title"])
+            
+            success = content_manager.save_window_content(board_id, window_data)
+            if not success:
+                raise HTTPException(status_code=404, detail="展板不存在")
         
         info(f"更新窗口成功: {window_id}")
         return window_data
