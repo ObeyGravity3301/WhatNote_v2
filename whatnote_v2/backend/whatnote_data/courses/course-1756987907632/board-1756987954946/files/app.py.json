@@ -1,6 +1,6 @@
 {
-  "type": "text",
-  "title": "4.md",
+  "type": "generic",
+  "title": "app.py",
   "position": {
     "x": 267,
     "y": 285
@@ -11,7 +11,8 @@
   },
   "id": "window_1757493955472",
   "created_at": "2025-09-10T16:45:55.472791",
-  "updated_at": "2025-09-11T20:21:09.822585",
-  "file_path": "files/4.md",
-  "hidden": true
+  "updated_at": "2025-09-15T14:37:46.474825",
+  "file_path": "files/app.py",
+  "hidden": true,
+  "content": ""
 }

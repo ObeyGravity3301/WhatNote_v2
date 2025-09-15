@@ -1,12 +1,32 @@
 {
+  "window_1757915754394": {
+    "position": {
+      "x": 20,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 0,
+      "gridY": 0
+    }
+  },
   "window_1757493956930": {
     "position": {
-      "x": 580,
+      "x": 500,
       "y": 100
     },
     "gridPosition": {
-      "gridX": 7,
+      "gridX": 6,
       "gridY": 1
+    }
+  },
+  "window_1757913905264": {
+    "position": {
+      "x": 580,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 7,
+      "gridY": 0
     }
   },
   "window_1757493955472": {
@@ -79,23 +99,13 @@
       "gridY": 4
     }
   },
-  "window_1757913905264": {
+  "window_1757914179132": {
     "position": {
-      "x": 20,
+      "x": 340,
       "y": 20
     },
     "gridPosition": {
-      "gridX": 0,
-      "gridY": 0
-    }
-  },
-  "window_1757504176719": {
-    "position": {
-      "x": 180,
-      "y": 20
-    },
-    "gridPosition": {
-      "gridX": 2,
+      "gridX": 4,
       "gridY": 0
     }
   },
@@ -149,13 +159,13 @@
       "gridY": 2
     }
   },
-  "window_1757914179132": {
+  "window_1757915734212": {
     "position": {
-      "x": 340,
+      "x": 180,
       "y": 20
     },
     "gridPosition": {
-      "gridX": 4,
+      "gridX": 2,
       "gridY": 0
     }
   }

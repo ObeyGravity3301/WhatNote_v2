@@ -538,9 +538,22 @@ class ContentManager:
                             try:
                                 # 根据文件类型决定如何加载内容
                                 if window_type == 'text':
-                                    # 文本类型：从.md文件读取内容
-                                    with open(content_file_path, "r", encoding="utf-8") as f:
-                                        window_data['content'] = f.read()
+                                    # 文本类型：从文件读取内容，尝试多种编码
+                                    try:
+                                        with open(content_file_path, "r", encoding="utf-8") as f:
+                                            window_data['content'] = f.read()
+                                    except UnicodeDecodeError:
+                                        try:
+                                            with open(content_file_path, "r", encoding="gbk") as f:
+                                                window_data['content'] = f.read()
+                                        except UnicodeDecodeError:
+                                            try:
+                                                with open(content_file_path, "r", encoding="gb2312") as f:
+                                                    window_data['content'] = f.read()
+                                            except UnicodeDecodeError:
+                                                # 如果所有编码都失败，使用二进制模式读取并忽略错误
+                                                with open(content_file_path, "r", encoding="utf-8", errors="ignore") as f:
+                                                    window_data['content'] = f.read()
                                 else:
                                     # 对于媒体文件，content存储文件路径或URL
                                     window_data['content'] = str(content_file_path)
@@ -739,6 +752,68 @@ class ContentManager:
         except Exception as e:
             print(f"更新JSON配置文件失败: {e}")
     
+    def update_window_metadata(self, board_id: str, window_id: str, updates: Dict) -> bool:
+        """更新窗口的元数据（位置、大小、隐藏状态等），不涉及内容"""
+        board_info = self.file_manager.get_board_info(board_id)
+        if not board_info:
+            return False
+        
+        # 找到展板目录
+        board_dir = None
+        for course_dir in self.file_manager.courses_dir.iterdir():
+            if course_dir.is_dir():
+                potential_board_dir = course_dir / board_id
+                if potential_board_dir.exists():
+                    board_dir = potential_board_dir
+                    break
+        
+        if not board_dir:
+            return False
+        
+        files_dir = board_dir / "files"
+        if not files_dir.exists():
+            return False
+        
+        # 查找对应的JSON文件
+        json_file = None
+        for file_path in files_dir.iterdir():
+            if file_path.is_file() and file_path.suffix == ".json":
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if data.get("id") == window_id:
+                        json_file = file_path
+                        break
+                except Exception as e:
+                    print(f"读取JSON文件失败: {file_path}, 错误: {e}")
+                    continue
+        
+        if not json_file:
+            print(f"未找到窗口ID {window_id} 的JSON配置文件")
+            return False
+        
+        try:
+            # 读取现有数据
+            with open(json_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            # 更新数据
+            data.update(updates)
+            data["updated_at"] = datetime.now().isoformat()
+            
+            # 写回文件
+            with open(json_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            
+            print(f"更新窗口元数据成功: {window_id}")
+            print(f"  更新字段: {list(updates.keys())}")
+            print(f"  JSON文件: {json_file.name}")
+            return True
+            
+        except Exception as e:
+            print(f"更新窗口元数据失败: {e}")
+            return False
+
     def update_window_content_only(self, board_id: str, window_id: str, content: str):
         """更新窗口的文字内容（新存储结构：更新.md文件）"""
         try:
@@ -774,9 +849,19 @@ class ContentManager:
                             if 'file_path' in data and data['file_path']:
                                 content_file_path = board_dir / data['file_path']
                                 if content_file_path.exists():
-                                    # 更新.md文件内容
-                                    with open(content_file_path, "w", encoding="utf-8") as f:
-                                        f.write(content)
+                                    # 更新文件内容，尝试检测编码
+                                    try:
+                                        with open(content_file_path, "w", encoding="utf-8") as f:
+                                            f.write(content)
+                                    except UnicodeEncodeError:
+                                        # 如果UTF-8编码失败，尝试GBK编码
+                                        try:
+                                            with open(content_file_path, "w", encoding="gbk") as f:
+                                                f.write(content)
+                                        except UnicodeEncodeError:
+                                            # 最后使用UTF-8并忽略错误
+                                            with open(content_file_path, "w", encoding="utf-8", errors="ignore") as f:
+                                                f.write(content)
                                     
                                     # 更新JSON文件的时间戳
                                     data["updated_at"] = datetime.now().isoformat()
@@ -1412,6 +1497,94 @@ class ContentManager:
             print(f"重命名文件失败: {e}")
         
         return False
+    
+    def convert_text_window_to_file_window(self, board_id: str, window_id: str, temp_file_path: str, filename: str, window_type: str) -> bool:
+        """将文本窗口转换为文件窗口"""
+        try:
+            # 找到展板目录
+            board_dir = None
+            for course_dir in self.file_manager.courses_dir.iterdir():
+                if course_dir.is_dir():
+                    potential_board_dir = course_dir / board_id
+                    if potential_board_dir.exists():
+                        board_dir = potential_board_dir
+                        break
+            
+            if not board_dir:
+                print(f"展板目录不存在: {board_id}")
+                return False
+            
+            files_dir = board_dir / "files"
+            if not files_dir.exists():
+                print(f"文件目录不存在: {files_dir}")
+                return False
+            
+            # 查找窗口对应的JSON文件
+            window_json_file = None
+            window_data = None
+            for json_file in files_dir.glob("*.json"):
+                try:
+                    with open(json_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if data.get("id") == window_id:
+                        window_json_file = json_file
+                        window_data = data
+                        break
+                except Exception as e:
+                    print(f"读取JSON文件失败: {json_file}, 错误: {e}")
+                    continue
+            
+            if not window_json_file or not window_data:
+                print(f"未找到窗口配置: {window_id}")
+                return False
+            
+            # 删除原有的.md文件（如果存在）
+            if window_data.get('file_path'):
+                old_content_file = board_dir / window_data['file_path']
+                if old_content_file.exists():
+                    old_content_file.unlink()
+                    print(f"删除原有内容文件: {old_content_file}")
+            
+            # 生成新的文件名
+            safe_filename = self._sanitize_filename(filename)
+            new_file_path = files_dir / safe_filename
+            
+            # 移动临时文件到目标位置
+            import shutil
+            shutil.move(temp_file_path, new_file_path)
+            print(f"文件保存到: {new_file_path}")
+            
+            # 更新窗口数据
+            window_data['type'] = window_type
+            window_data['title'] = safe_filename
+            window_data['file_path'] = f"files/{safe_filename}"
+            window_data['content'] = f"files/{safe_filename}"  # 对于文件窗口，content存储文件路径
+            window_data['updated_at'] = datetime.now().isoformat()
+            
+            # 生成新的JSON文件名
+            new_json_filename = f"{safe_filename}.json"
+            new_json_path = files_dir / new_json_filename
+            
+            # 保存更新的JSON文件
+            with open(new_json_path, "w", encoding="utf-8") as f:
+                json.dump(window_data, f, ensure_ascii=False, indent=2)
+            
+            # 删除旧的JSON文件
+            if new_json_path != window_json_file:
+                window_json_file.unlink()
+                print(f"删除旧JSON文件: {window_json_file}")
+            
+            print(f"窗口转换成功: {window_id} -> {window_type}")
+            print(f"新文件名: {safe_filename}")
+            print(f"新JSON文件: {new_json_filename}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"转换文本窗口到文件窗口失败: {e}")
+            import traceback
+            print(f"详细错误信息: {traceback.format_exc()}")
+            return False
     
     def find_window_board(self, window_id: str) -> Optional[str]:
         """查找窗口所在的板块ID"""

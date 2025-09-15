@@ -29,6 +29,45 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
   const previewRef = useRef(null);
   const saveTimeoutRef = useRef(null);
 
+  // 检测是否有内容（用于控制上传按钮显示）
+  const hasContent = useMemo(() => {
+    return localContent && localContent.trim().length > 0;
+  }, [localContent]);
+
+  // 处理文件上传
+  const handleFileUpload = () => {
+    // 创建文件输入元素
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '*/*'; // 接受所有文件类型
+    fileInput.style.display = 'none';
+    
+    // 添加文件选择事件监听
+    fileInput.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      console.log('选择上传文件:', file.name, file.type, file.size);
+      
+      try {
+        // 调用父组件的上传处理函数
+        if (onContentChange) {
+          await onContentChange(file, 'upload');
+        }
+      } catch (error) {
+        console.error('文件上传失败:', error);
+        alert('文件上传失败: ' + error.message);
+      }
+      
+      // 清理文件输入元素
+      document.body.removeChild(fileInput);
+    });
+    
+    // 添加到DOM并触发点击
+    document.body.appendChild(fileInput);
+    fileInput.click();
+  };
+
   // 计算光标位置
   const calculateCursorPosition = (textarea) => {
     if (!textarea) return { line: 1, column: 1 };
@@ -723,40 +762,55 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
         gap: '4px',
         height: '24px'
       }}>
-        <button
-          onClick={() => {
-            console.log('上传功能被点击');
-            // TODO: 实现上传功能
-          }}
-          style={{
-            padding: '1px 8px',
+        {/* 上传按钮 - 只在没有内容时显示 */}
+        {!hasContent && (
+          <button
+            onClick={() => {
+              console.log('上传功能被点击');
+              handleFileUpload();
+            }}
+            style={{
+              padding: '1px 8px',
+              fontSize: '11px',
+              backgroundColor: '#c0c0c0',
+              border: '2px outset #c0c0c0',
+              borderRadius: '0px',
+              cursor: 'pointer',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              height: '20px',
+              minWidth: '60px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            onMouseDown={(e) => {
+              e.target.style.border = '2px inset #c0c0c0';
+              e.target.style.backgroundColor = '#a0a0a0';
+            }}
+            onMouseUp={(e) => {
+              e.target.style.border = '2px outset #c0c0c0';
+              e.target.style.backgroundColor = '#c0c0c0';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.border = '2px outset #c0c0c0';
+              e.target.style.backgroundColor = '#c0c0c0';
+            }}
+          >
+            上传...
+          </button>
+        )}
+        
+        {/* 当有内容时显示状态提示 */}
+        {hasContent && (
+          <div style={{
             fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
+            color: '#000000',
             fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '60px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-          onMouseDown={(e) => {
-            e.target.style.border = '2px inset #c0c0c0';
-            e.target.style.backgroundColor = '#a0a0a0';
-          }}
-          onMouseUp={(e) => {
-            e.target.style.border = '2px outset #c0c0c0';
-            e.target.style.backgroundColor = '#c0c0c0';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.border = '2px outset #c0c0c0';
-            e.target.style.backgroundColor = '#c0c0c0';
-          }}
-        >
-          上传...
-        </button>
+            padding: '2px 8px'
+          }}>
+            编辑模式
+          </div>
+        )}
       </div>
 
       {/* 调试面板 */}
@@ -1124,8 +1178,10 @@ function BoardCanvas({
 
   const resizeState = useRef({ active: false, windowId: null, startX: 0, startY: 0, startW: 0, startH: 0, originalW: 0, originalH: 0 });
   const dragState = useRef({ active: false, windowId: null, startX: 0, startY: 0, initialX: 0, initialY: 0, originalX: 0, originalY: 0 });
-  const saveTimeoutRef = useRef(null);
+  const windowSaveTimeoutRef = useRef(null); // 重命名避免与TextEditor中的saveTimeoutRef冲突
   const maxZIndexRef = useRef(100);
+  const periodicSaveIntervalRef = useRef(null); // 定期保存间隔引用
+  const isSavingStateRef = useRef(false); // 标记是否正在保存窗口状态
 
   // 检查窗口是否有真实的媒体内容
   const hasRealMediaContent = (window) => {
@@ -1412,6 +1468,12 @@ function BoardCanvas({
       
       // 只处理当前展板的事件
       if (board_id && board_id !== boardId) {
+        return;
+      }
+      
+      // 如果正在保存窗口状态，忽略文件变化事件，避免循环重新加载
+      if (isSavingStateRef.current) {
+        console.log('🚫 正在保存窗口状态，忽略文件监控事件:', event.detail);
         return;
       }
       
@@ -2007,63 +2069,149 @@ function BoardCanvas({
   const saveWindowState = async (windowId, updates) => {
     try {
       const window = windows.find(w => w.id === windowId);
-      if (window) {
-        // 合并更新数据，优先使用传入的hidden值
-        const updatedWindow = { 
-          ...window, 
-          ...updates,
-          // 如果updates中没有hidden字段，则根据hiddenWindows状态判断
-          hidden: updates.hasOwnProperty('hidden') 
-            ? updates.hidden 
-            : (hiddenWindows && hiddenWindows.has(windowId) ? true : false)
-        };
-        
-        // 只在非内容更新时输出详细日志
-        if (!updates.hasOwnProperty('content')) {
-          console.log('💾 保存窗口状态:', windowId, '更新:', Object.keys(updates));
-        }
-        
-        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updatedWindow),
-        });
+      if (!window) {
+        console.error('❌ 未找到要保存的窗口:', windowId);
+        return false;
+      }
+      
+      // 设置保存状态标记
+      isSavingStateRef.current = true;
+      
+      // 合并更新数据，优先使用传入的hidden值
+      const updatedWindow = { 
+        ...window, 
+        ...updates,
+        // 确保必要字段存在
+        id: windowId,
+        updated_at: new Date().toISOString(),
+        // 如果updates中没有hidden字段，则根据hiddenWindows状态判断
+        hidden: updates.hasOwnProperty('hidden') 
+          ? updates.hidden 
+          : (hiddenWindows && hiddenWindows.has(windowId) ? true : false),
+        // 确保位置和大小数据格式正确
+        position: updates.position || window.position || { x: 100, y: 100 },
+        size: updates.size || window.size || { width: 400, height: 300 }
+      };
+      
+      // 只在非内容更新时输出详细日志
+      if (!updates.hasOwnProperty('content')) {
+        console.log('💾 保存窗口状态:', windowId, '更新字段:', Object.keys(updates));
+        console.log('📍 窗口位置:', updatedWindow.position);
+        console.log('📏 窗口大小:', updatedWindow.size);
+        console.log('👁️ 隐藏状态:', updatedWindow.hidden);
+      }
+      
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedWindow),
+      });
 
-        if (response.ok) {
-          console.log('✅ 窗口状态保存成功:', windowId, 'hidden:', updatedWindow.hidden);
-          return true;
-        } else {
-          console.error('❌ 窗口状态保存失败:', response.status);
-          return false;
-        }
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ 窗口状态保存成功:', windowId);
+        
+        // 延迟清除保存状态标记，给文件监控一些时间
+        setTimeout(() => {
+          isSavingStateRef.current = false;
+        }, 2000);
+        
+        return true;
+      } else {
+        const errorText = await response.text();
+        console.error('❌ 窗口状态保存失败:', response.status, errorText);
+        isSavingStateRef.current = false;
+        return false;
       }
     } catch (error) {
-      console.error('保存窗口状态失败:', error);
+      console.error('❌ 保存窗口状态异常:', error);
+      isSavingStateRef.current = false;
       return false;
     }
   };
 
   // 优化的窗口内容保存函数
-  const handleWindowContentChange = async (windowId, newContent) => {
+  const handleWindowContentChange = async (windowId, newContent, mode = 'content') => {
     try {
-      console.log('📝 保存窗口内容:', windowId, '内容长度:', newContent.length);
-      
-      // 更新本地状态
-      setWindows(prevWindows => 
-        prevWindows.map(w => 
-          w.id === windowId 
-            ? { ...w, content: newContent }
-            : w
-        )
-      );
-      
-      // 保存到后端
-      await saveWindowState(windowId, { content: newContent });
-      console.log('✅ 窗口内容保存成功:', windowId);
+      if (mode === 'upload' && newContent instanceof File) {
+        // 处理文件上传
+        console.log('📁 开始上传文件:', newContent.name, newContent.type, newContent.size);
+        await handleFileUploadToWindow(windowId, newContent);
+      } else {
+        // 处理内容更新
+        console.log('📝 保存窗口内容:', windowId, '内容长度:', newContent.length);
+        
+        // 更新本地状态
+        setWindows(prevWindows => 
+          prevWindows.map(w => 
+            w.id === windowId 
+              ? { ...w, content: newContent }
+              : w
+          )
+        );
+        
+        // 保存到后端
+        await saveWindowState(windowId, { content: newContent });
+        console.log('✅ 窗口内容保存成功:', windowId);
+      }
     } catch (error) {
       console.error('❌ 窗口内容保存失败:', error);
+    }
+  };
+
+  // 处理文件上传到窗口
+  const handleFileUploadToWindow = async (windowId, file) => {
+    try {
+      // 创建FormData
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      // 获取窗口信息
+      const window = windows.find(w => w.id === windowId);
+      if (!window) {
+        throw new Error('窗口不存在');
+      }
+      
+      console.log('📤 上传文件到窗口:', windowId, '文件名:', file.name);
+      
+      // 发送上传请求
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ 文件上传成功:', result);
+        
+        // 更新本地窗口状态
+        setWindows(prevWindows => 
+          prevWindows.map(w => 
+            w.id === windowId 
+              ? { 
+                  ...w, 
+                  type: result.window_type,
+                  title: result.filename,
+                  file_path: result.file_path,
+                  content: result.content || ''
+                }
+              : w
+          )
+        );
+        
+        // 刷新窗口列表以获取最新状态
+        await fetchBoardWindows();
+        
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '上传失败');
+      }
+      
+    } catch (error) {
+      console.error('❌ 文件上传失败:', error);
+      throw error;
     }
   };
 
@@ -2323,9 +2471,21 @@ function BoardCanvas({
       case 'rename':
         if (targetId) {
           // 开始重命名图标对应的窗口
+          console.log('🎯 开始重命名流程:', targetId);
+          console.log('🎯 当前桌面图标数量:', desktopIcons.length);
+          console.log('🎯 当前窗口数量:', windows.length);
+          
           setEditingTitleId(targetId);
+          // 优先从桌面图标获取标题，如果找不到则从窗口获取
+          const icon = desktopIcons.find(i => i.id === targetId);
           const window = windows.find(w => w.id === targetId);
-          setEditingTitleValue(window?.title || '');
+          const currentTitle = icon?.title || window?.title || '';
+          setEditingTitleValue(currentTitle);
+          
+          console.log('🎯 找到的图标:', icon);
+          console.log('🎯 找到的窗口:', window);
+          console.log('🎯 设置编辑标题ID:', targetId);
+          console.log('🎯 设置编辑标题值:', currentTitle);
         }
         break;
       case 'delete':
@@ -2495,11 +2655,11 @@ function BoardCanvas({
         
         if (positionChanged) {
           // 延迟保存，防抖机制
-          if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
+          if (windowSaveTimeoutRef.current) {
+            clearTimeout(windowSaveTimeoutRef.current);
           }
           
-          saveTimeoutRef.current = setTimeout(async () => {
+          windowSaveTimeoutRef.current = setTimeout(async () => {
             console.log('准备保存窗口位置:', {
               windowId: target.id,
               position: finalPosition,
@@ -2650,11 +2810,11 @@ function BoardCanvas({
         
         if (sizeChanged) {
           // 延迟保存，防抖机制
-          if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
+          if (windowSaveTimeoutRef.current) {
+            clearTimeout(windowSaveTimeoutRef.current);
           }
           
-          saveTimeoutRef.current = setTimeout(async () => {
+          windowSaveTimeoutRef.current = setTimeout(async () => {
             console.log('准备保存窗口大小:', {
               windowId: target.id,
               size: finalSize,
@@ -2674,14 +2834,124 @@ function BoardCanvas({
     });
   };
 
+  // 定期保存所有窗口状态
+  const saveAllWindowStates = useCallback(async () => {
+    if (windows.length === 0) return;
+    
+    // 设置保存状态标记
+    isSavingStateRef.current = true;
+    
+    console.log('🔄 定期保存所有窗口状态...');
+    for (const window of windows) {
+      try {
+        // 获取当前隐藏状态
+        const isHidden = hiddenWindows && hiddenWindows.has(window.id);
+        
+        // 保存窗口的完整状态（不再设置标记，因为已经在外层设置）
+        const windowToSave = windows.find(w => w.id === window.id);
+        if (!windowToSave) continue;
+        
+        const updatedWindow = { 
+          ...windowToSave, 
+          position: window.position,
+          size: window.size,
+          hidden: isHidden,
+          id: window.id,
+          updated_at: new Date().toISOString()
+        };
+        
+        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${window.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updatedWindow),
+        });
+
+        if (response.ok) {
+          console.log('✅ 窗口状态保存成功:', window.id);
+        } else {
+          console.error('❌ 窗口状态保存失败:', window.id, response.status);
+        }
+      } catch (error) {
+        console.error('❌ 定期保存窗口状态失败:', window.id, error);
+      }
+    }
+    
+    console.log('✅ 定期保存完成');
+    
+    // 延迟清除保存状态标记
+    setTimeout(() => {
+      isSavingStateRef.current = false;
+    }, 3000);
+  }, [windows, hiddenWindows, boardId]);
+
+  // 启动定期保存
+  useEffect(() => {
+    // 每30秒定期保存一次所有窗口状态
+    periodicSaveIntervalRef.current = setInterval(saveAllWindowStates, 30000);
+    
+    return () => {
+      if (periodicSaveIntervalRef.current) {
+        clearInterval(periodicSaveIntervalRef.current);
+      }
+    };
+  }, [saveAllWindowStates]);
+
+  // 页面卸载前保存所有窗口状态
+  useEffect(() => {
+    const handleBeforeUnload = async (event) => {
+      // 同步保存所有窗口状态
+      if (windows.length > 0) {
+        console.log('🚪 页面即将卸载，强制保存所有窗口状态');
+        
+        // 创建同步保存Promise数组
+        const savePromises = windows.map(async (window) => {
+          try {
+            const isHidden = hiddenWindows && hiddenWindows.has(window.id);
+            return fetch(`http://localhost:8081/api/boards/${boardId}/windows/${window.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...window,
+                hidden: isHidden,
+                updated_at: new Date().toISOString()
+              }),
+              keepalive: true // 确保请求在页面卸载时仍能发送
+            });
+          } catch (error) {
+            console.error('页面卸载保存失败:', window.id, error);
+          }
+        });
+        
+        // 等待所有保存完成（但不阻塞页面卸载）
+        Promise.all(savePromises).then(() => {
+          console.log('✅ 页面卸载前保存完成');
+        }).catch((error) => {
+          console.error('❌ 页面卸载前保存出错:', error);
+        });
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [windows, hiddenWindows, boardId]);
+
   // 组件卸载时清理事件监听器
   useEffect(() => {
     return () => {
       cleanupResizeListeners();
       cleanupDragListeners();
       // 清理保存定时器
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
+      if (windowSaveTimeoutRef.current) {
+        clearTimeout(windowSaveTimeoutRef.current);
+      }
+      // 清理定期保存间隔
+      if (periodicSaveIntervalRef.current) {
+        clearInterval(periodicSaveIntervalRef.current);
       }
     };
   }, []);
@@ -2857,7 +3127,41 @@ function BoardCanvas({
               )}
             </div>
             <div className="desktop-icon-label">
-              {icon.title}
+              {editingTitleId === icon.id ? (
+                <input
+                  ref={(input) => {
+                    if (input && editingTitleId === icon.id) {
+                      console.log('🎯 输入框ref回调，准备聚焦:', icon.id);
+                      // 只在首次聚焦时设置光标位置
+                      if (!input.hasAttribute('data-focused')) {
+                        input.setAttribute('data-focused', 'true');
+                        setTimeout(() => {
+                          console.log('🎯 执行首次聚焦操作:', icon.id);
+                          input.focus();
+                          // 将光标移动到文本末尾，而不是选中所有文本
+                          const length = input.value.length;
+                          input.setSelectionRange(length, length);
+                        }, 0);
+                      }
+                    }
+                  }}
+                  type="text"
+                  className="desktop-icon-rename-input"
+                  value={editingTitleValue}
+                  onChange={(e) => setEditingTitleValue(e.target.value)}
+                  onBlur={finishEditingTitle}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      finishEditingTitle();
+                    } else if (e.key === 'Escape') {
+                      setEditingTitleId(null);
+                      setEditingTitleValue('');
+                    }
+                  }}
+                />
+              ) : (
+                <span className="desktop-icon-title-text">{icon.title}</span>
+              )}
             </div>
           </div>
         ))}
@@ -2982,7 +3286,7 @@ function BoardCanvas({
               {window.type === 'text' && (
                 <TextEditorWithPreview
                   window={window}
-                  onContentChange={(content) => handleWindowContentChange(window.id, content)}
+                  onContentChange={(content, mode) => handleWindowContentChange(window.id, content, mode)}
                 />
               )}
               {window.type === 'image' && (

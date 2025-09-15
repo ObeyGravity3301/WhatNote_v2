@@ -238,13 +238,17 @@ async def update_window(board_id: str, window_id: str, window_data: Dict):
             content_manager.update_window_content_only(board_id, window_id, content)
             info(f"更新窗口内容成功: {window_id}")
         else:
-            # 非内容更新：处理标题重命名等
+            # 非内容更新：处理标题重命名和元数据更新
             if old_title:
                 content_manager.rename_window_file(board_id, window_id, old_title, window_data["title"])
             
-            success = content_manager.save_window_content(board_id, window_data)
+            # 使用专门的元数据更新函数
+            success = content_manager.update_window_metadata(board_id, window_id, window_data)
             if not success:
-                raise HTTPException(status_code=404, detail="展板不存在")
+                # 如果元数据更新失败，尝试使用原来的方法（兼容性）
+                success = content_manager.save_window_content(board_id, window_data)
+                if not success:
+                    raise HTTPException(status_code=404, detail="展板不存在")
         
         info(f"更新窗口成功: {window_id}")
         return window_data
@@ -498,6 +502,95 @@ async def upload_file(
         raise
     except Exception as e:
         error(f"文件上传失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 窗口文件上传API - 专门用于将文本窗口转换为文件窗口
+@app.post("/api/boards/{board_id}/windows/{window_id}/upload")
+async def upload_file_to_window(
+    board_id: str,
+    window_id: str,
+    file: UploadFile = File(...)
+):
+    """上传文件到指定窗口，将文本窗口转换为文件窗口"""
+    try:
+        info(f"开始上传文件到窗口: {window_id}, 文件名: {file.filename}")
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        if target_window.get('type') != 'text':
+            raise HTTPException(status_code=400, detail="只能向文本窗口上传文件")
+        
+        # 确定文件类型
+        file_extension = Path(file.filename).suffix.lower()
+        file_type_map = {
+            '.jpg': 'image', '.jpeg': 'image', '.png': 'image', '.gif': 'image', '.bmp': 'image', '.webp': 'image',
+            '.mp4': 'video', '.avi': 'video', '.mov': 'video', '.wmv': 'video', '.flv': 'video', '.webm': 'video',
+            '.mp3': 'audio', '.wav': 'audio', '.flac': 'audio', '.aac': 'audio', '.ogg': 'audio',
+            '.pdf': 'pdf',
+            '.doc': 'document', '.docx': 'document', '.ppt': 'document', '.pptx': 'document', '.xls': 'document', '.xlsx': 'document',
+            '.txt': 'text', '.md': 'text'
+        }
+        
+        window_type = file_type_map.get(file_extension, 'generic')
+        
+        # 保存文件
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+        
+        # 使用content_manager保存文件并转换窗口
+        success = content_manager.convert_text_window_to_file_window(
+            board_id, window_id, temp_path, file.filename, window_type
+        )
+        
+        # 删除临时文件（如果还存在）
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception as e:
+            print(f"删除临时文件失败: {e}")
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="文件上传和窗口转换失败")
+        
+        # 获取更新后的窗口信息
+        updated_windows = content_manager.get_board_windows(board_id)
+        updated_window = None
+        for window in updated_windows:
+            if window.get('id') == window_id:
+                updated_window = window
+                break
+        
+        if not updated_window:
+            raise HTTPException(status_code=500, detail="无法获取更新后的窗口信息")
+        
+        info(f"文件上传和窗口转换成功: {file.filename} -> {window_type}")
+        
+        return {
+            "message": "文件上传成功",
+            "filename": file.filename,
+            "window_type": window_type,
+            "file_path": updated_window.get('file_path', ''),
+            "content": updated_window.get('content', '')
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"窗口文件上传失败: {e}")
+        import traceback
+        error(f"详细错误信息: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/media/serve")
