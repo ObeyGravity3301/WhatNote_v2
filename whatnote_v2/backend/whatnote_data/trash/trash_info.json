@@ -333,5 +333,32 @@
     "deleted_at": "2025-09-10T20:02:12.682563",
     "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
     "file_size": 330
+  },
+  {
+    "id": "trash_1757918400414",
+    "original_name": "新建项目.json",
+    "trash_filename": "1757918400414_新建项目.json",
+    "window_data": {
+      "type": "generic",
+      "title": "新建项目",
+      "position": {
+        "x": 241,
+        "y": 249
+      },
+      "size": {
+        "width": 300,
+        "height": 200
+      },
+      "id": "window_1757430339090",
+      "created_at": "2025-09-09T23:05:39.090726",
+      "updated_at": "2025-09-10T19:40:35.590397",
+      "file_path": null,
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1757430336519",
+    "deleted_at": "2025-09-15T14:40:00.415399",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1757430332129\\board-1757430336519\\files",
+    "file_size": 330
   }
 ]

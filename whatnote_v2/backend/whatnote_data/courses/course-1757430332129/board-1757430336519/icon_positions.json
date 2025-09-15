@@ -1,0 +1,22 @@
+{
+  "window_1757430339090": {
+    "position": {
+      "x": 20,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 0,
+      "gridY": 0
+    }
+  },
+  "window_1757918391725": {
+    "position": {
+      "x": 100,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 1,
+      "gridY": 0
+    }
+  }
+}

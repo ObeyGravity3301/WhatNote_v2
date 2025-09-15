@@ -1182,6 +1182,7 @@ function BoardCanvas({
   const maxZIndexRef = useRef(100);
   const periodicSaveIntervalRef = useRef(null); // 定期保存间隔引用
   const isSavingStateRef = useRef(false); // 标记是否正在保存窗口状态
+  const previousBoardIdRef = useRef(null); // 记录前一个展板ID
 
   // 检查窗口是否有真实的媒体内容
   const hasRealMediaContent = (window) => {
@@ -1432,32 +1433,78 @@ function BoardCanvas({
     if (boardId) {
       console.log('🔄 展板ID变化，清理状态并重新加载:', boardId);
       
-      // 清理缓存数据
-      console.log('🧹 清理浏览器缓存数据');
+      // 在切换展板前，先强制保存当前展板的所有窗口状态
+      const saveCurrentBoardState = async () => {
+        if (windows.length > 0 && previousBoardIdRef.current) {
+          console.log('💾 展板切换前强制保存当前窗口状态...');
+          isSavingStateRef.current = true;
+          
+          const savePromises = windows.map(async (window) => {
+            try {
+              const isHidden = hiddenWindows && hiddenWindows.has(window.id);
+              // 使用前一个展板ID来保存当前窗口状态
+              const response = await fetch(`http://localhost:8081/api/boards/${previousBoardIdRef.current}/windows/${window.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ...window,
+                  hidden: isHidden,
+                  updated_at: new Date().toISOString()
+                }),
+              });
+              return response.ok;
+            } catch (error) {
+              console.error('展板切换前保存失败:', window.id, error);
+              return false;
+            }
+          });
+          
+          await Promise.all(savePromises);
+          console.log('✅ 展板切换前保存完成');
+          
+          // 短暂延迟确保保存操作完成
+          await new Promise(resolve => setTimeout(resolve, 500));
+          isSavingStateRef.current = false;
+        }
+      };
       
-      // 先清空隐藏状态，避免切换时闪烁
-      if (onClearHiddenWindows) {
-        onClearHiddenWindows();
-      }
-      
-      // 重置所有状态
-      console.log('🧹 重置组件状态');
-      setWindows([]); // 清空窗口数据
-      setDesktopIcons([]); // 清空桌面图标
-      setIsDragging(false);
-      setIsResizing(false);
-      setWindowZIndexes({});
-      setEditingTitleId(null); // 重置编辑状态
-      setEditingTitleValue('');
-      maxZIndexRef.current = 100;
-      
-      // 清理事件监听器
-      cleanupResizeListeners();
-      cleanupDragListeners();
-      
-      // 重新加载窗口数据
-      console.log('🔄 开始重新加载窗口数据');
-      fetchBoardWindows();
+      // 执行保存并继续切换流程
+      saveCurrentBoardState().then(() => {
+        // 清理缓存数据
+        console.log('🧹 清理浏览器缓存数据');
+        
+        // 先清空隐藏状态，避免切换时闪烁
+        if (onClearHiddenWindows) {
+          onClearHiddenWindows();
+        }
+        
+        // 重置所有状态
+        console.log('🧹 重置组件状态');
+        setWindows([]); // 清空窗口数据
+        setDesktopIcons([]); // 清空桌面图标
+        setIsDragging(false);
+        setIsResizing(false);
+        setWindowZIndexes({});
+        setEditingTitleId(null); // 重置编辑状态
+        setEditingTitleValue('');
+        maxZIndexRef.current = 100;
+        
+        // 清理事件监听器
+        cleanupResizeListeners();
+        cleanupDragListeners();
+        
+        // 重新加载窗口数据
+        console.log('🔄 开始重新加载窗口数据');
+        fetchBoardWindows();
+        
+        // 更新前一个展板ID为当前展板ID
+        previousBoardIdRef.current = boardId;
+      }).catch((error) => {
+        console.error('❌ 展板切换前保存失败:', error);
+        // 即使保存失败，也继续切换流程
+        fetchBoardWindows();
+        previousBoardIdRef.current = boardId;
+      });
     }
   }, [boardId]);
 
