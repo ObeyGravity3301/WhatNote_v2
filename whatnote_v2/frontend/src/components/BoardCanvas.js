@@ -5,6 +5,10 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// 配置PDF.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 // LaTeX 分隔符标准化函数
 const normalizeLatexDelimiters = (text) => {
@@ -14,6 +18,570 @@ const normalizeLatexDelimiters = (text) => {
     .replace(/\\\[/g, '$$')
     .replace(/\\\]/g, '$$');
 };
+
+// PDF分页组件
+function PDFPaginationViewer({ pdfUrl, onClose }) {
+  const [pdfDocument, setPdfDocument] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const canvasRef = useRef(null);
+
+  // 加载PDF文档
+  useEffect(() => {
+    const loadPDF = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        const loadingTask = pdfjsLib.getDocument(pdfUrl);
+        const pdf = await loadingTask.promise;
+        
+        setPdfDocument(pdf);
+        setTotalPages(pdf.numPages);
+        setCurrentPage(1);
+        setIsLoading(false);
+        
+        console.log('PDF加载成功，总页数:', pdf.numPages);
+      } catch (err) {
+        console.error('PDF加载失败:', err);
+        setError('PDF加载失败: ' + err.message);
+        setIsLoading(false);
+      }
+    };
+
+    if (pdfUrl) {
+      loadPDF();
+    }
+  }, [pdfUrl]);
+
+  // 渲染当前页面
+  useEffect(() => {
+    const renderPage = async () => {
+      if (!pdfDocument || !canvasRef.current) return;
+
+      try {
+        const page = await pdfDocument.getPage(currentPage);
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+
+        // 计算缩放比例
+        const scale = 1.5; // 可以调整这个值来改变显示大小
+        const viewport = page.getViewport({ scale });
+        
+        console.log('PDF视口信息:', {
+          scale: scale,
+          width: viewport.width,
+          height: viewport.height,
+          originalWidth: page.view[2],
+          originalHeight: page.view[3]
+        });
+
+        // 设置canvas尺寸
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        // 渲染页面
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport
+        };
+
+        await page.render(renderContext).promise;
+        
+        // 渲染文本层以支持文字选择
+        const textLayer = document.getElementById(`textLayer-${currentPage}`);
+        if (textLayer) {
+          textLayer.innerHTML = ''; // 清空之前的内容
+          
+          // 设置文本层容器的精确尺寸
+          textLayer.style.width = viewport.width + 'px';
+          textLayer.style.height = viewport.height + 'px';
+          
+          console.log('文本层容器尺寸设置:', {
+            textLayerWidth: viewport.width,
+            textLayerHeight: viewport.height,
+            canvasWidth: canvas.width,
+            canvasHeight: canvas.height
+          });
+          
+          try {
+            // 获取文本内容
+            const textContent = await page.getTextContent();
+            console.log('文本内容获取成功，开始创建文本层');
+            
+            // 手动创建文本层，使用更精确的位置计算
+            let debugCount = 0;
+            textContent.items.forEach((textItem, index) => {
+              if (!textItem.str || textItem.str.trim() === '') return;
+              
+              const textDiv = document.createElement('span');
+              textDiv.textContent = textItem.str;
+              textDiv.style.position = 'absolute';
+              
+              // 使用PDF.js的变换矩阵
+              const transform = textItem.transform;
+              const fontSize = Math.abs(transform[0]);
+              const x = transform[4];
+              const y = transform[5];
+              
+              // PDF.js坐标系：Y轴向上为正，原点在左下角
+              // CSS坐标系：Y轴向下为正，原点在左上角
+              // 需要考虑缩放比例并翻转Y坐标，调整字体基线
+              const scale = viewport.scale;
+              const scaledX = x * scale;
+              const scaledY = viewport.height - (y * scale) - (fontSize * scale); // 所有坐标都需要缩放
+              const scaledFontSize = fontSize * scale;
+              
+              textDiv.style.left = scaledX + 'px';
+              textDiv.style.top = scaledY + 'px';
+              textDiv.style.fontSize = scaledFontSize + 'px';
+              textDiv.style.fontFamily = textItem.fontName || 'sans-serif';
+              // 临时调试：让文本层可见
+              textDiv.style.color = 'rgba(255, 0, 0, 0.3)'; // 红色半透明，用于调试
+              textDiv.style.cursor = 'text';
+              textDiv.style.userSelect = 'text';
+              textDiv.style.pointerEvents = 'auto';
+              textDiv.style.whiteSpace = 'pre';
+              textDiv.style.transformOrigin = '0% 0%';
+              textDiv.style.lineHeight = '1';
+              textDiv.style.backgroundColor = 'rgba(0, 255, 0, 0.1)'; // 绿色背景，用于调试
+              textDiv.style.border = '1px solid blue'; // 蓝色边框，用于调试文本元素位置
+              
+              // 添加调试信息（只显示前几个）
+              if (debugCount < 5) {
+                // 获取文本层容器的实际尺寸
+                const containerRect = textLayer.getBoundingClientRect();
+                console.log(`文本项 ${debugCount}:`, {
+                  text: textItem.str,
+                  originalX: x,
+                  originalY: y,
+                  scaledOriginalX: x * scale,
+                  scaledOriginalY: y * scale,
+                  flippedY: viewport.height - (y * scale),
+                  adjustedY: viewport.height - (y * scale) - (fontSize * scale),
+                  finalX: scaledX,
+                  finalY: scaledY,
+                  originalFontSize: fontSize,
+                  finalFontSize: scaledFontSize,
+                  viewportHeight: viewport.height,
+                  viewportWidth: viewport.width,
+                  containerWidth: containerRect.width,
+                  containerHeight: containerRect.height,
+                  scale: scale
+                });
+                debugCount++;
+              }
+              
+              // 添加悬停效果
+              textDiv.addEventListener('mouseenter', () => {
+                textDiv.style.backgroundColor = 'rgba(0, 0, 255, 0.1)';
+              });
+              
+              textDiv.addEventListener('mouseleave', () => {
+                textDiv.style.backgroundColor = 'transparent';
+              });
+              
+              textLayer.appendChild(textDiv);
+            });
+            
+            console.log(`文本层 ${currentPage} 渲染完成，共 ${textContent.items.length} 个文本项`);
+          } catch (textError) {
+            console.error('文本层渲染失败:', textError);
+          }
+        }
+        
+        console.log(`页面 ${currentPage} 渲染完成`);
+      } catch (err) {
+        console.error('页面渲染失败:', err);
+      }
+    };
+
+    renderPage();
+  }, [pdfDocument, currentPage]);
+
+  // 上一页
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  // 下一页
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  // 跳转到指定页面
+  const goToPage = (pageNumber) => {
+    const page = Math.max(1, Math.min(totalPages, parseInt(pageNumber)));
+    setCurrentPage(page);
+  };
+
+  if (isLoading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        height: '100%',
+        flexDirection: 'column',
+        gap: '8px'
+      }}>
+        <div>📄 正在加载PDF...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        height: '100%',
+        flexDirection: 'column',
+        gap: '8px',
+        color: '#ff0000'
+      }}>
+        <div>❌ {error}</div>
+        <button 
+          onClick={onClose}
+          style={{
+            padding: '4px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif'
+          }}
+        >
+          关闭
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ 
+      width: '100%', 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      backgroundColor: '#ffffff'
+    }}>
+      {/* 分页工具栏 */}
+      <div style={{
+        backgroundColor: '#c0c0c0',
+        borderBottom: '2px outset #c0c0c0',
+        padding: '2px 4px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        height: '24px',
+        flexShrink: 0
+      }}>
+        {/* 上一页按钮 */}
+        <button
+          onClick={goToPreviousPage}
+          disabled={currentPage <= 1}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: currentPage <= 1 ? '#a0a0a0' : '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          ←
+        </button>
+
+        {/* 页码显示和输入 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ fontSize: '11px', fontFamily: 'MS Sans Serif, sans-serif' }}>
+            第
+          </span>
+          <input
+            type="number"
+            value={currentPage}
+            onChange={(e) => goToPage(e.target.value)}
+            min="1"
+            max={totalPages}
+            style={{
+              width: '40px',
+              height: '16px',
+              fontSize: '11px',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              border: '2px inset #c0c0c0',
+              backgroundColor: '#ffffff',
+              textAlign: 'center'
+            }}
+          />
+          <span style={{ fontSize: '11px', fontFamily: 'MS Sans Serif, sans-serif' }}>
+            页，共 {totalPages} 页
+          </span>
+        </div>
+
+        {/* 下一页按钮 */}
+        <button
+          onClick={goToNextPage}
+          disabled={currentPage >= totalPages}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: currentPage >= totalPages ? '#a0a0a0' : '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          →
+        </button>
+
+        {/* 关闭分页模式按钮 */}
+        <button
+          onClick={onClose}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '60px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginLeft: 'auto'
+          }}
+        >
+          关闭分页
+        </button>
+      </div>
+
+      {/* PDF页面内容 */}
+      <div style={{ 
+        flex: 1, 
+        overflow: 'auto',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        padding: '10px',
+        backgroundColor: '#f0f0f0'
+      }}>
+        <div style={{ position: 'relative' }}>
+          <canvas
+            ref={canvasRef}
+            style={{
+              border: '1px solid #808080',
+              backgroundColor: '#ffffff',
+              boxShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+              position: 'relative',
+              zIndex: 1
+            }}
+          />
+          {/* 文本层容器 - 用于文字选择 */}
+          <div
+            id={`textLayer-${currentPage}`}
+            className="textLayer"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: canvasRef.current?.width + 'px' || '100%',
+              height: canvasRef.current?.height + 'px' || '100%',
+              zIndex: 2,
+              pointerEvents: 'auto',
+              userSelect: 'text',
+              border: '2px solid red' // 临时调试边框
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 检查窗口是否有真实的媒体内容
+const hasRealMediaContent = (window) => {
+  // 如果有content且是URL或路径，说明已上传
+  if (window.content && (
+    window.content.includes('http') || 
+    window.content.includes('/api/boards/') ||
+    window.content.includes('\\') || window.content.includes('/')
+  )) {
+    return true;
+  }
+  
+  // 如果有file_path字段，说明已上传
+  if (window.file_path) {
+    return true;
+  }
+  
+  return false;
+};
+
+// toMediaUrl 函数
+const toMediaUrl = (windowOrContent, boardId) => {
+  console.log('🔗 toMediaUrl 被调用:', { windowOrContent, boardId });
+  
+  // 兼容旧的调用方式（直接传content）和新的调用方式（传window对象）
+  let content, filePath;
+  
+  if (typeof windowOrContent === 'object' && windowOrContent !== null) {
+    // 新方式：传入window对象
+    content = windowOrContent.content;
+    filePath = windowOrContent.file_path;
+  } else {
+    // 旧方式：直接传入content
+    content = windowOrContent;
+  }
+  
+  // 优先使用 file_path 生成静态文件URL（最可靠）
+  if (filePath && typeof filePath === 'string' && filePath.startsWith('files/')) {
+    const filename = filePath.substring(6); // 移除 "files/" 前缀
+    // 从boardId推断course ID (假设URL格式一致)
+    const courseId = 'course-1756987907632'; // TODO: 应该动态获取
+    const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${filename}`;
+    console.log('🔗 从file_path生成静态URL:', staticUrl);
+    return staticUrl;
+  }
+  
+  // 备用：使用 content 字段
+  if (content && typeof content === 'string') {
+    if (content.startsWith('http://') || content.startsWith('https://')) {
+      console.log('🔗 使用content中的完整URL:', content);
+      return content;
+    }
+    if (content.startsWith('/api/')) {
+      const fullUrl = `http://localhost:8081${content}`;
+      console.log('🔗 使用content中的相对API路径:', fullUrl);
+      return fullUrl;
+    }
+    // 如果content是绝对路径，编码处理
+    if (content.includes('\\') || content.includes('/')) {
+      const encodedUrl = `http://localhost:8081/api/boards/${boardId}/files/serve?path=${encodeURIComponent(content)}`;
+      console.log('🔗 从content生成编码URL:', encodedUrl);
+      return encodedUrl;
+    }
+  }
+  
+  console.log('🔗 无法生成有效URL，返回空字符串');
+  return '';
+};
+
+// PDF窗口渲染器组件
+function PDFWindowRenderer({ window, onUpload, boardId }) {
+  const [isPaginationMode, setIsPaginationMode] = useState(false);
+
+  console.log('📄 PDF窗口渲染:', {
+    windowId: window.id,
+    windowContent: window.content,
+    hasContent: !!window.content
+  });
+
+  if (!hasRealMediaContent(window)) {
+    console.log('📄 PDF窗口无内容，显示占位符');
+    return (
+      <label className="pdf-placeholder" title="点击上传PDF" style={{ flex: 1 }}>
+        📄 PDF内容
+        <p>点击上传PDF</p>
+        <input
+          type="file"
+          accept="application/pdf"
+          style={{ display: 'none' }}
+          onChange={(e) => onUpload(e.target.files)}
+        />
+      </label>
+    );
+  }
+
+  const pdfUrl = toMediaUrl(window, boardId);
+  console.log('📄 PDF URL生成:', pdfUrl);
+
+  // 如果启用分页模式，显示分页组件
+  if (isPaginationMode) {
+    return (
+      <PDFPaginationViewer 
+        pdfUrl={pdfUrl} 
+        onClose={() => setIsPaginationMode(false)}
+      />
+    );
+  }
+
+  // 默认iframe模式
+  return (
+    <div className="pdf-container" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* PDF工具栏 */}
+      <div style={{
+        backgroundColor: '#c0c0c0',
+        borderBottom: '2px outset #c0c0c0',
+        padding: '2px 4px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        height: '24px',
+        flexShrink: 0
+      }}>
+        <button
+          onClick={() => {
+            console.log('分页模式按钮被点击');
+            setIsPaginationMode(true);
+          }}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '60px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onMouseDown={(e) => { e.target.style.border = '2px inset #c0c0c0'; e.target.style.backgroundColor = '#a0a0a0'; }}
+          onMouseUp={(e) => { e.target.style.border = '2px outset #c0c0c0'; e.target.style.backgroundColor = '#c0c0c0'; }}
+          onMouseLeave={(e) => { e.target.style.border = '2px outset #c0c0c0'; e.target.style.backgroundColor = '#c0c0c0'; }}
+        >
+          分页模式
+        </button>
+      </div>
+      
+      {/* PDF内容区域 */}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <iframe
+          title="pdf"
+          style={{ width: '100%', height: '100%', border: 'none' }}
+          src={pdfUrl}
+          onLoad={() => console.log('📄 PDF iframe 加载完成')}
+          onError={(e) => console.error('📄 PDF iframe 加载错误:', e)}
+        ></iframe>
+      </div>
+    </div>
+  );
+}
 
 // 简单的文本编辑器组件，支持实时预览和打字机模式
 function TextEditorWithPreview({ window: windowData, onContentChange }) {
@@ -1240,7 +1808,7 @@ function BoardCanvas({
       case 'image':
         if (hasMediaContent) {
           // 返回图片URL作为缩略图
-          return toMediaUrl(window);
+          return toMediaUrl(window, boardId);
         }
         return '🖼️';
       case 'video':
@@ -1263,54 +1831,6 @@ function BoardCanvas({
     }
   };
 
-  // toMediaUrl 函数 - 移动到前面避免依赖问题
-  const toMediaUrl = (windowOrContent) => {
-    console.log('🔗 toMediaUrl 被调用:', { windowOrContent });
-    
-    // 兼容旧的调用方式（直接传content）和新的调用方式（传window对象）
-    let content, filePath;
-    
-    if (typeof windowOrContent === 'object' && windowOrContent !== null) {
-      // 新方式：传入window对象
-      content = windowOrContent.content;
-      filePath = windowOrContent.file_path;
-    } else {
-      // 旧方式：直接传入content
-      content = windowOrContent;
-    }
-    
-    // 优先使用 file_path 生成静态文件URL（最可靠）
-    if (filePath && typeof filePath === 'string' && filePath.startsWith('files/')) {
-      const filename = filePath.substring(6); // 移除 "files/" 前缀
-      // 从boardId推断course ID (假设URL格式一致)
-      const courseId = 'course-1756987907632'; // TODO: 应该动态获取
-      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${filename}`;
-      console.log('🔗 从file_path生成静态URL:', staticUrl);
-      return staticUrl;
-    }
-    
-    // 备用：使用 content 字段
-    if (content && typeof content === 'string') {
-      if (content.startsWith('http://') || content.startsWith('https://')) {
-        console.log('🔗 使用content中的完整URL:', content);
-        return content;
-      }
-      if (content.startsWith('/api/')) {
-        const fullUrl = `http://localhost:8081${content}`;
-        console.log('🔗 使用content中的相对API路径:', fullUrl);
-        return fullUrl;
-      }
-      // 如果content是绝对路径，编码处理
-      if (content.includes('\\') || content.includes('/')) {
-        const encodedUrl = `http://localhost:8081/api/boards/${boardId}/files/serve?path=${encodeURIComponent(content)}`;
-        console.log('🔗 从content生成编码URL:', encodedUrl);
-        return encodedUrl;
-      }
-    }
-    
-    console.log('🔗 无法生成有效URL，返回空字符串');
-    return '';
-  };
 
   // 获取展板窗口数据的函数 - 移动到useEffect之前避免临时死区问题
   const fetchBoardWindows = useCallback(async () => {
@@ -1484,15 +2004,15 @@ function BoardCanvas({
           cleanupDragListeners();
           
           // 清空隐藏状态
-          if (onClearHiddenWindows) {
-            onClearHiddenWindows();
-          }
-          
+      if (onClearHiddenWindows) {
+        onClearHiddenWindows();
+      }
+      
           // 重置编辑状态
           setEditingTitleId(null);
-          setEditingTitleValue('');
-          maxZIndexRef.current = 100;
-          
+      setEditingTitleValue('');
+      maxZIndexRef.current = 100;
+      
           // 加载新展板数据
           console.log('🔄 开始加载新展板窗口数据');
           await fetchBoardWindows();
@@ -1717,7 +2237,7 @@ function BoardCanvas({
         });
 
         console.log('📥 后端响应状态:', response.status);
-        
+
         if (response.ok) {
           const result = await response.json();
           console.log('📥 后端响应数据:', result);
@@ -2190,15 +2710,15 @@ function BoardCanvas({
       }
 
       // 合并更新数据，确保包含所有必要字段
-      const updatedWindow = { 
-        ...window, 
-        ...updates,
+        const updatedWindow = { 
+          ...window, 
+          ...updates,
         // 确保必要字段存在
         id: windowId,
         updated_at: new Date().toISOString(),
-        // 如果updates中没有hidden字段，则根据hiddenWindows状态判断
-        hidden: updates.hasOwnProperty('hidden') 
-          ? updates.hidden 
+          // 如果updates中没有hidden字段，则根据hiddenWindows状态判断
+          hidden: updates.hasOwnProperty('hidden') 
+            ? updates.hidden 
           : (hiddenWindows && hiddenWindows.has(windowId) ? true : false),
         // 确保位置和大小数据格式正确
         position: updates.position || window.position || { x: 100, y: 100 },
@@ -2212,23 +2732,23 @@ function BoardCanvas({
         console.log('📏 窗口大小:', updatedWindow.size);
         console.log('👁️ 隐藏状态:', updatedWindow.hidden);
       }
-      
-      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updatedWindow),
-      });
+        
+        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updatedWindow),
+        });
 
-      if (response.ok) {
+        if (response.ok) {
         const result = await response.json();
         console.log('✅ 窗口状态保存成功:', windowId);
-        return true;
-      } else {
+          return true;
+        } else {
         const errorText = await response.text();
         console.error('❌ 窗口状态保存失败:', response.status, errorText);
-        return false;
+          return false;
       }
     } catch (error) {
       console.error('❌ 保存窗口状态异常:', error);
@@ -2257,7 +2777,7 @@ function BoardCanvas({
         );
         
         // 保存到后端
-        await saveWindowState(windowId, { content: newContent });
+    await saveWindowState(windowId, { content: newContent });
         console.log('✅ 窗口内容保存成功:', windowId);
       }
     } catch (error) {
@@ -3419,7 +3939,7 @@ function BoardCanvas({
                 <label className="image-placeholder" title={window.content || '点击上传图片'}>
                   {hasRealMediaContent(window) ? (
                     <img
-                      src={toMediaUrl(window)}
+                      src={toMediaUrl(window, boardId)}
                       alt="img"
                       style={{ maxWidth: '100%', maxHeight: '100%' }}
                     />
@@ -3443,7 +3963,7 @@ function BoardCanvas({
                     <video
                       controls
                       style={{ width: '100%', height: '100%' }}
-                      src={toMediaUrl(window)}
+                      src={toMediaUrl(window, boardId)}
                     />
                   ) : (
                     <>
@@ -3465,7 +3985,7 @@ function BoardCanvas({
                     <audio
                       controls
                       style={{ width: '100%' }}
-                      src={toMediaUrl(window)}
+                      src={toMediaUrl(window, boardId)}
                     />
                   ) : (
                     <>
@@ -3482,44 +4002,11 @@ function BoardCanvas({
                 </label>
               )}
               {window.type === 'pdf' && (
-                <label className="pdf-placeholder" title={window.content || '点击上传PDF'}>
-                  {(() => {
-                    console.log('📄 PDF窗口渲染:', {
-                      windowId: window.id,
-                      windowContent: window.content,
-                      hasContent: !!window.content
-                    });
-                    
-                    if (hasRealMediaContent(window)) {
-                      const pdfUrl = toMediaUrl(window);
-                      console.log('📄 PDF URL生成:', pdfUrl);
-                      
-                      return (
-                    <iframe
-                      title="pdf"
-                      style={{ width: '100%', height: '100%', border: 'none' }}
-                          src={pdfUrl}
-                          onLoad={() => console.log('📄 PDF iframe 加载完成')}
-                          onError={(e) => console.error('📄 PDF iframe 加载错误:', e)}
-                    ></iframe>
-                      );
-                    } else {
-                      console.log('📄 PDF窗口无内容，显示占位符');
-                      return (
-                    <>
-                      📄 PDF内容
-                      <p>点击上传PDF</p>
-                    </>
-                      );
-                    }
-                  })()}
-                  <input
-                    type="file"
-                    accept="application/pdf"
-                    style={{ display: 'none' }}
-                    onChange={(e) => handleUpload(window.id, 'pdfs', e.target.files)}
-                  />
-                </label>
+                <PDFWindowRenderer 
+                  window={window} 
+                  onUpload={(files) => handleUpload(window.id, 'pdfs', files)}
+                  boardId={boardId}
+                />
               )}
             </div>
 
