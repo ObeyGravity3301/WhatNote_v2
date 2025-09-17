@@ -7,6 +7,7 @@ from config import DATA_DIR
 from typing import Dict, List, Optional
 from datetime import datetime
 from .trash_manager import TrashManager
+import pypdf
 
 class ContentManager:
     def __init__(self, file_manager):
@@ -250,6 +251,16 @@ class ContentManager:
                 if not self.trash_manager.move_to_trash(window_json_file, json_window_data, board_id):
                     print(f"移动JSON配置文件到回收站失败: {window_json_file}")
                     success = False
+            
+            # 如果是PDF窗口，同时移动对应的pages文件夹到回收站
+            if window_data.get('type') == 'pdf':
+                # 使用JSON文件名来推断PDF文件名
+                pdf_filename = actual_filename  # actual_filename已经是去掉.json后缀的文件名
+                pages_result = self.trash_manager.move_pdf_pages_to_trash(board_dir, pdf_filename)
+                if pages_result:
+                    print(f"PDF pages文件夹清理成功: {pdf_filename}")
+                else:
+                    print(f"移动PDF pages文件夹到回收站失败: {pdf_filename}")
             
             if success:
                 print(f"窗口已移动到回收站: {window_id}")
@@ -554,7 +565,7 @@ class ContentManager:
                     # 检查窗口ID是否重复
                     window_id = window_data.get('id')
                     if window_id in seen_window_ids:
-                        print(f"⚠️ 发现重复的窗口ID，跳过文件: {file_path.name} (ID: {window_id})")
+                        print(f"警告: 发现重复的窗口ID，跳过文件: {file_path.name} (ID: {window_id})")
                         continue
                     
                     seen_window_ids.add(window_id)
@@ -850,11 +861,11 @@ class ContentManager:
                             data["content"] = content
                             data["updated_at"] = datetime.now().isoformat()
                             
-                            with open(json_file, "w", encoding="utf-8") as f:
-                                json.dump(data, f, ensure_ascii=False, indent=2)
-                            
+                        with open(json_file, "w", encoding="utf-8") as f:
+                            json.dump(data, f, ensure_ascii=False, indent=2)
+                        
                             print(f"更新窗口内容: {window_id} -> {content}")
-                            return
+                        return
                         
                 except Exception as e:
                     print(f"读取JSON文件失败: {json_file}, 错误: {e}")
@@ -1486,7 +1497,7 @@ class ContentManager:
                     # 写入更新后的配置到新文件
                     with open(new_json_file, "w", encoding="utf-8") as f:
                         json.dump(window_data, f, ensure_ascii=False, indent=2)
-                    
+                
                     # 删除旧配置文件
                     old_json_file.unlink()
                     print(f"  重命名配置文件: {old_json_file.name} -> {new_json_file.name}")
@@ -1624,7 +1635,7 @@ class ContentManager:
             print(f"转换文本窗口到文件窗口失败: {e}")
             import traceback
             print(f"详细错误信息: {traceback.format_exc()}")
-            return False
+        return False
     
     def find_window_board(self, window_id: str) -> Optional[str]:
         """查找窗口所在的板块ID"""
@@ -1807,4 +1818,87 @@ class ContentManager:
             
         except Exception as e:
             print(f"更新窗口内容失败: {e}")
+            return False
+    
+    def extract_pdf_text_to_pages(self, board_id: str, window_id: str, window_data: Dict) -> bool:
+        """提取PDF文本并保存到pages文件夹"""
+        try:
+            # 找到展板目录
+            board_dir = None
+            for course_dir in self.file_manager.courses_dir.iterdir():
+                if course_dir.is_dir():
+                    potential_board_dir = course_dir / board_id
+                    if potential_board_dir.exists():
+                        board_dir = potential_board_dir
+                        break
+            
+            if not board_dir:
+                print(f"展板目录不存在: {board_id}")
+                return False
+            
+            # 获取PDF文件路径
+            pdf_file_path = None
+            if window_data.get('file_path'):
+                pdf_file_path = board_dir / window_data['file_path']
+            
+            if not pdf_file_path or not pdf_file_path.exists():
+                print(f"PDF文件不存在: {pdf_file_path}")
+                return False
+            
+            # 创建pages文件夹结构
+            pages_dir = board_dir / "files" / "pages"
+            pages_dir.mkdir(exist_ok=True)
+            
+            # 获取PDF文件名（不含扩展名）
+            pdf_name = pdf_file_path.stem
+            pdf_pages_dir = pages_dir / pdf_name
+            pdf_pages_dir.mkdir(exist_ok=True)
+            
+            print(f"开始提取PDF文本: {pdf_file_path}")
+            
+            # 使用pypdf提取文本
+            with open(pdf_file_path, 'rb') as file:
+                pdf_reader = pypdf.PdfReader(file)
+                total_pages = len(pdf_reader.pages)
+                
+                print(f"PDF总页数: {total_pages}")
+                
+                for page_num in range(total_pages):
+                    try:
+                        page = pdf_reader.pages[page_num]
+                        text = page.extract_text()
+                        
+                        # 保存到MD文件
+                        page_filename = f"{pdf_name}_page_{page_num + 1:03d}.md"
+                        page_file_path = pdf_pages_dir / page_filename
+                        
+                        # 创建MD文件内容
+                        md_content = f"# {pdf_name} - 第 {page_num + 1} 页\n\n"
+                        md_content += f"来源: {window_data.get('title', 'unknown.pdf')}\n"
+                        md_content += f"提取时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        md_content += f"页码: {page_num + 1}/{total_pages}\n\n"
+                        md_content += "---\n\n"
+                        
+                        if text.strip():
+                            md_content += text.strip()
+                        else:
+                            md_content += "*此页面没有可提取的文本内容*"
+                        
+                        # 写入文件
+                        with open(page_file_path, 'w', encoding='utf-8') as f:
+                            f.write(md_content)
+                        
+                        print(f"已保存第 {page_num + 1} 页文本: {page_filename}")
+                        
+                    except Exception as e:
+                        print(f"提取第 {page_num + 1} 页文本失败: {e}")
+                        continue
+                
+                print(f"PDF文本提取完成: {total_pages} 页 -> {pdf_pages_dir}")
+                return True
+                
+        except Exception as e:
+            print(f"PDF文本提取失败: {e}")
+            import traceback
+            print(f"详细错误信息: {traceback.format_exc()}")
             return False 

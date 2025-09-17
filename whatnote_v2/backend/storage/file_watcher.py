@@ -6,6 +6,7 @@
 import os
 import json
 import asyncio
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 from watchdog.observers import Observer
@@ -153,6 +154,10 @@ class FileWatcher:
         if 'files' not in path.parts:
             return None
         
+        # 排除pages文件夹中的文件
+        if 'pages' in path.parts:
+            return None
+        
         # 查找路径模式: .../courses/course-xxx/board-xxx/files/filename
         parts = path.parts
         try:
@@ -166,6 +171,11 @@ class FileWatcher:
             
             # 检查是否在files子目录中
             if parts[courses_idx + 3] != 'files':
+                return None
+            
+            # 只处理直接在files目录下的文件，忽略子文件夹（如pages）中的文件
+            if len(parts) > courses_idx + 5:
+                # 文件在files的子目录中，跳过处理
                 return None
             
             return {
@@ -476,6 +486,34 @@ class FileWatcher:
                                     print(f"删除内容文件: {content_file}")
                                 except:
                                     pass
+                        
+                        # 如果是PDF文件，删除对应的pages文件夹
+                        if window.get('type') == 'pdf':
+                            try:
+                                # 获取PDF文件名（从base_name中提取，移除.pdf后缀）
+                                if base_name.endswith('.pdf'):
+                                    pdf_name = base_name[:-4]  # 移除.pdf后缀
+                                else:
+                                    pdf_name = base_name
+                                
+                                pages_dir = board_dir / "files" / "pages"
+                                pdf_pages_dir = pages_dir / pdf_name
+                                
+                                if pdf_pages_dir.exists():
+                                    # 移动到回收站而不是直接删除
+                                    if hasattr(self.content_manager, 'trash_manager'):
+                                        success_pages = self.content_manager.trash_manager.move_pdf_pages_to_trash(board_dir, f"{pdf_name}.pdf")
+                                        if success_pages:
+                                            print(f"PDF pages文件夹已移动到回收站: {pdf_name}")
+                                        else:
+                                            print(f"移动PDF pages文件夹到回收站失败: {pdf_name}")
+                                    else:
+                                        # 备用方案：直接删除
+                                        shutil.rmtree(pdf_pages_dir)
+                                        print(f"删除PDF pages文件夹: {pdf_name}")
+                                        
+                            except Exception as e:
+                                print(f"处理PDF pages文件夹失败: {e}")
                         
                         # 删除窗口
                         success = self.content_manager.delete_window_content(path_info['board_id'], window_id)

@@ -131,18 +131,9 @@ def start_backend():
     """启动后端服务"""
     print_colored("🚀 启动后端服务...", Colors.BLUE)
     
-    # 添加后端目录到 Python 路径
-    sys.path.insert(0, str(BACKEND_DIR))
-    
     try:
-        # 使用 uvicorn 启动后端
-        cmd = [
-            sys.executable, '-m', 'uvicorn', 
-            'main:app', 
-            '--host', '0.0.0.0',
-            '--port', str(BACKEND_PORT),
-            '--reload'
-        ]
+        # 直接使用 backend/run.py 启动，这样模块路径更清晰
+        cmd = [sys.executable, 'run.py']
         
         process = subprocess.Popen(
             cmd,

@@ -52,6 +52,10 @@ class FileSystemManager:
         for subdir in subdirs:
             (board_dir / subdir).mkdir(exist_ok=True)
         
+        # 创建pages文件夹用于存储PDF文本提取结果
+        pages_dir = board_dir / "files" / "pages"
+        pages_dir.mkdir(exist_ok=True)
+        
         board_info = {
             "id": board_id,
             "name": board_name,

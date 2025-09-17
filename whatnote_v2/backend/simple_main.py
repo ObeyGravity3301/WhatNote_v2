@@ -40,11 +40,11 @@ async def serve_board_file(board_id: str, path: str):
         
         # 基本验证：文件必须存在且是文件
         if not file_path.exists():
-            print(f"❌ 文件不存在: {file_path}")
+            print(f"错误: 文件不存在: {file_path}")
             raise HTTPException(status_code=404, detail="文件不存在")
         
         if not file_path.is_file():
-            print(f"❌ 路径不是文件: {file_path}")
+            print(f"错误: 路径不是文件: {file_path}")
             raise HTTPException(status_code=400, detail="路径不是文件")
         
         # 获取MIME类型
@@ -52,7 +52,7 @@ async def serve_board_file(board_id: str, path: str):
         if not mime_type:
             mime_type = 'application/octet-stream'
         
-        print(f"✅ 返回文件: {file_path.name}, MIME: {mime_type}")
+        print(f"成功: 返回文件: {file_path.name}, MIME: {mime_type}")
         
         # 直接返回文件
         return FileResponse(
@@ -64,7 +64,7 @@ async def serve_board_file(board_id: str, path: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ 文件服务失败: {e}")
+        print(f"错误: 文件服务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

@@ -212,3 +212,53 @@ class TrashManager:
         except Exception as e:
             print(f"计算回收站大小失败: {e}")
             return 0
+    
+    def move_pdf_pages_to_trash(self, board_dir: Path, pdf_filename: str) -> bool:
+        """将PDF对应的pages文件夹移动到回收站"""
+        try:
+            print(f"[DEBUG] move_pdf_pages_to_trash 开始: board_dir={board_dir}, pdf_filename={pdf_filename}")
+            
+            # 获取PDF文件名（不含扩展名）
+            pdf_name = Path(pdf_filename).stem
+            print(f"[DEBUG] PDF名称: {pdf_name}")
+            
+            # 查找pages文件夹中对应的PDF文件夹
+            pages_dir = board_dir / "files" / "pages"
+            pdf_pages_dir = pages_dir / pdf_name
+            
+            print(f"[DEBUG] 查找pages目录: {pdf_pages_dir}")
+            print(f"[DEBUG] pages目录是否存在: {pdf_pages_dir.exists()}")
+            
+            if not pdf_pages_dir.exists():
+                print(f"PDF pages文件夹不存在: {pdf_pages_dir}")
+                return True  # 不存在也算成功
+            
+            # 生成唯一的回收站文件夹名
+            timestamp = int(time.time() * 1000)
+            trash_folder_name = f"{timestamp}_{pdf_name}_pages"
+            trash_folder_path = self.trash_dir / trash_folder_name
+            
+            # 移动整个文件夹到回收站
+            shutil.move(str(pdf_pages_dir), str(trash_folder_path))
+            
+            # 记录回收站信息
+            trash_info = self._load_trash_info()
+            trash_item = {
+                "id": f"trash_{timestamp}_pages",
+                "original_name": f"{pdf_name}_pages",
+                "trash_filename": trash_folder_name,
+                "type": "pdf_pages_folder",
+                "pdf_name": pdf_name,
+                "deleted_at": datetime.now().isoformat(),
+                "original_path": str(pdf_pages_dir.parent),
+                "is_folder": True
+            }
+            trash_info.append(trash_item)
+            self._save_trash_info(trash_info)
+            
+            print(f"PDF pages文件夹已移动到回收站: {pdf_name} -> {trash_folder_name}")
+            return True
+            
+        except Exception as e:
+            print(f"移动PDF pages文件夹到回收站失败: {e}")
+            return False

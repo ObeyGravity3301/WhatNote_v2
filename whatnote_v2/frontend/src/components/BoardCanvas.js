@@ -2079,12 +2079,9 @@ function BoardCanvas({
 
   // 同步窗口数据到桌面图标 - 包括所有窗口（显示和隐藏的）
   useEffect(() => {
-    // 临时调试：检查是否是这个useEffect导致了状态重置
-    console.log('🎯 桌面图标同步useEffect被触发，当前窗口数量:', windows.length);
-    
-    // 如果窗口数量为0，跳过同步，避免进一步的问题
+    // 如果窗口数量为0，清空桌面图标
     if (windows.length === 0) {
-      console.log('⚠️ 窗口数量为0，跳过桌面图标同步');
+      setDesktopIcons([]);
       return;
     }
     

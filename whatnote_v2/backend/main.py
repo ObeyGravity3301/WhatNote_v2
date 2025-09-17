@@ -575,18 +575,71 @@ async def upload_file_to_window(
         
         info(f"文件上传和窗口转换成功: {file.filename} -> {window_type}")
         
+        # 如果是PDF文件，自动提取文本
+        if window_type == 'pdf':
+            try:
+                info(f"开始自动提取PDF文本: {window_id}")
+                text_extraction_success = content_manager.extract_pdf_text_to_pages(
+                    board_id, window_id, updated_window
+                )
+                if text_extraction_success:
+                    info(f"PDF文本自动提取成功: {window_id}")
+                else:
+                    info(f"PDF文本自动提取失败: {window_id}")
+            except Exception as e:
+                info(f"PDF文本自动提取异常: {e}")
+        
         return {
             "message": "文件上传成功",
             "filename": file.filename,
             "window_type": window_type,
             "file_path": updated_window.get('file_path', ''),
-            "content": updated_window.get('content', '')
+            "content": updated_window.get('content', ''),
+            "text_extracted": window_type == 'pdf'  # 标记是否进行了文本提取
         }
         
     except HTTPException:
         raise
     except Exception as e:
         error(f"窗口文件上传失败: {e}")
+        import traceback
+        error(f"详细错误信息: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# PDF文本提取API
+@app.post("/api/boards/{board_id}/windows/{window_id}/extract-text")
+async def extract_pdf_text(board_id: str, window_id: str):
+    """提取PDF文本并保存到pages文件夹"""
+    try:
+        info(f"开始提取PDF文本: {window_id}")
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        if target_window.get('type') != 'pdf':
+            raise HTTPException(status_code=400, detail="只能提取PDF窗口的文本")
+        
+        # 提取PDF文本
+        success = content_manager.extract_pdf_text_to_pages(board_id, window_id, target_window)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="PDF文本提取失败")
+        
+        info(f"PDF文本提取成功: {window_id}")
+        return {"message": "PDF文本提取成功", "window_id": window_id}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"PDF文本提取失败: {e}")
         import traceback
         error(f"详细错误信息: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
