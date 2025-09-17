@@ -27,6 +27,15 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const canvasRef = useRef(null);
+  
+  // 缩放和拖拽状态
+  const [scale, setScale] = useState(1.5);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
+  const containerRef = useRef(null);
 
   // 加载PDF文档
   useEffect(() => {
@@ -66,8 +75,7 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
 
-        // 计算缩放比例
-        const scale = 1.5; // 可以调整这个值来改变显示大小
+        // 使用动态缩放比例
         const viewport = page.getViewport({ scale });
         
         console.log('PDF视口信息:', {
@@ -199,7 +207,52 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
     };
 
     renderPage();
-  }, [pdfDocument, currentPage]);
+  }, [pdfDocument, currentPage, scale]);
+
+  // 缩放函数
+  const handleZoomIn = () => {
+    setScale(prev => Math.min(prev + 0.2, 3.0));
+  };
+
+  const handleZoomOut = () => {
+    setScale(prev => Math.max(prev - 0.2, 0.5));
+  };
+
+  const handleZoomReset = () => {
+    setScale(1.5);
+    setPanX(0);
+    setPanY(0);
+  };
+
+  // 滚轮缩放
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setScale(prev => Math.max(0.5, Math.min(3.0, prev + delta)));
+  };
+
+  // 拖拽处理
+  const handleMouseDown = (e) => {
+    if (e.button === 1) { // 中键
+      e.preventDefault();
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+      setLastPan({ x: panX, y: panY });
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (isDragging) {
+      const deltaX = e.clientX - dragStart.x;
+      const deltaY = e.clientY - dragStart.y;
+      setPanX(lastPan.x + deltaX);
+      setPanY(lastPan.y + deltaY);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
 
   // 上一页
   const goToPreviousPage = () => {
@@ -355,6 +408,78 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
           →
         </button>
 
+        {/* 缩放控制按钮 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginLeft: '8px' }}>
+          <button
+            onClick={handleZoomOut}
+            style={{
+              padding: '1px 6px',
+              fontSize: '11px',
+              backgroundColor: '#c0c0c0',
+              border: '2px outset #c0c0c0',
+              borderRadius: '0px',
+              cursor: 'pointer',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              height: '20px',
+              minWidth: '30px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            −
+          </button>
+          
+          <span style={{ 
+            fontSize: '11px', 
+            fontFamily: 'MS Sans Serif, sans-serif',
+            minWidth: '40px',
+            textAlign: 'center'
+          }}>
+            {Math.round(scale * 100)}%
+          </span>
+          
+          <button
+            onClick={handleZoomIn}
+            style={{
+              padding: '1px 6px',
+              fontSize: '11px',
+              backgroundColor: '#c0c0c0',
+              border: '2px outset #c0c0c0',
+              borderRadius: '0px',
+              cursor: 'pointer',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              height: '20px',
+              minWidth: '30px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            +
+          </button>
+          
+          <button
+            onClick={handleZoomReset}
+            style={{
+              padding: '1px 6px',
+              fontSize: '11px',
+              backgroundColor: '#c0c0c0',
+              border: '2px outset #c0c0c0',
+              borderRadius: '0px',
+              cursor: 'pointer',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              height: '20px',
+              minWidth: '30px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            重置
+          </button>
+        </div>
+
         {/* 关闭分页模式按钮 */}
         <button
           onClick={onClose}
@@ -379,16 +504,29 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
       </div>
 
       {/* PDF页面内容 */}
-      <div style={{ 
-        flex: 1, 
-        overflow: 'auto',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-        padding: '10px',
-        backgroundColor: '#f0f0f0'
-      }}>
-        <div style={{ position: 'relative' }}>
+      <div 
+        ref={containerRef}
+        style={{ 
+          flex: 1, 
+          overflow: 'hidden',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#f0f0f0',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          position: 'relative'
+        }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        <div style={{ 
+          position: 'relative',
+          transform: `translate(${panX}px, ${panY}px)`,
+          transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+        }}>
           <canvas
             ref={canvasRef}
             style={{
