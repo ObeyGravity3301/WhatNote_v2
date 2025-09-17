@@ -19,29 +19,62 @@ class DocumentConverter:
         self.temp_dir = Path(tempfile.gettempdir()) / "whatnote_converter"
         self.temp_dir.mkdir(exist_ok=True)
     
-    def convert_word_to_pdf(self, word_file_path: str, output_dir: str) -> Optional[str]:
+    def convert_office_to_pdf(self, file_path: str, output_dir: str) -> Optional[str]:
         """
-        将Word文档转换为PDF
+        将Office文档转换为PDF（支持Word、PPT、Excel）
         
         Args:
-            word_file_path: Word文档路径
+            file_path: Office文档路径
             output_dir: 输出目录
             
         Returns:
             转换后的PDF文件路径，失败返回None
         """
         try:
-            word_path = Path(word_file_path)
-            if not word_path.exists():
-                print(f"Word文件不存在: {word_file_path}")
+            file_path_obj = Path(file_path)
+            if not file_path_obj.exists():
+                print(f"文件不存在: {file_path}")
                 return None
             
+            # 检测文件类型
+            file_extension = file_path_obj.suffix.lower()
+            file_type = self._detect_file_type(file_extension)
+            
             # 生成输出PDF文件名
-            pdf_filename = word_path.stem + ".pdf"
+            pdf_filename = file_path_obj.stem + ".pdf"
             pdf_path = Path(output_dir) / pdf_filename
             
-            print(f"开始转换Word文档: {word_path.name} -> {pdf_filename}")
+            print(f"开始转换{file_type}文档: {file_path_obj.name} -> {pdf_filename}")
             
+            # 根据文件类型选择转换方法
+            if file_type == 'word':
+                return self._convert_word_to_pdf(file_path_obj, pdf_path)
+            elif file_type == 'powerpoint':
+                return self._convert_ppt_to_pdf(file_path_obj, pdf_path)
+            elif file_type == 'excel':
+                return self._convert_excel_to_pdf(file_path_obj, pdf_path)
+            else:
+                print(f"不支持的文件类型: {file_extension}")
+                return None
+            
+        except Exception as e:
+            print(f"Office文档转PDF转换异常: {e}")
+            return None
+    
+    def _detect_file_type(self, file_extension: str) -> str:
+        """检测文件类型"""
+        if file_extension in ['.doc', '.docx']:
+            return 'word'
+        elif file_extension in ['.ppt', '.pptx']:
+            return 'powerpoint'
+        elif file_extension in ['.xls', '.xlsx']:
+            return 'excel'
+        else:
+            return 'unknown'
+    
+    def _convert_word_to_pdf(self, word_path: Path, pdf_path: Path) -> Optional[str]:
+        """转换Word文档为PDF"""
+        try:
             # 方法1: 使用Microsoft Office COM接口转换（最高质量）
             try:
                 result = self._convert_with_office_com(word_path, pdf_path)
@@ -83,11 +116,76 @@ class DocumentConverter:
             except Exception as e:
                 print(f"LibreOffice转换失败: {e}")
             
-            print(f"所有PDF转换方法都失败了: {word_path.name}")
+            print(f"所有Word转换方法都失败了: {word_path.name}")
             return None
             
         except Exception as e:
-            print(f"Word转PDF转换异常: {e}")
+            print(f"Word转换异常: {e}")
+            return None
+    
+    def _convert_ppt_to_pdf(self, ppt_path: Path, pdf_path: Path) -> Optional[str]:
+        """转换PowerPoint文档为PDF"""
+        try:
+            # 方法1: 使用PowerPoint COM接口转换（最高质量）
+            try:
+                result = self._convert_ppt_with_office_com(ppt_path, pdf_path)
+                if result and result.endswith('.pdf') and Path(result).exists():
+                    print(f"PowerPoint COM转换成功: {pdf_path}")
+                    return result
+            except Exception as e:
+                print(f"PowerPoint COM转换失败: {e}")
+            
+            # 方法2: 使用PowerPoint打印驱动转换
+            try:
+                result = self._convert_ppt_with_print_driver(ppt_path, pdf_path)
+                if result and result.endswith('.pdf') and Path(result).exists():
+                    print(f"PowerPoint打印驱动转换成功: {pdf_path}")
+                    return result
+            except Exception as e:
+                print(f"PowerPoint打印驱动转换失败: {e}")
+            
+            # 方法3: 使用LibreOffice转换
+            try:
+                result = self._convert_with_libreoffice(ppt_path, pdf_path)
+                if result and result.endswith('.pdf') and Path(result).exists():
+                    print(f"LibreOffice转换成功: {pdf_path}")
+                    return result
+            except Exception as e:
+                print(f"LibreOffice转换失败: {e}")
+            
+            print(f"所有PowerPoint转换方法都失败了: {ppt_path.name}")
+            return None
+            
+        except Exception as e:
+            print(f"PowerPoint转换异常: {e}")
+            return None
+    
+    def _convert_excel_to_pdf(self, excel_path: Path, pdf_path: Path) -> Optional[str]:
+        """转换Excel文档为PDF"""
+        try:
+            # 方法1: 使用Excel COM接口转换（最高质量）
+            try:
+                result = self._convert_excel_with_office_com(excel_path, pdf_path)
+                if result and result.endswith('.pdf') and Path(result).exists():
+                    print(f"Excel COM转换成功: {pdf_path}")
+                    return result
+            except Exception as e:
+                print(f"Excel COM转换失败: {e}")
+            
+            # 方法2: 使用LibreOffice转换
+            try:
+                result = self._convert_with_libreoffice(excel_path, pdf_path)
+                if result and result.endswith('.pdf') and Path(result).exists():
+                    print(f"LibreOffice转换成功: {pdf_path}")
+                    return result
+            except Exception as e:
+                print(f"LibreOffice转换失败: {e}")
+            
+            print(f"所有Excel转换方法都失败了: {excel_path.name}")
+            return None
+            
+        except Exception as e:
+            print(f"Excel转换异常: {e}")
             return None
     
     def _convert_with_libreoffice(self, word_path: Path, pdf_path: Path) -> Optional[str]:
@@ -289,6 +387,122 @@ class DocumentConverter:
                 
         except Exception as e:
             print(f"打印驱动转换异常: {e}")
+            raise
+    
+    def _convert_ppt_with_office_com(self, ppt_path: Path, pdf_path: Path) -> Optional[str]:
+        """使用PowerPoint COM接口转换（最高质量）"""
+        try:
+            print(f"尝试使用PowerPoint COM接口转换: {ppt_path.name}")
+            
+            # 启动PowerPoint应用程序
+            ppt_app = win32com.client.Dispatch("PowerPoint.Application")
+            ppt_app.Visible = False  # 不显示PowerPoint窗口
+            ppt_app.DisplayAlerts = False  # 不显示警告
+            
+            try:
+                # 打开PowerPoint文档
+                presentation = ppt_app.Presentations.Open(str(ppt_path.absolute()))
+                
+                # 导出为PDF
+                presentation.SaveAs(str(pdf_path.absolute()), 32)  # 32 = PDF格式
+                
+                # 关闭文档
+                presentation.Close()
+                
+                if pdf_path.exists():
+                    print(f"PowerPoint COM转换成功: {pdf_path}")
+                    return str(pdf_path)
+                else:
+                    raise Exception("PDF文件未生成")
+                    
+            finally:
+                # 关闭PowerPoint应用程序
+                ppt_app.Quit()
+                time.sleep(1)  # 等待PowerPoint完全关闭
+                
+        except Exception as e:
+            print(f"PowerPoint COM转换异常: {e}")
+            raise
+    
+    def _convert_ppt_with_print_driver(self, ppt_path: Path, pdf_path: Path) -> Optional[str]:
+        """使用PowerPoint打印驱动转换"""
+        try:
+            print(f"尝试使用PowerPoint打印驱动转换: {ppt_path.name}")
+            
+            # 使用PowerShell调用PowerPoint的打印功能
+            ps_script = f'''
+            $ppt = New-Object -ComObject PowerPoint.Application
+            $ppt.Visible = $false
+            $ppt.DisplayAlerts = $false
+            
+            try {{
+                $presentation = $ppt.Presentations.Open("{ppt_path.absolute()}")
+                $presentation.SaveAs("{pdf_path.absolute()}", 32)
+                $presentation.Close()
+                Write-Output "转换成功"
+            }} finally {{
+                $ppt.Quit()
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($ppt) | Out-Null
+            }}
+            '''
+            
+            # 执行PowerShell脚本
+            result = subprocess.run([
+                'powershell', '-Command', ps_script
+            ], capture_output=True, text=True, timeout=60)
+            
+            if result.returncode == 0 and pdf_path.exists():
+                print(f"PowerPoint打印驱动转换成功: {pdf_path}")
+                return str(pdf_path)
+            else:
+                raise Exception(f"PowerShell转换失败: {result.stderr}")
+                
+        except Exception as e:
+            print(f"PowerPoint打印驱动转换异常: {e}")
+            raise
+    
+    def _convert_excel_with_office_com(self, excel_path: Path, pdf_path: Path) -> Optional[str]:
+        """使用Excel COM接口转换（最高质量）"""
+        try:
+            print(f"尝试使用Excel COM接口转换: {excel_path.name}")
+            
+            # 启动Excel应用程序
+            excel_app = win32com.client.Dispatch("Excel.Application")
+            excel_app.Visible = False  # 不显示Excel窗口
+            excel_app.DisplayAlerts = False  # 不显示警告
+            
+            try:
+                # 打开Excel文档
+                workbook = excel_app.Workbooks.Open(str(excel_path.absolute()))
+                
+                # 导出为PDF
+                workbook.ExportAsFixedFormat(
+                    Type=0,  # xlTypePDF
+                    Filename=str(pdf_path.absolute()),
+                    Quality=0,  # xlQualityStandard
+                    IncludeDocProps=True,
+                    IgnorePrintAreas=False,
+                    From=1,
+                    To=1,
+                    OpenAfterPublish=False
+                )
+                
+                # 关闭文档
+                workbook.Close()
+                
+                if pdf_path.exists():
+                    print(f"Excel COM转换成功: {pdf_path}")
+                    return str(pdf_path)
+                else:
+                    raise Exception("PDF文件未生成")
+                    
+            finally:
+                # 关闭Excel应用程序
+                excel_app.Quit()
+                time.sleep(1)  # 等待Excel完全关闭
+                
+        except Exception as e:
+            print(f"Excel COM转换异常: {e}")
             raise
     
     def _docx_to_html(self, doc: Document) -> str:

@@ -559,13 +559,13 @@ async def upload_file_to_window(
         final_filename = file.filename
         final_window_type = window_type
         
-        if original_window_type == 'document' and file_extension in ['.doc', '.docx']:
+        if original_window_type == 'document' and file_extension in ['.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx']:
             try:
                 # 创建临时输出目录
                 temp_output_dir = tempfile.mkdtemp()
                 
-                # 转换Word为PDF
-                pdf_path = document_converter.convert_word_to_pdf(temp_path, temp_output_dir)
+                # 转换Office文档为PDF
+                pdf_path = document_converter.convert_office_to_pdf(temp_path, temp_output_dir)
                 
                 if pdf_path and Path(pdf_path).exists():
                     if pdf_path.endswith('.pdf'):
@@ -573,30 +573,30 @@ async def upload_file_to_window(
                         final_file_path = pdf_path
                         final_filename = Path(file.filename).stem + ".pdf"
                         final_window_type = 'pdf'
-                        info(f"Word文档转换为PDF成功: {file.filename} -> {final_filename}")
+                        info(f"Office文档转换为PDF成功: {file.filename} -> {final_filename}")
                     elif pdf_path.endswith('.html'):
                         # 转换为HTML成功
                         final_file_path = pdf_path
                         final_filename = Path(file.filename).stem + ".html"
                         final_window_type = 'document'  # HTML文件也作为document类型处理
-                        info(f"Word文档转换为HTML成功: {file.filename} -> {final_filename}")
+                        info(f"Office文档转换为HTML成功: {file.filename} -> {final_filename}")
                     elif pdf_path.endswith('.txt'):
                         # 转换为文本成功
                         final_file_path = pdf_path
                         final_filename = Path(file.filename).stem + ".txt"
                         final_window_type = 'text'
-                        info(f"Word文档转换为文本成功: {file.filename} -> {final_filename}")
+                        info(f"Office文档转换为文本成功: {file.filename} -> {final_filename}")
                     else:
                         # 其他格式，保持原文件
-                        info(f"Word文档转换失败，保持原格式: {file.filename}")
+                        info(f"Office文档转换失败，保持原格式: {file.filename}")
                         final_window_type = 'document'
                 else:
                     # 转换失败，保持原文件
-                    info(f"Word文档转换失败，保持原格式: {file.filename}")
+                    info(f"Office文档转换失败，保持原格式: {file.filename}")
                     final_window_type = 'document'
                 
             except Exception as e:
-                error(f"Word文档转换异常: {e}")
+                error(f"Office文档转换异常: {e}")
                 # 转换失败，保持原文件
                 final_window_type = 'document'
         

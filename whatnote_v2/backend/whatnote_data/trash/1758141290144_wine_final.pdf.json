@@ -1,0 +1,18 @@
+{
+  "type": "pdf",
+  "title": "wine_final.pdf",
+  "position": {
+    "x": 90,
+    "y": 29
+  },
+  "size": {
+    "width": 840,
+    "height": 585
+  },
+  "id": "window_1758141181004",
+  "created_at": "2025-09-18T04:33:01.004176",
+  "updated_at": "2025-09-18T04:34:32.108211",
+  "hidden": true,
+  "file_path": "files/wine_final.pdf",
+  "original_file_path": "files/originals/tmp91l0xlfz_wine_final.pptx"
+}
