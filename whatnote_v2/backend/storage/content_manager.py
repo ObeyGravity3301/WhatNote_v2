@@ -1549,7 +1549,7 @@ class ContentManager:
         
         return False
     
-    def convert_text_window_to_file_window(self, board_id: str, window_id: str, temp_file_path: str, filename: str, window_type: str) -> bool:
+    def convert_text_window_to_file_window(self, board_id: str, window_id: str, temp_file_path: str, filename: str, window_type: str, original_file_path: str = None) -> bool:
         """将文本窗口转换为文件窗口"""
         try:
             # 找到展板目录
@@ -1604,6 +1604,22 @@ class ContentManager:
             import shutil
             shutil.move(temp_file_path, new_file_path)
             print(f"文件保存到: {new_file_path}")
+            
+            # 如果有原文件，保存到originals文件夹
+            if original_file_path and Path(original_file_path).exists():
+                originals_dir = files_dir / "originals"
+                originals_dir.mkdir(exist_ok=True)
+                
+                # 获取原文件名
+                original_filename = Path(original_file_path).name
+                original_dest_path = originals_dir / original_filename
+                
+                # 复制原文件到originals文件夹
+                shutil.copy2(original_file_path, original_dest_path)
+                print(f"原文件保存到: {original_dest_path}")
+                
+                # 在窗口数据中记录原文件路径
+                window_data['original_file_path'] = f"files/originals/{original_filename}"
             
             # 更新窗口数据
             window_data['type'] = window_type

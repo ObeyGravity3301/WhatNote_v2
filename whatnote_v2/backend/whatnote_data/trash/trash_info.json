@@ -727,5 +727,270 @@
     "deleted_at": "2025-09-18T03:17:56.447744",
     "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files\\pages",
     "is_folder": true
+  },
+  {
+    "id": "trash_1758138496015",
+    "original_name": "HW3 G1 胡祺 U202314148.pdf",
+    "trash_filename": "1758138496015_HW3 G1 胡祺 U202314148.pdf",
+    "window_data": {
+      "type": "pdf",
+      "title": "HW3 G1 胡祺 U202314148.pdf",
+      "position": {
+        "x": 251,
+        "y": 145
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758138026243",
+      "created_at": "2025-09-18T03:40:26.243375",
+      "updated_at": "2025-09-18T03:40:31.724246",
+      "file_path": "files/HW3 G1 胡祺 U202314148.pdf",
+      "content": "files/HW3 G1 胡祺 U202314148.pdf"
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-18T03:48:16.020682",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 2134
+  },
+  {
+    "id": "trash_1758138496022",
+    "original_name": "HW3 G1 胡祺 U202314148.pdf.json",
+    "trash_filename": "1758138496022_HW3 G1 胡祺 U202314148.pdf.json",
+    "window_data": {
+      "type": "pdf",
+      "title": "HW3 G1 胡祺 U202314148.pdf",
+      "position": {
+        "x": 251,
+        "y": 145
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758138026243",
+      "created_at": "2025-09-18T03:40:26.243375",
+      "updated_at": "2025-09-18T03:40:31.724246",
+      "file_path": "files/HW3 G1 胡祺 U202314148.pdf",
+      "content": "files/HW3 G1 胡祺 U202314148.pdf",
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-18T03:48:16.031680",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 407
+  },
+  {
+    "id": "trash_1758138526742",
+    "original_name": "新建 Microsoft Word 文档.docx",
+    "trash_filename": "1758138526742_新建 Microsoft Word 文档.docx",
+    "window_data": {
+      "type": "document",
+      "title": "新建 Microsoft Word 文档.docx",
+      "position": {
+        "x": 132,
+        "y": 186
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758138497845",
+      "created_at": "2025-09-18T03:48:17.845429",
+      "updated_at": "2025-09-18T03:48:43.876198",
+      "file_path": "files/新建 Microsoft Word 文档.docx",
+      "hidden": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-18T03:48:46.748388",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 0
+  },
+  {
+    "id": "trash_1758138526750",
+    "original_name": "新建 Microsoft Word 文档.docx.json",
+    "trash_filename": "1758138526750_新建 Microsoft Word 文档.docx.json",
+    "window_data": {
+      "type": "document",
+      "title": "新建 Microsoft Word 文档.docx",
+      "position": {
+        "x": 132,
+        "y": 186
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758138497845",
+      "created_at": "2025-09-18T03:48:17.845429",
+      "updated_at": "2025-09-18T03:48:43.876198",
+      "file_path": "files/新建 Microsoft Word 文档.docx",
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-18T03:48:46.756984",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 389
+  },
+  {
+    "id": "trash_1758138835540",
+    "original_name": "胡祺专选课补选申请.txt",
+    "trash_filename": "1758138835540_胡祺专选课补选申请.txt",
+    "window_data": {
+      "type": "text",
+      "title": "胡祺专选课补选申请.txt",
+      "position": {
+        "x": 188,
+        "y": 248
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758138527568",
+      "created_at": "2025-09-18T03:48:47.568573",
+      "updated_at": "2025-09-18T03:48:50.670306",
+      "file_path": "files/胡祺专选课补选申请.txt",
+      "content": "files/胡祺专选课补选申请.txt"
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-18T03:53:55.541014",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 326
+  },
+  {
+    "id": "trash_1758138835542",
+    "original_name": "胡祺专选课补选申请.txt.json",
+    "trash_filename": "1758138835542_胡祺专选课补选申请.txt.json",
+    "window_data": {
+      "type": "text",
+      "title": "胡祺专选课补选申请.txt",
+      "position": {
+        "x": 188,
+        "y": 248
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758138527568",
+      "created_at": "2025-09-18T03:48:47.568573",
+      "updated_at": "2025-09-18T03:48:50.670306",
+      "file_path": "files/胡祺专选课补选申请.txt",
+      "content": "files/胡祺专选课补选申请.txt",
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-18T03:53:55.550487",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 417
+  },
+  {
+    "id": "trash_1758138887595",
+    "original_name": "新建 Microsoft Word 文档.pdf",
+    "trash_filename": "1758138887595_新建 Microsoft Word 文档.pdf",
+    "window_data": {
+      "type": "pdf",
+      "title": "新建 Microsoft Word 文档.pdf",
+      "position": {
+        "x": 254,
+        "y": 217
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758138852302",
+      "created_at": "2025-09-18T03:54:12.302988",
+      "updated_at": "2025-09-18T03:54:44.383727",
+      "file_path": "files/新建 Microsoft Word 文档.pdf",
+      "hidden": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-18T03:54:47.604075",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 48570
+  },
+  {
+    "id": "trash_1758138887606",
+    "original_name": "新建 Microsoft Word 文档.pdf.json",
+    "trash_filename": "1758138887606_新建 Microsoft Word 文档.pdf.json",
+    "window_data": {
+      "type": "pdf",
+      "title": "新建 Microsoft Word 文档.pdf",
+      "position": {
+        "x": 254,
+        "y": 217
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758138852302",
+      "created_at": "2025-09-18T03:54:12.302988",
+      "updated_at": "2025-09-18T03:54:44.383727",
+      "file_path": "files/新建 Microsoft Word 文档.pdf",
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-18T03:54:47.613075",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 382
+  },
+  {
+    "id": "trash_1758140184299",
+    "original_name": "胡祺专选课补选申请.html",
+    "trash_filename": "1758140184299_胡祺专选课补选申请.html",
+    "window_data": {
+      "type": "document",
+      "title": "胡祺专选课补选申请.html",
+      "position": {
+        "x": 154,
+        "y": 196
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758138893842",
+      "created_at": "2025-09-18T03:54:53.842774",
+      "updated_at": "2025-09-18T04:16:21.677637",
+      "file_path": "files/胡祺专选课补选申请.html",
+      "hidden": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-18T04:16:24.300570",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 946
+  },
+  {
+    "id": "trash_1758140184303",
+    "original_name": "胡祺专选课补选申请.html.json",
+    "trash_filename": "1758140184303_胡祺专选课补选申请.html.json",
+    "window_data": {
+      "type": "document",
+      "title": "胡祺专选课补选申请.html",
+      "position": {
+        "x": 154,
+        "y": 196
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758138893842",
+      "created_at": "2025-09-18T03:54:53.842774",
+      "updated_at": "2025-09-18T04:16:21.677637",
+      "file_path": "files/胡祺专选课补选申请.html",
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-18T04:16:24.310898",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 387
   }
 ]

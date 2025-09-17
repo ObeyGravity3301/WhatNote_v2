@@ -22,6 +22,7 @@ from logger import info, error
 from storage.file_manager import FileSystemManager
 from storage.content_manager import ContentManager
 from storage.file_watcher import FileWatcher
+from document_converter import document_converter
 
 app = FastAPI(title="WhatNote V2 API", version="2.0.0")
 
@@ -538,7 +539,13 @@ async def upload_file_to_window(
             '.txt': 'text', '.md': 'text'
         }
         
-        window_type = file_type_map.get(file_extension, 'generic')
+        original_window_type = file_type_map.get(file_extension, 'generic')
+        window_type = original_window_type
+        
+        # 如果是Word文档，需要转换为PDF
+        if original_window_type == 'document' and file_extension in ['.doc', '.docx']:
+            info(f"检测到Word文档，准备转换为PDF: {file.filename}")
+            # 暂时保持document类型，在转换成功后再改为pdf
         
         # 保存文件
         import tempfile
@@ -547,15 +554,63 @@ async def upload_file_to_window(
             temp_file.write(content)
             temp_path = temp_file.name
         
-        # 使用content_manager保存文件并转换窗口
+        # 如果是Word文档，先转换为PDF
+        final_file_path = temp_path
+        final_filename = file.filename
+        final_window_type = window_type
+        
+        if original_window_type == 'document' and file_extension in ['.doc', '.docx']:
+            try:
+                # 创建临时输出目录
+                temp_output_dir = tempfile.mkdtemp()
+                
+                # 转换Word为PDF
+                pdf_path = document_converter.convert_word_to_pdf(temp_path, temp_output_dir)
+                
+                if pdf_path and Path(pdf_path).exists():
+                    if pdf_path.endswith('.pdf'):
+                        # 转换为PDF成功
+                        final_file_path = pdf_path
+                        final_filename = Path(file.filename).stem + ".pdf"
+                        final_window_type = 'pdf'
+                        info(f"Word文档转换为PDF成功: {file.filename} -> {final_filename}")
+                    elif pdf_path.endswith('.html'):
+                        # 转换为HTML成功
+                        final_file_path = pdf_path
+                        final_filename = Path(file.filename).stem + ".html"
+                        final_window_type = 'document'  # HTML文件也作为document类型处理
+                        info(f"Word文档转换为HTML成功: {file.filename} -> {final_filename}")
+                    elif pdf_path.endswith('.txt'):
+                        # 转换为文本成功
+                        final_file_path = pdf_path
+                        final_filename = Path(file.filename).stem + ".txt"
+                        final_window_type = 'text'
+                        info(f"Word文档转换为文本成功: {file.filename} -> {final_filename}")
+                    else:
+                        # 其他格式，保持原文件
+                        info(f"Word文档转换失败，保持原格式: {file.filename}")
+                        final_window_type = 'document'
+                else:
+                    # 转换失败，保持原文件
+                    info(f"Word文档转换失败，保持原格式: {file.filename}")
+                    final_window_type = 'document'
+                
+            except Exception as e:
+                error(f"Word文档转换异常: {e}")
+                # 转换失败，保持原文件
+                final_window_type = 'document'
+        
+        # 使用content_manager保存文件并转换窗口，传递原文件路径
         success = content_manager.convert_text_window_to_file_window(
-            board_id, window_id, temp_path, file.filename, window_type
+            board_id, window_id, final_file_path, final_filename, final_window_type, temp_path
         )
         
-        # 删除临时文件（如果还存在）
+        # 删除临时文件
         try:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+            if final_file_path != temp_path and os.path.exists(final_file_path):
+                os.remove(final_file_path)
         except Exception as e:
             print(f"删除临时文件失败: {e}")
         
@@ -576,7 +631,7 @@ async def upload_file_to_window(
         info(f"文件上传和窗口转换成功: {file.filename} -> {window_type}")
         
         # 如果是PDF文件，自动提取文本
-        if window_type == 'pdf':
+        if final_window_type == 'pdf':
             try:
                 info(f"开始自动提取PDF文本: {window_id}")
                 text_extraction_success = content_manager.extract_pdf_text_to_pages(
@@ -592,10 +647,10 @@ async def upload_file_to_window(
         return {
             "message": "文件上传成功",
             "filename": file.filename,
-            "window_type": window_type,
+            "window_type": final_window_type,  # 使用最终确定的窗口类型
             "file_path": updated_window.get('file_path', ''),
             "content": updated_window.get('content', ''),
-            "text_extracted": window_type == 'pdf'  # 标记是否进行了文本提取
+            "text_extracted": final_window_type == 'pdf'  # 标记是否进行了文本提取
         }
         
     except HTTPException:

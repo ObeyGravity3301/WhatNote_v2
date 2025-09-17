@@ -216,18 +216,12 @@ class TrashManager:
     def move_pdf_pages_to_trash(self, board_dir: Path, pdf_filename: str) -> bool:
         """将PDF对应的pages文件夹移动到回收站"""
         try:
-            print(f"[DEBUG] move_pdf_pages_to_trash 开始: board_dir={board_dir}, pdf_filename={pdf_filename}")
-            
             # 获取PDF文件名（不含扩展名）
             pdf_name = Path(pdf_filename).stem
-            print(f"[DEBUG] PDF名称: {pdf_name}")
             
             # 查找pages文件夹中对应的PDF文件夹
             pages_dir = board_dir / "files" / "pages"
             pdf_pages_dir = pages_dir / pdf_name
-            
-            print(f"[DEBUG] 查找pages目录: {pdf_pages_dir}")
-            print(f"[DEBUG] pages目录是否存在: {pdf_pages_dir.exists()}")
             
             if not pdf_pages_dir.exists():
                 print(f"PDF pages文件夹不存在: {pdf_pages_dir}")

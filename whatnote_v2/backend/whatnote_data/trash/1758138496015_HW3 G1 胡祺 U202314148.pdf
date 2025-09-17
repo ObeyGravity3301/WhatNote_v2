@@ -1,0 +1,26 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Word Document</title>
+    <style>
+        body { font-family: 'Times New Roman', serif; margin: 40px; line-height: 1.6; }
+        h1, h2, h3, h4, h5, h6 { color: #333; margin-top: 20px; margin-bottom: 10px; }
+        p { margin-bottom: 10px; }
+        .page-break { page-break-before: always; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        td, th { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+
+<p>Immunology Homework 3 2025/9/13</p>
+<p>No.U202314148      胡祺     Sino-French 2301</p>
+<p>Describe the basic process and typical event characteristics of T cell mediated adaptive immune response to one of the exogenous or endogenous antigens.</p>
+<p>Typical Event: T Cell Role in Adaptive Immune Response to Viral Infection</p>
+<p>When a virus infects host cells, viral proteins are degraded into short peptides and presented on the cell surface through MHC class I molecules. This process allows cytotoxic CD8⁺ T cells to recognize the infected cells. Once activated, CD8⁺ T cells undergo clonal expansion and differentiate into effector cytotoxic T lymphocytes (CTLs).</p>
+<p>The effector CTLs bind specifically to infected cells via the T cell receptor (TCR)–MHC I–peptide complex. They then release perforin and granzymes, which induce apoptosis in the target cells, thereby eliminating the viral reservoir. In addition, CD4⁺ helper T cells play a supportive role by releasing cytokines such as IL-2 and IFN-γ. These cytokines promote the proliferation and survival of CD8⁺ T cells and enhance the overall immune response.</p>
+<p>A critical feature of this adaptive immune response is the generation of memory T cells. After the clearance of infection, a portion of activated T cells persist as memory cells, which can rapidly respond to the same viral antigen upon reinfection. This long-lasting immunity represents one of the defining characteristics of the adaptive immune system.</p>
+</body></html>

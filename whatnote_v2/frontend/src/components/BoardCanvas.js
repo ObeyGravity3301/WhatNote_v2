@@ -489,6 +489,100 @@ const toMediaUrl = (windowOrContent, boardId) => {
   return '';
 };
 
+// 文档窗口渲染器组件（Word文档等）
+function DocumentWindowRenderer({ window, onUpload, boardId }) {
+  const [isPaginationMode, setIsPaginationMode] = useState(false);
+
+  console.log('📄 文档窗口渲染:', {
+    windowId: window.id,
+    windowContent: window.content,
+    hasContent: !!window.content
+  });
+
+  if (!hasRealMediaContent(window)) {
+    console.log('📄 文档窗口无内容，显示占位符');
+    return (
+      <label className="pdf-placeholder" title="点击上传文档" style={{ flex: 1 }}>
+        📄 文档内容
+        <p>点击上传Word文档</p>
+        <input
+          type="file"
+          accept=".doc,.docx,.ppt,.pptx,.xls,.xlsx"
+          style={{ display: 'none' }}
+          onChange={(e) => onUpload(e.target.files)}
+        />
+      </label>
+    );
+  }
+
+  const documentUrl = toMediaUrl(window, boardId);
+  console.log('📄 文档URL生成:', documentUrl);
+
+  // 如果启用分页模式，显示分页组件（转换为PDF后）
+  if (isPaginationMode) {
+    return (
+      <PDFPaginationViewer 
+        pdfUrl={documentUrl} 
+        onClose={() => setIsPaginationMode(false)}
+      />
+    );
+  }
+
+  // 默认iframe模式
+  return (
+    <div className="pdf-container" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* 文档工具栏 */}
+      <div style={{
+        backgroundColor: '#c0c0c0',
+        borderBottom: '2px outset #c0c0c0',
+        padding: '2px 4px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        height: '24px',
+        flexShrink: 0
+      }}>
+        <button
+          onClick={() => {
+            console.log('分页模式按钮被点击');
+            setIsPaginationMode(true);
+          }}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '60px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onMouseDown={(e) => { e.target.style.border = '2px inset #c0c0c0'; e.target.style.backgroundColor = '#a0a0a0'; }}
+          onMouseUp={(e) => { e.target.style.border = '2px outset #c0c0c0'; e.target.style.backgroundColor = '#c0c0c0'; }}
+          onMouseLeave={(e) => { e.target.style.border = '2px outset #c0c0c0'; e.target.style.backgroundColor = '#c0c0c0'; }}
+        >
+          分页模式
+        </button>
+      </div>
+      
+      {/* 文档内容区域 */}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <iframe
+          title="document"
+          style={{ width: '100%', height: '100%', border: 'none' }}
+          src={documentUrl}
+          onLoad={() => console.log('📄 文档iframe加载完成')}
+          onError={(e) => console.error('📄 文档iframe加载错误:', e)}
+        ></iframe>
+      </div>
+    </div>
+  );
+}
+
 // PDF窗口渲染器组件
 function PDFWindowRenderer({ window, onUpload, boardId }) {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
@@ -1824,6 +1918,11 @@ function BoardCanvas({
       case 'pdf':
         if (hasMediaContent) {
           return '📑'; // PDF有内容时显示文档图标
+        }
+        return '📄';
+      case 'document':
+        if (hasMediaContent) {
+          return '📄'; // 文档有内容时显示文档图标
         }
         return '📄';
       default:
@@ -4002,6 +4101,13 @@ function BoardCanvas({
                 <PDFWindowRenderer 
                   window={window} 
                   onUpload={(files) => handleUpload(window.id, 'pdfs', files)}
+                  boardId={boardId}
+                />
+              )}
+              {window.type === 'document' && (
+                <DocumentWindowRenderer 
+                  window={window} 
+                  onUpload={(files) => handleUpload(window.id, 'documents', files)}
                   boardId={boardId}
                 />
               )}
