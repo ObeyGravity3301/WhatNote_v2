@@ -1060,6 +1060,26 @@ function BoardCanvas({
   onWindowDelete
 }) {
   const [windows, setWindows] = useState([]);
+  
+  // 包装setWindows来跟踪调用来源
+  const setWindowsWithTrace = (newWindows) => {
+    console.log('🔄 setWindows被调用:', {
+      新窗口数量: Array.isArray(newWindows) ? newWindows.length : '函数调用',
+      调用堆栈: new Error().stack?.split('\n').slice(1, 4).join('\n')
+    });
+    setWindows(newWindows);
+  };
+  
+  // 调试：监听windows状态变化
+  useEffect(() => {
+    // 更新ref以便其他地方获取最新状态
+    windowsRef.current = windows;
+    
+    console.log('🔄 Windows状态变化:', {
+      数量: windows.length,
+      窗口列表: windows.map(w => ({ id: w.id, title: w.title, position: w.position }))
+    });
+  }, [windows]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragData, setDragData] = useState(null);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
@@ -1090,6 +1110,9 @@ function BoardCanvas({
   
   // 桌面网格管理器
   const desktopGridRef = useRef(new Set()); // 已占用的网格位置 "x,y"
+  const previousHiddenStateRef = useRef(''); // 记录上次的隐藏状态
+  const lastSaveStateRef = useRef({}); // 记录上次保存的窗口状态
+  const windowsRef = useRef([]); // 用于获取最新的windows状态
   
   // 网格位置计算辅助函数
   const pixelToGrid = (pixelX, pixelY) => {
@@ -1178,11 +1201,8 @@ function BoardCanvas({
 
   const resizeState = useRef({ active: false, windowId: null, startX: 0, startY: 0, startW: 0, startH: 0, originalW: 0, originalH: 0 });
   const dragState = useRef({ active: false, windowId: null, startX: 0, startY: 0, initialX: 0, initialY: 0, originalX: 0, originalY: 0 });
-  const windowSaveTimeoutRef = useRef(null); // 重命名避免与TextEditor中的saveTimeoutRef冲突
+  const saveTimeoutRef = useRef(null);
   const maxZIndexRef = useRef(100);
-  const periodicSaveIntervalRef = useRef(null); // 定期保存间隔引用
-  const isSavingStateRef = useRef(false); // 标记是否正在保存窗口状态
-  const previousBoardIdRef = useRef(null); // 记录前一个展板ID
 
   // 检查窗口是否有真实的媒体内容
   const hasRealMediaContent = (window) => {
@@ -1298,7 +1318,7 @@ function BoardCanvas({
       console.log('🔄 fetchBoardWindows 开始加载展板窗口数据, boardId:', boardId);
       
       if (!boardId) {
-        console.log('❌ boardId 为空，跳过加载');
+        console.error('❌ boardId 为空，跳过加载');
         return;
       }
       
@@ -1328,14 +1348,10 @@ function BoardCanvas({
           console.log('⚠️ 图标位置数据加载失败，使用默认位置');
         }
         
-        // 打印每个窗口的位置和大小信息
+        // 简化的窗口加载日志
+        console.log(`✅ 成功加载 ${list.length} 个窗口:`);
         list.forEach((w, index) => {
-          console.log(`窗口 ${index + 1} 从后端加载:`);
-          console.log('  ID:', w.id);
-          console.log('  类型:', w.type);
-          console.log('  位置:', `x:${w.position?.x}, y:${w.position?.y}`);
-          console.log('  大小:', `w:${w.size?.width}, h:${w.size?.height}`);
-          console.log('  隐藏:', w.hidden);
+          console.log(`  ${index + 1}. ${w.title} (${w.type}) - 位置: ${w.position?.x},${w.position?.y} 大小: ${w.size?.width}x${w.size?.height} ${w.hidden ? '[隐藏]' : ''}`);
         });
         
         // 批量恢复隐藏状态，避免闪烁
@@ -1391,8 +1407,21 @@ function BoardCanvas({
         updateGridOccupancy(iconsWithPositions);
         setDesktopIcons(iconsWithPositions);
         
+        // 去重处理：确保没有重复的窗口ID
+        const uniqueWindows = [];
+        const seenIds = new Set();
+        
+        for (const window of list) {
+          if (!seenIds.has(window.id)) {
+            seenIds.add(window.id);
+            uniqueWindows.push(window);
+          } else {
+            console.warn('⚠️ 发现重复的窗口ID，已跳过:', window.id, window.title);
+          }
+        }
+        
         // 设置窗口数据，确保每个窗口都有必需的属性
-        const validatedWindows = list.map(window => ({
+        const validatedWindows = uniqueWindows.map(window => ({
           ...window,
           // 处理位置数据：支持嵌套格式 (position.x) 和扁平格式 (x)
           position: window.position || { 
@@ -1405,7 +1434,14 @@ function BoardCanvas({
             height: window.height || 300 
           }
         }));
-        setWindows(validatedWindows);
+        console.log('🔄 设置窗口状态，窗口数量:', validatedWindows.length);
+        setWindowsWithTrace(validatedWindows);
+        
+        // 延迟验证状态是否正确设置（使用ref获取最新状态）
+        setTimeout(() => {
+          console.log('⏰ 延迟验证 - 当前windows状态长度:', windowsRef.current.length);
+          console.log('⏰ 延迟验证 - 窗口列表:', windowsRef.current.map(w => w.title));
+        }, 100);
         
         // 迁移修复：将历史存量的相对 /api/ 路径改为 8081 绝对路径，避免走到 3000
         for (const w of list) {
@@ -1425,86 +1461,53 @@ function BoardCanvas({
         console.error('获取窗口失败:', windowsResponse.status);
       }
     } catch (error) {
-      console.error('获取窗口失败:', error);
+      console.error('❌ fetchBoardWindows 获取窗口失败:', error);
+      console.error('❌ 错误详情:', error.message);
+      console.error('❌ 当前boardId:', boardId);
+      // 确保在错误情况下也有基本的空状态
+      console.log('❌ 由于fetchBoardWindows错误，重置windows状态为空');
+      setWindowsWithTrace([]);
+      setDesktopIcons([]);
     }
   }, [boardId, onBatchWindowHide]);
 
   useEffect(() => {
     if (boardId) {
-      console.log('🔄 展板ID变化，清理状态并重新加载:', boardId);
+      console.log('🔄 展板ID变化，开始加载新展板数据:', boardId);
       
-      // 在切换展板前，先强制保存当前展板的所有窗口状态
-      const saveCurrentBoardState = async () => {
-        if (windows.length > 0 && previousBoardIdRef.current) {
-          console.log('💾 展板切换前强制保存当前窗口状态...');
-          isSavingStateRef.current = true;
+      // 先加载新数据，再清理旧状态，避免出现空白期
+      const loadNewBoardData = async () => {
+        try {
+          // 清理交互状态
+          forceResetWindowStates();
+          cleanupResizeListeners();
+          cleanupDragListeners();
           
-          const savePromises = windows.map(async (window) => {
-            try {
-              const isHidden = hiddenWindows && hiddenWindows.has(window.id);
-              // 使用前一个展板ID来保存当前窗口状态
-              const response = await fetch(`http://localhost:8081/api/boards/${previousBoardIdRef.current}/windows/${window.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  ...window,
-                  hidden: isHidden,
-                  updated_at: new Date().toISOString()
-                }),
-              });
-              return response.ok;
-            } catch (error) {
-              console.error('展板切换前保存失败:', window.id, error);
-              return false;
-            }
-          });
+          // 清空隐藏状态
+          if (onClearHiddenWindows) {
+            onClearHiddenWindows();
+          }
           
-          await Promise.all(savePromises);
-          console.log('✅ 展板切换前保存完成');
+          // 重置编辑状态
+          setEditingTitleId(null);
+          setEditingTitleValue('');
+          maxZIndexRef.current = 100;
           
-          // 短暂延迟确保保存操作完成
-          await new Promise(resolve => setTimeout(resolve, 500));
-          isSavingStateRef.current = false;
+          // 加载新展板数据
+          console.log('🔄 开始加载新展板窗口数据');
+          await fetchBoardWindows();
+          
+          console.log('✅ 展板切换完成');
+        } catch (error) {
+          console.error('❌ 展板切换失败:', error);
+          // 发生错误时才清空状态
+          console.log('❌ 由于展板切换错误，重置windows状态为空');
+          setWindowsWithTrace([]);
+          setDesktopIcons([]);
         }
       };
       
-      // 执行保存并继续切换流程
-      saveCurrentBoardState().then(() => {
-        // 清理缓存数据
-        console.log('🧹 清理浏览器缓存数据');
-        
-        // 先清空隐藏状态，避免切换时闪烁
-        if (onClearHiddenWindows) {
-          onClearHiddenWindows();
-        }
-        
-        // 重置所有状态
-        console.log('🧹 重置组件状态');
-        setWindows([]); // 清空窗口数据
-        setDesktopIcons([]); // 清空桌面图标
-        setIsDragging(false);
-        setIsResizing(false);
-        setWindowZIndexes({});
-        setEditingTitleId(null); // 重置编辑状态
-        setEditingTitleValue('');
-        maxZIndexRef.current = 100;
-        
-        // 清理事件监听器
-        cleanupResizeListeners();
-        cleanupDragListeners();
-        
-        // 重新加载窗口数据
-        console.log('🔄 开始重新加载窗口数据');
-        fetchBoardWindows();
-        
-        // 更新前一个展板ID为当前展板ID
-        previousBoardIdRef.current = boardId;
-      }).catch((error) => {
-        console.error('❌ 展板切换前保存失败:', error);
-        // 即使保存失败，也继续切换流程
-        fetchBoardWindows();
-        previousBoardIdRef.current = boardId;
-      });
+      loadNewBoardData();
     }
   }, [boardId]);
 
@@ -1518,18 +1521,14 @@ function BoardCanvas({
         return;
       }
       
-      // 如果正在保存窗口状态，忽略文件变化事件，避免循环重新加载
-      if (isSavingStateRef.current) {
-        console.log('🚫 正在保存窗口状态，忽略文件监控事件:', event.detail);
-        return;
-      }
-      
       console.log('📡 BoardCanvas收到文件监控事件:', event.detail);
+      console.log('⚠️ 文件监控事件可能影响窗口状态！当前窗口数:', windows.length);
       
       switch (type) {
         case 'reload_windows':
           // 重新加载窗口数据和桌面图标 - 使用完整的加载函数确保一致性
           console.log('🔄 文件监控触发：重新加载展板数据');
+          console.log('⚠️ 文件监控导致的重新加载可能会重置窗口位置！');
           fetchBoardWindows();
           break;
         case 'window_deleted':
@@ -1552,6 +1551,7 @@ function BoardCanvas({
 
   // 通知App组件窗口变化
   useEffect(() => {
+    console.log('📢 通知App组件窗口变化，窗口数量:', windows.length);
     if (onWindowsChange) {
       onWindowsChange(windows);
     }
@@ -1559,10 +1559,32 @@ function BoardCanvas({
 
   // 同步窗口数据到桌面图标 - 包括所有窗口（显示和隐藏的）
   useEffect(() => {
+    // 临时调试：检查是否是这个useEffect导致了状态重置
+    console.log('🎯 桌面图标同步useEffect被触发，当前窗口数量:', windows.length);
+    
+    // 如果窗口数量为0，跳过同步，避免进一步的问题
+    if (windows.length === 0) {
+      console.log('⚠️ 窗口数量为0，跳过桌面图标同步');
+      return;
+    }
+    
+    // 检查是否需要同步（避免频繁触发）
+    const windowIds = windows.map(w => w.id).sort().join(',');
+    const currentIconIds = desktopIcons.map(i => i.windowId).sort().join(',');
+    const hiddenWindowIds = hiddenWindows ? Array.from(hiddenWindows).sort().join(',') : '';
+    
+    // 如果窗口列表和隐藏状态都没有变化，则跳过
+    if (windowIds === currentIconIds && 
+        previousHiddenStateRef.current === hiddenWindowIds &&
+        desktopIcons.length === windows.length) {
+      console.log('🎯 窗口状态无变化，跳过桌面图标同步');
+      return;
+    }
+    
     console.log('🎯 同步窗口数据到桌面图标');
     console.log('🎯 当前窗口数量:', windows.length);
     console.log('🎯 当前桌面图标数量:', desktopIcons.length);
-    console.log('🎯 隐藏窗口数量:', hiddenWindows.size);
+    console.log('🎯 隐藏窗口数量:', hiddenWindows ? hiddenWindows.size : 0);
     
     const icons = windows.map(window => {
       // 查找是否已有该图标，保持位置和网格信息
@@ -1580,7 +1602,7 @@ function BoardCanvas({
           position: existingIcon.position,
           gridPosition: existingIcon.gridPosition,
         thumbnail: generateThumbnail(window),
-          isHidden: hiddenWindows.has(window.id)
+          isHidden: hiddenWindows ? hiddenWindows.has(window.id) : false
         };
       } else {
         // 新图标：分配下一个可用的网格位置
@@ -1598,7 +1620,7 @@ function BoardCanvas({
           position: pixelPos,
           gridPosition: gridPos,
           thumbnail: generateThumbnail(window),
-          isHidden: hiddenWindows.has(window.id)
+          isHidden: hiddenWindows ? hiddenWindows.has(window.id) : false
         };
       }
     });
@@ -1609,12 +1631,21 @@ function BoardCanvas({
     updateGridOccupancy(icons);
     setDesktopIcons(icons);
     
+    // 记录当前状态
+    previousHiddenStateRef.current = hiddenWindowIds;
+    
     console.log('🎯 桌面图标同步完成');
   }, [windows, hiddenWindows]);
 
   // 窗口焦点管理
-  const handleWindowFocusLocal = (windowId) => {
+  const handleWindowFocusLocal = async (windowId) => {
     console.log('窗口获得焦点:', windowId);
+    
+    // 如果有之前的焦点窗口，保存其状态
+    if (focusedWindowId && focusedWindowId !== windowId) {
+      console.log('保存失去焦点的窗口状态:', focusedWindowId);
+      await saveWindowState(focusedWindowId, {});
+    }
     
     // 通知App组件焦点变化
     if (onWindowFocus) {
@@ -1666,18 +1697,31 @@ function BoardCanvas({
     try {
       const windowObj = windows.find(w => w.id === editingTitleId);
       if (windowObj && windowObj.title !== newTitle) {
+        console.log('🔄 开始重命名窗口:', {
+          windowId: editingTitleId,
+          oldTitle: windowObj.title,
+          newTitle: newTitle,
+          windowType: windowObj.type
+        });
+        
         const updatedWindow = { 
           ...windowObj, 
           title: newTitle
         };
         
+        console.log('📤 发送重命名请求到后端...');
         const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${editingTitleId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatedWindow),
         });
 
+        console.log('📥 后端响应状态:', response.status);
+        
         if (response.ok) {
+          const result = await response.json();
+          console.log('📥 后端响应数据:', result);
+          
           // 更新本地状态
           setWindows(prevWindows => 
             prevWindows.map(w => 
@@ -1686,13 +1730,37 @@ function BoardCanvas({
                 : w
             )
           );
-          console.log('标题更新成功:', newTitle);
+          
+          // 更新桌面图标状态
+          setDesktopIcons(prevIcons =>
+            prevIcons.map(icon =>
+              icon.id === editingTitleId
+                ? { ...icon, title: newTitle }
+                : icon
+            )
+          );
+          
+          console.log('✅ 窗口重命名成功:', newTitle);
+          
+          // 延迟刷新以确保文件系统操作完成
+          setTimeout(() => {
+            console.log('🔄 刷新窗口数据以同步文件系统变化');
+            fetchBoardWindows();
+          }, 1000);
+          
         } else {
-          console.error('更新标题失败:', response.status);
+          const errorText = await response.text();
+          console.error('❌ 更新标题失败:', response.status, errorText);
         }
+      } else {
+        console.log('⚠️ 窗口未找到或标题未变化:', {
+          found: !!windowObj,
+          oldTitle: windowObj?.title,
+          newTitle: newTitle
+        });
       }
     } catch (error) {
-      console.error('更新标题错误:', error);
+      console.error('❌ 重命名异常:', error);
     }
 
     setEditingTitleId(null);
@@ -2120,11 +2188,8 @@ function BoardCanvas({
         console.error('❌ 未找到要保存的窗口:', windowId);
         return false;
       }
-      
-      // 设置保存状态标记
-      isSavingStateRef.current = true;
-      
-      // 合并更新数据，优先使用传入的hidden值
+
+      // 合并更新数据，确保包含所有必要字段
       const updatedWindow = { 
         ...window, 
         ...updates,
@@ -2159,22 +2224,14 @@ function BoardCanvas({
       if (response.ok) {
         const result = await response.json();
         console.log('✅ 窗口状态保存成功:', windowId);
-        
-        // 延迟清除保存状态标记，给文件监控一些时间
-        setTimeout(() => {
-          isSavingStateRef.current = false;
-        }, 2000);
-        
         return true;
       } else {
         const errorText = await response.text();
         console.error('❌ 窗口状态保存失败:', response.status, errorText);
-        isSavingStateRef.current = false;
         return false;
       }
     } catch (error) {
       console.error('❌ 保存窗口状态异常:', error);
-      isSavingStateRef.current = false;
       return false;
     }
   };
@@ -2265,6 +2322,22 @@ function BoardCanvas({
   // 关闭窗口（隐藏而不删除）- 使用App传来的处理函数
   const handleWindowCloseLocal = async (windowId) => {
     console.log('BoardCanvas: 关闭窗口（隐藏）:', windowId);
+    
+    // 如果该窗口正在被拖拽或缩放，先停止这些操作
+    if (isDragging && dragState.current.windowId === windowId) {
+      console.log('⚠️ 窗口正在拖拽中，先停止拖拽');
+      dragState.current.active = false;
+      setIsDragging(false);
+      cleanupDragListeners();
+    }
+    
+    if (isResizing && resizeState.current.windowId === windowId) {
+      console.log('⚠️ 窗口正在缩放中，先停止缩放');
+      resizeState.current.active = false;
+      setIsResizing(false);
+      cleanupResizeListeners();
+    }
+    
     if (onWindowClose) {
       onWindowClose(windowId);
       // 立即保存隐藏状态到后端，明确设置hidden为true
@@ -2581,6 +2654,31 @@ function BoardCanvas({
     document.body.style.userSelect = '';
   };
 
+  // 强制重置所有窗口交互状态（紧急修复函数）
+  const forceResetWindowStates = () => {
+    console.log('🔧 强制重置所有窗口交互状态');
+    
+    // 重置拖拽状态
+    if (isDragging) {
+      dragState.current.active = false;
+      setIsDragging(false);
+      cleanupDragListeners();
+    }
+    
+    // 重置缩放状态
+    if (isResizing) {
+      resizeState.current.active = false;
+      setIsResizing(false);
+      cleanupResizeListeners();
+    }
+    
+    // 重置样式
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    
+    console.log('✅ 窗口交互状态重置完成');
+  };
+
   // 新的拖拽系统 - 使用鼠标事件而非drag API
   const startDrag = (e, windowId) => {
     console.log('🔵 startDrag 函数被调用，窗口ID:', windowId);
@@ -2701,19 +2799,27 @@ function BoardCanvas({
         console.log('  是否改变:', positionChanged);
         
         if (positionChanged) {
+          console.log('✅ 检测到窗口位置变化，准备保存');
           // 延迟保存，防抖机制
-          if (windowSaveTimeoutRef.current) {
-            clearTimeout(windowSaveTimeoutRef.current);
+          if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
           }
           
-          windowSaveTimeoutRef.current = setTimeout(async () => {
+          saveTimeoutRef.current = setTimeout(async () => {
             console.log('准备保存窗口位置:', {
               windowId: target.id,
               position: finalPosition,
             });
             
             // 使用统一的保存函数，确保包含所有状态
-            await saveWindowState(target.id, { position: finalPosition });
+            console.log('🔄 开始保存窗口位置...');
+            const saveResult = await saveWindowState(target.id, { position: finalPosition });
+            console.log('💾 窗口位置保存结果:', saveResult ? '成功' : '失败');
+            
+            // 验证保存是否真正生效
+            if (saveResult) {
+              console.log('🔍 保存成功后验证 - 检查后端数据是否更新');
+            }
           }, 300); // 300ms 防抖
         } else {
           console.log('窗口位置未改变，跳过保存');
@@ -2857,11 +2963,11 @@ function BoardCanvas({
         
         if (sizeChanged) {
           // 延迟保存，防抖机制
-          if (windowSaveTimeoutRef.current) {
-            clearTimeout(windowSaveTimeoutRef.current);
+          if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
           }
           
-          windowSaveTimeoutRef.current = setTimeout(async () => {
+          saveTimeoutRef.current = setTimeout(async () => {
             console.log('准备保存窗口大小:', {
               windowId: target.id,
               size: finalSize,
@@ -2881,111 +2987,88 @@ function BoardCanvas({
     });
   };
 
-  // 定期保存所有窗口状态
-  const saveAllWindowStates = useCallback(async () => {
-    if (windows.length === 0) return;
-    
-    // 设置保存状态标记
-    isSavingStateRef.current = true;
-    
-    console.log('🔄 定期保存所有窗口状态...');
-    for (const window of windows) {
-      try {
-        // 获取当前隐藏状态
-        const isHidden = hiddenWindows && hiddenWindows.has(window.id);
-        
-        // 保存窗口的完整状态（不再设置标记，因为已经在外层设置）
-        const windowToSave = windows.find(w => w.id === window.id);
-        if (!windowToSave) continue;
-        
-        const updatedWindow = { 
-          ...windowToSave, 
-          position: window.position,
-          size: window.size,
-          hidden: isHidden,
-          id: window.id,
-          updated_at: new Date().toISOString()
-        };
-        
-        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${window.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updatedWindow),
-        });
+  // 页面离开前保存功能已移除
+  // 原因：beforeunload 事件会在页面失去焦点时频繁触发，导致不必要的批量保存
+  // 现有的事件驱动保存机制已经足够：
+  // - 拖拽结束后立即保存位置
+  // - 缩放结束后立即保存大小
+  // - 窗口失去焦点时保存状态
+  // - 文本内容变化时自动保存
 
-        if (response.ok) {
-          console.log('✅ 窗口状态保存成功:', window.id);
+  // 定期保存已禁用 - 使用事件驱动的保存机制更高效
+  // 现有的保存机制：
+  // 1. 拖拽结束后保存位置
+  // 2. 缩放结束后保存大小  
+  // 3. 窗口失去焦点时保存状态
+  // 4. 页面离开前保存所有状态
+  // 5. 文本内容变化时自动保存
+
+  // 添加键盘快捷键监听（Ctrl+Shift+R 重置窗口状态，Ctrl+Shift+D 显示调试信息）
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+Shift+R 强制重置窗口状态
+      if (e.ctrlKey && e.shiftKey && e.key === 'R') {
+        e.preventDefault();
+        console.log('🎹 检测到快捷键 Ctrl+Shift+R，强制重置窗口状态');
+        forceResetWindowStates();
+      }
+      
+      // Ctrl+Shift+S 强制同步所有窗口状态到后端
+      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        console.log('🔄 强制同步所有窗口状态到后端...');
+        
+        windowsRef.current.forEach(async (window) => {
+          const isHidden = hiddenWindows && hiddenWindows.has(window.id);
+          console.log(`💾 强制保存窗口: ${window.title} (隐藏: ${isHidden})`);
+          await saveWindowState(window.id, { hidden: isHidden });
+        });
+      }
+      
+      // Ctrl+Shift+D 显示调试信息
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        console.log('🔍 当前窗口状态调试信息:');
+        console.log(`📊 窗口总数 (state): ${windows.length}`);
+        console.log(`📊 窗口总数 (ref): ${windowsRef.current.length}`);
+        console.log(`📊 隐藏窗口数: ${hiddenWindows ? hiddenWindows.size : 0}`);
+        console.log(`📊 桌面图标数: ${desktopIcons.length}`);
+        
+        const currentWindows = windowsRef.current.length > 0 ? windowsRef.current : windows;
+        
+        if (currentWindows.length === 0) {
+          console.log('⚠️ 当前没有加载任何窗口');
         } else {
-          console.error('❌ 窗口状态保存失败:', window.id, response.status);
-        }
-      } catch (error) {
-        console.error('❌ 定期保存窗口状态失败:', window.id, error);
-      }
-    }
-    
-    console.log('✅ 定期保存完成');
-    
-    // 延迟清除保存状态标记
-    setTimeout(() => {
-      isSavingStateRef.current = false;
-    }, 3000);
-  }, [windows, hiddenWindows, boardId]);
-
-  // 启动定期保存
-  useEffect(() => {
-    // 每30秒定期保存一次所有窗口状态
-    periodicSaveIntervalRef.current = setInterval(saveAllWindowStates, 30000);
-    
-    return () => {
-      if (periodicSaveIntervalRef.current) {
-        clearInterval(periodicSaveIntervalRef.current);
-      }
-    };
-  }, [saveAllWindowStates]);
-
-  // 页面卸载前保存所有窗口状态
-  useEffect(() => {
-    const handleBeforeUnload = async (event) => {
-      // 同步保存所有窗口状态
-      if (windows.length > 0) {
-        console.log('🚪 页面即将卸载，强制保存所有窗口状态');
-        
-        // 创建同步保存Promise数组
-        const savePromises = windows.map(async (window) => {
-          try {
+          currentWindows.forEach((window, index) => {
             const isHidden = hiddenWindows && hiddenWindows.has(window.id);
-            return fetch(`http://localhost:8081/api/boards/${boardId}/windows/${window.id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ...window,
-                hidden: isHidden,
-                updated_at: new Date().toISOString()
-              }),
-              keepalive: true // 确保请求在页面卸载时仍能发送
-            });
-          } catch (error) {
-            console.error('页面卸载保存失败:', window.id, error);
-          }
-        });
+            console.log(`  窗口 ${index + 1}: ${window.title || '无标题'}`);
+            console.log(`    ID: ${window.id}`);
+            console.log(`    类型: ${window.type}`);
+            console.log(`    位置: x:${window.position?.x || '未设置'}, y:${window.position?.y || '未设置'}`);
+            console.log(`    大小: w:${window.size?.width || '未设置'}, h:${window.size?.height || '未设置'}`);
+            console.log(`    隐藏: ${isHidden}`);
+            console.log(`    完整对象:`, window);
+          });
+        }
         
-        // 等待所有保存完成（但不阻塞页面卸载）
-        Promise.all(savePromises).then(() => {
-          console.log('✅ 页面卸载前保存完成');
-        }).catch((error) => {
-          console.error('❌ 页面卸载前保存出错:', error);
+        // 也显示桌面图标信息
+        console.log('🎯 桌面图标信息:');
+        desktopIcons.forEach((icon, index) => {
+          console.log(`  图标 ${index + 1}: ${icon.title || '无标题'}`);
+          console.log(`    ID: ${icon.id}`);
+          console.log(`    窗口ID: ${icon.windowId}`);
+          console.log(`    位置: x:${icon.position?.x}, y:${icon.position?.y}`);
+          console.log(`    隐藏: ${icon.isHidden}`);
         });
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('keydown', handleKeyDown);
     
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [windows, hiddenWindows, boardId]);
+  }, []);
 
   // 组件卸载时清理事件监听器
   useEffect(() => {
@@ -2993,12 +3076,8 @@ function BoardCanvas({
       cleanupResizeListeners();
       cleanupDragListeners();
       // 清理保存定时器
-      if (windowSaveTimeoutRef.current) {
-        clearTimeout(windowSaveTimeoutRef.current);
-      }
-      // 清理定期保存间隔
-      if (periodicSaveIntervalRef.current) {
-        clearInterval(periodicSaveIntervalRef.current);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
       }
     };
   }, []);

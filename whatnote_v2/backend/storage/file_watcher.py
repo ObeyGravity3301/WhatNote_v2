@@ -294,10 +294,29 @@ class FileWatcher:
             if not files_dir.exists():
                 return False
             
-            # 检查是否已有对应的JSON配置文件（新命名规则：xxx.ext.json）
-            json_file = files_dir / f"{filename}.json"  # 使用完整文件名
-            if json_file.exists():
+            # 检查是否已有对应的JSON配置文件（新命名规则：xxx.ext.json 或 xxx.md.json）
+            # 方法1：检查 filename.json（旧格式）
+            json_file_old = files_dir / f"{filename}.json"
+            if json_file_old.exists():
                 return True
+            
+            # 方法2：检查 filename.md.json（新格式，适用于文本文件）
+            if filename.endswith('.md'):
+                json_file_new = files_dir / f"{filename}.md.json"
+                if json_file_new.exists():
+                    return True
+            
+            # 方法3：扫描所有JSON文件，检查是否有匹配的file_path
+            for json_file in files_dir.glob("*.json"):
+                try:
+                    with open(json_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    file_path = data.get("file_path", "")
+                    if file_path == f"files/{filename}":
+                        print(f"找到匹配的窗口配置: {json_file.name} -> {filename}")
+                        return True
+                except Exception:
+                    continue
             
             # 如果是JSON文件本身，检查是否有对应的实际文件
             if filename.endswith('.json'):

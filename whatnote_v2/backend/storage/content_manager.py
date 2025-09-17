@@ -160,6 +160,9 @@ class ContentManager:
                 # 删除窗口配置JSON文件
                 window_file.unlink()
                 
+                # 清理图标位置信息
+                self._cleanup_icon_position(board_dir, window_id)
+                
                 # 不再从 board_info.json 中移除窗口，只使用 files/ 目录管理
                 return True
                 
@@ -167,6 +170,27 @@ class ContentManager:
                 print(f"删除窗口文件失败: {e}")
         
         return False
+    
+    def _cleanup_icon_position(self, board_dir: Path, window_id: str):
+        """清理删除窗口的图标位置信息"""
+        try:
+            icon_positions_file = board_dir / "icon_positions.json"
+            if icon_positions_file.exists():
+                with open(icon_positions_file, "r", encoding="utf-8") as f:
+                    positions = json.load(f)
+                
+                # 移除对应窗口的位置信息
+                if window_id in positions:
+                    del positions[window_id]
+                    print(f"从图标位置文件中移除: {window_id}")
+                    
+                    # 保存更新后的位置信息
+                    with open(icon_positions_file, "w", encoding="utf-8") as f:
+                        json.dump(positions, f, ensure_ascii=False, indent=2)
+                    
+                    print(f"图标位置清理完成")
+        except Exception as e:
+            print(f"清理图标位置失败: {e}")
     
     def move_window_to_trash(self, board_id: str, window_id: str) -> bool:
         """将窗口及其文件移动到回收站"""
@@ -518,6 +542,7 @@ class ContentManager:
             return []
         
         windows = []
+        seen_window_ids = set()  # 用于去重
         
         # 扫描files目录，查找所有JSON配置文件（新命名规则：xxx.ext.json）
         for file_path in files_dir.iterdir():
@@ -525,6 +550,14 @@ class ContentManager:
                 try:
                     with open(file_path, "r", encoding="utf-8") as f:
                         window_data = json.load(f)
+                    
+                    # 检查窗口ID是否重复
+                    window_id = window_data.get('id')
+                    if window_id in seen_window_ids:
+                        print(f"⚠️ 发现重复的窗口ID，跳过文件: {file_path.name} (ID: {window_id})")
+                        continue
+                    
+                    seen_window_ids.add(window_id)
                     
                     # 从对应的文件中加载内容
                     window_type = window_data.get('type', 'text')
@@ -752,68 +785,6 @@ class ContentManager:
         except Exception as e:
             print(f"更新JSON配置文件失败: {e}")
     
-    def update_window_metadata(self, board_id: str, window_id: str, updates: Dict) -> bool:
-        """更新窗口的元数据（位置、大小、隐藏状态等），不涉及内容"""
-        board_info = self.file_manager.get_board_info(board_id)
-        if not board_info:
-            return False
-        
-        # 找到展板目录
-        board_dir = None
-        for course_dir in self.file_manager.courses_dir.iterdir():
-            if course_dir.is_dir():
-                potential_board_dir = course_dir / board_id
-                if potential_board_dir.exists():
-                    board_dir = potential_board_dir
-                    break
-        
-        if not board_dir:
-            return False
-        
-        files_dir = board_dir / "files"
-        if not files_dir.exists():
-            return False
-        
-        # 查找对应的JSON文件
-        json_file = None
-        for file_path in files_dir.iterdir():
-            if file_path.is_file() and file_path.suffix == ".json":
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    if data.get("id") == window_id:
-                        json_file = file_path
-                        break
-                except Exception as e:
-                    print(f"读取JSON文件失败: {file_path}, 错误: {e}")
-                    continue
-        
-        if not json_file:
-            print(f"未找到窗口ID {window_id} 的JSON配置文件")
-            return False
-        
-        try:
-            # 读取现有数据
-            with open(json_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            
-            # 更新数据
-            data.update(updates)
-            data["updated_at"] = datetime.now().isoformat()
-            
-            # 写回文件
-            with open(json_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            
-            print(f"更新窗口元数据成功: {window_id}")
-            print(f"  更新字段: {list(updates.keys())}")
-            print(f"  JSON文件: {json_file.name}")
-            return True
-            
-        except Exception as e:
-            print(f"更新窗口元数据失败: {e}")
-            return False
-
     def update_window_content_only(self, board_id: str, window_id: str, content: str):
         """更新窗口的文字内容（新存储结构：更新.md文件）"""
         try:
@@ -1439,7 +1410,7 @@ class ContentManager:
         return f"files/{safe_name}{extension}"
     
     def rename_window_file(self, board_id: str, window_id: str, old_title: str, new_title: str) -> bool:
-        """重命名窗口对应的文件"""
+        """重命名窗口对应的文件（新存储结构：.md文件 + .md.json配置）"""
         # 找到展板目录
         board_dir = None
         for course_dir in self.file_manager.courses_dir.iterdir():
@@ -1450,51 +1421,120 @@ class ContentManager:
                     break
         
         if not board_dir:
+            print(f"展板目录不存在: {board_id}")
             return False
         
         files_dir = board_dir / "files"
         if not files_dir.exists():
-            return False
-        
-        # 获取窗口信息以确定文件类型
-        windows_dir = board_dir / "windows"
-        window_file = windows_dir / f"{window_id}.json"
-        
-        if not window_file.exists():
+            print(f"文件目录不存在: {files_dir}")
             return False
         
         try:
-            with open(window_file, "r", encoding="utf-8") as f:
-                window_data = json.load(f)
+            # 查找窗口的JSON配置文件
+            window_json_file = None
+            window_data = None
+            
+            for json_file in files_dir.glob("*.json"):
+                try:
+                    with open(json_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if data.get("id") == window_id:
+                        window_json_file = json_file
+                        window_data = data
+                        break
+                except Exception as e:
+                    print(f"读取JSON文件失败: {json_file}, 错误: {e}")
+                    continue
+            
+            if not window_json_file or not window_data:
+                print(f"未找到窗口配置: {window_id}")
+                return False
             
             window_type = window_data.get("type", "text")
-            extension = self._get_file_extension(window_type)
-            
-            # 构造旧文件名和新文件名
             old_safe_name = self._sanitize_filename(old_title)
             new_safe_name = self._sanitize_filename(new_title)
             
-            old_file_path = files_dir / f"{old_safe_name}{extension}"
-            new_file_name = self._generate_unique_filename(files_dir, new_title, extension)
-            new_file_path = files_dir / new_file_name
+            print(f"开始重命名窗口文件: {old_title} -> {new_title}")
+            print(f"  窗口类型: {window_type}")
+            print(f"  旧安全名称: {old_safe_name}")
+            print(f"  新安全名称: {new_safe_name}")
             
-            # 重命名文件
-            if old_file_path.exists():
-                # 如果目标文件已存在，先删除它（避免冲突）
-                if new_file_path.exists():
-                    new_file_path.unlink()
+            if window_type == "text":
+                # 文本窗口：重命名 .md 文件和 .md.json 文件
+                old_md_file = files_dir / f"{old_safe_name}.md"
+                new_md_file = files_dir / f"{new_safe_name}.md"
+                old_json_file = files_dir / f"{old_safe_name}.md.json"
+                new_json_file = files_dir / f"{new_safe_name}.md.json"
                 
-                old_file_path.rename(new_file_path)
+                # 重命名内容文件
+                if old_md_file.exists():
+                    if new_md_file.exists():
+                        new_md_file.unlink()  # 删除冲突文件
+                    old_md_file.rename(new_md_file)
+                    print(f"  重命名内容文件: {old_md_file.name} -> {new_md_file.name}")
                 
-                # 更新窗口数据中的文件路径
-                window_data["file_path"] = f"files/{new_file_name}"
-                with open(window_file, "w", encoding="utf-8") as f:
-                    json.dump(window_data, f, ensure_ascii=False, indent=2)
+                # 更新配置数据
+                window_data["title"] = new_title
+                window_data["file_path"] = f"files/{new_safe_name}.md"
+                window_data["updated_at"] = datetime.now().isoformat()
                 
-                return True
+                # 重命名配置文件
+                if old_json_file.exists():
+                    if new_json_file.exists():
+                        new_json_file.unlink()  # 删除冲突文件
+                    
+                    # 写入更新后的配置到新文件
+                    with open(new_json_file, "w", encoding="utf-8") as f:
+                        json.dump(window_data, f, ensure_ascii=False, indent=2)
+                    
+                    # 删除旧配置文件
+                    old_json_file.unlink()
+                    print(f"  重命名配置文件: {old_json_file.name} -> {new_json_file.name}")
+                
+            else:
+                # 非文本窗口：重命名实际文件和对应的 .json 配置
+                file_path = window_data.get("file_path", "")
+                if file_path and file_path.startswith("files/"):
+                    old_filename = file_path[6:]  # 移除 "files/" 前缀
+                    old_file = files_dir / old_filename
+                    
+                    # 保持原文件扩展名
+                    old_ext = Path(old_filename).suffix
+                    new_filename = f"{new_safe_name}{old_ext}"
+                    new_file = files_dir / new_filename
+                    
+                    # 重命名实际文件
+                    if old_file.exists():
+                        if new_file.exists():
+                            new_file.unlink()  # 删除冲突文件
+                        old_file.rename(new_file)
+                        print(f"  重命名实际文件: {old_filename} -> {new_filename}")
+                    
+                    # 重命名JSON配置文件
+                    old_json_file = files_dir / f"{old_filename}.json"
+                    new_json_file = files_dir / f"{new_filename}.json"
+                    
+                    if old_json_file.exists():
+                        # 更新配置数据
+                        window_data["title"] = new_title
+                        window_data["file_path"] = f"files/{new_filename}"
+                        window_data["updated_at"] = datetime.now().isoformat()
+                        
+                        # 写入更新后的配置到新文件
+                        with open(new_json_file, "w", encoding="utf-8") as f:
+                            json.dump(window_data, f, ensure_ascii=False, indent=2)
+                        
+                        # 删除旧配置文件
+                        old_json_file.unlink()
+                        print(f"  重命名配置文件: {old_json_file.name} -> {new_json_file.name}")
+            
+            print(f"窗口文件重命名完成: {old_title} -> {new_title}")
+            return True
             
         except Exception as e:
             print(f"重命名文件失败: {e}")
+            import traceback
+            print(f"详细错误信息: {traceback.format_exc()}")
         
         return False
     

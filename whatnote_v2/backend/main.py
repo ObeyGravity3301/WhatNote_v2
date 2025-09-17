@@ -231,24 +231,22 @@ async def update_window(board_id: str, window_id: str, window_data: Dict):
         window_data["id"] = window_id
         window_data["updated_at"] = datetime.now().isoformat()
         
-        # 检查是否是内容更新
-        if "content" in window_data:
-            # 内容更新：直接更新.md文件
+        # 检查是否是纯内容更新（只有content字段，没有其他窗口属性）
+        content_only_update = "content" in window_data and len([k for k in window_data.keys() if k not in ["id", "updated_at", "content"]]) == 0
+        
+        if content_only_update:
+            # 纯内容更新：只更新.md文件
             content = window_data["content"]
             content_manager.update_window_content_only(board_id, window_id, content)
             info(f"更新窗口内容成功: {window_id}")
         else:
-            # 非内容更新：处理标题重命名和元数据更新
+            # 窗口属性更新（可能包含位置、大小、隐藏状态等）
             if old_title:
                 content_manager.rename_window_file(board_id, window_id, old_title, window_data["title"])
             
-            # 使用专门的元数据更新函数
-            success = content_manager.update_window_metadata(board_id, window_id, window_data)
+            success = content_manager.save_window_content(board_id, window_data)
             if not success:
-                # 如果元数据更新失败，尝试使用原来的方法（兼容性）
-                success = content_manager.save_window_content(board_id, window_data)
-                if not success:
-                    raise HTTPException(status_code=404, detail="展板不存在")
+                raise HTTPException(status_code=404, detail="展板不存在")
         
         info(f"更新窗口成功: {window_id}")
         return window_data
@@ -604,11 +602,11 @@ async def serve_media_file(path: str):
         
         # 基本验证：文件必须存在且是文件
         if not file_path.exists():
-            print(f"❌ 文件不存在: {file_path}")
+            print(f"文件不存在: {file_path}")
             raise HTTPException(status_code=404, detail="文件不存在")
         
         if not file_path.is_file():
-            print(f"❌ 路径不是文件: {file_path}")
+            print(f"路径不是文件: {file_path}")
             raise HTTPException(status_code=400, detail="路径不是文件")
         
         # 获取MIME类型
@@ -616,7 +614,7 @@ async def serve_media_file(path: str):
         if not mime_type:
             mime_type = 'application/octet-stream'
         
-        print(f"✅ 返回媒体文件: {file_path.name}, MIME: {mime_type}")
+        print(f"返回媒体文件: {file_path.name}, MIME: {mime_type}")
         
         # 直接返回文件
         return FileResponse(
@@ -628,7 +626,7 @@ async def serve_media_file(path: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ 媒体服务失败: {e}")
+        print(f"媒体服务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # 文件列表API已移除，避免与 /files/serve 路由冲突
