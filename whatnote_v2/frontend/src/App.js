@@ -467,6 +467,25 @@ function App() {
           ) : (
             <span className="taskbar-label">WhatNote V2 - 请通过开始菜单选择展板</span>
           )}
+          
+          {/* 右侧聊天按钮 */}
+          {selectedBoard && (
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button 
+                className="taskbar-item"
+                onClick={() => {
+                  // 通过事件通知BoardCanvas打开聊天窗口
+                  const event = new CustomEvent('toggleChatWindow');
+                  window.dispatchEvent(event);
+                }}
+                title="AI助手聊天"
+                style={{ minWidth: 'auto', width: '80px' }}
+              >
+                <span className="taskbar-icon">💬</span>
+                <span className="taskbar-text">AI助手</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
       

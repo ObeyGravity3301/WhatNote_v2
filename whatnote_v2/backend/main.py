@@ -22,6 +22,7 @@ from logger import info, error
 from storage.file_manager import FileSystemManager
 from storage.content_manager import ContentManager
 from storage.file_watcher import FileWatcher
+from storage.conversation_manager import ConversationManager
 from document_converter import document_converter
 
 app = FastAPI(title="WhatNote V2 API", version="2.0.0")
@@ -88,6 +89,7 @@ class ConnectionManager:
 # 初始化存储管理器
 file_manager = FileSystemManager(DATA_DIR)
 content_manager = ContentManager(file_manager)
+conversation_manager = ConversationManager(file_manager)
 
 # 初始化WebSocket连接管理器
 manager = ConnectionManager()
@@ -737,7 +739,83 @@ async def serve_media_file(path: str):
         print(f"媒体服务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# 文件列表API已移除，避免与 /files/serve 路由冲突
+# 获取展板文件列表API
+@app.get("/api/boards/{board_id}/files")
+async def get_board_files(board_id: str):
+    """获取展板的所有文件列表（用于聊天发送）"""
+    try:
+        # 获取展板目录
+        board_dir = None
+        for course_dir in file_manager.courses_dir.iterdir():
+            if course_dir.is_dir():
+                potential_board_dir = course_dir / board_id
+                if potential_board_dir.exists():
+                    board_dir = potential_board_dir
+                    break
+        
+        if not board_dir:
+            raise HTTPException(status_code=404, detail="展板不存在")
+        
+        files_dir = board_dir / "files"
+        if not files_dir.exists():
+            return {"files": []}
+        
+        files_list = []
+        file_types = ["images", "videos", "pdfs", "audios", "texts"]
+        
+        # 扫描标准文件类型目录
+        for file_type in file_types:
+            type_dir = files_dir / file_type
+            if type_dir.exists():
+                for file_path in type_dir.iterdir():
+                    if file_path.is_file() and not file_path.name.startswith('.'):
+                        # 获取文件信息
+                        file_stat = file_path.stat()
+                        file_info = {
+                            "name": file_path.name,
+                            "type": file_type,
+                            "size": file_stat.st_size,
+                            "modified": file_stat.st_mtime,
+                            "path": str(file_path),
+                            "url": f"http://{API_HOST}:{API_PORT}/api/media/serve?path={str(file_path)}"
+                        }
+                        files_list.append(file_info)
+        
+        # 也扫描files目录下的直接文件（兼容旧格式）
+        for file_path in files_dir.iterdir():
+            if file_path.is_file() and not file_path.name.startswith('.') and not file_path.name.endswith('.json'):
+                # 根据文件扩展名判断类型
+                file_ext = file_path.suffix.lower()
+                file_type = "texts"  # 默认类型
+                if file_ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']:
+                    file_type = "images"
+                elif file_ext in ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm']:
+                    file_type = "videos"
+                elif file_ext in ['.mp3', '.wav', '.flac', '.aac', '.ogg']:
+                    file_type = "audios"
+                elif file_ext in ['.pdf']:
+                    file_type = "pdfs"
+                elif file_ext in ['.txt', '.md', '.doc', '.docx']:
+                    file_type = "texts"
+                
+                file_stat = file_path.stat()
+                file_info = {
+                    "name": file_path.name,
+                    "type": file_type,
+                    "size": file_stat.st_size,
+                    "modified": file_stat.st_mtime,
+                    "path": str(file_path),
+                    "url": f"http://{API_HOST}:{API_PORT}/api/media/serve?path={str(file_path)}"
+                }
+                files_list.append(file_info)
+        
+        # 按修改时间倒序排列
+        files_list.sort(key=lambda x: x["modified"], reverse=True)
+        
+        return {"files": files_list}
+    except Exception as e:
+        error(f"获取展板文件列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.websocket("/ws/logs")
 async def websocket_logs(websocket: WebSocket):
@@ -920,6 +998,98 @@ async def get_trash_size():
         return {"size": size}
     except Exception as e:
         error(f"获取回收站大小失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== LLM对话相关API ====================
+
+@app.get("/api/boards/{board_id}/conversations")
+async def get_board_conversations(board_id: str):
+    """获取展板的所有对话记录"""
+    try:
+        conversations = conversation_manager.get_board_conversations(board_id)
+        return {"conversations": conversations}
+    except Exception as e:
+        error(f"获取展板对话记录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/boards/{board_id}/conversations")
+async def create_conversation(board_id: str, title: str = ""):
+    """创建新的对话记录"""
+    try:
+        conversation = conversation_manager.create_conversation(board_id, title)
+        info(f"创建对话成功: {conversation['id']}")
+        return conversation
+    except Exception as e:
+        error(f"创建对话失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/boards/{board_id}/conversations/{conversation_id}")
+async def get_conversation(board_id: str, conversation_id: str):
+    """获取指定对话记录"""
+    try:
+        conversation = conversation_manager.get_conversation(board_id, conversation_id)
+        if not conversation:
+            raise HTTPException(status_code=404, detail="对话不存在")
+        return conversation
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取对话失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/boards/{board_id}/conversations/{conversation_id}/messages")
+async def add_message(board_id: str, conversation_id: str, message: Dict):
+    """向对话中添加消息"""
+    try:
+        success = conversation_manager.add_message(board_id, conversation_id, message)
+        if not success:
+            raise HTTPException(status_code=404, detail="对话不存在")
+        info(f"添加消息成功: {conversation_id}")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"添加消息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/boards/{board_id}/conversations/{conversation_id}/title")
+async def update_conversation_title(board_id: str, conversation_id: str, title: str):
+    """更新对话标题"""
+    try:
+        success = conversation_manager.update_conversation_title(board_id, conversation_id, title)
+        if not success:
+            raise HTTPException(status_code=404, detail="对话不存在")
+        info(f"更新对话标题成功: {conversation_id}")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"更新对话标题失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/boards/{board_id}/conversations/{conversation_id}")
+async def delete_conversation(board_id: str, conversation_id: str):
+    """删除对话记录"""
+    try:
+        success = conversation_manager.delete_conversation(board_id, conversation_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="对话不存在")
+        info(f"删除对话成功: {conversation_id}")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"删除对话失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/boards/{board_id}/conversations/{conversation_id}/context")
+async def get_conversation_context(board_id: str, conversation_id: str, limit: int = 50):
+    """获取对话上下文（用于LLM调用）"""
+    try:
+        context = conversation_manager.get_conversation_context(board_id, conversation_id, limit)
+        return {"context": context}
+    except Exception as e:
+        error(f"获取对话上下文失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

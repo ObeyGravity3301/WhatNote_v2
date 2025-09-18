@@ -48,7 +48,7 @@ class FileSystemManager:
         board_dir.mkdir(exist_ok=True)
         
         # 创建展板子目录（简化结构）
-        subdirs = ["windows", "files"]
+        subdirs = ["windows", "files", "llm_conversations"]
         for subdir in subdirs:
             (board_dir / subdir).mkdir(exist_ok=True)
         

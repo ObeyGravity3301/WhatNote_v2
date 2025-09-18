@@ -1,0 +1,134 @@
+{
+  "id": "conv-1758181351025",
+  "title": "新对话",
+  "board_id": "board-1756987954946",
+  "created_at": "2025-09-18T15:42:31.025189",
+  "updated_at": "2025-09-18T20:16:28.811091",
+  "messages": [
+    {
+      "role": "user",
+      "content": "fnhbjksadfhlajdgb",
+      "timestamp": "2025-09-18T15:48:46.544272"
+    },
+    {
+      "role": "assistant",
+      "content": "让我帮您总结一下关于\"fnhbjksadfhlajdgb\"的要点...",
+      "timestamp": "2025-09-18T15:48:48.599057"
+    },
+    {
+      "role": "user",
+      "content": "fasjoiflajwlf'",
+      "timestamp": "2025-09-18T15:48:54.942291"
+    },
+    {
+      "role": "assistant",
+      "content": "让我帮您总结一下关于\"fasjoiflajwlf'\"的要点...",
+      "timestamp": "2025-09-18T15:48:56.327342"
+    },
+    {
+      "role": "user",
+      "content": "fsafg earikuy iefj hasuf opiwesaj iowae uo;ia",
+      "timestamp": "2025-09-18T15:48:59.083709"
+    },
+    {
+      "role": "assistant",
+      "content": "关于\"fsafg earikuy iefj hasuf opiwesaj iowae uo;ia\"，我可以为您提供以下建议...",
+      "timestamp": "2025-09-18T15:49:01.084004"
+    },
+    {
+      "role": "user",
+      "content": "[文件] HW2 G1 U202314148 胡祺.pdf",
+      "file": {
+        "id": "window_1758147403393",
+        "name": "HW2 G1 U202314148 胡祺.pdf",
+        "type": "pdf",
+        "url": "http://localhost:8081/static/files/board-1756987954946/files/F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files\\HW2 G1 U202314148 胡祺.pdf"
+      },
+      "timestamp": "2025-09-18T18:16:17.236737"
+    },
+    {
+      "role": "user",
+      "content": "hjkhkhk",
+      "timestamp": "2025-09-18T18:16:21.389666"
+    },
+    {
+      "role": "assistant",
+      "content": "让我帮您总结一下关于\"hjkhkhk\"的要点...",
+      "timestamp": "2025-09-18T18:16:22.479024"
+    },
+    {
+      "role": "user",
+      "content": "[文件] 免疫学第二次作业.pdf",
+      "file": {
+        "id": "window_1758191717605",
+        "name": "免疫学第二次作业.pdf",
+        "type": "pdf",
+        "url": "http://localhost:8081/static/files/board-1756987954946/files/F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files\\免疫学第二次作业.pdf"
+      },
+      "timestamp": "2025-09-18T18:35:33.774283"
+    },
+    {
+      "role": "user",
+      "content": "[文件] BCI2000_a_general-purpose_brain-computer_interface_BCI_system.pdf",
+      "file": {
+        "id": "window_1758194006085",
+        "name": "BCI2000_a_general-purpose_brain-computer_interface_BCI_system.pdf",
+        "type": "pdf",
+        "url": "http://localhost:8081/static/files/board-1756987954946/files/F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files\\BCI2000_a_general-purpose_brain-computer_interface_BCI_system.pdf"
+      },
+      "timestamp": "2025-09-18T19:14:44.937992"
+    },
+    {
+      "role": "user",
+      "content": "kjljgkdg",
+      "timestamp": "2025-09-18T19:14:48.562203"
+    },
+    {
+      "role": "assistant",
+      "content": "这是一个很好的问题！关于\"kjljgkdg\"，我的看法是...",
+      "timestamp": "2025-09-18T19:14:50.962109"
+    },
+    {
+      "role": "user",
+      "content": "zheshishneme",
+      "files": [
+        {
+          "name": "免疫学第二次作业.pdf",
+          "type": "pdfs",
+          "size": 464649,
+          "modified": 1758195725.73557,
+          "path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files\\免疫学第二次作业.pdf",
+          "url": "http://127.0.0.1:8081/api/media/serve?path=F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files\\免疫学第二次作业.pdf",
+          "timestamp": "2025-09-18T20:16:14.894446"
+        }
+      ],
+      "timestamp": "2025-09-18T20:16:14.894446"
+    },
+    {
+      "role": "assistant",
+      "content": "关于\"zheshishneme\"，我可以为您提供以下建议...",
+      "timestamp": "2025-09-18T20:16:16.644434"
+    },
+    {
+      "role": "user",
+      "content": "ranhoushizhege",
+      "files": [
+        {
+          "name": "无标题.png",
+          "type": "images",
+          "size": 599431,
+          "modified": 1758197395.28346,
+          "path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files\\无标题.png",
+          "url": "http://127.0.0.1:8081/api/media/serve?path=F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files\\无标题.png",
+          "timestamp": "2025-09-18T20:16:26.630733"
+        }
+      ],
+      "timestamp": "2025-09-18T20:16:26.630733"
+    },
+    {
+      "role": "assistant",
+      "content": "关于\"ranhoushizhege\"，我可以为您提供以下建议...",
+      "timestamp": "2025-09-18T20:16:28.811091"
+    }
+  ]
+}

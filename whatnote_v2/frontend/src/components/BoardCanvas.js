@@ -6,6 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import * as pdfjsLib from 'pdfjs-dist';
+import ChatWindow from './ChatWindow';
 
 // 配置PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -1277,6 +1278,23 @@ function BoardCanvas({
 }) {
   const [windows, setWindows] = useState([]);
   
+  // 聊天窗口ID常量
+  const CHAT_WINDOW_ID = 'chat-window-special';
+  
+  // 创建聊天窗口对象
+  const createChatWindow = () => {
+    return {
+      id: CHAT_WINDOW_ID,
+      type: 'chat',
+      title: `💬 AI助手 - ${boardName}`,
+      position: { x: 150, y: 100 },
+      size: { width: 400, height: 500 },
+      content: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  };
+  
   // 包装setWindows来跟踪调用来源
   const setWindowsWithTrace = (newWindows) => {
     console.log('🔄 setWindows被调用:', {
@@ -1479,6 +1497,8 @@ function BoardCanvas({
           return '📄'; // 文档有内容时显示文档图标
         }
         return '📄';
+      case 'chat':
+        return '💬';
       default:
         return '🪟';
     }
@@ -1722,11 +1742,12 @@ function BoardCanvas({
     };
   }, [boardId, fetchBoardWindows]);
 
-  // 通知App组件窗口变化
+  // 通知App组件窗口变化（过滤掉聊天窗口）
   useEffect(() => {
-    console.log('📢 通知App组件窗口变化，窗口数量:', windows.length);
+    const regularWindows = windows.filter(window => window.type !== 'chat');
+    console.log('📢 通知App组件窗口变化，常规窗口数量:', regularWindows.length, '总窗口数量:', windows.length);
     if (onWindowsChange) {
-      onWindowsChange(windows);
+      onWindowsChange(regularWindows);
     }
   }, [windows, onWindowsChange]);
 
@@ -1756,7 +1777,10 @@ function BoardCanvas({
     console.log('🎯 当前桌面图标数量:', desktopIcons.length);
     console.log('🎯 隐藏窗口数量:', hiddenWindows ? hiddenWindows.size : 0);
     
-    const icons = windows.map(window => {
+    // 过滤掉聊天窗口，聊天窗口不应该有桌面图标
+    const regularWindows = windows.filter(window => window.type !== 'chat');
+    
+    const icons = regularWindows.map(window => {
       // 查找是否已有该图标，保持位置和网格信息
       const existingIcon = desktopIcons.find(icon => icon.id === window.id);
       
@@ -2357,6 +2381,12 @@ function BoardCanvas({
       if (!window) {
         console.error('❌ 未找到要保存的窗口:', windowId);
         return false;
+      }
+
+      // 聊天窗口不需要保存到后端文件系统
+      if (window.type === 'chat') {
+        console.log('💬 聊天窗口状态不保存到后端，跳过保存');
+        return true;
       }
 
       // 合并更新数据，确保包含所有必要字段
@@ -3240,6 +3270,36 @@ function BoardCanvas({
     };
   }, []);
 
+  // 监听聊天窗口切换事件
+  useEffect(() => {
+    const handleToggleChatWindow = () => {
+      setWindows(prev => {
+        const chatWindow = prev.find(w => w.id === CHAT_WINDOW_ID);
+        
+        if (chatWindow) {
+          // 如果聊天窗口存在，移除它
+          return prev.filter(w => w.id !== CHAT_WINDOW_ID);
+        } else {
+          // 如果聊天窗口不存在，添加它
+          const newChatWindow = createChatWindow();
+          const newWindows = [...prev, newChatWindow];
+          
+          // 设置聊天窗口为焦点
+          setTimeout(() => {
+            handleWindowFocusLocal(CHAT_WINDOW_ID);
+          }, 0);
+          
+          return newWindows;
+        }
+      });
+    };
+
+    window.addEventListener('toggleChatWindow', handleToggleChatWindow);
+    return () => {
+      window.removeEventListener('toggleChatWindow', handleToggleChatWindow);
+    };
+  }, [boardName]);
+
   // 组件卸载时清理事件监听器
   useEffect(() => {
     return () => {
@@ -3583,6 +3643,30 @@ function BoardCanvas({
                 <TextEditorWithPreview
                   window={window}
                   onContentChange={(content, mode) => handleWindowContentChange(window.id, content, mode)}
+                />
+              )}
+              {window.type === 'chat' && (
+                <ChatWindow
+                  boardId={boardId}
+                  boardName={boardName}
+                  isVisible={true}
+                  onClose={() => {
+                    // 从windows数组中移除聊天窗口
+                    setWindows(prev => prev.filter(w => w.id !== CHAT_WINDOW_ID));
+                  }}
+                  onMinimize={() => {
+                    if (onWindowMinimize) {
+                      onWindowMinimize(window.id);
+                    }
+                  }}
+                  onFocus={() => {
+                    handleWindowFocusLocal(window.id);
+                  }}
+                  isFocused={focusedWindowId === window.id}
+                  position={window.position}
+                  onPositionChange={(newPosition) => {
+                    // 位置变化通过现有的拖拽系统处理
+                  }}
                 />
               )}
               {window.type === 'image' && (
