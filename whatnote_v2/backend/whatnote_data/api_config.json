@@ -1,0 +1,27 @@
+{
+  "current_provider": "qwen",
+  "providers": {
+    "openai": {
+      "apiKey": "",
+      "model": "gpt-4",
+      "baseUrl": "https://api.openai.com/v1"
+    },
+    "anthropic": {
+      "apiKey": "",
+      "model": "claude-3-5-sonnet-20241022",
+      "baseUrl": "https://api.anthropic.com"
+    },
+    "gemini": {
+      "apiKey": "",
+      "model": "gemini-1.5-pro",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1"
+    },
+    "qwen": {
+      "apiKey": "sk-b8f8062e586648898749ed9e7e6e5456",
+      "model": "qwen-vl-plus",
+      "baseUrl": "https://dashscope.aliyuncs.com/api/v1"
+    }
+  },
+  "created_at": "2025-09-19T11:49:29.740818",
+  "updated_at": "2025-09-19T12:07:44.599030"
+}

@@ -23,6 +23,15 @@ function ChatWindow({
   const [boardFiles, setBoardFiles] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
   
+  // LLM API设置状态
+  const [apiProvider, setApiProvider] = useState('openai'); // 默认OpenAI
+  const [apiConfigs, setApiConfigs] = useState({
+    openai: { apiKey: '', model: 'gpt-4', baseUrl: 'https://api.openai.com/v1' },
+    anthropic: { apiKey: '', model: 'claude-3-5-sonnet-20241022', baseUrl: 'https://api.anthropic.com' },
+    gemini: { apiKey: '', model: 'gemini-1.5-pro', baseUrl: 'https://generativelanguage.googleapis.com/v1' },
+    qwen: { apiKey: '', model: 'qwen-plus', baseUrl: 'https://dashscope.aliyuncs.com/api/v1' }
+  });
+  
   // 引用
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -43,6 +52,72 @@ function ChatWindow({
     }
   }, [boardId, isVisible]);
 
+  // 加载API配置
+  useEffect(() => {
+    loadApiConfig();
+  }, []);
+
+  // 从后端加载API配置
+  const loadApiConfig = async () => {
+    try {
+      const response = await fetch('http://localhost:8081/api/llm/config');
+      if (response.ok) {
+        const config = await response.json();
+        setApiProvider(config.current_provider || 'openai');
+        
+        // 转换后端配置格式到前端格式
+        const frontendConfigs = {};
+        Object.entries(config.providers || {}).forEach(([provider, providerConfig]) => {
+          frontendConfigs[provider] = {
+            apiKey: providerConfig.configured ? '***已配置***' : '',
+            model: providerConfig.model || '',
+            baseUrl: providerConfig.baseUrl || ''
+          };
+        });
+        setApiConfigs(frontendConfigs);
+        
+        console.log('加载API配置成功');
+      } else {
+        console.error('加载API配置失败');
+      }
+    } catch (error) {
+      console.error('加载API配置失败:', error);
+    }
+  };
+
+  // 保存API配置到后端
+  const saveApiConfig = async (provider, configs) => {
+    try {
+      // 更新服务商配置
+      const response = await fetch(`http://localhost:8081/api/llm/config/${provider}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(configs[provider])
+      });
+      
+      if (response.ok) {
+        console.log(`保存${provider}配置成功`);
+      } else {
+        console.error(`保存${provider}配置失败`);
+      }
+      
+      // 设置当前服务商
+      const providerResponse = await fetch(`http://localhost:8081/api/llm/provider/${provider}`, {
+        method: 'POST'
+      });
+      
+      if (providerResponse.ok) {
+        console.log(`设置当前服务商成功: ${provider}`);
+      } else {
+        console.error(`设置当前服务商失败: ${provider}`);
+      }
+    } catch (error) {
+      console.error('保存API配置失败:', error);
+    }
+  };
+
   // 聚焦时focus输入框
   useEffect(() => {
     if (isFocused && isVisible && inputRef.current) {
@@ -60,6 +135,20 @@ function ChatWindow({
       inputRef.current.style.overflowY = 'hidden';
     }
   }, [inputText]);
+
+  // 点击外部关闭设置面板
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showSettings && !event.target.closest('.settings-panel') && !event.target.closest('.settings-button')) {
+        setShowSettings(false);
+      }
+    };
+    
+    if (showSettings) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSettings]);
 
   const initializeConversation = async () => {
     try {
@@ -202,20 +291,73 @@ function ChatWindow({
     }
   };
 
-  // 模拟AI响应（可以替换为真正的LLM API调用）
+  // 调用真正的LLM API
   const generateAIResponse = async (userInput) => {
-    // 模拟网络延迟
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-    
-    const responses = [
-      `我理解您提到的"${userInput}"。让我为您分析一下这个问题。`,
-      `关于"${userInput}"，我可以为您提供以下建议...`,
-      `这是一个很好的问题！关于"${userInput}"，我的看法是...`,
-      `让我帮您总结一下关于"${userInput}"的要点...`,
-      `根据您提到的"${userInput}"，我建议您考虑以下几个方面...`
-    ];
-    
-    return responses[Math.floor(Math.random() * responses.length)];
+    try {
+      // 准备消息历史（包括当前对话上下文）
+      const conversationMessages = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      // 添加当前用户消息
+      conversationMessages.push({
+        role: 'user',
+        content: userInput
+      });
+      
+      // 调用流式API
+      const response = await fetch('http://localhost:8081/api/llm/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: conversationMessages
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API调用失败: ${response.status}`);
+      }
+      
+      // 处理流式响应
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              return fullResponse;
+            }
+            
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                fullResponse += parsed.content;
+              }
+            } catch (e) {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+      
+      return fullResponse || '抱歉，API返回了空响应';
+      
+    } catch (error) {
+      console.error('LLM API调用失败:', error);
+      return `❌ API调用失败: ${error.message}\n\n请检查:\n1. API配置是否正确\n2. 网络连接是否正常\n3. API密钥是否有效`;
+    }
   };
 
   const handleKeyPress = (e) => {
@@ -235,6 +377,48 @@ function ChatWindow({
       'texts': '📝'
     };
     return icons[fileType] || '📄';
+  };
+
+  // 获取服务商名称
+  const getProviderName = (provider) => {
+    const names = {
+      'openai': 'OpenAI',
+      'anthropic': 'Anthropic',
+      'gemini': 'Google Gemini',
+      'qwen': '阿里云通义千问'
+    };
+    return names[provider] || provider;
+  };
+
+  // 获取模型选项
+  const getModelOptions = (provider) => {
+    const options = {
+      'openai': [
+        { value: 'gpt-4', label: 'GPT-4 (推荐)' },
+        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+        { value: 'gpt-4o', label: 'GPT-4o (多模态)' },
+        { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (经济)' }
+      ],
+      'anthropic': [
+        { value: 'claude-3-5-sonnet-20241022', label: 'Claude-3.5 Sonnet (推荐)' },
+        { value: 'claude-3-opus-20240229', label: 'Claude-3 Opus (最强)' },
+        { value: 'claude-3-sonnet-20240229', label: 'Claude-3 Sonnet' },
+        { value: 'claude-3-haiku-20240307', label: 'Claude-3 Haiku (快速)' }
+      ],
+      'gemini': [
+        { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (推荐)' },
+        { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (快速)' },
+        { value: 'gemini-pro', label: 'Gemini Pro' },
+        { value: 'gemini-pro-vision', label: 'Gemini Pro Vision (多模态)' }
+      ],
+      'qwen': [
+        { value: 'qwen-plus', label: '通义千问-Plus (推荐)' },
+        { value: 'qwen-turbo', label: '通义千问-Turbo (快速)' },
+        { value: 'qwen-max', label: '通义千问-Max (最强)' },
+        { value: 'qwen-vl-plus', label: '通义千问-VL-Plus (多模态)' }
+      ]
+    };
+    return options[provider] || [];
   };
 
   // 自适应高度处理函数
@@ -284,6 +468,7 @@ function ChatWindow({
         flexShrink: 0
       }}>
         <button
+          className="settings-button"
           onClick={() => setShowSettings(!showSettings)}
           style={{
             padding: '1px 8px',
@@ -302,7 +487,7 @@ function ChatWindow({
           onMouseDown={(e) => { e.target.style.border = '2px inset #c0c0c0'; e.target.style.backgroundColor = '#a0a0a0'; }}
           onMouseUp={(e) => { e.target.style.border = '2px outset #c0c0c0'; e.target.style.backgroundColor = '#c0c0c0'; }}
           onMouseLeave={(e) => { e.target.style.border = '2px outset #c0c0c0'; e.target.style.backgroundColor = '#c0c0c0'; }}
-          title="聊天设置"
+          title="LLM API 设置"
         >
           ⚙️ 设置
         </button>
@@ -337,14 +522,179 @@ function ChatWindow({
         </button>
         
         {showSettings && (
-          <span style={{
+          <div className="settings-panel" style={{
+            position: 'absolute',
+            top: '26px',
+            left: '4px',
+            width: '320px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            padding: '8px',
             fontSize: '11px',
             fontFamily: 'MS Sans Serif, sans-serif',
-            color: '#000000',
-            marginLeft: '8px'
+            zIndex: 1000,
+            boxShadow: '2px 2px 4px rgba(0,0,0,0.3)'
           }}>
-            设置面板开发中...
-          </span>
+            <div style={{ fontWeight: 'bold', marginBottom: '8px', borderBottom: '1px solid #808080', paddingBottom: '4px' }}>
+              LLM API 设置
+            </div>
+            
+            {/* API服务商选择 */}
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                API 服务商:
+              </label>
+              <select
+                value={apiProvider}
+                onChange={(e) => {
+                  setApiProvider(e.target.value);
+                  saveApiConfig(e.target.value, apiConfigs);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '2px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  border: '1px inset #c0c0c0',
+                  backgroundColor: '#ffffff'
+                }}
+              >
+                <option value="openai">OpenAI (GPT-4, GPT-3.5)</option>
+                <option value="anthropic">Anthropic (Claude-3.5)</option>
+                <option value="gemini">Google (Gemini Pro)</option>
+                <option value="qwen">阿里云 (通义千问)</option>
+              </select>
+            </div>
+            
+            {/* API配置表单 */}
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                API 密钥:
+              </label>
+              <input
+                type="password"
+                value={apiConfigs[apiProvider]?.apiKey || ''}
+                onChange={(e) => {
+                  const newConfigs = {
+                    ...apiConfigs,
+                    [apiProvider]: {
+                      ...apiConfigs[apiProvider],
+                      apiKey: e.target.value
+                    }
+                  };
+                  setApiConfigs(newConfigs);
+                  
+                  // 只有在用户实际输入内容时才保存（避免保存占位符）
+                  if (e.target.value && e.target.value !== '***已配置***') {
+                    saveApiConfig(apiProvider, newConfigs);
+                  }
+                }}
+                onFocus={(e) => {
+                  // 清空占位符，让用户输入真实密钥
+                  if (e.target.value === '***已配置***') {
+                    const newConfigs = {
+                      ...apiConfigs,
+                      [apiProvider]: {
+                        ...apiConfigs[apiProvider],
+                        apiKey: ''
+                      }
+                    };
+                    setApiConfigs(newConfigs);
+                  }
+                }}
+                placeholder="请输入API密钥"
+                style={{
+                  width: '100%',
+                  padding: '2px 4px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  border: '1px inset #c0c0c0',
+                  backgroundColor: '#ffffff',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            {/* 模型选择 */}
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                模型:
+              </label>
+              <select
+                value={apiConfigs[apiProvider]?.model || ''}
+                onChange={(e) => {
+                  const newConfigs = {
+                    ...apiConfigs,
+                    [apiProvider]: {
+                      ...apiConfigs[apiProvider],
+                      model: e.target.value
+                    }
+                  };
+                  setApiConfigs(newConfigs);
+                  saveApiConfig(apiProvider, newConfigs);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '2px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  border: '1px inset #c0c0c0',
+                  backgroundColor: '#ffffff'
+                }}
+              >
+                {getModelOptions(apiProvider).map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* API端点 */}
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                API 端点:
+              </label>
+              <input
+                type="text"
+                value={apiConfigs[apiProvider]?.baseUrl || ''}
+                onChange={(e) => {
+                  const newConfigs = {
+                    ...apiConfigs,
+                    [apiProvider]: {
+                      ...apiConfigs[apiProvider],
+                      baseUrl: e.target.value
+                    }
+                  };
+                  setApiConfigs(newConfigs);
+                  saveApiConfig(apiProvider, newConfigs);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '2px 4px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  border: '1px inset #c0c0c0',
+                  backgroundColor: '#ffffff',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            {/* 状态显示 */}
+            <div style={{ 
+              marginTop: '8px', 
+              padding: '4px', 
+              backgroundColor: apiConfigs[apiProvider]?.apiKey ? '#e6f3ff' : '#fff3e6',
+              border: '1px solid #ccc',
+              fontSize: '10px'
+            }}>
+              状态: {apiConfigs[apiProvider]?.apiKey ? 
+                `✅ ${getProviderName(apiProvider)} 已配置` : 
+                `⚠️ 请配置 ${getProviderName(apiProvider)} API密钥`
+              }
+            </div>
+          </div>
         )}
       </div>
 

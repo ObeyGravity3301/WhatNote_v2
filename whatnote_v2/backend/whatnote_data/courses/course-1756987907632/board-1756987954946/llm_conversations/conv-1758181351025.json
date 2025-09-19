@@ -3,7 +3,7 @@
   "title": "新对话",
   "board_id": "board-1756987954946",
   "created_at": "2025-09-18T15:42:31.025189",
-  "updated_at": "2025-09-18T20:16:28.811091",
+  "updated_at": "2025-09-19T12:21:41.295810",
   "messages": [
     {
       "role": "user",
@@ -129,6 +129,37 @@
       "role": "assistant",
       "content": "关于\"ranhoushizhege\"，我可以为您提供以下建议...",
       "timestamp": "2025-09-18T20:16:28.811091"
+    },
+    {
+      "role": "user",
+      "content": "[新文件] 河津桜は綺麗ですよね.jpg",
+      "file": {
+        "id": "window_1758206060804",
+        "name": "河津桜は綺麗ですよね.jpg",
+        "type": "image",
+        "url": "http://localhost:8081/static/files/courses/course-1756987907632/board-1756987954946/files/河津桜は綺麗ですよね.jpg"
+      },
+      "timestamp": "2025-09-18T22:34:20.851241"
+    },
+    {
+      "role": "user",
+      "content": "你好",
+      "timestamp": "2025-09-19T12:08:09.190179"
+    },
+    {
+      "role": "assistant",
+      "content": "这是一个很好的问题！关于\"你好\"，我的看法是...",
+      "timestamp": "2025-09-19T12:08:10.913700"
+    },
+    {
+      "role": "user",
+      "content": "你好",
+      "timestamp": "2025-09-19T12:21:41.276284"
+    },
+    {
+      "role": "assistant",
+      "content": "❌ API调用失败: API调用失败: 404\n\n请检查:\n1. API配置是否正确\n2. 网络连接是否正常\n3. API密钥是否有效",
+      "timestamp": "2025-09-19T12:21:41.295810"
     }
   ]
 }

@@ -2,8 +2,8 @@
   "type": "pdf",
   "title": "免疫学第二次作业.pdf",
   "position": {
-    "x": 170,
-    "y": 298
+    "x": 639,
+    "y": 330
   },
   "size": {
     "width": 800,
@@ -11,7 +11,7 @@
   },
   "id": "window_1758195717325",
   "created_at": "2025-09-18T19:41:57.325409",
-  "updated_at": "2025-09-18T20:09:08.007361",
+  "updated_at": "2025-09-18T22:35:05.155533",
   "file_path": "files/免疫学第二次作业.pdf",
-  "hidden": false
+  "hidden": true
 }

@@ -1,31 +1,11 @@
 {
-  "window_1758194006085": {
+  "window_1758147403393": {
     "position": {
       "x": 20,
       "y": 20
     },
     "gridPosition": {
       "gridX": 0,
-      "gridY": 0
-    }
-  },
-  "window_1758194096708": {
-    "position": {
-      "x": 100,
-      "y": 20
-    },
-    "gridPosition": {
-      "gridX": 1,
-      "gridY": 0
-    }
-  },
-  "window_1758194190614": {
-    "position": {
-      "x": 180,
-      "y": 20
-    },
-    "gridPosition": {
-      "gridX": 2,
       "gridY": 0
     }
   }

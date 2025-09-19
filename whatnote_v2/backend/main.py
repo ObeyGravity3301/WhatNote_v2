@@ -23,6 +23,8 @@ from storage.file_manager import FileSystemManager
 from storage.content_manager import ContentManager
 from storage.file_watcher import FileWatcher
 from storage.conversation_manager import ConversationManager
+from storage.api_config_manager import APIConfigManager
+from llm_service import LLMService
 from document_converter import document_converter
 
 app = FastAPI(title="WhatNote V2 API", version="2.0.0")
@@ -90,6 +92,8 @@ class ConnectionManager:
 file_manager = FileSystemManager(DATA_DIR)
 content_manager = ContentManager(file_manager)
 conversation_manager = ConversationManager(file_manager)
+api_config_manager = APIConfigManager(DATA_DIR)
+llm_service = LLMService(api_config_manager)
 
 # 初始化WebSocket连接管理器
 manager = ConnectionManager()
@@ -815,6 +819,107 @@ async def get_board_files(board_id: str):
         return {"files": files_list}
     except Exception as e:
         error(f"获取展板文件列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# API配置管理端点
+@app.get("/api/llm/config")
+async def get_api_config():
+    """获取LLM API配置"""
+    try:
+        config = api_config_manager.get_config()
+        # 不返回敏感的API密钥，只返回是否已配置
+        safe_config = {
+            "current_provider": config.get("current_provider", "openai"),
+            "providers": {}
+        }
+        
+        for provider, provider_config in config.get("providers", {}).items():
+            safe_config["providers"][provider] = {
+                "model": provider_config.get("model", ""),
+                "baseUrl": provider_config.get("baseUrl", ""),
+                "apiKey": "***" if provider_config.get("apiKey", "").strip() else "",
+                "configured": bool(provider_config.get("apiKey", "").strip())
+            }
+        
+        return safe_config
+    except Exception as e:
+        error(f"获取API配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/llm/config/{provider}")
+async def update_provider_config(provider: str, config: dict):
+    """更新指定服务商的配置"""
+    try:
+        # 验证服务商
+        valid_providers = ["openai", "anthropic", "gemini", "qwen"]
+        if provider not in valid_providers:
+            raise HTTPException(status_code=400, detail="不支持的服务商")
+        
+        # 更新配置
+        success = api_config_manager.update_config(provider, config)
+        if not success:
+            raise HTTPException(status_code=500, detail="更新配置失败")
+        
+        info(f"更新API配置成功: {provider}")
+        return {"success": True, "message": "配置更新成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"更新API配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/llm/provider/{provider}")
+async def set_current_provider(provider: str):
+    """设置当前使用的服务商"""
+    try:
+        # 验证服务商
+        valid_providers = ["openai", "anthropic", "gemini", "qwen"]
+        if provider not in valid_providers:
+            raise HTTPException(status_code=400, detail="不支持的服务商")
+        
+        # 设置当前服务商
+        success = api_config_manager.set_current_provider(provider)
+        if not success:
+            raise HTTPException(status_code=500, detail="设置服务商失败")
+        
+        info(f"设置当前服务商成功: {provider}")
+        return {"success": True, "current_provider": provider}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"设置服务商失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# LLM对话API端点
+@app.post("/api/llm/chat")
+async def llm_chat_completion(request: dict):
+    """LLM对话补全API"""
+    try:
+        messages = request.get('messages', [])
+        if not messages:
+            raise HTTPException(status_code=400, detail="消息列表不能为空")
+        
+        # 使用流式响应
+        async def generate_response():
+            async for chunk in llm_service.chat_completion(messages, stream=True):
+                # 使用Server-Sent Events格式
+                yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+        
+        return StreamingResponse(
+            generate_response(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"LLM对话失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.websocket("/ws/logs")
