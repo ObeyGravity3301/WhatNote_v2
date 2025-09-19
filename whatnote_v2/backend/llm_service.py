@@ -231,8 +231,8 @@ class LLMService:
             yield f"❌ Gemini API调用异常: {str(e)}"
     
     async def _call_qwen_api(self, config: Dict, messages: List[Dict], stream: bool) -> AsyncGenerator[str, None]:
-        """调用通义千问API"""
-        url = f"{config['baseUrl']}/services/aigc/text-generation/generation"
+        """调用通义千问API（OpenAI兼容模式）"""
+        url = f"{config['baseUrl']}/chat/completions"
         headers = {
             'Authorization': f"Bearer {config['apiKey']}",
             'Content-Type': 'application/json'
@@ -240,14 +240,10 @@ class LLMService:
         
         payload = {
             'model': config['model'],
-            'input': {
-                'messages': messages
-            },
-            'parameters': {
-                'temperature': 0.7,
-                'max_tokens': 4000,
-                'incremental_output': stream
-            }
+            'messages': messages,
+            'stream': stream,
+            'temperature': 0.7,
+            'max_tokens': 4000
         }
         
         try:
@@ -262,17 +258,23 @@ class LLMService:
                         async for line in response.content:
                             line = line.decode('utf-8').strip()
                             if line.startswith('data: '):
-                                data = line[6:]
+                                data = line[6:]  # 移除 'data: ' 前缀
+                                if data == '[DONE]':
+                                    break
                                 try:
                                     chunk_data = json.loads(data)
-                                    if 'output' in chunk_data and 'text' in chunk_data['output']:
-                                        yield chunk_data['output']['text']
+                                    if 'choices' in chunk_data and chunk_data['choices']:
+                                        delta = chunk_data['choices'][0].get('delta', {})
+                                        content = delta.get('content', '')
+                                        if content:
+                                            yield content
                                 except json.JSONDecodeError:
                                     continue
                     else:
                         response_data = await response.json()
-                        if 'output' in response_data and 'text' in response_data['output']:
-                            yield response_data['output']['text']
+                        if 'choices' in response_data and response_data['choices']:
+                            content = response_data['choices'][0]['message']['content']
+                            yield content
                             
         except Exception as e:
             yield f"❌ 通义千问API调用异常: {str(e)}"

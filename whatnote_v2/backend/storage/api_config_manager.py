@@ -37,7 +37,7 @@ class APIConfigManager:
                     "qwen": {
                         "apiKey": "",
                         "model": "qwen-plus",
-                        "baseUrl": "https://dashscope.aliyuncs.com/api/v1"
+                        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
                     }
                 },
                 "created_at": datetime.now().isoformat(),
@@ -64,7 +64,7 @@ class APIConfigManager:
                 "openai": {"apiKey": "", "model": "gpt-4", "baseUrl": "https://api.openai.com/v1"},
                 "anthropic": {"apiKey": "", "model": "claude-3-5-sonnet-20241022", "baseUrl": "https://api.anthropic.com"},
                 "gemini": {"apiKey": "", "model": "gemini-1.5-pro", "baseUrl": "https://generativelanguage.googleapis.com/v1"},
-                "qwen": {"apiKey": "", "model": "qwen-plus", "baseUrl": "https://dashscope.aliyuncs.com/api/v1"}
+                "qwen": {"apiKey": "", "model": "qwen-plus", "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"}
             }
         }
     

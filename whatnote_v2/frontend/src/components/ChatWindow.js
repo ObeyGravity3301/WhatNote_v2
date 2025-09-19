@@ -1,5 +1,98 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './ChatWindow.css';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import mermaid from 'mermaid';
+
+// LaTeX 分隔符标准化函数
+const normalizeLatexDelimiters = (text) => {
+  return text
+    .replace(/\\\(/g, '$')
+    .replace(/\\\)/g, '$')
+    .replace(/\\\[/g, '$$')
+    .replace(/\\\]/g, '$$');
+};
+
+// Mermaid 组件
+const MermaidDiagram = ({ children }) => {
+  const [svg, setSvg] = useState('');
+  const [error, setError] = useState(null);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const renderMermaid = async () => {
+      try {
+        // 初始化Mermaid（如果还没有初始化）
+        if (!mermaid.initialize) {
+          mermaid.initialize({ 
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose'
+          });
+        }
+
+        // 渲染图表
+        const { svg } = await mermaid.render(`mermaid-${Date.now()}`, children);
+        setSvg(svg);
+      } catch (err) {
+        setError('Mermaid渲染失败: ' + err.message);
+      }
+    };
+
+    if (children) {
+      renderMermaid();
+    }
+  }, [children]);
+
+  if (error) {
+    return (
+      <div style={{
+        backgroundColor: '#ffe6e6',
+        border: '1px solid #ff9999',
+        padding: '8px',
+        margin: '4px 0',
+        borderRadius: '2px',
+        fontSize: '10px',
+        color: '#cc0000'
+      }}>
+        ❌ {error}
+      </div>
+    );
+  }
+
+  if (!svg) {
+    return (
+      <div style={{
+        backgroundColor: '#f0f0f0',
+        border: '1px solid #ccc',
+        padding: '8px',
+        margin: '4px 0',
+        borderRadius: '2px',
+        fontSize: '10px',
+        color: '#666'
+      }}>
+        🔄 正在渲染图表...
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      ref={containerRef}
+      style={{
+        margin: '8px 0',
+        textAlign: 'center',
+        border: '1px solid #ccc',
+        borderRadius: '2px',
+        backgroundColor: '#ffffff'
+      }}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
+};
 
 function ChatWindow({ 
   boardId, 
@@ -14,6 +107,8 @@ function ChatWindow({
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState(null);
   const [conversationId, setConversationId] = useState(null);
   const [conversationTitle, setConversationTitle] = useState('AI助手');
   
@@ -238,6 +333,7 @@ function ChatWindow({
     if ((!inputText.trim() && selectedFiles.length === 0) || !conversationId || isLoading) return;
 
     const userMessage = {
+      id: Date.now(),
       role: 'user',
       content: inputText.trim() || '发送了文件',
       files: selectedFiles.length > 0 ? selectedFiles : undefined
@@ -259,24 +355,24 @@ function ChatWindow({
         body: JSON.stringify(userMessage)
       });
 
-      // 模拟AI回复（这里可以集成真正的LLM API）
-      const aiResponse = await generateAIResponse(userMessage.content);
+      // 创建AI消息占位符，用于流式更新
+      const aiMessageId = Date.now();
       const aiMessage = {
+        id: aiMessageId,
         role: 'assistant',
-        content: aiResponse
+        content: ''
       };
 
-      // 显示AI回复
+      // 立即显示空的AI消息
       setMessages(prev => [...prev, aiMessage]);
 
-      // 保存AI消息到后端
-      await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${conversationId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(aiMessage)
-      });
+      // 开始流式输出，停止显示"正在思考..."
+      setIsLoading(false);
+      setIsStreaming(true);
+      setStreamingMessageId(aiMessageId);
+
+      // 调用流式AI回复
+      await generateStreamingAIResponse(userMessage.content, aiMessageId);
 
     } catch (error) {
       console.error('发送消息失败:', error);
@@ -291,7 +387,108 @@ function ChatWindow({
     }
   };
 
-  // 调用真正的LLM API
+  // 流式AI回复函数
+  const generateStreamingAIResponse = async (userInput, aiMessageId) => {
+    try {
+      // 准备消息历史（包括当前对话上下文）
+      const conversationMessages = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      // 添加当前用户消息
+      conversationMessages.push({
+        role: 'user',
+        content: userInput
+      });
+      
+      // 调用流式API
+      const response = await fetch('http://localhost:8081/api/llm/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: conversationMessages
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API调用失败: ${response.status}`);
+      }
+      
+      // 处理流式响应
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              // 流式响应完成，停止流式状态
+              setIsStreaming(false);
+              setStreamingMessageId(null);
+              
+              // 流式响应完成，保存完整消息到后端
+              const finalMessage = {
+                role: 'assistant',
+                content: fullResponse
+              };
+              
+              await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${conversationId}/messages`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(finalMessage)
+              });
+              
+              return;
+            }
+            
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                fullResponse += parsed.content;
+                
+                // 实时更新消息内容
+                setMessages(prev => prev.map(msg => 
+                  msg.id === aiMessageId 
+                    ? { ...msg, content: fullResponse }
+                    : msg
+                ));
+              }
+            } catch (e) {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('流式LLM API调用失败:', error);
+      // 停止流式状态
+      setIsStreaming(false);
+      setStreamingMessageId(null);
+      
+      // 更新消息为错误信息
+      setMessages(prev => prev.map(msg => 
+        msg.id === aiMessageId 
+          ? { ...msg, content: `❌ API调用失败: ${error.message}\n\n请检查:\n1. API配置是否正确\n2. 网络连接是否正常\n3. API密钥是否有效` }
+          : msg
+      ));
+    }
+  };
+
+  // 调用真正的LLM API（保留用于兼容性）
   const generateAIResponse = async (userInput) => {
     try {
       // 准备消息历史（包括当前对话上下文）
@@ -711,12 +908,139 @@ function ChatWindow({
             </div>
           ) : (
             messages.map((message, index) => (
-              <div key={index} className={`message ${message.role === 'user' ? 'user-message' : 'ai-message'}`}>
+              <div key={message.id || index} className={`message ${message.role === 'user' ? 'user-message' : 'ai-message'}`}>
                 <div className="message-avatar">
                   {message.role === 'user' ? '👤' : '🤖'}
                 </div>
                 <div className={`message-bubble ${message.role === 'user' ? 'user-bubble' : 'ai-bubble'}`}>
-                  {message.content}
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                    components={{
+                      // 自定义组件样式，保持Windows 98风格
+                      p: ({ children }) => <p style={{ margin: '4px 0', fontSize: '11px', lineHeight: '1.4' }}>{children}</p>,
+                      h1: ({ children }) => <h1 style={{ fontSize: '14px', fontWeight: 'bold', margin: '8px 0 4px 0' }}>{children}</h1>,
+                      h2: ({ children }) => <h2 style={{ fontSize: '13px', fontWeight: 'bold', margin: '6px 0 3px 0' }}>{children}</h2>,
+                      h3: ({ children }) => <h3 style={{ fontSize: '12px', fontWeight: 'bold', margin: '4px 0 2px 0' }}>{children}</h3>,
+                      strong: ({ children }) => <strong style={{ fontWeight: 'bold' }}>{children}</strong>,
+                      em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
+                      code: ({ children, className, node }) => {
+                        // 调试信息
+                        console.log('Code component - className:', className, 'node:', node, 'children:', children);
+                        
+                        // 检查是否是Mermaid代码块
+                        const isMermaid = className && className.includes('language-mermaid');
+                        
+                        // 获取内容
+                        let content = '';
+                        if (typeof children === 'string') {
+                          content = children;
+                        } else if (Array.isArray(children)) {
+                          content = children.join('');
+                        }
+                        
+                        // 备用检测：通过内容识别Mermaid
+                        const isMermaidByContent = content.includes('graph') || 
+                                                  content.includes('flowchart') || 
+                                                  content.includes('sequenceDiagram') ||
+                                                  content.includes('classDiagram');
+                        
+                        console.log('Code analysis - content:', content.substring(0, 100), 'isMermaidByContent:', isMermaidByContent);
+                        
+                        if (isMermaid || isMermaidByContent) {
+                          console.log('Rendering Mermaid diagram from code with content:', content);
+                          return <MermaidDiagram>{content}</MermaidDiagram>;
+                        }
+                        
+                        return <code style={{ 
+                          backgroundColor: '#f0f0f0', 
+                          padding: '1px 2px', 
+                          fontSize: '10px',
+                          fontFamily: 'Courier New, monospace',
+                          border: '1px solid #ccc'
+                        }}>{children}</code>;
+                      },
+                      pre: ({ children, className, node }) => {
+                        // 调试信息 - 更详细的日志
+                        console.log('Pre component - className:', className, 'node:', node, 'children:', children);
+                        
+                        // 检查是否是Mermaid代码块
+                        const isMermaid = className && className.includes('language-mermaid');
+                        
+                        // 获取内容 - 处理不同的children类型
+                        let content = '';
+                        if (typeof children === 'string') {
+                          content = children;
+                        } else if (Array.isArray(children)) {
+                          content = children.join('');
+                        } else if (children && children.props && children.props.children) {
+                          content = children.props.children;
+                        }
+                        
+                        // 备用检测：通过内容识别Mermaid
+                        const isMermaidByContent = content.includes('graph') || 
+                                                  content.includes('flowchart') || 
+                                                  content.includes('sequenceDiagram') ||
+                                                  content.includes('classDiagram');
+                        
+                        console.log('Content analysis - content:', content.substring(0, 100), 'isMermaidByContent:', isMermaidByContent);
+                        
+                        if (isMermaid || isMermaidByContent) {
+                          console.log('Rendering Mermaid diagram with content:', content);
+                          return <MermaidDiagram>{content}</MermaidDiagram>;
+                        }
+                        
+                        return <pre style={{ 
+                          backgroundColor: '#f0f0f0', 
+                          padding: '4px', 
+                          fontSize: '10px',
+                          fontFamily: 'Courier New, monospace',
+                          border: '1px solid #ccc',
+                          overflow: 'auto',
+                          margin: '4px 0'
+                        }}>{children}</pre>;
+                      },
+                      ul: ({ children }) => <ul style={{ margin: '4px 0', paddingLeft: '16px' }}>{children}</ul>,
+                      ol: ({ children }) => <ol style={{ margin: '4px 0', paddingLeft: '16px' }}>{children}</ol>,
+                      li: ({ children }) => <li style={{ margin: '2px 0' }}>{children}</li>,
+                      blockquote: ({ children }) => <blockquote style={{ 
+                        borderLeft: '3px solid #ccc', 
+                        margin: '4px 0', 
+                        paddingLeft: '8px',
+                        fontStyle: 'italic'
+                      }}>{children}</blockquote>,
+                      table: ({ children }) => <table style={{ 
+                        borderCollapse: 'collapse', 
+                        margin: '4px 0',
+                        fontSize: '10px'
+                      }}>{children}</table>,
+                      th: ({ children }) => <th style={{ 
+                        border: '1px solid #ccc', 
+                        padding: '2px 4px',
+                        backgroundColor: '#f0f0f0',
+                        fontWeight: 'bold'
+                      }}>{children}</th>,
+                      td: ({ children }) => <td style={{ 
+                        border: '1px solid #ccc', 
+                        padding: '2px 4px'
+                      }}>{children}</td>
+                    }}
+                  >
+                    {normalizeLatexDelimiters(message.content)}
+                  </ReactMarkdown>
+                  
+                  {/* 流式输出指示器 */}
+                  {isStreaming && message.id === streamingMessageId && (
+                    <span style={{
+                      display: 'inline-block',
+                      marginLeft: '4px',
+                      color: '#666',
+                      fontSize: '12px',
+                      animation: 'blink 1s infinite'
+                    }}>
+                      ▊
+                    </span>
+                  )}
                   
                   {/* 显示文件附件 */}
                   {message.files && message.files.length > 0 && (
