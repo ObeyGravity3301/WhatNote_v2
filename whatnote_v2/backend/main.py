@@ -709,7 +709,7 @@ async def extract_pdf_text(board_id: str, window_id: str):
 async def serve_media_file(path: str):
     """全新的媒体文件服务API - 避免路由冲突"""
     try:
-        print(f"🔧 媒体服务请求: path={path}")
+        print(f"媒体服务请求: path={path}")
         
         # 直接使用传入的绝对路径
         file_path = Path(path)
@@ -1129,10 +1129,10 @@ async def create_conversation(board_id: str, title: str = ""):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/boards/{board_id}/conversations/{conversation_id}")
-async def get_conversation(board_id: str, conversation_id: str):
-    """获取指定对话记录"""
+async def get_conversation(board_id: str, conversation_id: str, page: int = 0, limit: int = 20):
+    """获取指定对话记录，支持分页"""
     try:
-        conversation = conversation_manager.get_conversation(board_id, conversation_id)
+        conversation = conversation_manager.get_conversation(board_id, conversation_id, page=page, limit=limit)
         if not conversation:
             raise HTTPException(status_code=404, detail="对话不存在")
         return conversation

@@ -6,8 +6,10 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  width: 100%;
   background: #3a6ea5; /* 真正的Windows 98桌面蓝色 */
   position: relative;
+  overflow: hidden; /* 防止内部滚动条 */
 }
 
 .canvas-header {
@@ -63,6 +65,8 @@
   position: relative;
   background: #3a6ea5; /* 桌面背景色 */
   overflow: hidden;
+  height: 100%;
+  width: 100%;
 }
 
 .welcome-screen {

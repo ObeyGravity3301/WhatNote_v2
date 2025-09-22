@@ -33,7 +33,7 @@ async def health():
 async def serve_board_file(board_id: str, path: str):
     """简单高效的文件服务API"""
     try:
-        print(f"🔧 文件服务请求: board_id={board_id}, path={path}")
+        print(f"文件服务请求: board_id={board_id}, path={path}")
         
         # 直接使用传入的绝对路径
         file_path = Path(path)

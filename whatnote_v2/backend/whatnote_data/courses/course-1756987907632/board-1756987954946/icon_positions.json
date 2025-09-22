@@ -1,11 +1,41 @@
 {
-  "window_1758147403393": {
+  "window_1758195717325": {
     "position": {
       "x": 20,
       "y": 20
     },
     "gridPosition": {
       "gridX": 0,
+      "gridY": 0
+    }
+  },
+  "window_1758197377440": {
+    "position": {
+      "x": 100,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 1,
+      "gridY": 0
+    }
+  },
+  "window_1758206060804": {
+    "position": {
+      "x": 180,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 2,
+      "gridY": 0
+    }
+  },
+  "window_1758195798650": {
+    "position": {
+      "x": 260,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 3,
       "gridY": 0
     }
   }

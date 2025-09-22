@@ -3300,6 +3300,7 @@ function BoardCanvas({
     };
   }, [boardName]);
 
+
   // 组件卸载时清理事件监听器
   useEffect(() => {
     return () => {
@@ -3403,37 +3404,7 @@ function BoardCanvas({
 
   return (
     <div className="board-canvas">
-      <div className="canvas-header">
-        <h2>{boardName || '未命名展板'}</h2>
-        <div className="canvas-toolbar">
-          <button 
-            className="create-window-btn"
-            onClick={() => setShowCreateMenu(!showCreateMenu)}
-          >
-            + 创建窗口
-          </button>
-          
-          {showCreateMenu && (
-            <div className="create-menu">
-              <button onClick={() => handleCreateWindow('text')}>
-                📝 文本框
-              </button>
-              <button onClick={() => handleCreateWindow('image')}>
-                🖼️ 图片框
-              </button>
-              <button onClick={() => handleCreateWindow('video')}>
-                🎥 视频框
-              </button>
-                <button onClick={() => handleCreateWindow('audio')}>
-                  🎵 音频框
-                </button>
-              <button onClick={() => handleCreateWindow('pdf')}>
-                📄 PDF框
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* 移除顶部标题栏和新建窗口按钮 */}
       
       <div 
         className={`canvas-area ${isDragOver ? 'drag-over' : ''}`}
@@ -3663,6 +3634,16 @@ function BoardCanvas({
                     handleWindowFocusLocal(window.id);
                   }}
                   isFocused={focusedWindowId === window.id}
+                  onOpenWindow={(fileName) => {
+                    // 根据文件名查找对应的窗口并打开
+                    const targetWindow = windows.find(w => 
+                      w.title === fileName || 
+                      (w.file_path && w.file_path.includes(fileName))
+                    );
+                    if (targetWindow) {
+                      handleIconDoubleClick(targetWindow.id);
+                    }
+                  }}
                   position={window.position}
                   onPositionChange={(newPosition) => {
                     // 位置变化通过现有的拖拽系统处理

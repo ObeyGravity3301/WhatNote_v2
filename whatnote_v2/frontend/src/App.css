@@ -1,21 +1,41 @@
+/* 全局样式，确保没有滚动条 */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #3a6ea5;
+}
+
+#root {
+  height: 100vh;
+  overflow: hidden;
+}
+
 .app {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #f5f5f5;
+  background: #3a6ea5; /* 改为桌面蓝色背景 */
+  overflow: hidden; /* 移除整个应用的滚动条 */
+  position: fixed; /* 固定定位，防止滚动 */
+  width: 100vw; /* 确保占满整个视口宽度 */
+  top: 0;
+  left: 0;
 }
 
 .main-content {
   display: flex;
   flex: 1;
   overflow: hidden;
+  height: calc(100vh - 30px); /* 减去任务栏高度 */
 }
 
 .content-area {
   flex: 1;
-  background: white;
+  background: #3a6ea5; /* 改为桌面蓝色背景 */
   overflow: hidden;
-  padding-bottom: 35px; /* 为任务栏留出空间 */
+  /* 移除padding-bottom，任务栏是fixed定位，不需要预留空间 */
 }
 
 .welcome-screen {
@@ -41,10 +61,12 @@
   height: 30px;
   background: linear-gradient(to bottom, #d4d4d4, #a0a0a0);
   border-top: 2px solid #ffffff;
-  border-bottom: 1px solid #808080;
+  border-bottom: none; /* 移除底部边框，避免缝隙 */
   z-index: 10000;
   font-family: 'MS Sans Serif', sans-serif;
   font-size: 11px;
+  margin: 0;
+  padding: 0;
 }
 
 .taskbar-content {
@@ -158,25 +180,56 @@
   flex: 1;
 }
 
-/* Win98 开始菜单 */
-.start-menu {
+/* Win98 开始菜单容器 */
+.start-menu-container {
   position: fixed;
   bottom: 32px;
   left: 2px;
-  width: 300px;
+  z-index: 20000;
+}
+
+/* Win98 开始菜单 */
+.start-menu {
+  position: relative; /* 相对于容器定位 */
+  width: 250px; /* 恢复原始宽度，子菜单在外侧 */
   background: #c0c0c0;
   border: 2px outset #c0c0c0;
   box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-  z-index: 20000;
   font-family: 'MS Sans Serif', sans-serif;
   font-size: 11px;
+  display: flex;
+  flex-direction: row; /* 改为横向布局 */
 }
 
 .start-menu-header {
+  display: flex;
   background: linear-gradient(to right, #000080, #0000ff);
   color: white;
-  padding: 4px 8px;
   font-weight: bold;
+}
+
+.start-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+}
+
+.start-menu-vertical-title {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 12px;
+  font-weight: bold;
+  color: white;
+  padding: 8px 4px;
+  background: linear-gradient(to bottom, #000080, #0000ff);
+  border-right: 1px solid #4040ff;
+  width: 30px; /* 固定宽度 */
+  flex-shrink: 0; /* 不允许收缩 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(180deg); /* 旋转180度 */
 }
 
 .start-menu-title {
@@ -190,9 +243,145 @@
 }
 
 .start-menu-content {
-  padding: 4px;
-  max-height: 400px;
-  overflow-y: auto;
+  flex: 1;
+  background: #c0c0c0;
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+}
+
+.start-menu-main {
+  flex: 1;
+}
+
+.start-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  color: black;
+  border: 1px solid transparent;
+  position: relative;
+}
+
+.start-menu-item:hover {
+  background: #316ac5;
+  color: white;
+  border: 1px solid #316ac5;
+}
+
+.menu-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-text {
+  flex: 1;
+  font-family: 'MS Sans Serif', sans-serif;
+}
+
+.menu-arrow {
+  font-size: 10px;
+  color: #666;
+  margin-left: 4px;
+}
+
+.start-menu-item:hover .menu-arrow {
+  color: white;
+}
+
+/* 分界线样式 - Windows 98 3D效果 */
+.menu-separator {
+  height: 2px;
+  margin: 2px 0;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #ffffff;
+  background: transparent;
+}
+
+.start-menu-submenu {
+  position: absolute;
+  left: calc(100% - 1px); /* 紧贴主菜单，减少1px间隙 */
+  width: 200px;
+  background: #c0c0c0;
+  border: 2px outset #c0c0c0;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+  z-index: 20001; /* 比开始菜单更高 */
+  height: auto; /* 高度自适应内容 */
+  max-height: calc(100vh - 70px); /* 防止超出屏幕，预留任务栏空间 */
+  overflow-y: auto; /* 如果内容过多，允许滚动 */
+}
+
+.submenu-content {
+  height: auto; /* 自适应内容高度 */
+}
+
+.submenu-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: #d4d4d4;
+  border: 1px inset #c0c0c0;
+  margin-bottom: 2px;
+  font-weight: bold;
+}
+
+.submenu-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.submenu-title {
+  font-family: 'MS Sans Serif', sans-serif;
+  font-size: 11px;
+  color: black;
+}
+
+.submenu-items {
+  padding: 2px;
+}
+
+.submenu-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  color: black;
+  border: 1px solid transparent;
+}
+
+.submenu-item:hover {
+  background: #316ac5;
+  color: white;
+  border: 1px solid #316ac5;
+}
+
+.submenu-text {
+  font-family: 'MS Sans Serif', sans-serif;
+}
+
+.submenu-empty {
+  padding: 4px 8px; /* 减少上下padding，让高度约为选项的一半 */
+  text-align: center;
+  color: #666;
+  font-style: italic;
+  font-size: 10px;
+  min-height: 16px; /* 确保最小高度 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .start-menu-section {
@@ -570,4 +759,38 @@
 .tool-item:hover {
   background: #316ac5;
   color: white;
+}
+
+/* 连接状态指示器样式 */
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: #c0c0c0;
+  border: 1px outset #c0c0c0;
+  font-family: 'MS Sans Serif', sans-serif;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.connected {
+  background: #27ae60;
+  box-shadow: 0 0 4px #27ae60;
+}
+
+.status-dot.disconnected {
+  background: #e74c3c;
+  box-shadow: 0 0 4px #e74c3c;
+}
+
+.status-text {
+  font-size: 11px;
+  color: black;
+  font-weight: normal;
 } 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
 
@@ -6,7 +6,7 @@ import './App.css';
 import CourseExplorer from './components/CourseExplorer';
 import BoardCanvas from './components/BoardCanvas';
 import Console from './components/Console';
-import Header from './components/Header';
+// import Header from './components/Header'; // 移除顶部标题栏
 import Sidebar from './components/Sidebar';
 
 function App() {
@@ -24,6 +24,122 @@ function App() {
   const [newCourseDesc, setNewCourseDesc] = useState('');
   const [newBoardName, setNewBoardName] = useState('');
   const [courseBoards, setCourseBoards] = useState({});
+  
+  // 子菜单悬浮状态
+  const [hoveredCourse, setHoveredCourse] = useState(null);
+  const [hoveredSubmenu, setHoveredSubmenu] = useState(false);
+  const [submenuPosition, setSubmenuPosition] = useState({ top: 0 });
+  
+  // 延迟定时器引用
+  const hideTimeoutRef = useRef(null);
+  
+  // 计算子菜单位置
+  const calculateSubmenuPosition = (element) => {
+    if (!element) {
+      console.log('❌ calculateSubmenuPosition: element is null');
+      return { top: 0 };
+    }
+    
+    const rect = element.getBoundingClientRect();
+    console.log('📍 文件夹元素位置:', {
+      top: rect.top,
+      bottom: rect.bottom,
+      height: rect.height
+    });
+    
+    const startMenuElement = document.querySelector('.start-menu');
+    if (!startMenuElement) {
+      console.log('❌ 找不到 .start-menu 元素');
+      return { top: 0 };
+    }
+    
+    const startMenuRect = startMenuElement.getBoundingClientRect();
+    console.log('📍 开始菜单位置:', {
+      top: startMenuRect.top,
+      bottom: startMenuRect.bottom,
+      height: startMenuRect.height
+    });
+    
+    // 获取子菜单的预估高度（基于内容）
+    const submenuElement = document.querySelector('.start-menu-submenu');
+    const estimatedHeight = submenuElement ? submenuElement.scrollHeight : 200;
+    console.log('📍 子菜单预估高度:', estimatedHeight);
+    
+    // 计算文件夹顶部到开始菜单底部的距离（可用空间）
+    const folderTop = rect.top - startMenuRect.top;
+    const startMenuHeight = startMenuRect.bottom - startMenuRect.top;
+    const availableSpace = startMenuHeight - folderTop;
+    
+    console.log('📍 计算数据:', {
+      folderTop,
+      startMenuHeight,
+      availableSpace,
+      estimatedHeight,
+      comparison: `${estimatedHeight} vs ${availableSpace}`
+    });
+    
+    // 判断子菜单高度与可用空间的关系
+    if (estimatedHeight < availableSpace) {
+      // 子菜单高度小于可用空间，顶部对齐文件夹顶部
+      const result = { top: Math.max(0, folderTop) };
+      console.log('✅ 使用顶部对齐 (子菜单高度 < 可用空间):', result);
+      return result;
+    } else {
+      // 子菜单高度大于等于可用空间，底部对齐开始菜单底部
+      const bottomAlignedTop = startMenuHeight - estimatedHeight;
+      const result = { top: bottomAlignedTop }; // 不使用Math.max，允许负数（超出顶部）
+      console.log('✅ 使用底部对齐 (子菜单高度 >= 可用空间):', {
+        startMenuHeight,
+        estimatedHeight,
+        bottomAlignedTop,
+        finalTop: result.top,
+        note: bottomAlignedTop < 0 ? '子菜单顶部超出开始菜单顶部' : '子菜单完全在开始菜单内'
+      });
+      return result;
+    }
+  };
+  
+  // 处理课程悬浮 - 立即显示，延迟隐藏
+  const handleCourseMouseEnter = (courseId, event) => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+    
+    // 立即保存元素引用，避免异步时失效
+    const targetElement = event.currentTarget;
+    
+    setHoveredCourse(courseId);
+    
+    // 延迟计算位置，等待子菜单渲染完成
+    setTimeout(() => {
+      const position = calculateSubmenuPosition(targetElement);
+      setSubmenuPosition(position);
+    }, 10);
+  };
+  
+  const handleCourseMouseLeave = () => {
+    hideTimeoutRef.current = setTimeout(() => {
+      if (!hoveredSubmenu) {
+        setHoveredCourse(null);
+      }
+    }, 150); // 150ms延迟
+  };
+  
+  
+  // 处理子菜单悬浮
+  const handleSubmenuMouseEnter = () => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+    setHoveredSubmenu(true);
+  };
+  
+  const handleSubmenuMouseLeave = () => {
+    setHoveredSubmenu(false);
+    setHoveredCourse(null);
+  };
   
   // 回收站相关状态
   const [showTrash, setShowTrash] = useState(false);
@@ -364,7 +480,7 @@ function App() {
   // 点击外部关闭开始菜单
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (showStartMenu && !event.target.closest('.start-menu') && !event.target.closest('.start-button')) {
+      if (showStartMenu && !event.target.closest('.start-menu-container') && !event.target.closest('.start-button')) {
         setShowStartMenu(false);
       }
     };
@@ -375,12 +491,35 @@ function App() {
     }
   }, [showStartMenu]);
 
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // 子菜单显示后重新计算位置
+  useEffect(() => {
+    if (hoveredCourse && hoveredSubmenu) {
+      // 延迟一点时间让子菜单完全渲染
+      setTimeout(() => {
+        const submenuElement = document.querySelector('.start-menu-submenu');
+        if (submenuElement) {
+          // 获取当前悬浮的菜单项
+          const hoveredElement = document.querySelector('.start-menu-item:hover');
+          if (hoveredElement) {
+            const position = calculateSubmenuPosition(hoveredElement);
+            setSubmenuPosition(position);
+          }
+        }
+      }, 10);
+    }
+  }, [hoveredCourse, hoveredSubmenu]);
+
   return (
     <div className="app">
-      <Header 
-        isConnected={isConnected} 
-        onToggleConsole={() => setShowConsole(!showConsole)} 
-      />
       <div className="main-content">
                 {/* 侧边栏已移植到开始菜单，暂时隐藏 */}
         {/* <Sidebar 
@@ -468,9 +607,9 @@ function App() {
             <span className="taskbar-label">WhatNote V2 - 请通过开始菜单选择展板</span>
           )}
           
-          {/* 右侧聊天按钮 */}
-          {selectedBoard && (
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {/* 右侧聊天按钮和连接状态 */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {selectedBoard && (
               <button 
                 className="taskbar-item"
                 onClick={() => {
@@ -484,103 +623,121 @@ function App() {
                 <span className="taskbar-icon">💬</span>
                 <span className="taskbar-text">AI助手</span>
               </button>
+            )}
+            
+            {/* 连接状态指示器 */}
+            <div className="connection-status" style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 8px' }}>
+              <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`}></span>
+              <span className="status-text" style={{ fontSize: '11px', color: 'black' }}>
+                {isConnected ? '已连接' : '未连接'}
+              </span>
             </div>
-          )}
+          </div>
         </div>
       </div>
       
       {/* Win98风格开始菜单 */}
       {showStartMenu && (
-        <div className="start-menu">
-          <div className="start-menu-header">
-            <div className="start-menu-title">
-              <span className="start-menu-icon">🏠</span>
-              <span>WhatNote V2</span>
-            </div>
-          </div>
-          
-          <div className="start-menu-content">
-            <div className="start-menu-section">
-              <div className="section-header">
-                <span>📚 课程管理</span>
-                <button 
-                  className="start-menu-btn"
-                  onClick={() => setShowCreateCourse(true)}
-                >
-                  + 新建课程
-                </button>
+        <div className="start-menu-container">
+          <div className="start-menu">
+            <div className="start-menu-vertical-title">WhatNote</div>
+            <div className="start-menu-content">
+            {/* 主菜单 */}
+            <div className="start-menu-main">
+              {/* 新建课程选项 */}
+              <div 
+                className="start-menu-item"
+                onClick={() => {
+                  setShowCreateCourse(true);
+                  setShowStartMenu(false);
+                }}
+              >
+                <span className="menu-icon">📚</span>
+                <span className="menu-text">新建课程</span>
               </div>
               
-              <div className="courses-list">
-                {courses && courses.length > 0 ? (
-                  courses.map(course => (
-                    <div key={course.id} className="course-item">
-                      <div 
-                        className={`course-header ${selectedCourse?.id === course.id ? 'selected' : ''}`}
-                        onClick={() => setSelectedCourse(course)}
-                      >
-                        <span className="course-name">📖 {course.name || '未命名课程'}</span>
-                        <button 
-                          className="create-board-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedCourse(course);
-                            setShowCreateBoard(true);
-                          }}
-                        >
-                          + 展板
-                        </button>
-                      </div>
-                      
-                      {selectedCourse?.id === course.id && (
-                        <div className="boards-list">
-                          {courseBoards[course.id]?.map(board => (
-                            <div 
-                              key={board.id}
-                              className={`board-item ${selectedBoard?.id === board.id ? 'selected' : ''}`}
-                              onClick={() => {
-                                setSelectedBoard(board);
-                                setShowStartMenu(false); // 选择展板后关闭开始菜单
-                              }}
-                            >
-                              📋 {board.name || '未命名展板'}
-                            </div>
-                          ))}
-                          {(!courseBoards[course.id] || courseBoards[course.id].length === 0) && (
-                            <div className="no-boards">
-                              暂无展板
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <div className="no-courses">
-                    暂无课程，请创建第一个课程
+              {/* 分界线 */}
+              <div className="menu-separator"></div>
+              
+              {/* 课程列表 */}
+              {courses && courses.length > 0 && (
+                courses.map(course => (
+                  <div 
+                    key={course.id} 
+                    className="start-menu-item"
+                    onMouseEnter={(e) => handleCourseMouseEnter(course.id, e)}
+                    onMouseLeave={handleCourseMouseLeave}
+                  >
+                    <span className="menu-icon">📖</span>
+                    <span className="menu-text">{course.name || '未命名课程'}</span>
+                    <span className="menu-arrow">▶</span>
                   </div>
-                )}
+                ))
+              )}
+              
+              {/* 分界线 */}
+              <div className="menu-separator"></div>
+              
+              {/* 回收站 */}
+              <div 
+                className="start-menu-item"
+                onClick={() => {
+                  setShowTrash(true);
+                  setShowStartMenu(false);
+                }}
+              >
+                <span className="menu-icon">🗑️</span>
+                <span className="menu-text">回收站</span>
               </div>
             </div>
             
-            {/* 系统工具部分 */}
-            <div className="start-menu-section">
-              <div className="section-header">
-                <span>🛠️ 系统工具</span>
-              </div>
-              
-              <div className="system-tools">
-                <div 
-                  className="tool-item"
-                  onClick={() => {
-                    setShowTrash(true);
-                    setShowStartMenu(false);
-                  }}
-                >
-                  🗑️ 回收站
+          </div>
+          
+          {/* 外侧子菜单 */}
+          {hoveredCourse && (
+            <div 
+              className="start-menu-submenu"
+              style={{ top: `${submenuPosition.top}px` }}
+              onMouseEnter={handleSubmenuMouseEnter}
+              onMouseLeave={handleSubmenuMouseLeave}
+            >
+              <div className="submenu-content">
+                <div className="submenu-items">
+                  <div 
+                    className="submenu-item"
+                    onClick={() => {
+                      setSelectedCourse(courses.find(c => c.id === hoveredCourse));
+                      setShowCreateBoard(true);
+                      setShowStartMenu(false);
+                    }}
+                  >
+                    <span className="submenu-icon">➕</span>
+                    <span className="submenu-text">新建展板</span>
+                  </div>
+                  
+                  {courseBoards[hoveredCourse]?.map(board => (
+                    <div 
+                      key={board.id}
+                      className="submenu-item"
+                      onClick={() => {
+                        setSelectedBoard(board);
+                        setShowStartMenu(false);
+                      }}
+                    >
+                      <span className="submenu-icon">📋</span>
+                      <span className="submenu-text">{board.name || '未命名展板'}</span>
+                    </div>
+                  ))}
+                  
+                  {(!courseBoards[hoveredCourse] || courseBoards[hoveredCourse].length === 0) && (
+                    <div className="submenu-empty">
+                      暂无展板
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
+          )}
           </div>
         </div>
       )}

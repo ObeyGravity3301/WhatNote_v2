@@ -12,7 +12,7 @@
 }
 
 .messages-container {
-  flex: 1;
+  flex: 1; /* 占据剩余空间 */
   overflow-y: auto;
   padding: 8px;
   background: #ffffff;
@@ -20,9 +20,14 @@
   margin: 1px;
   margin-top: 0; /* 与工具栏相接 */
   margin-bottom: 0;
+  /* 确保消息容器能够适应窗口缩放 */
+  min-height: 0; /* 允许收缩 */
+  width: 100%;
+  box-sizing: border-box;
+  /* 移除flex，保持正常的块级元素滚动 */
 }
 
-/* 消息样式 */
+/* 用户消息样式 - 保持原有气泡设计 */
 .message {
   display: flex;
   margin-bottom: 12px;
@@ -35,19 +40,8 @@
   flex-direction: row-reverse;
 }
 
-.message-avatar {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
 .message-bubble {
-  max-width: 280px;
+  max-width: 320px; /* 增加最大宽度以容纳图片 */
   padding: 8px 12px;
   border-radius: 0px; /* Windows 98 style - no rounded corners */
   font-size: 11px;
@@ -55,6 +49,8 @@
   word-wrap: break-word;
   font-family: 'MS Sans Serif', Tahoma, sans-serif;
   position: relative;
+  /* 确保图片能够正确显示 */
+  overflow: visible;
 }
 
 .user-bubble {
@@ -66,13 +62,145 @@
   color: #000000;
 }
 
-.ai-bubble {
+/* AI消息样式 - 居中的直接文本展示 */
+.ai-message-block {
   background: #ffffff;
-  border-top: 1px solid #dfdfdf;
-  border-left: 1px solid #dfdfdf;
-  border-right: 1px solid #404040;
-  border-bottom: 1px solid #404040;
+  padding: 12px 20px;
+  margin: 16px auto;
+  max-width: 80%; /* 限制最大宽度，让内容居中 */
+  border-left: 3px solid #4CAF50; /* 绿色左边框区分AI消息 */
+  box-sizing: border-box;
+  /* 确保整个消息块内的文本可以被选中 */
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+.message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 4px;
+}
+
+.message-avatar {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.message-sender {
+  font-size: 11px;
+  font-weight: bold;
+  color: #666;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+}
+
+.message-content {
+  font-size: 11px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
   color: #000000;
+  width: 100%;
+  overflow-wrap: break-word;
+  /* 确保内容能够适应窗口宽度 */
+  min-width: 0;
+  flex: 1;
+  /* 确保文本可以被选中 */
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+/* 确保Markdown渲染的所有元素都支持文本选择 */
+.message-content * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  pointer-events: auto !important;
+}
+
+.ai-message-block * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  pointer-events: auto !important;
+}
+
+/* 强制所有聊天内容支持文本选择 */
+.chat-content, .chat-content * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  pointer-events: auto !important;
+}
+
+/* 特别针对段落元素 */
+.message-content p, .ai-message-block p {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  pointer-events: auto !important;
+  -webkit-touch-callout: default !important;
+  -webkit-user-drag: auto !important;
+}
+
+/* 响应式设计 - 适应窗口缩放 */
+.ai-message-block {
+  /* 确保AI消息块能够适应容器宽度 */
+  min-width: 0;
+  max-width: 85%;
+}
+
+.message-bubble {
+  /* 确保用户气泡能够适应容器宽度，为图片预留更多空间 */
+  max-width: min(320px, 75%);
+  box-sizing: border-box;
+}
+
+/* 当窗口很小时的适配 */
+@media (max-width: 400px) {
+  .message-header {
+    gap: 6px;
+  }
+  
+  .message-avatar {
+    width: 18px;
+    height: 18px;
+    font-size: 12px;
+  }
+  
+  .message-sender {
+    font-size: 10px;
+  }
+  
+  .message-content {
+    font-size: 10px;
+  }
+  
+  .ai-message-block {
+    padding: 8px 12px;
+    max-width: 95%;
+    margin: 12px auto;
+  }
+  
+  .message-bubble {
+    max-width: 90%;
+    padding: 6px 8px;
+  }
 }
 
 /* 欢迎消息 */
@@ -128,11 +256,13 @@
   }
 }
 
-/* 输入区域 */
+/* 输入区域 - 固定在底部 */
 .input-container {
   border-top: 1px solid #808080;
   background: #c0c0c0;
   padding: 4px;
+  flex-shrink: 0; /* 防止收缩 */
+  margin-top: auto; /* 推到底部 */
 }
 
 .input-box {

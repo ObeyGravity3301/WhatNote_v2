@@ -631,16 +631,6 @@ function ChatWindow({
   const [streamingMessageId, setStreamingMessageId] = useState(null);
   const [conversationId, setConversationId] = useState(null);
   
-  // 分页加载状态
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [hasMoreHistory, setHasMoreHistory] = useState(true);
-  const [currentPage, setCurrentPage] = useState(0);
-  
-  // 简化的消息管理状态
-  const [displayedMessages, setDisplayedMessages] = useState([]);
-  const [isAtTop, setIsAtTop] = useState(false);
-  const [shouldPreserveScrollPosition, setShouldPreserveScrollPosition] = useState(false);
-  
   // UI状态
   const [showSettings, setShowSettings] = useState(false);
   const [showFileSelector, setShowFileSelector] = useState(false);
@@ -659,79 +649,6 @@ function ChatWindow({
   // 引用 - 最小化引用数量
   const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
-  const ITEMS_PER_PAGE = 20; // 每页加载20条消息
-
-  // 加载更多历史消息 - 手动触发版本，保持滚动位置
-  const loadMoreHistory = useCallback(async () => {
-    console.log('🔄 点击加载更多按钮:', { isLoadingHistory, hasMoreHistory, conversationId, currentPage });
-    
-    if (isLoadingHistory || !hasMoreHistory || !conversationId) {
-      console.log('❌ 跳过加载:', { isLoadingHistory, hasMoreHistory, conversationId });
-      return;
-    }
-
-    // 记录当前滚动位置
-    const container = messagesContainerRef.current;
-    const currentScrollTop = container ? container.scrollTop : 0;
-    const currentScrollHeight = container ? container.scrollHeight : 0;
-    
-    setIsLoadingHistory(true);
-    setShouldPreserveScrollPosition(true); // 标记需要保持滚动位置
-    console.log('📥 开始加载历史消息...');
-    
-    try {
-      const url = `http://localhost:8081/api/boards/${boardId}/conversations/${conversationId}?page=${currentPage + 1}&limit=${ITEMS_PER_PAGE}`;
-      console.log('📡 请求URL:', url);
-      
-      const response = await fetch(url);
-      console.log('📡 API响应状态:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        const newMessages = data.messages || [];
-        console.log('📨 收到新消息:', newMessages.length, '条');
-        console.log('📊 数据详情:', data);
-        
-        if (newMessages.length === 0) {
-          console.log('📭 没有更多历史消息');
-          setHasMoreHistory(false);
-        } else {
-          const updatedMessages = [...newMessages, ...messages];
-          console.log('📊 更新消息列表:', updatedMessages.length, '条');
-          
-          // 如果消息总数超过100条，只保留最新的100条以控制内存使用
-          if (updatedMessages.length > 100) {
-            setMessages(updatedMessages.slice(-100));
-          } else {
-            setMessages(updatedMessages);
-          }
-          
-          setCurrentPage(prev => prev + 1);
-          
-          // 计算新的滚动位置以保持用户的视觉位置
-          setTimeout(() => {
-            if (container && shouldPreserveScrollPosition) {
-              const newScrollHeight = container.scrollHeight;
-              const heightDifference = newScrollHeight - currentScrollHeight;
-              const newScrollTop = currentScrollTop + heightDifference;
-              container.scrollTop = newScrollTop;
-              console.log('📍 保持滚动位置:', { currentScrollTop, newScrollTop, heightDifference });
-            }
-          }, 100);
-        }
-      } else {
-        console.error('❌ API请求失败:', response.status);
-        const errorText = await response.text();
-        console.error('❌ 错误详情:', errorText);
-      }
-    } catch (error) {
-      console.error('❌ 加载历史消息失败:', error);
-    } finally {
-      setIsLoadingHistory(false);
-      setShouldPreserveScrollPosition(false); // 重置标记
-      console.log('✅ 加载历史消息完成');
-    }
-  }, [isLoadingHistory, hasMoreHistory, conversationId, currentPage, boardId, messages, shouldPreserveScrollPosition]);
 
   // 优化的滚动函数 - 使用useCallback避免重复创建
   const scrollToBottom = useCallback((smooth = false) => {
@@ -746,29 +663,6 @@ function ChatWindow({
         container.scrollTop = container.scrollHeight;
       }
     }
-  }, []);
-
-  // 智能消息管理函数 - 根据消息数量决定显示策略
-  const updateDisplayedMessages = useCallback(() => {
-    if (messages.length <= 15) {
-      // 如果消息总数不超过15条，显示所有消息
-      setDisplayedMessages(messages);
-    } else {
-      // 如果消息总数超过15条，显示所有消息（让用户可以滚动查看）
-      setDisplayedMessages(messages);
-    }
-  }, [messages]);
-
-  // 滚动事件处理 - 检测是否在顶部
-  const handleScroll = useCallback((e) => {
-    // 阻止事件冒泡，防止桌面被滚动
-    e.stopPropagation();
-    
-    const container = e.target;
-    const scrollTop = container.scrollTop;
-    
-    // 检测是否接近顶部（50px范围内）
-    setIsAtTop(scrollTop < 50);
   }, []);
 
   // 优化的文件加载函数
@@ -1045,7 +939,7 @@ function ChatWindow({
     }
   }, [messages, boardId, conversationId]);
 
-  // 初始化对话 - 支持分页加载
+  // 初始化对话
   const initializeConversation = useCallback(async () => {
     try {
       const response = await fetch(`http://localhost:8081/api/boards/${boardId}/conversations`);
@@ -1057,25 +951,10 @@ function ChatWindow({
           const latestConv = conversations[0];
           setConversationId(latestConv.id);
           
-          // 只加载最新的消息（第一页）
-          const historyResponse = await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${latestConv.id}?page=0&limit=${ITEMS_PER_PAGE}`);
+          const historyResponse = await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${latestConv.id}`);
           if (historyResponse.ok) {
             const conversation = await historyResponse.json();
-            const messages = conversation.messages || [];
-            const totalMessages = conversation.total_messages || messages.length;
-            
-            console.log('📊 初始化对话:', { 
-              loadedMessages: messages.length, 
-              totalMessages, 
-              hasMore: conversation.has_more 
-            });
-            
-            setMessages(messages);
-            setCurrentPage(0);
-            // 根据后端返回的has_more字段或消息数量判断是否有更多历史
-            const hasMore = conversation.has_more !== false && totalMessages > messages.length;
-            console.log('📊 设置hasMoreHistory:', hasMore, { has_more: conversation.has_more, totalMessages, loadedMessages: messages.length });
-            setHasMoreHistory(hasMore);
+            setMessages(conversation.messages || []);
           }
         } else {
           const newConvResponse = await fetch(`http://localhost:8081/api/boards/${boardId}/conversations`, {
@@ -1088,8 +967,6 @@ function ChatWindow({
             const conversation = await newConvResponse.json();
             setConversationId(conversation.id);
             setMessages([]);
-            setCurrentPage(0);
-            setHasMoreHistory(false);
           }
         }
       }
@@ -1104,31 +981,6 @@ function ChatWindow({
       initializeConversation();
     }
   }, [boardId, isVisible, initializeConversation]);
-
-  // 初始化显示的消息
-  useEffect(() => {
-    updateDisplayedMessages();
-  }, [updateDisplayedMessages]);
-
-  // 当消息更新时，智能滚动
-  useEffect(() => {
-    if (messages.length > 0 && !shouldPreserveScrollPosition) {
-      // 只有在初次加载或新增消息时才滚动到底部
-      // 加载历史消息时不自动滚动，保持用户位置
-      if (messages.length <= 20) {
-        // 初次加载时滚动到底部
-        setTimeout(() => {
-          scrollToBottom();
-        }, 100);
-      } else {
-        // 新增消息时滚动到底部
-        setTimeout(() => {
-          scrollToBottom();
-        }, 100);
-      }
-    }
-  }, [messages, scrollToBottom, shouldPreserveScrollPosition]);
-
 
   useEffect(() => {
     loadApiConfig();
@@ -1192,110 +1044,7 @@ function ChatWindow({
         getProviderName={getProviderName}
       />
 
-      <div 
-        className="messages-container" 
-        ref={messagesContainerRef} 
-        style={{ 
-          flex: 1,
-          overflowY: 'auto',
-          overflowX: 'hidden'
-        }}
-        onScroll={handleScroll}
-        onWheel={(e) => {
-          // 阻止滚轮事件冒泡到桌面
-          e.stopPropagation();
-        }}
-        onTouchMove={(e) => {
-          // 阻止触摸滚动事件冒泡到桌面
-          e.stopPropagation();
-        }}
-      >
-        
-        {/* 调试信息 */}
-        {process.env.NODE_ENV === 'development' && (
-          <div style={{
-            fontSize: '9px',
-            color: '#999',
-            padding: '2px 8px',
-            backgroundColor: '#f9f9f9',
-            borderBottom: '1px solid #eee'
-          }}>
-            🔍 调试: hasMoreHistory={hasMoreHistory.toString()}, messages={messages.length}, currentPage={currentPage}, conversationId={conversationId ? '✓' : '✗'}
-          </div>
-        )}
-        
-        {/* 加载更早记录按钮 - Windows 98风格 */}
-        {hasMoreHistory && messages.length > 0 && isAtTop && (
-          <div style={{
-            textAlign: 'center',
-            padding: '6px',
-            backgroundColor: '#ffffff', // 与聊天界面背景色一致
-            borderBottom: '1px solid #c0c0c0',
-            borderTop: '1px solid #c0c0c0',
-            fontSize: '11px',
-            fontFamily: 'MS Sans Serif, sans-serif'
-          }}>
-            <button
-              onClick={loadMoreHistory}
-              disabled={isLoadingHistory}
-              style={{
-                backgroundColor: isLoadingHistory ? '#a0a0a0' : '#c0c0c0',
-                color: isLoadingHistory ? '#666' : '#000',
-                border: '2px outset #c0c0c0',
-                padding: '2px 8px',
-                fontSize: '11px',
-                cursor: isLoadingHistory ? 'not-allowed' : 'pointer',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                margin: '0 auto',
-                minWidth: '120px',
-                justifyContent: 'center'
-              }}
-              onMouseDown={(e) => {
-                if (!isLoadingHistory) {
-                  e.target.style.border = '2px inset #c0c0c0';
-                  e.target.style.backgroundColor = '#a0a0a0';
-                }
-              }}
-              onMouseUp={(e) => {
-                if (!isLoadingHistory) {
-                  e.target.style.border = '2px outset #c0c0c0';
-                  e.target.style.backgroundColor = '#c0c0c0';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isLoadingHistory) {
-                  e.target.style.border = '2px outset #c0c0c0';
-                  e.target.style.backgroundColor = '#c0c0c0';
-                }
-              }}
-              title="点击加载更早的聊天记录"
-            >
-              {isLoadingHistory ? (
-                <>
-                  <span>⏳</span>
-                  正在加载...
-                </>
-              ) : (
-                <>
-                  <span>📜</span>
-                  加载更早记录
-                </>
-              )}
-            </button>
-            <div style={{
-              fontSize: '10px',
-              color: '#666',
-              marginTop: '4px',
-              fontWeight: 'normal'
-            }}>
-              显示 {displayedMessages.length} 条消息 (共 {messages.length} 条) | 页面: {currentPage + 1}
-            </div>
-          </div>
-        )}
-        
+      <div className="messages-container" ref={messagesContainerRef} style={{ flex: 1 }}>
         {messages.length === 0 ? (
           <div className="welcome-message">
             <div className="ai-message-block">
@@ -1309,8 +1058,7 @@ function ChatWindow({
             </div>
           </div>
         ) : (
-          /* 使用智能管理的消息列表 */
-          displayedMessages.map((message, index) => (
+          messages.map((message, index) => (
             <MessageComponent
               key={message.id || index}
               message={message}

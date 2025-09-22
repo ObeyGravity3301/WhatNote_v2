@@ -52,8 +52,8 @@ class ConversationManager:
         
         return conversation_data
     
-    def get_conversation(self, board_id: str, conversation_id: str) -> Optional[Dict]:
-        """获取指定对话记录"""
+    def get_conversation(self, board_id: str, conversation_id: str, page: int = 0, limit: int = 20) -> Optional[Dict]:
+        """获取指定对话记录，支持分页"""
         conversations_dir = self.get_board_conversations_dir(board_id)
         if not conversations_dir:
             return None
@@ -64,7 +64,35 @@ class ConversationManager:
         
         try:
             with open(conversation_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+                conversation_data = json.load(f)
+            
+            # 如果指定了分页参数，则只返回分页后的消息
+            if page is not None and limit is not None:
+                messages = conversation_data.get("messages", [])
+                # 从最新消息开始分页（最新的消息在数组末尾）
+                total_messages = len(messages)
+                start_index = max(0, total_messages - (page + 1) * limit)
+                end_index = total_messages - page * limit
+                
+                # 获取分页后的消息（从旧到新排序）
+                paginated_messages = messages[start_index:end_index]
+                
+                # 返回分页后的对话数据
+                return {
+                    "id": conversation_data.get("id"),
+                    "title": conversation_data.get("title"),
+                    "created_at": conversation_data.get("created_at"),
+                    "updated_at": conversation_data.get("updated_at"),
+                    "messages": paginated_messages,
+                    "total_messages": total_messages,
+                    "page": page,
+                    "limit": limit,
+                    "has_more": start_index > 0
+                }
+            else:
+                # 如果不分页，返回完整对话
+                return conversation_data
+                
         except Exception as e:
             print(f"读取对话文件失败: {e}")
             return None
