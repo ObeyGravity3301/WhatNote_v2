@@ -1,8 +1,56 @@
 {
   "id": "conv-1758254712550",
   "title": "新对话",
-  "board_id": "board-1758254710332",
   "created_at": "2025-09-19T12:05:12.550826",
-  "updated_at": "2025-09-19T12:05:12.550826",
-  "messages": []
+  "updated_at": "2025-09-23T17:21:52.367924",
+  "messages": [
+    {
+      "id": 1758618694701,
+      "role": "user",
+      "content": "你可以看见我发送的文件或者图片吗",
+      "files": [
+        {
+          "name": "河津桜は綺麗ですよね.jpg",
+          "type": "images",
+          "size": 233657,
+          "modified": 1758618667.839339,
+          "path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1758254710332\\files\\河津桜は綺麗ですよね.jpg",
+          "url": "http://127.0.0.1:8081/api/media/serve?path=F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1758254710332\\files\\河津桜は綺麗ですよね.jpg",
+          "timestamp": "2025-09-23T17:11:34.713027"
+        }
+      ],
+      "timestamp": "2025-09-23T17:11:34.713027"
+    },
+    {
+      "role": "assistant",
+      "content": "抱歉，我无法查看或接收您发送的文件或图片。不过，如果您有任何问题或需要帮助，请随时告诉我，我会尽力为您提供支持！",
+      "timestamp": "2025-09-23T17:11:36.773774"
+    },
+    {
+      "id": 1758619308066,
+      "role": "user",
+      "content": "现在再试一下",
+      "files": [
+        {
+          "name": "河津桜は綺麗ですよね.jpg",
+          "type": "images",
+          "size": 233657,
+          "modified": 1758618667.839339,
+          "path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1758254710332\\files\\河津桜は綺麗ですよね.jpg",
+          "url": "http://127.0.0.1:8081/api/media/serve?path=F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1758254710332\\files\\河津桜は綺麗ですよね.jpg",
+          "timestamp": "2025-09-23T17:21:48.383534"
+        }
+      ],
+      "timestamp": "2025-09-23T17:21:48.383534"
+    },
+    {
+      "role": "assistant",
+      "content": "目前我仍然无法查看或接收您发送的文件或图片。如果您有任何文字描述或问题，欢迎随时告诉我，我会尽力帮助您！",
+      "timestamp": "2025-09-23T17:21:52.367924"
+    }
+  ],
+  "total_messages": 3,
+  "page": 0,
+  "limit": 20,
+  "has_more": false
 }

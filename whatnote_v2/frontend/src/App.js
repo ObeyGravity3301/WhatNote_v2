@@ -19,11 +19,18 @@ function App() {
   // 开始菜单相关状态
   const [showStartMenu, setShowStartMenu] = useState(false);
   const [showCreateCourse, setShowCreateCourse] = useState(false);
+  const [showCreateCourseInput, setShowCreateCourseInput] = useState(false);
   const [showCreateBoard, setShowCreateBoard] = useState(false);
+  const [showCreateBoardInput, setShowCreateBoardInput] = useState(false);
   const [newCourseName, setNewCourseName] = useState('');
   const [newCourseDesc, setNewCourseDesc] = useState('');
   const [newBoardName, setNewBoardName] = useState('');
+  const [isComposing, setIsComposing] = useState(false);
   const [courseBoards, setCourseBoards] = useState({});
+  
+  // 任务栏右键菜单状态
+  const [showTaskbarContextMenu, setShowTaskbarContextMenu] = useState(false);
+  const [taskbarMenuPosition, setTaskbarMenuPosition] = useState({ x: 0, y: 0 });
   
   // 子菜单悬浮状态
   const [hoveredCourse, setHoveredCourse] = useState(null);
@@ -86,7 +93,7 @@ function App() {
       return result;
     } else {
       // 子菜单高度大于等于可用空间，底部对齐开始菜单底部
-      const bottomAlignedTop = startMenuHeight - estimatedHeight;
+      const bottomAlignedTop = startMenuHeight - estimatedHeight - 5;
       const result = { top: bottomAlignedTop }; // 不使用Math.max，允许负数（超出顶部）
       console.log('✅ 使用底部对齐 (子菜单高度 >= 可用空间):', {
         startMenuHeight,
@@ -120,7 +127,8 @@ function App() {
   
   const handleCourseMouseLeave = () => {
     hideTimeoutRef.current = setTimeout(() => {
-      if (!hoveredSubmenu) {
+      // 如果正在显示输入框，不要关闭课程悬浮
+      if (!hoveredSubmenu && !showCreateBoardInput) {
         setHoveredCourse(null);
       }
     }, 150); // 150ms延迟
@@ -137,8 +145,23 @@ function App() {
   };
   
   const handleSubmenuMouseLeave = () => {
+    // 如果正在显示输入框，不要关闭子菜单
+    if (showCreateBoardInput) {
+      return;
+    }
     setHoveredSubmenu(false);
     setHoveredCourse(null);
+  };
+  
+  // 任务栏右键菜单处理
+  const handleTaskbarContextMenu = (e) => {
+    e.preventDefault();
+    setTaskbarMenuPosition({ x: e.clientX, y: e.clientY });
+    setShowTaskbarContextMenu(true);
+  };
+  
+  const handleTaskbarMenuClose = () => {
+    setShowTaskbarContextMenu(false);
   };
   
   // 回收站相关状态
@@ -250,10 +273,10 @@ function App() {
   // 开始菜单处理函数
   const handleStartMenuCreateCourse = async () => {
     if (newCourseName.trim()) {
-      await handleCreateCourse(newCourseName.trim(), newCourseDesc.trim());
+      await handleCreateCourse(newCourseName.trim(), '');
       setNewCourseName('');
-      setNewCourseDesc('');
-      setShowCreateCourse(false);
+      setShowCreateCourseInput(false);
+      setShowStartMenu(false);
     }
   };
 
@@ -261,7 +284,8 @@ function App() {
     if (newBoardName.trim() && selectedCourse) {
       await handleCreateBoard(selectedCourse.id, newBoardName.trim());
       setNewBoardName('');
-      setShowCreateBoard(false);
+      setShowCreateBoardInput(false);
+      setShowStartMenu(false);
     }
   };
 
@@ -477,19 +501,28 @@ function App() {
     return () => document.removeEventListener('keydown', handleKeyPress);
   }, [showConsole]);
 
-  // 点击外部关闭开始菜单
+  // 点击外部关闭开始菜单和任务栏右键菜单
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (showStartMenu && !event.target.closest('.start-menu-container') && !event.target.closest('.start-button')) {
         setShowStartMenu(false);
+        setShowCreateCourseInput(false); // 重置输入框状态
+        setNewCourseName(''); // 清空输入内容
+        setShowCreateBoardInput(false); // 重置新建展板输入框状态
+        setNewBoardName(''); // 清空展板输入内容
+      }
+      
+      // 关闭任务栏右键菜单
+      if (showTaskbarContextMenu && !event.target.closest('.taskbar-context-menu')) {
+        setShowTaskbarContextMenu(false);
       }
     };
 
-    if (showStartMenu) {
+    if (showStartMenu || showTaskbarContextMenu) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [showStartMenu]);
+  }, [showStartMenu, showTaskbarContextMenu]);
 
   // 清理定时器
   useEffect(() => {
@@ -559,7 +592,7 @@ function App() {
       </div>
       
       {/* Win98风格任务栏 - 始终显示 */}
-      <div className="taskbar">
+      <div className="taskbar" onContextMenu={handleTaskbarContextMenu}>
         <div className="taskbar-content">
           {/* Win98开始按钮 */}
           <button 
@@ -636,6 +669,25 @@ function App() {
         </div>
       </div>
       
+      {/* 任务栏右键菜单 */}
+      {showTaskbarContextMenu && (
+        <div 
+          className="taskbar-context-menu"
+          style={{
+            position: 'fixed',
+            left: `${taskbarMenuPosition.x}px`,
+            top: `${taskbarMenuPosition.y}px`,
+            zIndex: 20000
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="context-menu-item" onClick={handleTaskbarMenuClose}>
+            <span className="menu-icon">🎨</span>
+            <span className="menu-text">个性化</span>
+          </div>
+        </div>
+      )}
+      
       {/* Win98风格开始菜单 */}
       {showStartMenu && (
         <div className="start-menu-container">
@@ -645,16 +697,55 @@ function App() {
             {/* 主菜单 */}
             <div className="start-menu-main">
               {/* 新建课程选项 */}
-              <div 
-                className="start-menu-item"
-                onClick={() => {
-                  setShowCreateCourse(true);
-                  setShowStartMenu(false);
-                }}
-              >
-                <span className="menu-icon">📚</span>
-                <span className="menu-text">新建课程</span>
-              </div>
+              {!showCreateCourseInput ? (
+                <div 
+                  className="start-menu-item"
+                  onClick={() => {
+                    setShowCreateCourseInput(true);
+                    setNewCourseName('');
+                  }}
+                >
+                  <span className="menu-icon">📚</span>
+                  <span className="menu-text">新建课程</span>
+                </div>
+              ) : (
+                <div className="start-menu-item start-menu-input-container">
+                  <input
+                    type="text"
+                    placeholder="课程名称"
+                    value={newCourseName}
+                    onChange={(e) => setNewCourseName(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !isComposing) {
+                        handleStartMenuCreateCourse();
+                      } else if (e.key === 'Escape') {
+                        setShowCreateCourseInput(false);
+                        setNewCourseName('');
+                      }
+                    }}
+                    onCompositionStart={() => setIsComposing(true)}
+                    onCompositionEnd={() => setIsComposing(false)}
+                    onBlur={() => {
+                      if (!isComposing) {
+                        setTimeout(() => {
+                          if (newCourseName.trim() === '') {
+                            setShowCreateCourseInput(false);
+                          }
+                        }, 200);
+                      }
+                    }}
+                    autoFocus
+                    className="start-menu-input"
+                  />
+                  <button
+                    onClick={handleStartMenuCreateCourse}
+                    className="start-menu-confirm-btn"
+                    disabled={!newCourseName.trim()}
+                  >
+                    ✓
+                  </button>
+                </div>
+              )}
               
               {/* 分界线 */}
               <div className="menu-separator"></div>
@@ -703,17 +794,57 @@ function App() {
             >
               <div className="submenu-content">
                 <div className="submenu-items">
-                  <div 
-                    className="submenu-item"
-                    onClick={() => {
-                      setSelectedCourse(courses.find(c => c.id === hoveredCourse));
-                      setShowCreateBoard(true);
-                      setShowStartMenu(false);
-                    }}
-                  >
-                    <span className="submenu-icon">➕</span>
-                    <span className="submenu-text">新建展板</span>
-                  </div>
+                  {!showCreateBoardInput ? (
+                    <div 
+                      className="submenu-item"
+                      onClick={() => {
+                        setSelectedCourse(courses.find(c => c.id === hoveredCourse));
+                        setShowCreateBoardInput(true);
+                        setNewBoardName('');
+                      }}
+                    >
+                      <span className="submenu-icon">➕</span>
+                      <span className="submenu-text">新建展板</span>
+                    </div>
+                  ) : (
+                    <div className="submenu-item start-menu-input-container">
+                      <input
+                        type="text"
+                        placeholder="展板名称"
+                        value={newBoardName}
+                        onChange={(e) => setNewBoardName(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && !isComposing) {
+                            handleStartMenuCreateBoard();
+                          } else if (e.key === 'Escape') {
+                            setShowCreateBoardInput(false);
+                            setNewBoardName('');
+                          }
+                        }}
+                        onCompositionStart={() => setIsComposing(true)}
+                        onCompositionEnd={() => setIsComposing(false)}
+                        onBlur={() => {
+                          if (!isComposing) {
+                            setTimeout(() => {
+                              if (newBoardName.trim() === '') {
+                                setShowCreateBoardInput(false);
+                                setHoveredCourse(null);
+                              }
+                            }, 200);
+                          }
+                        }}
+                        autoFocus
+                        className="start-menu-input"
+                      />
+                      <button
+                        onClick={handleStartMenuCreateBoard}
+                        className="start-menu-confirm-btn"
+                        disabled={!newBoardName.trim()}
+                      >
+                        ✓
+                      </button>
+                    </div>
+                  )}
                   
                   {courseBoards[hoveredCourse]?.map(board => (
                     <div 
@@ -742,50 +873,7 @@ function App() {
         </div>
       )}
       
-      {/* 创建课程弹窗 */}
-      {showCreateCourse && (
-        <div className="modal-overlay" onClick={() => setShowCreateCourse(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>创建新课程</h3>
-            <input
-              type="text"
-              placeholder="课程名称"
-              value={newCourseName}
-              onChange={(e) => setNewCourseName(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleStartMenuCreateCourse()}
-            />
-            <textarea
-              placeholder="课程描述（可选）"
-              value={newCourseDesc}
-              onChange={(e) => setNewCourseDesc(e.target.value)}
-            />
-            <div className="modal-buttons">
-              <button onClick={handleStartMenuCreateCourse}>创建</button>
-              <button onClick={() => setShowCreateCourse(false)}>取消</button>
-            </div>
-          </div>
-        </div>
-      )}
       
-      {/* 创建展板弹窗 */}
-      {showCreateBoard && (
-        <div className="modal-overlay" onClick={() => setShowCreateBoard(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>创建新展板</h3>
-            <input
-              type="text"
-              placeholder="展板名称"
-              value={newBoardName}
-              onChange={(e) => setNewBoardName(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleStartMenuCreateBoard()}
-            />
-            <div className="modal-buttons">
-              <button onClick={handleStartMenuCreateBoard}>创建</button>
-              <button onClick={() => setShowCreateBoard(false)}>取消</button>
-            </div>
-          </div>
-        </div>
-      )}
       
       {/* 回收站弹窗 */}
       {showTrash && (

@@ -18,10 +18,10 @@
     },
     "qwen": {
       "apiKey": "sk-e6d7a8de91f24365a15a88c7f5f05471",
-      "model": "qwen-vl-plus",
+      "model": "qwen-vl-max",
       "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
     }
   },
   "created_at": "2025-09-19T11:49:29.740818",
-  "updated_at": "2025-09-20T18:53:15.853803"
+  "updated_at": "2025-09-25T07:29:31.803882"
 }

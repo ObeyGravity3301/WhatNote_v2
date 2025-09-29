@@ -481,6 +481,34 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
           </button>
         </div>
 
+        {/* 注释按钮 */}
+        <button
+          onClick={() => {
+            // TODO: 实现注释功能
+            console.log('注释功能被点击');
+            alert('注释功能开发中...');
+          }}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '50px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginLeft: 'auto',
+            marginRight: '8px'
+          }}
+          title="添加注释"
+        >
+          📝 注释
+        </button>
+
         {/* 关闭分页模式按钮 */}
         <button
           onClick={onClose}
@@ -496,8 +524,7 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
             minWidth: '60px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            marginLeft: 'auto'
+            justifyContent: 'center'
           }}
         >
           关闭分页
@@ -595,14 +622,64 @@ const toMediaUrl = (windowOrContent, boardId) => {
     content = windowOrContent;
   }
   
-  // 优先使用 file_path 生成静态文件URL（最可靠）
-  if (filePath && typeof filePath === 'string' && filePath.startsWith('files/')) {
-    const filename = filePath.substring(6); // 移除 "files/" 前缀
-    // 从boardId推断course ID (假设URL格式一致)
-    const courseId = 'course-1756987907632'; // TODO: 应该动态获取
-    const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${filename}`;
-    console.log('🔗 从file_path生成静态URL:', staticUrl);
-    return staticUrl;
+  // 优先使用 content 字段中的绝对路径来提取课程ID（最可靠）
+  if (content && typeof content === 'string' && (content.includes('\\') || content.includes('/'))) {
+    const pathParts = content.split(/[\\\/]/);
+    const filename = pathParts[pathParts.length - 1];
+    
+    // 从绝对路径中提取课程ID
+    const courseIndex = pathParts.findIndex(part => part.startsWith('course-'));
+    if (courseIndex !== -1) {
+      const courseId = pathParts[courseIndex];
+      console.log('🔍 从content绝对路径提取课程ID:', courseId);
+      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${filename}`;
+      console.log('🔗 从content绝对路径生成静态URL:', staticUrl);
+      return staticUrl;
+    }
+  }
+  
+  // 备用：使用 file_path 生成静态文件URL
+  if (filePath && typeof filePath === 'string') {
+    let filename;
+    let courseId;
+    
+    if (filePath.startsWith('files/')) {
+      // 旧格式：files/filename
+      filename = filePath.substring(6); // 移除 "files/" 前缀
+      
+      // 动态获取courseId - 优先从URL路径中提取
+      const currentPath = window.location.pathname;
+      console.log('🔍 当前URL路径:', currentPath);
+      const courseMatch = currentPath.match(/\/courses\/(course-\d+)/);
+      courseId = courseMatch ? courseMatch[1] : 'course-1756987907632'; // 默认值作为备选
+      console.log('🔍 提取的课程ID:', courseId);
+      
+      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${filename}`;
+      console.log('🔗 从file_path生成静态URL:', staticUrl, 'courseId:', courseId);
+      return staticUrl;
+    } else if (filePath.includes('\\') || filePath.includes('/')) {
+      // 新格式：绝对路径，需要提取文件名和课程ID
+      const pathParts = filePath.split(/[\\\/]/);
+      filename = pathParts[pathParts.length - 1];
+      
+      // 优先从路径中提取课程ID
+      const courseIndex = pathParts.findIndex(part => part.startsWith('course-'));
+      if (courseIndex !== -1) {
+        courseId = pathParts[courseIndex];
+        console.log('🔍 从文件路径提取课程ID:', courseId);
+      } else {
+        // 如果路径中没有课程ID，从URL中提取
+        const currentPath = window.location.pathname;
+        const courseMatch = currentPath.match(/\/courses\/(course-\d+)/);
+        courseId = courseMatch ? courseMatch[1] : 'course-1756987907632';
+        console.log('🔍 从URL路径提取课程ID:', courseId);
+      }
+      
+      console.log('🔍 从绝对路径提取:', { filename, courseId, filePath });
+      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${filename}`;
+      console.log('🔗 从绝对路径生成静态URL:', staticUrl);
+      return staticUrl;
+    }
   }
   
   // 备用：使用 content 字段
@@ -1347,6 +1424,7 @@ function BoardCanvas({
   const previousHiddenStateRef = useRef(''); // 记录上次的隐藏状态
   const lastSaveStateRef = useRef({}); // 记录上次保存的窗口状态
   const windowsRef = useRef([]); // 用于获取最新的windows状态
+  const deletedIconPositionsRef = useRef([]); // 记录被删除图标的位置，供新图标重用
   
   // 网格位置计算辅助函数
   const pixelToGrid = (pixelX, pixelY) => {
@@ -1364,8 +1442,17 @@ function BoardCanvas({
   
   // 查找下一个可用的网格位置（从上到下，从左到右）
   const findNextAvailableGridPosition = () => {
+    // 首先检查是否有被删除图标的位置可以重用
+    if (deletedIconPositionsRef.current.length > 0) {
+      const reusedPosition = deletedIconPositionsRef.current.shift(); // 取出第一个被删除的位置
+      const gridKey = `${reusedPosition.gridX},${reusedPosition.gridY}`;
+      desktopGridRef.current.add(gridKey);
+      console.log(`🎯 重用被删除图标的位置: (${reusedPosition.gridX},${reusedPosition.gridY})`);
+      return reusedPosition;
+    }
+    
+    // 如果没有可重用的位置，按原来的逻辑查找新位置
     // 获取画布区域的实际尺寸
-    // 通过查询DOM元素获取准确的画布尺寸
     const canvasArea = document.querySelector('.canvas-area');
     let canvasWidth, canvasHeight;
     
@@ -2549,6 +2636,13 @@ function BoardCanvas({
   const handleWindowDelete = async (windowId) => {
     if (window.confirm('确定要将这个窗口移动到回收站吗？')) {
       try {
+        // 在删除前记录图标位置，供新图标重用
+        const iconToDelete = desktopIcons.find(icon => icon.windowId === windowId);
+        if (iconToDelete && iconToDelete.gridPosition) {
+          deletedIconPositionsRef.current.push(iconToDelete.gridPosition);
+          console.log(`🎯 记录被删除图标的位置: (${iconToDelete.gridPosition.gridX},${iconToDelete.gridPosition.gridY})`);
+        }
+        
         const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
           method: 'DELETE',
         });

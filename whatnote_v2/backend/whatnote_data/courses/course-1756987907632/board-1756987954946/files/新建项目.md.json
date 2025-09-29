@@ -1,0 +1,17 @@
+{
+  "type": "text",
+  "title": "新建项目",
+  "position": {
+    "x": 223,
+    "y": 273
+  },
+  "size": {
+    "width": 800,
+    "height": 600
+  },
+  "id": "window_1758716914812",
+  "created_at": "2025-09-24T20:28:34.812349",
+  "updated_at": "2025-09-24T20:28:37.596577",
+  "hidden": true,
+  "file_path": "files/新建项目.md"
+}

@@ -305,9 +305,121 @@ html, body {
   background: transparent;
 }
 
+/* 开始菜单内联输入框样式 */
+.start-menu-input-container {
+  padding: 2px !important;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.start-menu-input {
+  flex: 1;
+  height: 22px;
+  padding: 3px 6px;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  background: white;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+  outline: none;
+  box-sizing: border-box;
+  line-height: 1.2;
+}
+
+.start-menu-input::placeholder {
+  color: #808080;
+  font-style: italic;
+}
+
+.start-menu-confirm-btn {
+  width: 22px;
+  height: 22px;
+  border-top: 2px solid #dfdfdf;
+  border-left: 2px solid #dfdfdf;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  background: #c0c0c0;
+  color: black;
+  cursor: pointer;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 10px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.start-menu-confirm-btn:hover:not(:disabled) {
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
+}
+
+.start-menu-confirm-btn:active:not(:disabled) {
+  border-top: 2px solid #404040;
+  border-left: 2px solid #404040;
+  border-right: 2px solid #dfdfdf;
+  border-bottom: 2px solid #dfdfdf;
+  background: #a0a0a0;
+}
+
+.start-menu-confirm-btn:disabled {
+  background: #808080;
+  color: #c0c0c0;
+  cursor: not-allowed;
+}
+
+/* 任务栏右键菜单样式 */
+.taskbar-context-menu {
+  background: #c0c0c0;
+  border-top: 2px solid #dfdfdf;
+  border-left: 2px solid #dfdfdf;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+  min-width: 120px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  color: black;
+  border: 1px solid transparent;
+}
+
+.context-menu-item:hover {
+  background: #316ac5;
+  color: white;
+  border: 1px solid #316ac5;
+}
+
+.context-menu-item .menu-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.context-menu-item .menu-text {
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+}
+
 .start-menu-submenu {
   position: absolute;
-  left: calc(100% - 1px); /* 紧贴主菜单，减少1px间隙 */
+  left: calc(100% + 2px); /* 紧贴主菜单，减少1px间隙 */
   width: 200px;
   background: #c0c0c0;
   border: 2px outset #c0c0c0;
@@ -373,12 +485,12 @@ html, body {
 }
 
 .submenu-empty {
-  padding: 4px 8px; /* 减少上下padding，让高度约为选项的一半 */
+  padding: 1px 8px; /* 进一步减少上下padding，让高度约为选项的一半 */
   text-align: center;
   color: #666;
   font-style: italic;
-  font-size: 10px;
-  min-height: 16px; /* 确保最小高度 */
+  font-size: 9px; /* 稍微减小字体 */
+  min-height: 10px; /* 减少最小高度 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -514,46 +626,75 @@ html, body {
 }
 
 .modal {
-  background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  min-width: 300px;
+  background: #c0c0c0;
+  padding: 12px;
+  border-top: 2px solid #dfdfdf;
+  border-left: 2px solid #dfdfdf;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  box-shadow: 1px 1px 0px #000000;
+  min-width: 320px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
 }
 
 .modal h3 {
-  margin: 0 0 1rem 0;
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  font-weight: bold;
+  color: black;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
 }
 
 .modal input, .modal textarea {
   width: 100%;
-  padding: 0.5rem;
-  margin-bottom: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  padding: 3px;
+  margin-bottom: 8px;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  background: white;
   box-sizing: border-box;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
 }
 
 .modal-buttons {
   display: flex;
-  gap: 1rem;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 .modal-buttons button {
-  flex: 1;
-  padding: 0.5rem;
-  border: none;
-  border-radius: 4px;
+  min-width: 60px;
+  height: 22px;
+  padding: 0;
+  border-top: 2px solid #dfdfdf;
+  border-left: 2px solid #dfdfdf;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  background: #c0c0c0;
+  color: black;
   cursor: pointer;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+  font-weight: normal;
 }
 
-.modal-buttons button:first-child {
-  background: #27ae60;
-  color: white;
+.modal-buttons button:hover {
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-right: 2px solid #808080;
+  border-bottom: 2px solid #808080;
 }
 
-.modal-buttons button:last-child {
-  background: #95a5a6;
-  color: white;
+.modal-buttons button:active {
+  border-top: 2px solid #404040;
+  border-left: 2px solid #404040;
+  border-right: 2px solid #dfdfdf;
+  border-bottom: 2px solid #dfdfdf;
+  background: #a0a0a0;
 }
 
 /* 回收站样式 */

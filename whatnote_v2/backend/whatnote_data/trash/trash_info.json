@@ -1169,5 +1169,174 @@
     "deleted_at": "2025-09-22T17:20:39.268593",
     "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
     "file_size": 251
+  },
+  {
+    "id": "trash_1758612158454",
+    "original_name": "0001-0175.mkv",
+    "trash_filename": "1758612158454_0001-0175.mkv",
+    "window_data": {
+      "type": "generic",
+      "title": "0001-0175.mkv",
+      "position": {
+        "x": 274,
+        "y": 190
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758612142870",
+      "created_at": "2025-09-23T15:22:22.870463",
+      "updated_at": "2025-09-23T15:22:33.044535",
+      "file_path": null,
+      "hidden": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-23T15:22:38.479228",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 859456
+  },
+  {
+    "id": "trash_1758612158486",
+    "original_name": "0001-0175.mkv.json",
+    "trash_filename": "1758612158486_0001-0175.mkv.json",
+    "window_data": {
+      "type": "generic",
+      "title": "0001-0175.mkv",
+      "position": {
+        "x": 274,
+        "y": 190
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758612142870",
+      "created_at": "2025-09-23T15:22:22.870463",
+      "updated_at": "2025-09-23T15:22:33.044535",
+      "file_path": null,
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-23T15:22:38.503884",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 331
+  },
+  {
+    "id": "trash_1758612210055",
+    "original_name": "HW2 G1 U202314148 胡祺.pdf",
+    "trash_filename": "1758612210055_HW2 G1 U202314148 胡祺.pdf",
+    "window_data": {
+      "type": "pdf",
+      "title": "HW2 G1 U202314148 胡祺.pdf",
+      "position": {
+        "x": 273,
+        "y": 145
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758612159877",
+      "created_at": "2025-09-23T15:22:39.877255",
+      "updated_at": "2025-09-23T15:23:21.316123",
+      "file_path": "files/HW2 G1 U202314148 胡祺.pdf",
+      "hidden": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-23T15:23:30.074960",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 699805
+  },
+  {
+    "id": "trash_1758612210079",
+    "original_name": "HW2 G1 U202314148 胡祺.pdf.json",
+    "trash_filename": "1758612210079_HW2 G1 U202314148 胡祺.pdf.json",
+    "window_data": {
+      "type": "pdf",
+      "title": "HW2 G1 U202314148 胡祺.pdf",
+      "position": {
+        "x": 273,
+        "y": 145
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758612159877",
+      "created_at": "2025-09-23T15:22:39.877255",
+      "updated_at": "2025-09-23T15:23:21.316123",
+      "file_path": "files/HW2 G1 U202314148 胡祺.pdf",
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2025-09-23T15:23:30.101470",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files",
+    "file_size": 374
+  },
+  {
+    "id": "trash_1758612210104_pages",
+    "original_name": "HW2 G1 U202314148 胡祺_pages",
+    "trash_filename": "1758612210104_HW2 G1 U202314148 胡祺_pages",
+    "type": "pdf_pages_folder",
+    "pdf_name": "HW2 G1 U202314148 胡祺",
+    "deleted_at": "2025-09-23T15:23:30.130881",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1756987907632\\board-1756987954946\\files\\pages",
+    "is_folder": true
+  },
+  {
+    "id": "trash_1758755322401",
+    "original_name": "66961510_p0.png",
+    "trash_filename": "1758755322401_66961510_p0.png",
+    "window_data": {
+      "type": "image",
+      "title": "66961510_p0.png",
+      "position": {
+        "x": 226,
+        "y": 147
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758755086113",
+      "created_at": "2025-09-25T07:04:46.113572",
+      "updated_at": "2025-09-25T07:08:37.254739",
+      "file_path": "files/66961510_p0.png",
+      "hidden": true
+    },
+    "board_id": "board-1758755083149",
+    "deleted_at": "2025-09-25T07:08:42.402902",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1758612900829\\board-1758755083149\\files",
+    "file_size": 1635242
+  },
+  {
+    "id": "trash_1758755322408",
+    "original_name": "66961510_p0.png.json",
+    "trash_filename": "1758755322408_66961510_p0.png.json",
+    "window_data": {
+      "type": "image",
+      "title": "66961510_p0.png",
+      "position": {
+        "x": 226,
+        "y": 147
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1758755086113",
+      "created_at": "2025-09-25T07:04:46.113572",
+      "updated_at": "2025-09-25T07:08:37.254739",
+      "file_path": "files/66961510_p0.png",
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1758755083149",
+    "deleted_at": "2025-09-25T07:08:42.416960",
+    "original_path": "F:\\Hima\\whatnote\\whatnote_v2\\backend\\whatnote_data\\courses\\course-1758612900829\\board-1758755083149\\files",
+    "file_size": 350
   }
 ]

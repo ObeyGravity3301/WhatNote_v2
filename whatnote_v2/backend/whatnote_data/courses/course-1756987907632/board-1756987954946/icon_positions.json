@@ -1,5 +1,35 @@
 {
+  "window_1758756608065": {
+    "position": {
+      "x": 180,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 2,
+      "gridY": 0
+    }
+  },
+  "window_1758716831368": {
+    "position": {
+      "x": 500,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 6,
+      "gridY": 0
+    }
+  },
   "window_1758195717325": {
+    "position": {
+      "x": 340,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 4,
+      "gridY": 0
+    }
+  },
+  "window_1758716914812": {
     "position": {
       "x": 20,
       "y": 20
@@ -9,7 +39,7 @@
       "gridY": 0
     }
   },
-  "window_1758197377440": {
+  "window_1758716815229": {
     "position": {
       "x": 100,
       "y": 20

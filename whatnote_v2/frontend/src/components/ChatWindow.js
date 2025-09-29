@@ -81,7 +81,7 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
             onClick={() => {
               if (onOpenWindow) {
                 onOpenWindow(file.name);
-              } else {
+      } else {
                 window.open(file.url, '_blank');
               }
             }}
@@ -164,7 +164,7 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
     <div className="ai-message-block">
       <div className="message-header">
         <div className="message-avatar">🤖</div>
-        <div className="message-sender">AI助手</div>
+        <div className="message-sender">Amadeus</div>
       </div>
       <div className="message-content">
         <ReactMarkdown
@@ -208,62 +208,62 @@ const Toolbar = React.memo(({
   getProviderName
 }) => {
   return (
-    <div style={{
-      backgroundColor: '#c0c0c0',
-      borderBottom: '2px outset #c0c0c0',
-      padding: '2px 4px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '4px',
-      height: '24px',
-      flexShrink: 0
-    }}>
-      <button
-        onClick={() => setShowSettings(!showSettings)}
-        style={{
-          padding: '1px 8px',
-          fontSize: '11px',
-          backgroundColor: '#c0c0c0',
-          border: '2px outset #c0c0c0',
-          borderRadius: '0px',
-          cursor: 'pointer',
-          fontFamily: 'MS Sans Serif, sans-serif',
-          height: '20px',
-          minWidth: '50px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}
-        title="LLM API 设置"
-      >
-        ⚙️ 设置
-      </button>
-      
-      <button
-        onClick={() => {
-          if (!showFileSelector) {
-            loadBoardFiles();
-          }
-          setShowFileSelector(!showFileSelector);
-        }}
-        style={{
-          padding: '1px 8px',
-          fontSize: '11px',
-          backgroundColor: '#c0c0c0',
-          border: '2px outset #c0c0c0',
-          borderRadius: '0px',
-          cursor: 'pointer',
-          fontFamily: 'MS Sans Serif, sans-serif',
-          height: '20px',
-          minWidth: '50px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}
-        title="选择文件发送"
-      >
-        📎 文件
-      </button>
+      <div style={{
+        backgroundColor: '#c0c0c0',
+        borderBottom: '2px outset #c0c0c0',
+        padding: '2px 4px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        height: '24px',
+        flexShrink: 0
+      }}>
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '50px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          title="LLM API 设置"
+        >
+          ⚙️ 设置
+        </button>
+        
+        <button
+          onClick={() => {
+            if (!showFileSelector) {
+              loadBoardFiles();
+            }
+            setShowFileSelector(!showFileSelector);
+          }}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '50px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          title="选择文件发送"
+        >
+          📎 文件
+        </button>
       
       <button
         onClick={() => scrollToBottom(true)}
@@ -285,176 +285,176 @@ const Toolbar = React.memo(({
       >
         ⬇️ 底部
       </button>
-      
-      {showSettings && (
-        <div className="settings-panel" style={{
-          position: 'absolute',
+        
+        {showSettings && (
+          <div className="settings-panel" style={{
+            position: 'absolute',
           top: '45px',
-          left: '4px',
-          width: '320px',
-          backgroundColor: '#c0c0c0',
-          border: '2px outset #c0c0c0',
-          padding: '8px',
-          fontSize: '11px',
-          fontFamily: 'MS Sans Serif, sans-serif',
-          zIndex: 1000,
-          boxShadow: '2px 2px 4px rgba(0,0,0,0.3)'
-        }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '8px', borderBottom: '1px solid #808080', paddingBottom: '4px' }}>
-            LLM API 设置
-          </div>
-          
-          <div style={{ marginBottom: '8px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
-              API 服务商:
-            </label>
-            <select
-              value={apiProvider}
-              onChange={(e) => {
-                setApiProvider(e.target.value);
-                saveApiConfig(e.target.value, apiConfigs);
-              }}
-              style={{
-                width: '100%',
-                padding: '2px',
-                fontSize: '11px',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                border: '1px inset #c0c0c0',
-                backgroundColor: '#ffffff'
-              }}
-            >
-              <option value="openai">OpenAI (GPT-4, GPT-3.5)</option>
-              <option value="anthropic">Anthropic (Claude-3.5)</option>
-              <option value="gemini">Google (Gemini Pro)</option>
-              <option value="qwen">阿里云 (通义千问)</option>
-            </select>
-          </div>
-          
-          <div style={{ marginBottom: '8px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
-              API 密钥:
-            </label>
-            <input
-              type="password"
-              value={apiConfigs[apiProvider]?.apiKey || ''}
-              onChange={(e) => {
-                const newConfigs = {
-                  ...apiConfigs,
-                  [apiProvider]: {
-                    ...apiConfigs[apiProvider],
-                    apiKey: e.target.value
-                  }
-                };
-                setApiConfigs(newConfigs);
-                
-                if (e.target.value && e.target.value !== '***已配置***') {
-                  saveApiConfig(apiProvider, newConfigs);
-                }
-              }}
-              onFocus={(e) => {
-                if (e.target.value === '***已配置***') {
+            left: '4px',
+            width: '320px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            padding: '8px',
+            fontSize: '11px',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            zIndex: 1000,
+            boxShadow: '2px 2px 4px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '8px', borderBottom: '1px solid #808080', paddingBottom: '4px' }}>
+              LLM API 设置
+            </div>
+            
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                API 服务商:
+              </label>
+              <select
+                value={apiProvider}
+                onChange={(e) => {
+                  setApiProvider(e.target.value);
+                  saveApiConfig(e.target.value, apiConfigs);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '2px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  border: '1px inset #c0c0c0',
+                  backgroundColor: '#ffffff'
+                }}
+              >
+                <option value="openai">OpenAI (GPT-4, GPT-3.5)</option>
+                <option value="anthropic">Anthropic (Claude-3.5)</option>
+                <option value="gemini">Google (Gemini Pro)</option>
+                <option value="qwen">阿里云 (通义千问)</option>
+              </select>
+            </div>
+            
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                API 密钥:
+              </label>
+              <input
+                type="password"
+                value={apiConfigs[apiProvider]?.apiKey || ''}
+                onChange={(e) => {
                   const newConfigs = {
                     ...apiConfigs,
                     [apiProvider]: {
                       ...apiConfigs[apiProvider],
-                      apiKey: ''
+                      apiKey: e.target.value
                     }
                   };
                   setApiConfigs(newConfigs);
-                }
-              }}
-              placeholder="请输入API密钥"
-              style={{
-                width: '100%',
-                padding: '2px 4px',
-                fontSize: '11px',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                border: '1px inset #c0c0c0',
-                backgroundColor: '#ffffff',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
-          
-          <div style={{ marginBottom: '8px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
-              模型:
-            </label>
-            <select
-              value={apiConfigs[apiProvider]?.model || ''}
-              onChange={(e) => {
-                const newConfigs = {
-                  ...apiConfigs,
-                  [apiProvider]: {
-                    ...apiConfigs[apiProvider],
-                    model: e.target.value
+                  
+                  if (e.target.value && e.target.value !== '***已配置***') {
+                    saveApiConfig(apiProvider, newConfigs);
                   }
-                };
-                setApiConfigs(newConfigs);
-                saveApiConfig(apiProvider, newConfigs);
-              }}
-              style={{
-                width: '100%',
-                padding: '2px',
-                fontSize: '11px',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                border: '1px inset #c0c0c0',
-                backgroundColor: '#ffffff'
-              }}
-            >
-              {getModelOptions(apiProvider).map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          <div style={{ marginBottom: '8px' }}>
-            <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
-              API 端点:
-            </label>
-            <input
-              type="text"
-              value={apiConfigs[apiProvider]?.baseUrl || ''}
-              onChange={(e) => {
-                const newConfigs = {
-                  ...apiConfigs,
-                  [apiProvider]: {
-                    ...apiConfigs[apiProvider],
-                    baseUrl: e.target.value
+                }}
+                onFocus={(e) => {
+                  if (e.target.value === '***已配置***') {
+                    const newConfigs = {
+                      ...apiConfigs,
+                      [apiProvider]: {
+                        ...apiConfigs[apiProvider],
+                        apiKey: ''
+                      }
+                    };
+                    setApiConfigs(newConfigs);
                   }
-                };
-                setApiConfigs(newConfigs);
-                saveApiConfig(apiProvider, newConfigs);
-              }}
-              style={{
-                width: '100%',
-                padding: '2px 4px',
-                fontSize: '11px',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                border: '1px inset #c0c0c0',
-                backgroundColor: '#ffffff',
-                boxSizing: 'border-box'
-              }}
-            />
+                }}
+                placeholder="请输入API密钥"
+                style={{
+                  width: '100%',
+                  padding: '2px 4px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  border: '1px inset #c0c0c0',
+                  backgroundColor: '#ffffff',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                模型:
+              </label>
+              <select
+                value={apiConfigs[apiProvider]?.model || ''}
+                onChange={(e) => {
+                  const newConfigs = {
+                    ...apiConfigs,
+                    [apiProvider]: {
+                      ...apiConfigs[apiProvider],
+                      model: e.target.value
+                    }
+                  };
+                  setApiConfigs(newConfigs);
+                  saveApiConfig(apiProvider, newConfigs);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '2px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  border: '1px inset #c0c0c0',
+                  backgroundColor: '#ffffff'
+                }}
+              >
+                {getModelOptions(apiProvider).map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                API 端点:
+              </label>
+              <input
+                type="text"
+                value={apiConfigs[apiProvider]?.baseUrl || ''}
+                onChange={(e) => {
+                  const newConfigs = {
+                    ...apiConfigs,
+                    [apiProvider]: {
+                      ...apiConfigs[apiProvider],
+                      baseUrl: e.target.value
+                    }
+                  };
+                  setApiConfigs(newConfigs);
+                  saveApiConfig(apiProvider, newConfigs);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '2px 4px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  border: '1px inset #c0c0c0',
+                  backgroundColor: '#ffffff',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            <div style={{ 
+              marginTop: '8px', 
+              padding: '4px', 
+              backgroundColor: apiConfigs[apiProvider]?.apiKey ? '#e6f3ff' : '#fff3e6',
+              border: '1px solid #ccc',
+              fontSize: '10px'
+            }}>
+              状态: {apiConfigs[apiProvider]?.apiKey ? 
+                `✅ ${getProviderName(apiProvider)} 已配置` : 
+                `⚠️ 请配置 ${getProviderName(apiProvider)} API密钥`
+              }
+            </div>
           </div>
-          
-          <div style={{ 
-            marginTop: '8px', 
-            padding: '4px', 
-            backgroundColor: apiConfigs[apiProvider]?.apiKey ? '#e6f3ff' : '#fff3e6',
-            border: '1px solid #ccc',
-            fontSize: '10px'
-          }}>
-            状态: {apiConfigs[apiProvider]?.apiKey ? 
-              `✅ ${getProviderName(apiProvider)} 已配置` : 
-              `⚠️ 请配置 ${getProviderName(apiProvider)} API密钥`
-            }
-          </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
   );
 });
 
@@ -470,144 +470,147 @@ const FileSelector = React.memo(({
   if (!showFileSelector) return null;
 
   return (
-    <div style={{
-      backgroundColor: '#f0f0f0',
-      border: '1px inset #c0c0c0',
-      maxHeight: '200px',
-      margin: '4px 8px',
-      fontSize: '11px',
+          <div style={{
+            backgroundColor: '#f0f0f0',
+            border: '1px inset #c0c0c0',
+            maxHeight: '200px',
+            margin: '4px 8px',
+            fontSize: '11px',
       fontFamily: 'MS Sans Serif, sans-serif',
       position: 'relative'
-    }}>
-      <div style={{ 
-        fontWeight: 'bold', 
+          }}>
+            <div style={{ 
+              fontWeight: 'bold', 
         padding: '8px 8px 4px 8px',
-        display: 'flex',
-        justifyContent: 'space-between',
+              display: 'flex',
+              justifyContent: 'space-between',
         alignItems: 'center',
         backgroundColor: '#f0f0f0',
         borderBottom: '1px solid #c0c0c0',
         position: 'sticky',
         top: '0',
         zIndex: 10
-      }}>
-        <span>选择要发送的文件 ({boardFiles.length}个文件)</span>
-        <button
-          onClick={() => setShowFileSelector(false)}
-          style={{
-            backgroundColor: '#c0c0c0',
-            border: '1px outset #c0c0c0',
-            cursor: 'pointer',
-            fontSize: '10px',
-            padding: '1px 4px'
-          }}
-        >
-          ✕
-        </button>
-      </div>
-      
+            }}>
+              <span>选择要发送的文件 ({boardFiles.length}个文件)</span>
+              <div style={{ fontSize: '8px', color: '#666', marginTop: '2px' }}>
+                调试: boardFiles.length = {boardFiles.length}
+              </div>
+              <button
+                onClick={() => setShowFileSelector(false)}
+                style={{
+                  backgroundColor: '#c0c0c0',
+                  border: '1px outset #c0c0c0',
+                  cursor: 'pointer',
+                  fontSize: '10px',
+                  padding: '1px 4px'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            
       <div style={{
         maxHeight: '160px',
         overflowY: 'auto',
         padding: '4px 8px 8px 8px'
       }}>
-        {boardFiles.length === 0 ? (
-          <div style={{ color: '#808080', textAlign: 'center', padding: '16px' }}>
-            展板中暂无文件
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {boardFiles.map((file) => (
-              <div
-                key={file.path}
-                onClick={() => {
-                  if (selectedFiles.find(f => f.path === file.path)) {
-                    setSelectedFiles(prev => prev.filter(f => f.path !== file.path));
-                  } else {
-                    setSelectedFiles(prev => [...prev, file]);
-                  }
-                }}
-                style={{
-                  border: selectedFiles.find(f => f.path === file.path) ? '2px solid #0078d4' : '1px solid #808080',
-                  backgroundColor: selectedFiles.find(f => f.path === file.path) ? '#e6f3ff' : '#ffffff',
-                  padding: '8px',
-                  cursor: 'pointer',
-                  borderRadius: '2px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  minHeight: '40px'
-                }}
-                title={`${file.name} (${(file.size / 1024).toFixed(1)}KB)`}
-              >
-                <div style={{ fontSize: '20px', flexShrink: 0 }}>
-                  {getFileIcon(file.type)}
-                </div>
-                
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ 
-                    fontSize: '11px', 
-                    fontWeight: 'bold',
-                    color: '#000000',
-                    marginBottom: '2px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {file.name}
-                  </div>
-                  <div style={{ 
-                    fontSize: '10px', 
-                    color: '#666666',
-                    display: 'flex',
-                    gap: '8px'
-                  }}>
-                    <span>{file.type}</span>
-                    <span>•</span>
-                    <span>{(file.size / 1024).toFixed(1)}KB</span>
-                  </div>
-                </div>
-                
-                {selectedFiles.find(f => f.path === file.path) && (
-                  <div style={{ 
-                    fontSize: '14px', 
-                    color: '#0078d4',
-                    flexShrink: 0
-                  }}>
-                    ✓
-                  </div>
-                )}
+            {boardFiles.length === 0 ? (
+              <div style={{ color: '#808080', textAlign: 'center', padding: '16px' }}>
+                展板中暂无文件
               </div>
-            ))}
-          </div>
-        )}
-        
-        {selectedFiles.length > 0 && (
-          <div style={{ 
-            marginTop: '8px', 
-            padding: '4px 8px', 
-            backgroundColor: '#e6f3ff',
-            border: '1px solid #0078d4',
-            borderRadius: '2px'
-          }}>
-            <strong>已选择 {selectedFiles.length} 个文件:</strong>
-            <div style={{ marginTop: '4px' }}>
-              {selectedFiles.map(file => (
-                <span key={file.path} style={{ 
-                  display: 'inline-block',
-                  backgroundColor: '#0078d4',
-                  color: 'white',
-                  padding: '2px 6px',
-                  margin: '2px',
-                  borderRadius: '2px',
-                  fontSize: '10px'
-                }}>
-                  {getFileIcon(file.type)} {file.name.length > 10 ? file.name.substring(0, 8) + '...' : file.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {boardFiles.map((file) => (
+                  <div
+                    key={file.path}
+                    onClick={() => {
+                      if (selectedFiles.find(f => f.path === file.path)) {
+                        setSelectedFiles(prev => prev.filter(f => f.path !== file.path));
+                      } else {
+                        setSelectedFiles(prev => [...prev, file]);
+                      }
+                    }}
+                    style={{
+                      border: selectedFiles.find(f => f.path === file.path) ? '2px solid #0078d4' : '1px solid #808080',
+                      backgroundColor: selectedFiles.find(f => f.path === file.path) ? '#e6f3ff' : '#ffffff',
+                      padding: '8px',
+                      cursor: 'pointer',
+                      borderRadius: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                  minHeight: '40px'
+                    }}
+                    title={`${file.name} (${(file.size / 1024).toFixed(1)}KB)`}
+              >
+                    <div style={{ fontSize: '20px', flexShrink: 0 }}>
+                      {getFileIcon(file.type)}
+                    </div>
+                    
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        fontWeight: 'bold',
+                        color: '#000000',
+                        marginBottom: '2px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {file.name}
+                      </div>
+                      <div style={{ 
+                        fontSize: '10px', 
+                        color: '#666666',
+                        display: 'flex',
+                        gap: '8px'
+                      }}>
+                        <span>{file.type}</span>
+                        <span>•</span>
+                        <span>{(file.size / 1024).toFixed(1)}KB</span>
+                      </div>
+                    </div>
+                    
+                    {selectedFiles.find(f => f.path === file.path) && (
+                      <div style={{ 
+                        fontSize: '14px', 
+                        color: '#0078d4',
+                        flexShrink: 0
+                      }}>
+                        ✓
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {selectedFiles.length > 0 && (
+              <div style={{ 
+                marginTop: '8px', 
+                padding: '4px 8px', 
+                backgroundColor: '#e6f3ff',
+                border: '1px solid #0078d4',
+                borderRadius: '2px'
+              }}>
+                <strong>已选择 {selectedFiles.length} 个文件:</strong>
+                <div style={{ marginTop: '4px' }}>
+                  {selectedFiles.map(file => (
+                    <span key={file.path} style={{ 
+                      display: 'inline-block',
+                      backgroundColor: '#0078d4',
+                      color: 'white',
+                      padding: '2px 6px',
+                      margin: '2px',
+                      borderRadius: '2px',
+                      fontSize: '10px'
+                    }}>
+                      {getFileIcon(file.type)} {file.name.length > 10 ? file.name.substring(0, 8) + '...' : file.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
       </div>
     </div>
   );
@@ -774,10 +777,17 @@ function ChatWindow({
   // 优化的文件加载函数
   const loadBoardFiles = useCallback(async () => {
     try {
+      console.log(`正在加载展板文件: ${boardId}`);
       const response = await fetch(`http://localhost:8081/api/boards/${boardId}/files`);
+      console.log(`文件API响应状态: ${response.status}`);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log(`加载到的文件数量: ${data.files ? data.files.length : 0}`);
+        console.log(`文件列表:`, data.files);
         setBoardFiles(data.files || []);
+      } else {
+        console.error('文件API响应失败:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('加载展板文件失败:', error);
@@ -937,7 +947,7 @@ function ChatWindow({
       setIsStreaming(true);
       setStreamingMessageId(aiMessageId);
 
-      await generateStreamingAIResponse(userMessage.content, aiMessageId);
+      await generateStreamingAIResponse(userMessage, aiMessageId);
 
     } catch (error) {
       console.error('发送消息失败:', error);
@@ -952,7 +962,7 @@ function ChatWindow({
   }, [inputText, selectedFiles, conversationId, isLoading, boardId]);
 
   // 流式AI回复函数
-  const generateStreamingAIResponse = useCallback(async (userInput, aiMessageId) => {
+  const generateStreamingAIResponse = useCallback(async (userMessage, aiMessageId) => {
     try {
       const conversationMessages = messages.map(msg => ({
         role: msg.role,
@@ -960,17 +970,41 @@ function ChatWindow({
         files: msg.files
       }));
       
+      // 直接使用传入的userMessage对象
       const currentUserMessage = {
-        role: 'user',
-        content: userInput
+        role: userMessage.role,
+        content: userMessage.content,
+        files: userMessage.files
       };
       
-      const currentMessage = messages[messages.length - 1];
-      if (currentMessage && currentMessage.files && currentMessage.files.length > 0) {
-        currentUserMessage.files = currentMessage.files;
+      if (userMessage.files && userMessage.files.length > 0) {
+        console.log('当前消息包含文件:', userMessage.files);
+      } else {
+        console.log('当前消息不包含文件');
       }
       
       conversationMessages.push(currentUserMessage);
+      
+      // 调试：打印发送给LLM的消息
+      console.log('=== 发送给LLM的完整消息 ===');
+      console.log('消息总数:', conversationMessages.length);
+      conversationMessages.forEach((msg, index) => {
+        console.log(`--- 消息 ${index} ---`);
+        console.log('角色:', msg.role);
+        console.log('内容:', msg.content);
+        if (msg.files && msg.files.length > 0) {
+          console.log(`文件数量: ${msg.files.length}`);
+          msg.files.forEach((file, fileIndex) => {
+            console.log(`  文件 ${fileIndex}: ${file.name} (${file.type})`);
+            console.log(`    路径: ${file.path}`);
+            console.log(`    URL: ${file.url}`);
+          });
+        } else {
+          console.log('无文件');
+        }
+      });
+      console.log('=== 完整JSON ===');
+      console.log(JSON.stringify(conversationMessages, null, 2));
       
       const response = await fetch('http://localhost:8081/api/llm/chat', {
         method: 'POST',
@@ -1223,7 +1257,7 @@ function ChatWindow({
             🔍 调试: hasMoreHistory={hasMoreHistory.toString()}, messages={messages.length}, currentPage={currentPage}, conversationId={conversationId ? '✓' : '✗'}
           </div>
         )}
-        
+
         {/* 加载更早记录按钮 - Windows 98风格 */}
         {hasMoreHistory && messages.length > 0 && isAtTop && (
           <div style={{
@@ -1301,10 +1335,10 @@ function ChatWindow({
             <div className="ai-message-block">
               <div className="message-header">
                 <div className="message-avatar">🤖</div>
-                <div className="message-sender">AI助手</div>
+                <div className="message-sender">Amadeus</div>
               </div>
               <div className="message-content">
-                你好！我是AI助手，有什么可以帮助您的吗？
+                你好,这是Amadeus，有什么可以帮助您的吗？
               </div>
             </div>
           </div>
@@ -1347,65 +1381,65 @@ function ChatWindow({
         getFileIcon={getFileIcon}
       />
 
-      <div className="input-container">
-        {selectedFiles.length > 0 && (
-          <div style={{
-            fontSize: '10px',
-            color: '#0078d4',
-            padding: '2px 4px',
-            backgroundColor: '#f0f8ff',
-            border: '1px solid #0078d4',
-            borderRadius: '2px',
-            margin: '0 4px 4px 4px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}>
-            <span>📎 已选择 {selectedFiles.length} 个文件</span>
-            <button
-              onClick={() => setSelectedFiles([])}
+        <div className="input-container">
+          {selectedFiles.length > 0 && (
+            <div style={{
+              fontSize: '10px',
+              color: '#0078d4',
+              padding: '2px 4px',
+              backgroundColor: '#f0f8ff',
+              border: '1px solid #0078d4',
+              borderRadius: '2px',
+              margin: '0 4px 4px 4px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              <span>📎 已选择 {selectedFiles.length} 个文件</span>
+              <button
+                onClick={() => setSelectedFiles([])}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '10px',
+                  color: '#0078d4',
+                  padding: '0 2px'
+                }}
+                title="清空选择"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          
+          <div className="input-box">
+            <textarea
+              ref={inputRef}
+              value={inputText}
+              onChange={handleInputChange}
+              onKeyPress={handleKeyPress}
+              placeholder="输入消息... (Enter发送，Shift+Enter换行)"
+              rows="1"
+              disabled={isLoading}
               style={{
-                backgroundColor: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '10px',
-                color: '#0078d4',
-                padding: '0 2px'
+                resize: 'none',
+                minHeight: '16px',
+              maxHeight: '96px',
+                overflowY: 'hidden',
+                transition: 'height 0.1s ease'
               }}
-              title="清空选择"
+            />
+            <button 
+              className="send-button"
+              onClick={sendMessage}
+              disabled={isLoading || !inputText.trim()}
+              title="发送消息"
             >
-              ✕
+              {isLoading ? '⏳' : '📤'}
             </button>
           </div>
-        )}
-        
-        <div className="input-box">
-          <textarea
-            ref={inputRef}
-            value={inputText}
-            onChange={handleInputChange}
-            onKeyPress={handleKeyPress}
-            placeholder="输入消息... (Enter发送，Shift+Enter换行)"
-            rows="1"
-            disabled={isLoading}
-            style={{
-              resize: 'none',
-              minHeight: '16px',
-              maxHeight: '96px',
-              overflowY: 'hidden',
-              transition: 'height 0.1s ease'
-            }}
-          />
-          <button 
-            className="send-button"
-            onClick={sendMessage}
-            disabled={isLoading || !inputText.trim()}
-            title="发送消息"
-          >
-            {isLoading ? '⏳' : '📤'}
-          </button>
         </div>
-      </div>
     </div>
   );
 }

@@ -43,7 +43,15 @@ async def startup_event():
 async def shutdown_event():
     """应用关闭时停止文件监控服务"""
     info("停止文件监控服务...")
-    file_watcher.stop_watching()
+    try:
+        file_watcher.stop_watching()
+        info("文件监控服务已停止")
+    except Exception as e:
+        info(f"停止文件监控服务时出错: {e}")
+    
+    # 等待一下让线程完全停止
+    import time
+    time.sleep(0.1)
 
 # 配置CORS
 app.add_middleware(
