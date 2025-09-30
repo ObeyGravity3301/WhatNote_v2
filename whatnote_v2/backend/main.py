@@ -713,6 +713,114 @@ async def extract_pdf_text(board_id: str, window_id: str):
         error(f"详细错误信息: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# PDF注释管理API
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/{page}")
+async def get_pdf_annotation(board_id: str, window_id: str, page: int):
+    """获取PDF指定页面的注释"""
+    try:
+        info(f"获取PDF注释: {window_id}, 页面: {page}")
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        if target_window.get('type') != 'pdf':
+            raise HTTPException(status_code=400, detail="只有PDF文件支持注释功能")
+        
+        # 获取注释内容
+        annotation_content = content_manager.get_pdf_annotation(board_id, window_id, page)
+        
+        return {
+            "success": True,
+            "page": page,
+            "content": annotation_content
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取PDF注释失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取PDF注释失败: {str(e)}")
+
+@app.put("/api/boards/{board_id}/windows/{window_id}/annotations/{page}")
+async def save_pdf_annotation(board_id: str, window_id: str, page: int, annotation_data: Dict):
+    """保存PDF指定页面的注释"""
+    try:
+        info(f"保存PDF注释: {window_id}, 页面: {page}")
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        if target_window.get('type') != 'pdf':
+            raise HTTPException(status_code=400, detail="只有PDF文件支持注释功能")
+        
+        # 保存注释内容
+        content = annotation_data.get('content', '')
+        result = content_manager.save_pdf_annotation(board_id, window_id, page, content)
+        
+        return {
+            "success": True,
+            "page": page,
+            "message": "注释保存成功",
+            "result": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"保存PDF注释失败: {e}")
+        raise HTTPException(status_code=500, detail=f"保存PDF注释失败: {str(e)}")
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/{page}/info")
+async def get_pdf_annotation_info(board_id: str, window_id: str, page: int):
+    """获取PDF注释文件信息（创建时间、修改时间等）"""
+    try:
+        info(f"获取PDF注释文件信息: {window_id}, 页面: {page}")
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        if target_window.get('type') != 'pdf':
+            raise HTTPException(status_code=400, detail="只有PDF文件支持注释功能")
+        
+        # 获取注释文件信息
+        file_info = content_manager.get_pdf_annotation_file_info(board_id, window_id, page)
+        
+        return {
+            "success": True,
+            "page": page,
+            "file_info": file_info
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取PDF注释文件信息失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取PDF注释文件信息失败: {str(e)}")
+
 @app.get("/api/media/serve")
 async def serve_media_file(path: str):
     """全新的媒体文件服务API - 避免路由冲突"""

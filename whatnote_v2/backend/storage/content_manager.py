@@ -1917,4 +1917,171 @@ class ContentManager:
             print(f"PDF文本提取失败: {e}")
             import traceback
             print(f"详细错误信息: {traceback.format_exc()}")
-            return False 
+            return False
+
+    def get_pdf_annotation(self, board_id: str, window_id: str, page: int) -> str:
+        """获取PDF指定页面的注释内容"""
+        try:
+            # 获取窗口信息
+            windows = self.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if not target_window:
+                return ""
+            
+            # 构建注释文件路径 - 去掉.pdf后缀
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]  # 去掉.pdf后缀
+            pdf_name = self._sanitize_filename(title)
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            
+            if not pdf_pages_dir or not pdf_pages_dir.exists():
+                return ""
+            
+            # 构建注释文件名
+            annotation_filename = f"{pdf_name}_note_{page:03d}.md"
+            annotation_file_path = pdf_pages_dir / annotation_filename
+            
+            # 读取注释文件
+            if annotation_file_path.exists():
+                with open(annotation_file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            else:
+                return ""
+                
+        except Exception as e:
+            print(f"获取PDF注释失败: {e}")
+            return ""
+
+    def save_pdf_annotation(self, board_id: str, window_id: str, page: int, content: str) -> bool:
+        """保存PDF指定页面的注释内容"""
+        try:
+            # 获取窗口信息
+            windows = self.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if not target_window:
+                return False
+            
+            # 构建注释文件路径 - 去掉.pdf后缀
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]  # 去掉.pdf后缀
+            pdf_name = self._sanitize_filename(title)
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            
+            if not pdf_pages_dir:
+                return False
+            
+            # 确保目录存在
+            pdf_pages_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 构建注释文件名
+            annotation_filename = f"{pdf_name}_note_{page:03d}.md"
+            annotation_file_path = pdf_pages_dir / annotation_filename
+            
+            # 创建注释文件内容 - 只保存用户输入的注释内容
+            if content.strip():
+                md_content = content.strip()
+            else:
+                md_content = "*暂无注释内容*"
+            
+            # 写入注释文件
+            with open(annotation_file_path, 'w', encoding='utf-8') as f:
+                f.write(md_content)
+            
+            print(f"已保存第 {page} 页注释: {annotation_filename}")
+            return True
+            
+        except Exception as e:
+            print(f"保存PDF注释失败: {e}")
+            import traceback
+            print(f"详细错误信息: {traceback.format_exc()}")
+            return False
+
+    def _get_pdf_pages_dir(self, board_id: str, pdf_name: str) -> Optional[Path]:
+        """获取PDF页面文件夹路径"""
+        try:
+            # 找到展板目录
+            board_dir = None
+            for course_dir in self.file_manager.courses_dir.iterdir():
+                if course_dir.is_dir():
+                    potential_board_dir = course_dir / board_id
+                    if potential_board_dir.exists():
+                        board_dir = potential_board_dir
+                        break
+            
+            if not board_dir:
+                return None
+            
+            # 构建pages目录路径 - 直接使用PDF文件本身的文件夹
+            files_dir = board_dir / "files"
+            pages_dir = files_dir / "pages"
+            pdf_pages_dir = pages_dir / pdf_name  # 直接使用PDF文件名，不加_pages后缀
+            
+            return pdf_pages_dir
+            
+        except Exception as e:
+            print(f"获取PDF页面目录失败: {e}")
+            return None
+
+    def get_pdf_annotation_file_info(self, board_id: str, window_id: str, page: int) -> dict:
+        """获取PDF注释文件信息（创建时间、修改时间等）"""
+        try:
+            # 获取窗口信息
+            windows = self.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if not target_window:
+                return {}
+            
+            # 构建注释文件路径 - 去掉.pdf后缀
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]  # 去掉.pdf后缀
+            pdf_name = self._sanitize_filename(title)
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            
+            if not pdf_pages_dir or not pdf_pages_dir.exists():
+                return {}
+            
+            # 构建注释文件名
+            annotation_filename = f"{pdf_name}_note_{page:03d}.md"
+            annotation_file_path = pdf_pages_dir / annotation_filename
+            
+            # 获取文件信息
+            if annotation_file_path.exists():
+                stat = annotation_file_path.stat()
+                return {
+                    "exists": True,
+                    "filename": annotation_filename,
+                    "size": stat.st_size,
+                    "created_time": datetime.fromtimestamp(stat.st_ctime).strftime('%Y-%m-%d %H:%M:%S'),
+                    "modified_time": datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                    "source_pdf": target_window.get('title', 'unknown.pdf'),
+                    "page": page
+                }
+            else:
+                return {
+                    "exists": False,
+                    "filename": annotation_filename,
+                    "source_pdf": target_window.get('title', 'unknown.pdf'),
+                    "page": page
+                }
+                
+        except Exception as e:
+            print(f"获取PDF注释文件信息失败: {e}")
+            return {} 

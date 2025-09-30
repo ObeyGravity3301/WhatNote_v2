@@ -20,8 +20,21 @@ const normalizeLatexDelimiters = (text) => {
     .replace(/\\\]/g, '$$');
 };
 
+// 防抖函数
+const debounce = (func, wait) => {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+};
+
 // PDF分页组件
-function PDFPaginationViewer({ pdfUrl, onClose }) {
+function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
   const [pdfDocument, setPdfDocument] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -37,6 +50,16 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
+  
+  // 注释功能状态
+  const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
+  const [annotationMode, setAnnotationMode] = useState('preview'); // 'preview' 或 'edit'
+  const [annotations, setAnnotations] = useState({}); // 存储每页的注释内容
+  const [isSavingAnnotation, setIsSavingAnnotation] = useState(false); // 保存状态
+  const [annotationFileInfo, setAnnotationFileInfo] = useState({}); // 存储注释文件信息
+  
+  // LLM功能状态
+  const [showLLMMenu, setShowLLMMenu] = useState(false); // 显示LLM菜单
 
   // 加载PDF文档
   useEffect(() => {
@@ -65,6 +88,46 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
       loadPDF();
     }
   }, [pdfUrl]);
+
+  // 页面切换时加载注释和文件信息
+  useEffect(() => {
+    if (showAnnotationPanel && boardId && windowId) {
+      loadAnnotation(currentPage);
+      loadAnnotationFileInfo(currentPage);
+    }
+  }, [currentPage, showAnnotationPanel, boardId, windowId]);
+
+  // 点击外部区域或按ESC键关闭LLM菜单
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showLLMMenu) {
+        // 检查点击的元素是否在LLM菜单容器内
+        const llmMenuContainer = document.querySelector('[data-llm-menu]');
+        if (llmMenuContainer && !llmMenuContainer.contains(event.target)) {
+          setShowLLMMenu(false);
+        }
+      }
+    };
+
+    const handleKeyDown = (event) => {
+      if (showLLMMenu && event.key === 'Escape') {
+        setShowLLMMenu(false);
+      }
+    };
+
+    if (showLLMMenu) {
+      // 使用setTimeout确保事件监听器在下一个事件循环中添加
+      setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+      }, 0);
+      
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [showLLMMenu]);
 
   // 渲染当前页面
   useEffect(() => {
@@ -223,6 +286,81 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
     setScale(1.5);
     setPanX(0);
     setPanY(0);
+  };
+
+  // 加载注释内容
+  const loadAnnotation = async (page) => {
+    if (!boardId || !windowId) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/${page}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setAnnotations(prev => ({
+            ...prev,
+            [page]: data.content
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('加载注释失败:', error);
+    }
+  };
+
+  // 保存注释内容
+  const saveAnnotation = async (page, content) => {
+    if (!boardId || !windowId) return;
+    
+    try {
+      setIsSavingAnnotation(true);
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/${page}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          console.log(`第 ${page} 页注释保存成功`);
+        }
+      }
+    } catch (error) {
+      console.error('保存注释失败:', error);
+    } finally {
+      setIsSavingAnnotation(false);
+    }
+  };
+
+  // 自动保存注释（防抖）
+  const debouncedSaveAnnotation = useCallback(
+    debounce((page, content) => {
+      saveAnnotation(page, content);
+    }, 1000),
+    [boardId, windowId]
+  );
+
+  // 获取注释文件信息
+  const loadAnnotationFileInfo = async (page) => {
+    if (!boardId || !windowId) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/${page}/info`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setAnnotationFileInfo(prev => ({
+            ...prev,
+            [page]: data.file_info
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('获取注释文件信息失败:', error);
+    }
   };
 
   // 滚轮缩放
@@ -484,14 +622,13 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
         {/* 注释按钮 */}
         <button
           onClick={() => {
-            // TODO: 实现注释功能
-            console.log('注释功能被点击');
-            alert('注释功能开发中...');
+            setShowAnnotationPanel(!showAnnotationPanel);
+            console.log('注释面板切换:', !showAnnotationPanel);
           }}
           style={{
             padding: '1px 8px',
             fontSize: '11px',
-            backgroundColor: '#c0c0c0',
+            backgroundColor: showAnnotationPanel ? '#a0a0a0' : '#c0c0c0',
             border: '2px outset #c0c0c0',
             borderRadius: '0px',
             cursor: 'pointer',
@@ -504,7 +641,7 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
             marginLeft: 'auto',
             marginRight: '8px'
           }}
-          title="添加注释"
+          title={showAnnotationPanel ? "隐藏注释" : "显示注释"}
         >
           📝 注释
         </button>
@@ -531,25 +668,31 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
         </button>
       </div>
 
-      {/* PDF页面内容 */}
-      <div 
-        ref={containerRef}
-        style={{ 
-          flex: 1, 
-          overflow: 'hidden',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#f0f0f0',
-          cursor: isDragging ? 'grabbing' : 'grab',
-          position: 'relative'
-        }}
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      >
+      {/* PDF页面内容和注释侧栏 */}
+      <div style={{ 
+        flex: 1, 
+        display: 'flex',
+        overflow: 'hidden'
+      }}>
+        {/* PDF页面内容 */}
+        <div 
+          ref={containerRef}
+          style={{ 
+            flex: showAnnotationPanel ? '1' : '1',
+            overflow: 'hidden',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: '#f0f0f0',
+            cursor: isDragging ? 'grabbing' : 'grab',
+            position: 'relative'
+          }}
+          onWheel={handleWheel}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
         <div style={{ 
           position: 'relative',
           transform: `translate(${panX}px, ${panY}px)`,
@@ -582,6 +725,286 @@ function PDFPaginationViewer({ pdfUrl, onClose }) {
             }}
           />
         </div>
+        </div>
+        
+        {/* 注释侧栏 */}
+        {showAnnotationPanel && (
+          <div style={{
+            width: '300px',
+            backgroundColor: '#f0f0f0',
+            borderLeft: '2px inset #c0c0c0',
+            display: 'flex',
+            flexDirection: 'column',
+            flexShrink: 0
+          }}>
+            {/* 注释侧栏工具栏 */}
+            <div style={{
+              backgroundColor: '#c0c0c0',
+              borderBottom: '2px outset #c0c0c0',
+              padding: '4px 8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              height: '28px',
+              flexShrink: 0
+            }}>
+              <span style={{
+                fontSize: '11px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                fontWeight: 'bold'
+              }}>
+                第 {currentPage} 页注释
+              </span>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}>
+                {/* 文件信息按钮 */}
+                <button
+                  style={{
+                    padding: '2px 6px',
+                    fontSize: '11px',
+                    backgroundColor: '#c0c0c0',
+                    border: '2px outset #c0c0c0',
+                    borderRadius: '0px',
+                    cursor: 'pointer',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    height: '20px',
+                    minWidth: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title={(() => {
+                    const fileInfo = annotationFileInfo[currentPage];
+                    if (!fileInfo || !fileInfo.exists) {
+                      return '暂无注释文件';
+                    }
+                    return `文件名: ${fileInfo.filename}\n来源: ${fileInfo.source_pdf}\n创建时间: ${fileInfo.created_time}\n修改时间: ${fileInfo.modified_time}\n文件大小: ${fileInfo.size} 字节`;
+                  })()}
+                >
+                  ℹ
+                </button>
+                
+                {/* LLM功能按钮 */}
+                <div style={{ position: 'relative' }} data-llm-menu>
+                  <button
+                    onClick={() => {
+                      setShowLLMMenu(!showLLMMenu);
+                      console.log('LLM菜单切换:', !showLLMMenu);
+                    }}
+                    style={{
+                      padding: '2px 6px',
+                      fontSize: '11px',
+                      backgroundColor: showLLMMenu ? '#a0a0a0' : '#c0c0c0',
+                      border: '2px outset #c0c0c0',
+                      borderRadius: '0px',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      height: '20px',
+                      minWidth: '40px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title="LLM智能功能"
+                  >
+                    LLM
+                  </button>
+                  
+                  {/* LLM下拉菜单 */}
+                  {showLLMMenu && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '22px',
+                      right: '0px',
+                      backgroundColor: '#c0c0c0',
+                      border: '2px outset #c0c0c0',
+                      borderRadius: '0px',
+                      zIndex: 1000,
+                      minWidth: '120px',
+                      boxShadow: '2px 2px 4px rgba(0,0,0,0.3)'
+                    }}>
+                      <button
+                        onClick={() => {
+                          console.log('生成注释功能');
+                          setShowLLMMenu(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          backgroundColor: '#c0c0c0',
+                          border: 'none',
+                          borderBottom: '1px solid #a0a0a0',
+                          cursor: 'pointer',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          textAlign: 'left'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
+                      >
+                        生成注释
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          console.log('视觉生成功能');
+                          setShowLLMMenu(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          backgroundColor: '#c0c0c0',
+                          border: 'none',
+                          borderBottom: '1px solid #a0a0a0',
+                          cursor: 'pointer',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          textAlign: 'left'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
+                      >
+                        视觉生成
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          console.log('批量处理功能');
+                          setShowLLMMenu(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          backgroundColor: '#c0c0c0',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          textAlign: 'left'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
+                      >
+                        批量...
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {/* 预览/编辑模式切换按钮 */}
+                <button
+                  onClick={() => {
+                    setAnnotationMode(annotationMode === 'preview' ? 'edit' : 'preview');
+                    console.log('注释模式切换:', annotationMode === 'preview' ? 'edit' : 'preview');
+                  }}
+                  style={{
+                    padding: '2px 6px',
+                    fontSize: '11px',
+                    backgroundColor: '#c0c0c0',
+                    border: '2px outset #c0c0c0',
+                    borderRadius: '0px',
+                    cursor: 'pointer',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    height: '20px',
+                    minWidth: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title={annotationMode === 'preview' ? "切换到编辑模式" : "切换到预览模式"}
+                >
+                  {annotationMode === 'preview' ? '✏️' : '👁️'}
+                </button>
+              </div>
+            </div>
+            
+            {/* 注释内容区域 */}
+            <div style={{
+              flex: 1,
+              padding: '8px',
+              overflow: 'auto'
+            }}>
+              {annotationMode === 'preview' ? (
+                <div style={{
+                  fontSize: '12px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  lineHeight: '1.4',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word'
+                }}>
+                  {annotations[currentPage] ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={{
+                        // 自定义样式以匹配Windows 98风格
+                        h1: ({children}) => <h1 style={{fontSize: '14px', fontWeight: 'bold', margin: '8px 0 4px 0'}}>{children}</h1>,
+                        h2: ({children}) => <h2 style={{fontSize: '13px', fontWeight: 'bold', margin: '6px 0 3px 0'}}>{children}</h2>,
+                        h3: ({children}) => <h3 style={{fontSize: '12px', fontWeight: 'bold', margin: '4px 0 2px 0'}}>{children}</h3>,
+                        p: ({children}) => <p style={{margin: '2px 0'}}>{children}</p>,
+                        code: ({children}) => <code style={{backgroundColor: '#f0f0f0', padding: '1px 2px', fontFamily: 'monospace'}}>{children}</code>,
+                        pre: ({children}) => <pre style={{backgroundColor: '#f0f0f0', padding: '4px', margin: '4px 0', overflow: 'auto'}}>{children}</pre>,
+                        blockquote: ({children}) => <blockquote style={{borderLeft: '3px solid #c0c0c0', paddingLeft: '8px', margin: '4px 0', fontStyle: 'italic'}}>{children}</blockquote>,
+                        ul: ({children}) => <ul style={{margin: '4px 0', paddingLeft: '16px'}}>{children}</ul>,
+                        ol: ({children}) => <ol style={{margin: '4px 0', paddingLeft: '16px'}}>{children}</ol>,
+                        li: ({children}) => <li style={{margin: '1px 0'}}>{children}</li>,
+                        table: ({children}) => <table style={{border: '1px solid #c0c0c0', borderCollapse: 'collapse', margin: '4px 0'}}>{children}</table>,
+                        th: ({children}) => <th style={{border: '1px solid #c0c0c0', padding: '2px 4px', backgroundColor: '#e0e0e0'}}>{children}</th>,
+                        td: ({children}) => <td style={{border: '1px solid #c0c0c0', padding: '2px 4px'}}>{children}</td>
+                      }}
+                    >
+                      {annotations[currentPage]}
+                    </ReactMarkdown>
+                  ) : (
+                    '暂无注释'
+                  )}
+                </div>
+              ) : (
+                <div style={{ position: 'relative', height: '100%' }}>
+                  <textarea
+                    value={annotations[currentPage] || ''}
+                    onChange={(e) => {
+                      const newContent = e.target.value;
+                      setAnnotations(prev => ({
+                        ...prev,
+                        [currentPage]: newContent
+                      }));
+                      // 自动保存（防抖）
+                      debouncedSaveAnnotation(currentPage, newContent);
+                    }}
+                    placeholder="在此输入注释..."
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      border: '2px inset #c0c0c0',
+                      backgroundColor: '#ffffff',
+                      fontSize: '12px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      padding: '4px',
+                      resize: 'none',
+                      outline: 'none'
+                    }}
+                  />
+                  {/* 保存状态指示器 */}
+                  {isSavingAnnotation && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '4px',
+                      right: '4px',
+                      fontSize: '10px',
+                      color: '#666',
+                      backgroundColor: '#f0f0f0',
+                      padding: '2px 4px',
+                      border: '1px solid #c0c0c0'
+                    }}>
+                      保存中...
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -740,6 +1163,8 @@ function DocumentWindowRenderer({ window, onUpload, boardId }) {
       <PDFPaginationViewer 
         pdfUrl={documentUrl} 
         onClose={() => setIsPaginationMode(false)}
+        boardId={boardId}
+        windowId={window.id}
       />
     );
   }
@@ -834,6 +1259,8 @@ function PDFWindowRenderer({ window, onUpload, boardId }) {
       <PDFPaginationViewer 
         pdfUrl={pdfUrl} 
         onClose={() => setIsPaginationMode(false)}
+        boardId={boardId}
+        windowId={window.id}
       />
     );
   }
