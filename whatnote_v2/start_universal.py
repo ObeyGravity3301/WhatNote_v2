@@ -152,7 +152,7 @@ def setup_virtual_environment():
 
 def install_backend_deps():
     """安装后端依赖"""
-    print_colored("📦 安装后端依赖...", Colors.BLUE)
+    print_colored("📦 检查后端依赖...", Colors.BLUE)
     
     venv_python = get_venv_python()
     requirements_file = PROJECT_ROOT / "requirements.txt"
@@ -161,13 +161,31 @@ def install_backend_deps():
         print_colored("❌ 未找到 requirements.txt", Colors.RED)
         return False
     
+    # 检查是否已经安装了主要依赖
     try:
-        subprocess.run([str(venv_python), '-m', 'pip', 'install', '-r', 'requirements.txt'], 
-                      cwd=PROJECT_ROOT, check=True, capture_output=True)
+        result = subprocess.run([str(venv_python), '-c', 'import fastapi, uvicorn'], 
+                               capture_output=True, text=True)
+        if result.returncode == 0:
+            print_colored("✓ 后端依赖已安装", Colors.GREEN)
+            return True
+    except:
+        pass
+    
+    # 需要安装依赖
+    print_colored("📦 安装后端依赖...", Colors.BLUE)
+    try:
+        result = subprocess.run([str(venv_python), '-m', 'pip', 'install', '-r', 'requirements.txt'], 
+                               cwd=PROJECT_ROOT, capture_output=True, text=True)
+        if result.returncode != 0:
+            print_colored(f"❌ 依赖安装失败:", Colors.RED)
+            print(result.stderr)
+            return False
         print_colored("✓ 后端依赖安装完成", Colors.GREEN)
         return True
     except subprocess.CalledProcessError as e:
         print_colored(f"❌ 后端依赖安装失败: {e}", Colors.RED)
+        if e.stderr:
+            print(e.stderr)
         return False
 
 def install_frontend_deps():
@@ -311,12 +329,18 @@ def main():
     kill_process_on_port(FRONTEND_PORT)
     
     # 设置虚拟环境
-    if not setup_virtual_environment():
-        return False
+    venv_path = PROJECT_ROOT / "venv"
+    if not venv_path.exists():
+        if not setup_virtual_environment():
+            return False
+    else:
+        print_colored("✓ 虚拟环境已存在", Colors.GREEN)
     
-    # 安装依赖
-    if not install_backend_deps():
-        return False
+    # 安装依赖（如果虚拟环境可用）
+    venv_python = get_venv_python()
+    if venv_python.exists():
+        if not install_backend_deps():
+            print_colored("⚠ 依赖安装失败，尝试使用现有环境", Colors.YELLOW)
     
     if not install_frontend_deps():
         return False
@@ -392,3 +416,4 @@ if __name__ == "__main__":
     except Exception as e:
         print_colored(f"❌ 启动脚本出错: {e}", Colors.RED)
         sys.exit(1)
+
