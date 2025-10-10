@@ -3798,10 +3798,17 @@ function BoardCanvas({
         const chatWindow = prev.find(w => w.id === CHAT_WINDOW_ID);
         
         if (chatWindow) {
-          // 如果聊天窗口存在，移除它
-          return prev.filter(w => w.id !== CHAT_WINDOW_ID);
+          // 如果聊天窗口存在，检查是否被最小化
+          if (minimizedWindows.has(CHAT_WINDOW_ID)) {
+            // 如果被最小化，恢复显示
+            handleWindowMinimizeLocal(CHAT_WINDOW_ID);
+          } else {
+            // 如果正在显示，最小化它
+            handleWindowMinimizeLocal(CHAT_WINDOW_ID);
+          }
+          return prev; // 不修改 windows 数组
         } else {
-          // 如果聊天窗口不存在，添加它
+          // 如果聊天窗口不存在，创建它
           const newChatWindow = createChatWindow();
           const newWindows = [...prev, newChatWindow];
           
@@ -3819,7 +3826,7 @@ function BoardCanvas({
     return () => {
       window.removeEventListener('toggleChatWindow', handleToggleChatWindow);
     };
-  }, [boardName]);
+  }, [boardName, minimizedWindows]);
 
 
   // 组件卸载时清理事件监听器
@@ -4089,27 +4096,35 @@ function BoardCanvas({
                 </span>
               )}
               <div className="window-controls">
-                <button 
-                  className="minimize-btn"
-                  onClick={(e) => {
-                    console.log('点击了最小化按钮:', window.id);
-                    e.stopPropagation();
-                    e.preventDefault();
-                    handleWindowMinimizeLocal(window.id);
-                  }}
-                  title="最小化"
-                >
-                  ⁻
-                </button>
+                {/* Chat 窗口只显示关闭按钮，关闭时执行最小化 */}
+                {window.type !== 'chat' && (
+                  <button 
+                    className="minimize-btn"
+                    onClick={(e) => {
+                      console.log('点击了最小化按钮:', window.id);
+                      e.stopPropagation();
+                      e.preventDefault();
+                      handleWindowMinimizeLocal(window.id);
+                    }}
+                    title="最小化"
+                  >
+                    ⁻
+                  </button>
+                )}
                 <button 
                   className="close-btn"
                   onClick={(e) => {
                     console.log('点击了关闭按钮:', window.id);
                     e.stopPropagation();
                     e.preventDefault();
-                    handleWindowCloseLocal(window.id);
+                    // Chat 窗口关闭时执行最小化，其他窗口执行真正的关闭
+                    if (window.type === 'chat') {
+                      handleWindowMinimizeLocal(window.id);
+                    } else {
+                      handleWindowCloseLocal(window.id);
+                    }
                   }}
-                  title="关闭窗口"
+                  title={window.type === 'chat' ? "最小化" : "关闭窗口"}
                 >
                   ✕
                 </button>
@@ -4142,15 +4157,6 @@ function BoardCanvas({
                   boardId={boardId}
                   boardName={boardName}
                   isVisible={true}
-                  onClose={() => {
-                    // 从windows数组中移除聊天窗口
-                    setWindows(prev => prev.filter(w => w.id !== CHAT_WINDOW_ID));
-                  }}
-                  onMinimize={() => {
-                    if (onWindowMinimize) {
-                      onWindowMinimize(window.id);
-                    }
-                  }}
                   onFocus={() => {
                     handleWindowFocusLocal(window.id);
                   }}
