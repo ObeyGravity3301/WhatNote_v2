@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatNote V2 - 基于真实文件系统的笔记软件</title>
+    <title>WhatNote V2 API</title>
     <style>
         * {
             margin: 0;
@@ -13,177 +13,432 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #f5f5f5;
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            padding: 20px;
         }
 
         .container {
+            max-width: 1200px;
+            margin: 0 auto;
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            padding: 40px;
-            max-width: 800px;
-            width: 90%;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        .header {
             text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
         }
 
-        .logo {
-            font-size: 3rem;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 20px;
+        .header h1 {
+            color: #333;
+            font-size: 2rem;
+            margin-bottom: 10px;
         }
 
-        .subtitle {
-            font-size: 1.2rem;
+        .header p {
             color: #666;
+            font-size: 1rem;
+        }
+
+        .status-bar {
+            background: #e8f5e8;
+            border: 1px solid #4caf50;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            background: #4caf50;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .api-section {
             margin-bottom: 30px;
         }
 
-        .status {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            border-left: 4px solid #28a745;
+        .section-title {
+            font-size: 1.3rem;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #007bff;
         }
 
-        .status h3 {
-            color: #28a745;
-            margin-bottom: 10px;
-        }
-
-        .features {
+        .endpoint-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }
-
-        .feature {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid #e9ecef;
-        }
-
-        .feature h4 {
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-
-        .api-info {
-            background: #e3f2fd;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            border-left: 4px solid #2196f3;
-        }
-
-        .api-info h3 {
-            color: #2196f3;
-            margin-bottom: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
         }
 
         .endpoint {
-            background: #f5f5f5;
-            padding: 10px;
-            border-radius: 5px;
-            margin: 5px 0;
-            font-family: monospace;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
             font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        .btn {
-            background: #667eea;
+        .method {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            margin-right: 10px;
+        }
+
+        .get { background: #d4edda; color: #155724; }
+        .post { background: #d1ecf1; color: #0c5460; }
+        .put { background: #fff3cd; color: #856404; }
+        .delete { background: #f8d7da; color: #721c24; }
+
+        .path {
+            flex: 1;
+            color: #495057;
+        }
+
+        .test-btn {
+            background: #007bff;
             color: white;
             border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: background 0.2s;
+        }
+
+        .test-btn:hover {
+            background: #0056b3;
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .action-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 1rem;
-            margin: 10px;
-            transition: background 0.3s;
+            transition: background 0.2s;
         }
 
-        .btn:hover {
-            background: #5a6fd8;
+        .action-btn:hover {
+            background: #218838;
         }
 
-        .btn-secondary {
+        .action-btn.secondary {
             background: #6c757d;
         }
 
-        .btn-secondary:hover {
+        .action-btn.secondary:hover {
             background: #5a6268;
+        }
+
+        .response-area {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+            min-height: 100px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            display: none;
+        }
+
+        .server-info {
+            background: #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 0.9rem;
+        }
+
+        .info-item {
+            margin-bottom: 8px;
+        }
+
+        .info-label {
+            font-weight: bold;
+            color: #495057;
+        }
+
+        .info-value {
+            color: #6c757d;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="logo">📝 WhatNote V2</div>
-        <div class="subtitle">基于真实文件系统的笔记软件</div>
-        
-        <div class="status">
-            <h3>✅ 系统状态</h3>
-            <p>后端API服务器正在运行</p>
-            <p>端口: 8082 | 状态: 正常</p>
+        <div class="header">
+            <h1>WhatNote V2 API</h1>
+            <p>后端API服务器调试界面</p>
         </div>
 
-        <div class="features">
-            <div class="feature">
-                <h4>🗂️ 真实文件系统</h4>
-                <p>所有内容都存储在对应的文件夹中，不使用JSON文件模拟</p>
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span>服务器运行正常</span>
             </div>
-            <div class="feature">
-                <h4>🔒 内容隔离</h4>
-                <p>每个展板的内容完全独立存储，互不干扰</p>
-            </div>
-            <div class="feature">
-                <h4>🗑️ 删除即消失</h4>
-                <p>删除文件夹后，软件中对应内容立即消失</p>
-            </div>
-            <div class="feature">
-                <h4>⚡ 无全局缓存</h4>
-                <p>直接使用文件系统，不依赖内存缓存</p>
+            <div>
+                <strong>端口:</strong> 8081 | 
+                <strong>时间:</strong> <span id="current-time"></span>
             </div>
         </div>
 
-        <div class="api-info">
-            <h3>🔗 API接口</h3>
-            <p>以下API端点可供使用：</p>
-            <div class="endpoint">GET /api/health - 健康检查</div>
-            <div class="endpoint">GET /api/courses - 获取所有课程</div>
-            <div class="endpoint">POST /api/courses - 创建新课程</div>
-            <div class="endpoint">GET /api/courses/{id}/boards - 获取课程展板</div>
-            <div class="endpoint">POST /api/courses/{id}/boards - 创建新展板</div>
-            <div class="endpoint">GET /api/boards/{id} - 获取展板信息</div>
-            <div class="endpoint">DELETE /api/boards/{id} - 删除展板</div>
+        <div class="quick-actions">
+            <button class="action-btn" onclick="testHealth()">🏥 健康检查</button>
+            <button class="action-btn" onclick="getCourses()">📚 获取课程</button>
+            <button class="action-btn secondary" onclick="openDocs()">📖 API文档</button>
+            <button class="action-btn secondary" onclick="openSwagger()">🔧 Swagger UI</button>
         </div>
 
-        <div>
-            <button class="btn" onclick="testAPI()">🧪 测试API</button>
-            <button class="btn btn-secondary" onclick="openDocs()">📚 查看文档</button>
+        <div class="api-section">
+            <h2 class="section-title">核心API端点</h2>
+            <div class="endpoint-grid">
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/health</span>
+                    <button class="test-btn" onclick="testEndpoint('/api/health')">测试</button>
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/courses</span>
+                    <button class="test-btn" onclick="testEndpoint('/api/courses')">测试</button>
+                </div>
+                <div class="endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/courses</span>
+                    <button class="test-btn" onclick="testEndpoint('/api/courses', 'POST')">测试</button>
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/courses/{id}/boards</span>
+                    <button class="test-btn" onclick="testEndpoint('/api/courses/course-1756987907632/boards')">测试</button>
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/boards/{id}</span>
+                    <button class="test-btn" onclick="testEndpoint('/api/boards/board-1756987954946')">测试</button>
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/boards/{id}/windows</span>
+                    <button class="test-btn" onclick="testEndpoint('/api/boards/board-1756987954946/windows')">测试</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="api-section">
+            <h2 class="section-title">文件管理API</h2>
+            <div class="endpoint-grid">
+                <div class="endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/boards/{id}/upload</span>
+                    <button class="test-btn" onclick="showUploadInfo()">说明</button>
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/boards/{id}/files</span>
+                    <button class="test-btn" onclick="testEndpoint('/api/boards/board-1756987954946/files')">测试</button>
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/media/serve</span>
+                    <button class="test-btn" onclick="showMediaInfo()">说明</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="api-section">
+            <h2 class="section-title">LLM服务API</h2>
+            <div class="endpoint-grid">
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/llm/config</span>
+                    <button class="test-btn" onclick="testEndpoint('/api/llm/config')">测试</button>
+                </div>
+                <div class="endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/api/llm/chat</span>
+                    <button class="test-btn" onclick="showChatInfo()">说明</button>
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/api/boards/{id}/conversations</span>
+                    <button class="test-btn" onclick="testEndpoint('/api/boards/board-1756987954946/conversations')">测试</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="response-area" id="response-area"></div>
+
+        <div class="server-info">
+            <div class="info-item">
+                <span class="info-label">服务器版本:</span>
+                <span class="info-value">WhatNote V2.0.0</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">API版本:</span>
+                <span class="info-value">v2</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">文档地址:</span>
+                <span class="info-value">/docs (Swagger UI)</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">ReDoc地址:</span>
+                <span class="info-value">/redoc</span>
+            </div>
         </div>
     </div>
 
     <script>
-        async function testAPI() {
+        // 更新时间
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleString('zh-CN');
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // 显示响应
+        function showResponse(data) {
+            const responseArea = document.getElementById('response-area');
+            responseArea.style.display = 'block';
+            responseArea.textContent = JSON.stringify(data, null, 2);
+        }
+
+        // 测试端点
+        async function testEndpoint(endpoint, method = 'GET') {
             try {
-                const response = await fetch('/api/health');
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                };
+                
+                const response = await fetch(endpoint, options);
                 const data = await response.json();
-                alert(`API测试成功！\n状态: ${data.status}\n服务: ${data.service}`);
+                
+                showResponse({
+                    endpoint: endpoint,
+                    method: method,
+                    status: response.status,
+                    data: data
+                });
             } catch (error) {
-                alert('API测试失败: ' + error.message);
+                showResponse({
+                    endpoint: endpoint,
+                    method: method,
+                    error: error.message
+                });
             }
         }
 
+        // 健康检查
+        async function testHealth() {
+            await testEndpoint('/api/health');
+        }
+
+        // 获取课程
+        async function getCourses() {
+            await testEndpoint('/api/courses');
+        }
+
+        // 打开API文档
         function openDocs() {
             window.open('/docs', '_blank');
         }
+
+        // 打开Swagger UI
+        function openSwagger() {
+            window.open('/docs', '_blank');
+        }
+
+        // 显示上传信息
+        function showUploadInfo() {
+            showResponse({
+                endpoint: '/api/boards/{id}/upload',
+                method: 'POST',
+                description: '文件上传接口',
+                parameters: {
+                    file: 'File (multipart/form-data)',
+                    file_type: 'String (images|videos|pdfs|audios|texts)',
+                    window_id: 'String (可选)'
+                },
+                example: 'curl -X POST "http://localhost:8081/api/boards/{board_id}/upload" -F "file=@example.jpg" -F "file_type=images"'
+            });
+        }
+
+        // 显示媒体服务信息
+        function showMediaInfo() {
+            showResponse({
+                endpoint: '/api/media/serve',
+                method: 'GET',
+                description: '媒体文件服务',
+                parameters: {
+                    path: 'String (文件绝对路径)'
+                },
+                example: 'GET /api/media/serve?path=/path/to/file.jpg'
+            });
+        }
+
+        // 显示聊天信息
+        function showChatInfo() {
+            showResponse({
+                endpoint: '/api/llm/chat',
+                method: 'POST',
+                description: 'LLM对话接口',
+                parameters: {
+                    messages: 'Array (消息列表)'
+                },
+                example: {
+                    messages: [
+                        { role: 'user', content: 'Hello' }
+                    ]
+                }
+            });
+        }
     </script>
 </body>
+</html>
 </html> 
