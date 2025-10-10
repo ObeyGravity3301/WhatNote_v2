@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# WhatNote V2 快速启动脚本 (Linux/Mac)
+# WhatNote V2 Linux/macOS 启动脚本
 
 # 颜色定义
 RED='\033[0;31m'
@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 echo -e "${BLUE}"
 echo "╔══════════════════════════════════════╗"
 echo "║            WhatNote V2               ║"
-echo "║     Unix/Linux 快速启动脚本          ║"
+echo "║     Unix/Linux/macOS 启动脚本        ║"
 echo "╚══════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -42,6 +42,4 @@ echo -e "${BLUE}🚀 启动 WhatNote V2...${NC}"
 echo ""
 
 # 运行Python启动脚本
-$PYTHON_CMD start.py
-
-
+$PYTHON_CMD start_universal.py

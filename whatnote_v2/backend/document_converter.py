@@ -11,8 +11,15 @@ from docx import Document
 import subprocess
 import shutil
 import docx2txt
-import win32com.client
 import time
+
+# Windows特定的导入
+try:
+    import win32com.client
+    HAS_WIN32COM = True
+except ImportError:
+    HAS_WIN32COM = False
+    win32com = None
 
 class DocumentConverter:
     def __init__(self):
@@ -311,6 +318,10 @@ class DocumentConverter:
     
     def _convert_with_office_com(self, word_path: Path, pdf_path: Path) -> Optional[str]:
         """使用Microsoft Office COM接口转换（最高质量）"""
+        if not HAS_WIN32COM:
+            print("Windows COM接口不可用，跳过Office转换")
+            return None
+            
         try:
             print(f"尝试使用Office COM接口转换: {word_path.name}")
             
@@ -391,6 +402,10 @@ class DocumentConverter:
     
     def _convert_ppt_with_office_com(self, ppt_path: Path, pdf_path: Path) -> Optional[str]:
         """使用PowerPoint COM接口转换（最高质量）"""
+        if not HAS_WIN32COM:
+            print("Windows COM接口不可用，跳过PowerPoint转换")
+            return None
+            
         try:
             print(f"尝试使用PowerPoint COM接口转换: {ppt_path.name}")
             
@@ -463,6 +478,10 @@ class DocumentConverter:
     
     def _convert_excel_with_office_com(self, excel_path: Path, pdf_path: Path) -> Optional[str]:
         """使用Excel COM接口转换（最高质量）"""
+        if not HAS_WIN32COM:
+            print("Windows COM接口不可用，跳过Excel转换")
+            return None
+            
         try:
             print(f"尝试使用Excel COM接口转换: {excel_path.name}")
             
