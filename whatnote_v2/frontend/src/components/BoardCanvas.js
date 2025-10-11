@@ -2073,11 +2073,24 @@ function BoardCanvas({
           console.log('没有需要恢复隐藏状态的窗口');
         }
         
-        // 创建包含图标位置信息的桌面图标数据
+        // 首先清空网格状态，准备重新分配
+        desktopGridRef.current.clear();
+        
+        // 第一遍：添加所有已保存位置到网格占用状态
+        list.forEach(window => {
+          const savedPosition = iconPositionsMap[window.id];
+          if (savedPosition && savedPosition.gridPosition) {
+            const gridKey = `${savedPosition.gridPosition.gridX},${savedPosition.gridPosition.gridY}`;
+            desktopGridRef.current.add(gridKey);
+            console.log(`📍 恢复已保存位置: ${window.title} at (${savedPosition.gridPosition.gridX},${savedPosition.gridPosition.gridY})`);
+          }
+        });
+        
+        // 第二遍：为没有保存位置的窗口分配新位置
         const iconsWithPositions = list.map(window => {
           const savedPosition = iconPositionsMap[window.id];
           
-          if (savedPosition) {
+          if (savedPosition && savedPosition.gridPosition) {
             // 使用保存的位置和网格信息
             return {
               id: window.id,
@@ -2110,8 +2123,10 @@ function BoardCanvas({
           }
         });
         
-        // 更新网格占用状态和桌面图标
-        updateGridOccupancy(iconsWithPositions);
+        // 确认网格占用状态
+        console.log('📊 网格占用状态:', Array.from(desktopGridRef.current));
+        
+        // 设置桌面图标
         setDesktopIcons(iconsWithPositions);
         
         // 去重处理：确保没有重复的窗口ID
@@ -2294,12 +2309,15 @@ function BoardCanvas({
     // 过滤掉聊天窗口，聊天窗口不应该有桌面图标
     const regularWindows = windows.filter(window => window.type !== 'chat');
     
+    // 先更新网格占用状态，基于现有图标
+    updateGridOccupancy(desktopIcons);
+    
     const icons = regularWindows.map(window => {
       // 查找是否已有该图标，保持位置和网格信息
       const existingIcon = desktopIcons.find(icon => icon.id === window.id);
       
       if (existingIcon) {
-        console.log(`🎯 保持现有图标位置: ${window.title} (${window.id})`);
+        console.log(`🎯 保持现有图标位置: ${window.title} (${window.id}) at (${existingIcon.gridPosition?.gridX},${existingIcon.gridPosition?.gridY})`);
         // 保持现有图标的位置和网格信息
       return {
         id: window.id,
@@ -2333,9 +2351,9 @@ function BoardCanvas({
       }
     });
     
-    console.log('🎯 生成的图标数据:', icons.map(i => ({ id: i.id, title: i.title, isHidden: i.isHidden })));
+    console.log('🎯 生成的图标数据:', icons.map(i => ({ id: i.id, title: i.title, gridPos: i.gridPosition, isHidden: i.isHidden })));
     
-    // 更新网格占用状态
+    // 再次更新网格占用状态（包含新图标）
     updateGridOccupancy(icons);
     setDesktopIcons(icons);
     
