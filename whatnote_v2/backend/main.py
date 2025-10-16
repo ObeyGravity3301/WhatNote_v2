@@ -867,9 +867,12 @@ async def generate_pdf_annotation(board_id: str, window_id: str, page: int):
         pdf_filename = target_window.get('title', 'unknown')
         annotation_conv_id = f"annotation-{window_id}-{page}"
         
-        # 获取或创建对话
-        conversation = conversation_manager.get_conversation(board_id, annotation_conv_id)
+        info(f"注释对话ID: {annotation_conv_id}")
+        
+        # 获取或创建对话（不使用分页参数）
+        conversation = conversation_manager.get_conversation(board_id, annotation_conv_id, page=None, limit=None)
         if not conversation:
+            info(f"创建新的注释对话: {annotation_conv_id}")
             # 创建新的注释对话
             conversation = conversation_manager.create_conversation(
                 board_id, 
@@ -881,7 +884,10 @@ async def generate_pdf_annotation(board_id: str, window_id: str, page: int):
             new_file = conversations_dir / f"{annotation_conv_id}.json"
             if old_file.exists():
                 old_file.rename(new_file)
+                info(f"对话文件重命名: {conversation['id']} -> {annotation_conv_id}")
             conversation['id'] = annotation_conv_id
+        else:
+            info(f"使用现有注释对话: {annotation_conv_id}, 历史消息数: {len(conversation.get('messages', []))}")
         
         # 添加用户消息到对话历史
         user_message = {
@@ -909,11 +915,15 @@ async def generate_pdf_annotation(board_id: str, window_id: str, page: int):
                     "content": accumulated_content,
                     "timestamp": datetime.now().isoformat()
                 }
-                conversation_manager.append_message(board_id, annotation_conv_id, user_message)
-                conversation_manager.append_message(board_id, annotation_conv_id, assistant_message)
+                conversation_manager.add_message(board_id, annotation_conv_id, user_message)
+                conversation_manager.add_message(board_id, annotation_conv_id, assistant_message)
                 
                 # 将生成的注释插入到note文件的最前面
+                info(f"开始保存注释: board_id={board_id}, window_id={window_id}, page={page}")
+                info(f"生成的注释长度: {len(accumulated_content)} 字符")
+                
                 existing_note = content_manager.get_pdf_annotation(board_id, window_id, page)
+                info(f"现有注释长度: {len(existing_note) if existing_note else 0} 字符")
                 
                 # 标注这是LLM生成的注释
                 llm_annotation = f"<!-- LLM生成的注释 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n"
@@ -924,8 +934,11 @@ async def generate_pdf_annotation(board_id: str, window_id: str, page: int):
                 if existing_note:
                     llm_annotation += existing_note
                 
+                info(f"最终注释内容长度: {len(llm_annotation)} 字符")
+                
                 # 保存注释
-                content_manager.save_pdf_annotation(board_id, window_id, page, llm_annotation)
+                save_result = content_manager.save_pdf_annotation(board_id, window_id, page, llm_annotation)
+                info(f"注释保存结果: {save_result}")
                 
                 yield f"data: {json.dumps({'type': 'done', 'success': True}, ensure_ascii=False)}\n\n"
                 

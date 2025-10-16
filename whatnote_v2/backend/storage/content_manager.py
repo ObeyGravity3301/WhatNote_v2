@@ -1961,8 +1961,12 @@ class ContentManager:
     def save_pdf_annotation(self, board_id: str, window_id: str, page: int, content: str) -> bool:
         """保存PDF指定页面的注释内容"""
         try:
+            print(f"[save_pdf_annotation] 开始保存: board_id={board_id}, window_id={window_id}, page={page}")
+            
             # 获取窗口信息
             windows = self.get_board_windows(board_id)
+            print(f"[save_pdf_annotation] 获取到 {len(windows)} 个窗口")
+            
             target_window = None
             for window in windows:
                 if window.get('id') == window_id:
@@ -1970,24 +1974,35 @@ class ContentManager:
                     break
             
             if not target_window:
+                print(f"[save_pdf_annotation] 错误：窗口不存在 {window_id}")
                 return False
+            
+            print(f"[save_pdf_annotation] 找到目标窗口: {target_window.get('title')}")
             
             # 构建注释文件路径 - 去掉.pdf后缀
             title = target_window.get('title', 'unknown')
             if title.endswith('.pdf'):
                 title = title[:-4]  # 去掉.pdf后缀
             pdf_name = self._sanitize_filename(title)
+            print(f"[save_pdf_annotation] PDF名称: {pdf_name}")
+            
             pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
             
             if not pdf_pages_dir:
+                print(f"[save_pdf_annotation] 错误：无法获取PDF页面目录")
                 return False
+            
+            print(f"[save_pdf_annotation] PDF页面目录: {pdf_pages_dir}")
             
             # 确保目录存在
             pdf_pages_dir.mkdir(parents=True, exist_ok=True)
+            print(f"[save_pdf_annotation] 目录已确保存在")
             
             # 构建注释文件名
             annotation_filename = f"{pdf_name}_note_{page:03d}.md"
             annotation_file_path = pdf_pages_dir / annotation_filename
+            
+            print(f"[save_pdf_annotation] 注释文件路径: {annotation_file_path}")
             
             # 创建注释文件内容 - 只保存用户输入的注释内容
             if content.strip():
@@ -1995,11 +2010,14 @@ class ContentManager:
             else:
                 md_content = "*暂无注释内容*"
             
+            print(f"[save_pdf_annotation] 注释内容长度: {len(md_content)} 字符")
+            
             # 写入注释文件
             with open(annotation_file_path, 'w', encoding='utf-8') as f:
                 f.write(md_content)
             
-            print(f"已保存第 {page} 页注释: {annotation_filename}")
+            print(f"[save_pdf_annotation] ✅ 已保存第 {page} 页注释: {annotation_filename}")
+            print(f"[save_pdf_annotation] 文件绝对路径: {annotation_file_path.absolute()}")
             return True
             
         except Exception as e:
