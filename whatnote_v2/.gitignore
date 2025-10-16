@@ -131,4 +131,8 @@ jspm_packages/
 
 # WhatNote specific
 whatnote_data/uploads/
-whatnote_data/temp/ 
+whatnote_data/temp/
+
+# User data - 忽略用户数据但保留结构
+backend/whatnote_data/courses/
+backend/whatnote_data/trash/ 
