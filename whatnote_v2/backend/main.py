@@ -898,7 +898,7 @@ async def generate_pdf_annotation(board_id: str, window_id: str, page: int):
             accumulated_content = ""
             
             try:
-                async for chunk in llm_service.chat_completion_stream(messages):
+                async for chunk in llm_service.chat_completion(messages, stream=True):
                     if chunk:
                         accumulated_content += chunk
                         yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
