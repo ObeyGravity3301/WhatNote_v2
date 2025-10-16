@@ -2084,4 +2084,68 @@ class ContentManager:
                 
         except Exception as e:
             print(f"获取PDF注释文件信息失败: {e}")
+            return {}
+    
+    def get_pdf_page_contents(self, board_id: str, window_id: str, page: int) -> dict:
+        """
+        获取PDF页面内容（前一页、当前页、下一页）
+        用于LLM生成注释
+        
+        Args:
+            board_id: 展板ID
+            window_id: 窗口ID
+            page: 当前页码
+            
+        Returns:
+            dict: {'previous': str, 'current': str, 'next': str}
+        """
+        try:
+            # 获取窗口信息
+            windows = self.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if not target_window:
+                return {}
+            
+            # 构建页面文件路径
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]  # 去掉.pdf后缀
+            pdf_name = self._sanitize_filename(title)
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            
+            if not pdf_pages_dir or not pdf_pages_dir.exists():
+                return {}
+            
+            result = {}
+            
+            # 读取前一页内容
+            if page > 1:
+                prev_page_file = pdf_pages_dir / f"{pdf_name}_page_{page-1:03d}.md"
+                if prev_page_file.exists():
+                    with open(prev_page_file, 'r', encoding='utf-8') as f:
+                        result['previous'] = f.read()
+            
+            # 读取当前页内容（必须存在）
+            current_page_file = pdf_pages_dir / f"{pdf_name}_page_{page:03d}.md"
+            if current_page_file.exists():
+                with open(current_page_file, 'r', encoding='utf-8') as f:
+                    result['current'] = f.read()
+            
+            # 读取下一页内容
+            next_page_file = pdf_pages_dir / f"{pdf_name}_page_{page+1:03d}.md"
+            if next_page_file.exists():
+                with open(next_page_file, 'r', encoding='utf-8') as f:
+                    result['next'] = f.read()
+            
+            return result
+            
+        except Exception as e:
+            print(f"获取PDF页面内容失败: {e}")
+            import traceback
+            print(f"详细错误信息: {traceback.format_exc()}")
             return {} 

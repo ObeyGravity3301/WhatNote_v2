@@ -821,6 +821,133 @@ async def get_pdf_annotation_info(board_id: str, window_id: str, page: int):
         error(f"获取PDF注释文件信息失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取PDF注释文件信息失败: {str(e)}")
 
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/{page}/generate")
+async def generate_pdf_annotation(board_id: str, window_id: str, page: int):
+    """使用LLM生成PDF指定页面的注释"""
+    try:
+        info(f"生成PDF注释: board_id={board_id}, window_id={window_id}, page={page}")
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        if target_window.get('type') != 'pdf':
+            raise HTTPException(status_code=400, detail="只有PDF文件支持注释功能")
+        
+        # 读取前一页、当前页、下一页的内容
+        page_contents = content_manager.get_pdf_page_contents(board_id, window_id, page)
+        
+        if not page_contents.get('current'):
+            raise HTTPException(status_code=404, detail="当前页面内容不存在")
+        
+        # 构建发送给LLM的提示词
+        prompt_parts = []
+        prompt_parts.append("请根据以下PDF页面内容生成简洁的注释。注意：我提供了前后页面的内容是为了防止页面分割导致内容不连续，你的注释应该主要针对当前页面。\n")
+        
+        if page_contents.get('previous'):
+            prompt_parts.append(f"【上一页内容（第{page-1}页）】\n{page_contents['previous']}\n")
+        
+        prompt_parts.append(f"【当前页内容（第{page}页）】\n{page_contents['current']}\n")
+        
+        if page_contents.get('next'):
+            prompt_parts.append(f"【下一页内容（第{page+1}页）】\n{page_contents['next']}\n")
+        
+        prompt_parts.append(f"\n请为第{page}页生成注释，包括：\n1. 页面主要内容概要\n2. 重要知识点\n3. 需要注意的细节\n\n请用Markdown格式输出。")
+        
+        full_prompt = "\n".join(prompt_parts)
+        
+        # 创建或获取该PDF的注释对话上下文
+        pdf_filename = target_window.get('title', 'unknown')
+        annotation_conv_id = f"annotation-{window_id}-{page}"
+        
+        # 获取或创建对话
+        conversation = conversation_manager.get_conversation(board_id, annotation_conv_id)
+        if not conversation:
+            # 创建新的注释对话
+            conversation = conversation_manager.create_conversation(
+                board_id, 
+                title=f"PDF注释生成 - {pdf_filename} - 第{page}页"
+            )
+            # 更新conversation_id为我们自定义的
+            conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+            old_file = conversations_dir / f"{conversation['id']}.json"
+            new_file = conversations_dir / f"{annotation_conv_id}.json"
+            if old_file.exists():
+                old_file.rename(new_file)
+            conversation['id'] = annotation_conv_id
+        
+        # 添加用户消息到对话历史
+        user_message = {
+            "role": "user",
+            "content": full_prompt,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # 调用LLM生成注释（流式）
+        messages = conversation.get('messages', []) + [user_message]
+        
+        # 准备SSE流式响应
+        async def generate_annotation_stream():
+            accumulated_content = ""
+            
+            try:
+                async for chunk in llm_service.chat_completion_stream(messages):
+                    if chunk:
+                        accumulated_content += chunk
+                        yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
+                
+                # 保存LLM响应到对话历史
+                assistant_message = {
+                    "role": "assistant",
+                    "content": accumulated_content,
+                    "timestamp": datetime.now().isoformat()
+                }
+                conversation_manager.append_message(board_id, annotation_conv_id, user_message)
+                conversation_manager.append_message(board_id, annotation_conv_id, assistant_message)
+                
+                # 将生成的注释插入到note文件的最前面
+                existing_note = content_manager.get_pdf_annotation(board_id, window_id, page)
+                
+                # 标注这是LLM生成的注释
+                llm_annotation = f"<!-- LLM生成的注释 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n"
+                llm_annotation += accumulated_content
+                llm_annotation += "\n\n---\n\n"
+                
+                # 如果有现有注释，追加在后面
+                if existing_note:
+                    llm_annotation += existing_note
+                
+                # 保存注释
+                content_manager.save_pdf_annotation(board_id, window_id, page, llm_annotation)
+                
+                yield f"data: {json.dumps({'type': 'done', 'success': True}, ensure_ascii=False)}\n\n"
+                
+            except Exception as e:
+                error(f"生成注释失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+        
+        return StreamingResponse(
+            generate_annotation_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"生成PDF注释失败: {e}")
+        raise HTTPException(status_code=500, detail=f"生成PDF注释失败: {str(e)}")
+
 @app.get("/api/media/serve")
 async def serve_media_file(path: str):
     """全新的媒体文件服务API - 避免路由冲突"""

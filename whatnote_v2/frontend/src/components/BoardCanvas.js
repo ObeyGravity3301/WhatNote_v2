@@ -824,9 +824,65 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
                       boxShadow: '2px 2px 4px rgba(0,0,0,0.3)'
                     }}>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           console.log('生成注释功能');
                           setShowLLMMenu(false);
+                          setAnnotationMode('preview'); // 切换到预览模式以查看生成的注释
+                          
+                          try {
+                            // 调用后端API生成注释
+                            const response = await fetch(
+                              `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/${currentPage}/generate`,
+                              {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                }
+                              }
+                            );
+                            
+                            if (!response.ok) {
+                              throw new Error('生成注释失败');
+                            }
+                            
+                            // 处理流式响应
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder();
+                            let buffer = '';
+                            
+                            while (true) {
+                              const {done, value} = await reader.read();
+                              if (done) break;
+                              
+                              buffer += decoder.decode(value, {stream: true});
+                              const lines = buffer.split('\n\n');
+                              buffer = lines.pop() || '';
+                              
+                              for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                  const data = JSON.parse(line.slice(6));
+                                  
+                                  if (data.type === 'content') {
+                                    // 实时更新注释内容
+                                    setAnnotations(prev => ({
+                                      ...prev,
+                                      [currentPage]: (prev[currentPage] || '') + data.content
+                                    }));
+                                  } else if (data.type === 'done') {
+                                    console.log('注释生成完成');
+                                    // 重新加载注释以获取完整内容
+                                    loadAnnotation(currentPage);
+                                  } else if (data.type === 'error') {
+                                    console.error('生成注释错误:', data.error);
+                                    alert('生成注释失败: ' + data.error);
+                                  }
+                                }
+                              }
+                            }
+                          } catch (error) {
+                            console.error('生成注释失败:', error);
+                            alert('生成注释失败: ' + error.message);
+                          }
                         }}
                         style={{
                           width: '100%',
