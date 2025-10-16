@@ -60,6 +60,43 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
   
   // LLM功能状态
   const [showLLMMenu, setShowLLMMenu] = useState(false); // 显示LLM菜单
+  const [showAnnotationSettings, setShowAnnotationSettings] = useState(false); // 显示注释设置面板
+  
+  // 注释设置状态
+  const [annotationSettings, setAnnotationSettings] = useState(() => {
+    // 从localStorage加载设置
+    const saved = localStorage.getItem('annotationSettings');
+    return saved ? JSON.parse(saved) : {
+      style: 'detailed', // 默认风格: detailed, simple, academic
+      customPrompt: ''
+    };
+  });
+  
+  // 预设的注释风格
+  const annotationStyles = {
+    detailed: {
+      name: '详细注释',
+      prompt: '请为第{page}页生成详细的注释，包括：\n1. 页面主要内容概要\n2. 重要知识点详解\n3. 需要注意的细节\n4. 相关概念说明\n\n请用Markdown格式输出。'
+    },
+    simple: {
+      name: '简洁注释',
+      prompt: '请为第{page}页生成简洁的注释，只包括：\n1. 核心内容概括（1-2句话）\n2. 关键知识点（列表形式）\n\n请用Markdown格式输出。'
+    },
+    academic: {
+      name: '学术注释',
+      prompt: '请为第{page}页生成学术风格的注释，包括：\n1. 内容摘要\n2. 主要论点和证据\n3. 方法论说明\n4. 关键术语解释\n\n请用Markdown格式输出。'
+    },
+    qanda: {
+      name: '问答式注释',
+      prompt: '请为第{page}页生成问答式注释：\n1. 这页讲了什么？\n2. 核心概念是什么？\n3. 需要记住什么？\n4. 如何应用？\n\n请用Markdown格式输出。'
+    }
+  };
+  
+  // 保存注释设置
+  const saveAnnotationSettings = (newSettings) => {
+    setAnnotationSettings(newSettings);
+    localStorage.setItem('annotationSettings', JSON.stringify(newSettings));
+  };
 
   // 加载PDF文档
   useEffect(() => {
@@ -97,7 +134,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
     }
   }, [currentPage, showAnnotationPanel, boardId, windowId]);
 
-  // 点击外部区域或按ESC键关闭LLM菜单
+  // 点击外部区域或按ESC键关闭LLM菜单和设置面板
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (showLLMMenu) {
@@ -107,15 +144,23 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
           setShowLLMMenu(false);
         }
       }
-    };
-
-    const handleKeyDown = (event) => {
-      if (showLLMMenu && event.key === 'Escape') {
-        setShowLLMMenu(false);
+      if (showAnnotationSettings) {
+        // 检查点击的元素是否在设置面板内
+        const settingsPanel = document.querySelector('[data-annotation-settings]');
+        if (settingsPanel && !settingsPanel.contains(event.target)) {
+          setShowAnnotationSettings(false);
+        }
       }
     };
 
-    if (showLLMMenu) {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        if (showLLMMenu) setShowLLMMenu(false);
+        if (showAnnotationSettings) setShowAnnotationSettings(false);
+      }
+    };
+
+    if (showLLMMenu || showAnnotationSettings) {
       // 使用setTimeout确保事件监听器在下一个事件循环中添加
       setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
@@ -127,7 +172,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
         document.removeEventListener('keydown', handleKeyDown);
       };
     }
-  }, [showLLMMenu]);
+  }, [showLLMMenu, showAnnotationSettings]);
 
   // 渲染当前页面
   useEffect(() => {
@@ -830,6 +875,17 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
                           setAnnotationMode('preview'); // 切换到预览模式以查看生成的注释
                           
                           try {
+                            // 准备提示词模板
+                            let promptTemplate = '';
+                            if (annotationSettings.style === 'custom') {
+                              promptTemplate = annotationSettings.customPrompt;
+                            } else if (annotationStyles[annotationSettings.style]) {
+                              promptTemplate = annotationStyles[annotationSettings.style].prompt;
+                            }
+                            
+                            console.log('使用注释风格:', annotationSettings.style);
+                            console.log('提示词模板:', promptTemplate);
+                            
                             // 调用后端API生成注释
                             const response = await fetch(
                               `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/${currentPage}/generate`,
@@ -837,7 +893,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
                                 method: 'POST',
                                 headers: {
                                   'Content-Type': 'application/json',
-                                }
+                                },
+                                body: JSON.stringify({
+                                  promptTemplate: promptTemplate
+                                })
                               }
                             );
                             
@@ -934,6 +993,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
                           fontSize: '11px',
                           backgroundColor: '#c0c0c0',
                           border: 'none',
+                          borderBottom: '1px solid #a0a0a0',
                           cursor: 'pointer',
                           fontFamily: 'MS Sans Serif, sans-serif',
                           textAlign: 'left'
@@ -942,6 +1002,28 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
                         批量...
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          console.log('打开注释设置');
+                          setShowLLMMenu(false);
+                          setShowAnnotationSettings(true);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          backgroundColor: '#c0c0c0',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          textAlign: 'left'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
+                      >
+                        ⚙️ 注释设置
                       </button>
                     </div>
                   )}
@@ -1059,6 +1141,159 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
                 </div>
               )}
             </div>
+            
+            {/* 注释设置面板 */}
+            {showAnnotationSettings && (
+              <div 
+                data-annotation-settings
+                style={{
+                  position: 'absolute',
+                  top: '40px',
+                  right: '10px',
+                  width: '320px',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px outset #c0c0c0',
+                  padding: '8px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  zIndex: 1001,
+                  boxShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                  maxHeight: '500px',
+                  overflowY: 'auto'
+                }}>
+                <div style={{ 
+                  fontWeight: 'bold', 
+                  marginBottom: '8px', 
+                  borderBottom: '1px solid #808080', 
+                  paddingBottom: '4px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span>注释设置</span>
+                  <button
+                    onClick={() => setShowAnnotationSettings(false)}
+                    style={{
+                      backgroundColor: '#c0c0c0',
+                      border: '1px outset #c0c0c0',
+                      cursor: 'pointer',
+                      fontSize: '10px',
+                      padding: '0 4px'
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                {/* 注释风格选择 */}
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                    注释风格:
+                  </label>
+                  <select
+                    value={annotationSettings.style}
+                    onChange={(e) => {
+                      const newSettings = { ...annotationSettings, style: e.target.value };
+                      saveAnnotationSettings(newSettings);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '2px',
+                      fontSize: '11px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      border: '1px inset #c0c0c0',
+                      backgroundColor: '#ffffff'
+                    }}
+                  >
+                    <option value="detailed">详细注释</option>
+                    <option value="simple">简洁注释</option>
+                    <option value="academic">学术注释</option>
+                    <option value="qanda">问答式注释</option>
+                    <option value="custom">自定义</option>
+                  </select>
+                  <div style={{ 
+                    fontSize: '10px', 
+                    color: '#666', 
+                    marginTop: '4px',
+                    padding: '4px',
+                    backgroundColor: '#f0f0f0',
+                    border: '1px solid #d0d0d0'
+                  }}>
+                    {annotationSettings.style === 'custom' ? 
+                      '使用自定义提示词' : 
+                      annotationStyles[annotationSettings.style]?.name
+                    }
+                  </div>
+                </div>
+                
+                {/* 预设风格预览 */}
+                {annotationSettings.style !== 'custom' && (
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                      风格说明:
+                    </label>
+                    <div style={{
+                      padding: '6px',
+                      backgroundColor: '#ffffff',
+                      border: '1px inset #c0c0c0',
+                      fontSize: '10px',
+                      whiteSpace: 'pre-wrap',
+                      maxHeight: '120px',
+                      overflowY: 'auto'
+                    }}>
+                      {annotationStyles[annotationSettings.style]?.prompt}
+                    </div>
+                  </div>
+                )}
+                
+                {/* 自定义提示词 */}
+                {annotationSettings.style === 'custom' && (
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                      自定义提示词:
+                    </label>
+                    <textarea
+                      value={annotationSettings.customPrompt}
+                      onChange={(e) => {
+                        const newSettings = { ...annotationSettings, customPrompt: e.target.value };
+                        saveAnnotationSettings(newSettings);
+                      }}
+                      placeholder="输入自定义提示词...\n例如：请为第{page}页生成..."
+                      style={{
+                        width: '100%',
+                        height: '120px',
+                        padding: '4px',
+                        fontSize: '11px',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        border: '1px inset #c0c0c0',
+                        backgroundColor: '#ffffff',
+                        resize: 'vertical',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <div style={{ 
+                      fontSize: '10px', 
+                      color: '#666', 
+                      marginTop: '2px'
+                    }}>
+                      提示：使用 {'{page}'} 作为页码占位符
+                    </div>
+                  </div>
+                )}
+                
+                {/* 状态提示 */}
+                <div style={{ 
+                  marginTop: '8px', 
+                  padding: '4px', 
+                  backgroundColor: '#e6f3ff',
+                  border: '1px solid #b0d0f0',
+                  fontSize: '10px'
+                }}>
+                  💡 当前使用: {annotationSettings.style === 'custom' ? '自定义提示词' : annotationStyles[annotationSettings.style]?.name}
+                </div>
+              </div>
+            )}
+            
           </div>
         )}
       </div>

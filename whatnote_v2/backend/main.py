@@ -822,10 +822,19 @@ async def get_pdf_annotation_info(board_id: str, window_id: str, page: int):
         raise HTTPException(status_code=500, detail=f"获取PDF注释文件信息失败: {str(e)}")
 
 @app.post("/api/boards/{board_id}/windows/{window_id}/annotations/{page}/generate")
-async def generate_pdf_annotation(board_id: str, window_id: str, page: int):
+async def generate_pdf_annotation(
+    board_id: str, 
+    window_id: str, 
+    page: int,
+    request: Request
+):
     """使用LLM生成PDF指定页面的注释"""
     try:
         info(f"生成PDF注释: board_id={board_id}, window_id={window_id}, page={page}")
+        
+        # 获取请求体中的自定义提示词（如果有）
+        request_body = await request.json() if request.headers.get('content-type') == 'application/json' else {}
+        custom_prompt_template = request_body.get('promptTemplate', '')
         
         # 获取窗口信息
         windows = content_manager.get_board_windows(board_id)
@@ -849,7 +858,7 @@ async def generate_pdf_annotation(board_id: str, window_id: str, page: int):
         
         # 构建发送给LLM的提示词
         prompt_parts = []
-        prompt_parts.append("请根据以下PDF页面内容生成简洁的注释。注意：我提供了前后页面的内容是为了防止页面分割导致内容不连续，你的注释应该主要针对当前页面。\n")
+        prompt_parts.append("请根据以下PDF页面内容生成注释。注意：我提供了前后页面的内容是为了防止页面分割导致内容不连续，你的注释应该主要针对当前页面。\n")
         
         if page_contents.get('previous'):
             prompt_parts.append(f"【上一页内容（第{page-1}页）】\n{page_contents['previous']}\n")
@@ -859,9 +868,20 @@ async def generate_pdf_annotation(board_id: str, window_id: str, page: int):
         if page_contents.get('next'):
             prompt_parts.append(f"【下一页内容（第{page+1}页）】\n{page_contents['next']}\n")
         
-        prompt_parts.append(f"\n请为第{page}页生成注释，包括：\n1. 页面主要内容概要\n2. 重要知识点\n3. 需要注意的细节\n\n请用Markdown格式输出。")
+        # 使用自定义提示词或默认提示词
+        if custom_prompt_template:
+            # 替换占位符
+            task_prompt = custom_prompt_template.replace('{page}', str(page))
+            prompt_parts.append(f"\n{task_prompt}")
+        else:
+            # 默认提示词
+            prompt_parts.append(f"\n请为第{page}页生成注释，包括：\n1. 页面主要内容概要\n2. 重要知识点\n3. 需要注意的细节\n\n请用Markdown格式输出。")
+        
+        # 统一添加：不要代码框
+        prompt_parts.append("\n**重要：请直接输出Markdown文本，不要在外面包裹```markdown```代码框。**")
         
         full_prompt = "\n".join(prompt_parts)
+        info(f"生成的完整提示词长度: {len(full_prompt)} 字符")
         
         # 创建或获取该PDF的注释对话上下文
         pdf_filename = target_window.get('title', 'unknown')
