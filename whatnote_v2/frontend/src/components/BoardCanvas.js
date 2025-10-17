@@ -941,7 +941,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     const refreshEvent = new CustomEvent('refreshChatConversation', {
                                       detail: { conversationId: data.conversation_id }
                                     });
-                                    window.dispatchEvent(refreshEvent);
+                                    if (typeof window !== 'undefined') {
+                                      window.dispatchEvent(refreshEvent);
+                                    }
                                   } else if (data.type === 'done') {
                                     console.log('注释生成完成');
                                     // 重新加载注释以获取完整内容
@@ -1038,7 +1040,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     const refreshEvent = new CustomEvent('refreshChatConversation', {
                                       detail: { conversationId: data.conversation_id }
                                     });
-                                    window.dispatchEvent(refreshEvent);
+                                    if (typeof window !== 'undefined') {
+                                      window.dispatchEvent(refreshEvent);
+                                    }
                                   } else if (data.type === 'done') {
                                     console.log('视觉生成注释完成');
                                     loadAnnotation(currentPage);
@@ -1627,9 +1631,13 @@ function PDFWindowRenderer({ window, onUpload, boardId }) {
       }
     };
 
-    window.addEventListener('openPDFPageInternal', handleOpenPDFPageInternal);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('openPDFPageInternal', handleOpenPDFPageInternal);
+    }
     return () => {
-      window.removeEventListener('openPDFPageInternal', handleOpenPDFPageInternal);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('openPDFPageInternal', handleOpenPDFPageInternal);
+      }
     };
   }, [window.id]);
 
@@ -2666,11 +2674,15 @@ function BoardCanvas({
     };
 
     // 添加事件监听器
-    window.addEventListener('fileWatcherUpdate', handleFileWatcherUpdate);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('fileWatcherUpdate', handleFileWatcherUpdate);
+    }
     
     // 清理函数
     return () => {
-      window.removeEventListener('fileWatcherUpdate', handleFileWatcherUpdate);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('fileWatcherUpdate', handleFileWatcherUpdate);
+      }
     };
   }, [boardId, fetchBoardWindows]);
 
@@ -4243,9 +4255,13 @@ function BoardCanvas({
       });
     };
 
-    window.addEventListener('toggleChatWindow', handleToggleChatWindow);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('toggleChatWindow', handleToggleChatWindow);
+    }
     return () => {
-      window.removeEventListener('toggleChatWindow', handleToggleChatWindow);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('toggleChatWindow', handleToggleChatWindow);
+      }
     };
   }, [boardName, minimizedWindows]);
 
@@ -4291,13 +4307,19 @@ function BoardCanvas({
         const pdfPageEvent = new CustomEvent('openPDFPageInternal', {
           detail: { windowId, page }
         });
-        window.dispatchEvent(pdfPageEvent);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(pdfPageEvent);
+        }
       }, 200);
     };
 
-    window.addEventListener('openPDFPage', handleOpenPDFPage);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('openPDFPage', handleOpenPDFPage);
+    }
     return () => {
-      window.removeEventListener('openPDFPage', handleOpenPDFPage);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('openPDFPage', handleOpenPDFPage);
+      }
     };
   }, [windows, minimizedWindows, hiddenWindows, onWindowShow]);
 

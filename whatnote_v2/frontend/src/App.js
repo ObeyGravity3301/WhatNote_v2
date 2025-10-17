@@ -648,7 +648,9 @@ function App() {
                 onClick={() => {
                   // 通过事件通知BoardCanvas打开聊天窗口
                   const event = new CustomEvent('toggleChatWindow');
-                  window.dispatchEvent(event);
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(event);
+                  }
                 }}
                 title="AI助手聊天"
                 style={{ minWidth: 'auto', width: '80px' }}

@@ -159,7 +159,9 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
             filename: metadata.pdf_filename
           }
         });
-        window.dispatchEvent(event);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(event);
+        }
       }
     };
     
@@ -1345,9 +1347,13 @@ function ChatWindow({
       }
     };
     
-    window.addEventListener('refreshChatConversation', handleRefreshConversation);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('refreshChatConversation', handleRefreshConversation);
+    }
     return () => {
-      window.removeEventListener('refreshChatConversation', handleRefreshConversation);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('refreshChatConversation', handleRefreshConversation);
+      }
     };
   }, [conversationId, boardId, scrollToBottom]);
 
