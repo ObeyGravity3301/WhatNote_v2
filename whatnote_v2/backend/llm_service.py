@@ -120,15 +120,21 @@ class LLMService:
                                     text_content = text_content.replace('\n\n\n', '\n\n')
                                     text_content = text_content.replace('  ', ' ')
                                     
-                                    # 限制文本长度
-                                    if len(text_content) > 8000:
-                                        text_content = text_content[:8000] + "\n\n... (内容已截断)"
+                                    # 限制文本长度（提高到50000字符，大约可容纳25-30页）
+                                    max_chars = 50000
+                                    original_length = len(text_content)
+                                    if original_length > max_chars:
+                                        total_pages = len(pdf_reader.pages)
+                                        # 估算截断在第几页
+                                        estimated_page = int((max_chars / original_length) * total_pages)
+                                        text_content = text_content[:max_chars] + f"\n\n... (内容已截断，完整文档共{total_pages}页，已发送约前{estimated_page}页)"
+                                        info(f"PDF文本过长，已截断: 原始{original_length}字符 -> {max_chars}字符，估算发送了前{estimated_page}页")
                                     
                                     content_array.append({
                                         'type': 'text',
-                                        'text': f"[PDF文件内容: {file_info.get('name', 'unknown')}]\n\n{text_content}"
+                                        'text': f"[PDF文件内容: {file_info.get('name', 'unknown')} - 共{len(pdf_reader.pages)}页]\n\n{text_content}"
                                     })
-                                    info(f"PDF文本提取成功，长度: {len(text_content)} 字符")
+                                    info(f"PDF文本提取成功，总页数: {len(pdf_reader.pages)}, 文本长度: {len(text_content)} 字符")
                                 else:
                                     content_array.append({
                                         'type': 'text',
