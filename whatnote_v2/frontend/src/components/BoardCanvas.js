@@ -1513,16 +1513,16 @@ const toMediaUrl = (windowOrContent, boardId) => {
 };
 
 // 文档窗口渲染器组件（Word文档等）
-function DocumentWindowRenderer({ window, onUpload, boardId }) {
+function DocumentWindowRenderer({ window: windowData, onUpload, boardId }) {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
 
   console.log('📄 文档窗口渲染:', {
-    windowId: window.id,
-    windowContent: window.content,
-    hasContent: !!window.content
+    windowId: windowData.id,
+    windowContent: windowData.content,
+    hasContent: !!windowData.content
   });
 
-  if (!hasRealMediaContent(window)) {
+  if (!hasRealMediaContent(windowData)) {
     console.log('📄 文档窗口无内容，显示占位符');
     return (
       <label className="pdf-placeholder" title="点击上传文档" style={{ flex: 1 }}>
@@ -1538,7 +1538,7 @@ function DocumentWindowRenderer({ window, onUpload, boardId }) {
     );
   }
 
-  const documentUrl = toMediaUrl(window, boardId);
+  const documentUrl = toMediaUrl(windowData, boardId);
   console.log('📄 文档URL生成:', documentUrl);
 
   // 如果启用分页模式，显示分页组件（转换为PDF后）
@@ -1548,7 +1548,7 @@ function DocumentWindowRenderer({ window, onUpload, boardId }) {
         pdfUrl={documentUrl} 
         onClose={() => setIsPaginationMode(false)}
         boardId={boardId}
-        windowId={window.id}
+        windowId={windowData.id}
       />
     );
   }
@@ -1609,14 +1609,14 @@ function DocumentWindowRenderer({ window, onUpload, boardId }) {
 }
 
 // PDF窗口渲染器组件
-function PDFWindowRenderer({ window, onUpload, boardId }) {
+function PDFWindowRenderer({ window: windowData, onUpload, boardId }) {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
   const [targetPage, setTargetPage] = useState(null);
 
   console.log('📄 PDF窗口渲染:', {
-    windowId: window.id,
-    windowContent: window.content,
-    hasContent: !!window.content
+    windowId: windowData.id,
+    windowContent: windowData.content,
+    hasContent: !!windowData.content
   });
 
   // 监听打开PDF页面事件
@@ -1624,7 +1624,7 @@ function PDFWindowRenderer({ window, onUpload, boardId }) {
     const handleOpenPDFPageInternal = (event) => {
       const { windowId, page } = event.detail || {};
       
-      if (windowId === window.id) {
+      if (windowId === windowData.id) {
         console.log('📖 PDF窗口收到跳转请求:', { windowId, page });
         setIsPaginationMode(true);
         setTargetPage(page);
@@ -1639,9 +1639,9 @@ function PDFWindowRenderer({ window, onUpload, boardId }) {
         window.removeEventListener('openPDFPageInternal', handleOpenPDFPageInternal);
       }
     };
-  }, [window.id]);
+  }, [windowData.id]);
 
-  if (!hasRealMediaContent(window)) {
+  if (!hasRealMediaContent(windowData)) {
     console.log('📄 PDF窗口无内容，显示占位符');
     return (
       <label className="pdf-placeholder" title="点击上传PDF" style={{ flex: 1 }}>
@@ -1657,7 +1657,7 @@ function PDFWindowRenderer({ window, onUpload, boardId }) {
     );
   }
 
-  const pdfUrl = toMediaUrl(window, boardId);
+  const pdfUrl = toMediaUrl(windowData, boardId);
   console.log('📄 PDF URL生成:', pdfUrl);
 
   // 如果启用分页模式，显示分页组件
@@ -1670,7 +1670,7 @@ function PDFWindowRenderer({ window, onUpload, boardId }) {
           setTargetPage(null);
         }}
         boardId={boardId}
-        windowId={window.id}
+        windowId={windowData.id}
         initialPage={targetPage}
       />
     );
