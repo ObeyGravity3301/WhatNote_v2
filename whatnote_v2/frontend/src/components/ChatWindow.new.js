@@ -82,7 +82,9 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
               if (onOpenWindow) {
                 onOpenWindow(file.name);
               } else {
-                window.open(file.url, '_blank');
+                if (typeof window !== 'undefined') {
+                  window.open(file.url, '_blank');
+                }
               }
             }}
             title={`${file.name} - 点击打开桌面窗口`}
@@ -118,7 +120,11 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
           </div>
         </div>
         <button
-          onClick={() => window.open(file.url, '_blank')}
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              window.open(file.url, '_blank');
+            }
+          }}
           style={{
             backgroundColor: '#c0c0c0',
             border: '1px outset #c0c0c0',
