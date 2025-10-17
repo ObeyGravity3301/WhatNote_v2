@@ -895,7 +895,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
                                   'Content-Type': 'application/json',
                                 },
                                 body: JSON.stringify({
-                                  promptTemplate: promptTemplate
+                                  promptTemplate: promptTemplate,
+                                  style: annotationSettings.style
                                 })
                               }
                             );

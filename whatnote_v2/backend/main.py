@@ -909,15 +909,27 @@ async def generate_pdf_annotation(
         else:
             info(f"使用现有注释对话: {annotation_conv_id}, 历史消息数: {len(conversation.get('messages', []))}")
         
-        # 添加用户消息到对话历史
+        # 添加用户消息到对话历史（包含关键信息用于记录）
         user_message = {
             "role": "user",
             "content": full_prompt,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "metadata": {
+                "action": "generate_annotation",
+                "pdf_filename": pdf_filename,
+                "window_id": window_id,
+                "page": page,
+                "total_pages": "unknown",  # 可以后续从窗口信息中获取
+                "style": request_body.get('style', 'default'),
+                "has_previous_page": bool(page_contents.get('previous')),
+                "has_next_page": bool(page_contents.get('next'))
+            }
         }
         
-        # 调用LLM生成注释（流式）
-        messages = conversation.get('messages', []) + [user_message]
+        # 调用LLM生成注释（只使用当前消息，不使用历史对话）
+        # 注释生成每次都是独立的，不需要上下文
+        messages = [user_message]
+        info(f"注释生成使用独立上下文，不包含历史消息")
         
         # 准备SSE流式响应
         async def generate_annotation_stream():
@@ -929,14 +941,19 @@ async def generate_pdf_annotation(
                         accumulated_content += chunk
                         yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
                 
-                # 保存LLM响应到对话历史
+                # 保存LLM响应到对话历史（包含元数据）
                 assistant_message = {
                     "role": "assistant",
                     "content": accumulated_content,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "metadata": {
+                        "content_length": len(accumulated_content),
+                        "generated_at": datetime.now().isoformat()
+                    }
                 }
                 conversation_manager.add_message(board_id, annotation_conv_id, user_message)
                 conversation_manager.add_message(board_id, annotation_conv_id, assistant_message)
+                info(f"注释对话已保存: {annotation_conv_id}")
                 
                 # 将生成的注释插入到note文件的最前面
                 info(f"开始保存注释: board_id={board_id}, window_id={window_id}, page={page}")
@@ -959,6 +976,46 @@ async def generate_pdf_annotation(
                 # 保存注释
                 save_result = content_manager.save_pdf_annotation(board_id, window_id, page, llm_annotation)
                 info(f"注释保存结果: {save_result}")
+                
+                # 在主对话（AI助手）中添加系统通知
+                try:
+                    # 查找该展板的主对话
+                    conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                    if conversations_dir:
+                        # 查找最新的主对话（conv-开头的）
+                        main_conversations = sorted(
+                            conversations_dir.glob("conv-*.json"),
+                            key=lambda x: x.stat().st_mtime,
+                            reverse=True
+                        )
+                        
+                        if main_conversations:
+                            # 获取最新的主对话ID
+                            main_conv_file = main_conversations[0]
+                            main_conv_id = main_conv_file.stem
+                            
+                            # 添加系统消息
+                            system_notification = {
+                                "role": "system",
+                                "content": f"[系统通知] 用户对PDF文件《{pdf_filename}》的第{page}页执行了注释生成操作。",
+                                "timestamp": datetime.now().isoformat(),
+                                "metadata": {
+                                    "type": "annotation_action",
+                                    "pdf_filename": pdf_filename,
+                                    "window_id": window_id,
+                                    "page": page,
+                                    "action": "generate_annotation"
+                                }
+                            }
+                            
+                            conversation_manager.add_message(board_id, main_conv_id, system_notification)
+                            info(f"已向主对话添加系统通知: {main_conv_id}")
+                        else:
+                            info("未找到主对话，跳过系统通知")
+                    
+                except Exception as e:
+                    # 系统通知失败不影响主流程
+                    error(f"添加系统通知失败: {e}")
                 
                 yield f"data: {json.dumps({'type': 'done', 'success': True}, ensure_ascii=False)}\n\n"
                 
