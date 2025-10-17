@@ -18,6 +18,7 @@ const normalizeLatexDelimiters = (text) => {
 // 优化的消息组件 - 使用React.memo减少重渲染
 const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId, onOpenWindow, getFileIcon }) => {
   const isUser = message.role === 'user';
+  const isSystem = message.role === 'system';
   
   // 使用useMemo缓存Markdown组件配置
   const markdownComponents = useMemo(() => ({
@@ -135,6 +136,40 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
     );
   }, [onOpenWindow, getFileIcon]);
 
+  // 系统消息渲染
+  if (isSystem) {
+    const metadata = message.metadata || {};
+    const isAnnotationAction = metadata.type === 'annotation_action';
+    
+    return (
+      <div style={{
+        margin: '8px 0',
+        padding: '6px 10px',
+        backgroundColor: '#fffacd',
+        border: '1px solid #f0e68c',
+        borderLeft: '3px solid #ffd700',
+        fontSize: '10px',
+        fontFamily: 'MS Sans Serif, sans-serif',
+        color: '#666',
+        borderRadius: '2px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '12px' }}>ℹ️</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
+              {message.content}
+            </div>
+            {isAnnotationAction && (
+              <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
+                📄 文件: {metadata.pdf_filename} | 📖 页码: 第{metadata.page}页 | ⏰ {new Date(message.timestamp).toLocaleString('zh-CN')}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   if (isUser) {
     return (
       <div className="message user-message">

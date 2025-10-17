@@ -884,8 +884,9 @@ async def generate_pdf_annotation(
         info(f"生成的完整提示词长度: {len(full_prompt)} 字符")
         
         # 创建或获取该PDF的注释对话上下文
+        # 同一个PDF文件的所有注释放在同一个json文件中
         pdf_filename = target_window.get('title', 'unknown')
-        annotation_conv_id = f"annotation-{window_id}-{page}"
+        annotation_conv_id = f"annotation-{window_id}"  # 只用window_id，不包含page
         
         info(f"注释对话ID: {annotation_conv_id}")
         
@@ -896,7 +897,7 @@ async def generate_pdf_annotation(
             # 创建新的注释对话
             conversation = conversation_manager.create_conversation(
                 board_id, 
-                title=f"PDF注释生成 - {pdf_filename} - 第{page}页"
+                title=f"PDF注释生成记录 - {pdf_filename}"
             )
             # 更新conversation_id为我们自定义的
             conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
