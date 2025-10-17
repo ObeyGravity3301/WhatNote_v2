@@ -2166,4 +2166,93 @@ class ContentManager:
             print(f"获取PDF页面内容失败: {e}")
             import traceback
             print(f"详细错误信息: {traceback.format_exc()}")
-            return {} 
+            return {}
+    
+    def render_pdf_page_to_image(self, board_id: str, window_id: str, page: int) -> Optional[str]:
+        """
+        将PDF页面渲染为图像
+        
+        Args:
+            board_id: 展板ID
+            window_id: 窗口ID
+            page: 页码
+            
+        Returns:
+            str: 图像文件的绝对路径，失败返回None
+        """
+        try:
+            import fitz  # PyMuPDF
+            
+            # 获取窗口信息
+            windows = self.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if not target_window:
+                print(f"窗口不存在: {window_id}")
+                return None
+            
+            # 获取PDF文件路径
+            pdf_path = target_window.get('content')
+            if not pdf_path or not Path(pdf_path).exists():
+                print(f"PDF文件不存在: {pdf_path}")
+                return None
+            
+            # 构建图像保存路径
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            
+            if not pdf_pages_dir:
+                return None
+            
+            # 确保目录存在
+            pdf_pages_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 图像文件名
+            image_filename = f"{pdf_name}_page_{page:03d}.png"
+            image_path = pdf_pages_dir / image_filename
+            
+            # 检查图像是否已存在
+            if image_path.exists():
+                print(f"页面图像已存在: {image_filename}")
+                return str(image_path.absolute())
+            
+            # 渲染PDF页面为图像
+            print(f"开始渲染PDF页面: {pdf_path}, 页码: {page}")
+            
+            pdf_document = fitz.open(pdf_path)
+            if page < 1 or page > len(pdf_document):
+                print(f"页码超出范围: {page}, 总页数: {len(pdf_document)}")
+                pdf_document.close()
+                return None
+            
+            # 获取页面（页码从0开始）
+            pdf_page = pdf_document[page - 1]
+            
+            # 渲染为图像（缩放因子2.0 = 144dpi，质量较高）
+            mat = fitz.Matrix(2.0, 2.0)
+            pix = pdf_page.get_pixmap(matrix=mat)
+            
+            # 保存为PNG
+            pix.save(str(image_path))
+            
+            pdf_document.close()
+            
+            print(f"✅ PDF页面渲染成功: {image_filename}, 大小: {image_path.stat().st_size} bytes")
+            return str(image_path.absolute())
+            
+        except ImportError:
+            print("PyMuPDF (fitz) 未安装，无法渲染PDF页面")
+            print("请运行: pip install PyMuPDF")
+            return None
+        except Exception as e:
+            print(f"渲染PDF页面失败: {e}")
+            import traceback
+            print(f"详细错误信息: {traceback.format_exc()}")
+            return None 

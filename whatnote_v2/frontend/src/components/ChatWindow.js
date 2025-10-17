@@ -140,6 +140,7 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
   if (isSystem) {
     const metadata = message.metadata || {};
     const isAnnotationAction = metadata.type === 'annotation_action';
+    const hasThumbnail = metadata.thumbnail_path && metadata.action === 'generate_visual_annotation';
     
     return (
       <div style={{
@@ -153,16 +154,34 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
         color: '#666',
         borderRadius: '2px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ fontSize: '12px' }}>ℹ️</span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+          <span style={{ fontSize: '12px', marginTop: '2px' }}>ℹ️</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
               {message.content}
             </div>
             {isAnnotationAction && (
-              <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
-                📄 文件: {metadata.pdf_filename} | 📖 页码: 第{metadata.page}页 | ⏰ {new Date(message.timestamp).toLocaleString('zh-CN')}
-              </div>
+              <>
+                <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
+                  📄 文件: {metadata.pdf_filename} | 📖 页码: 第{metadata.page}页 | ⏰ {new Date(message.timestamp).toLocaleString('zh-CN')}
+                </div>
+                {hasThumbnail && (
+                  <div style={{ marginTop: '6px' }}>
+                    <img 
+                      src={`http://localhost:8081/api/media/serve?path=${encodeURIComponent(metadata.thumbnail_path)}`}
+                      alt={`第${metadata.page}页缩略图`}
+                      style={{
+                        maxWidth: '150px',
+                        maxHeight: '150px',
+                        border: '1px solid #ccc',
+                        borderRadius: '2px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                      }}
+                      title={`PDF第${metadata.page}页渲染图像`}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

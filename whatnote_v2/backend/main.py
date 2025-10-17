@@ -1042,6 +1042,197 @@ async def generate_pdf_annotation(
         error(f"生成PDF注释失败: {e}")
         raise HTTPException(status_code=500, detail=f"生成PDF注释失败: {str(e)}")
 
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/{page}/generate-visual")
+async def generate_pdf_annotation_visual(
+    board_id: str, 
+    window_id: str, 
+    page: int,
+    request: Request
+):
+    """使用LLM基于PDF页面图像生成注释（视觉生成）"""
+    try:
+        info(f"视觉生成PDF注释: board_id={board_id}, window_id={window_id}, page={page}")
+        
+        # 获取请求体
+        request_body = await request.json() if request.headers.get('content-type') == 'application/json' else {}
+        custom_prompt_template = request_body.get('promptTemplate', '')
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        if target_window.get('type') != 'pdf':
+            raise HTTPException(status_code=400, detail="只有PDF文件支持视觉注释功能")
+        
+        # 渲染PDF页面为图像
+        image_path = content_manager.render_pdf_page_to_image(board_id, window_id, page)
+        
+        if not image_path:
+            raise HTTPException(status_code=500, detail="PDF页面渲染失败")
+        
+        info(f"PDF页面已渲染为图像: {image_path}")
+        
+        # 读取图像文件
+        with open(image_path, 'rb') as f:
+            image_data = f.read()
+        
+        # 转换为base64
+        import base64
+        base64_image = base64.b64encode(image_data).decode('utf-8')
+        
+        # 构建发送给LLM的提示词
+        if custom_prompt_template:
+            task_prompt = custom_prompt_template.replace('{page}', str(page))
+        else:
+            task_prompt = f"请根据这张PDF页面的图像生成注释。这是第{page}页的内容。\n\n请生成：\n1. 页面主要内容概要\n2. 重要知识点\n3. 图表、公式的说明（如果有）\n4. 需要注意的细节\n\n请用Markdown格式输出。"
+        
+        task_prompt += "\n**重要：请直接输出Markdown文本，不要在外面包裹```markdown```代码框。**"
+        
+        # 创建或获取该PDF的注释对话上下文
+        pdf_filename = target_window.get('title', 'unknown')
+        annotation_conv_id = f"annotation-{window_id}"
+        
+        conversation = conversation_manager.get_conversation(board_id, annotation_conv_id, page=None, limit=None)
+        if not conversation:
+            conversation = conversation_manager.create_conversation(
+                board_id, 
+                title=f"PDF注释生成记录 - {pdf_filename}"
+            )
+            conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+            old_file = conversations_dir / f"{conversation['id']}.json"
+            new_file = conversations_dir / f"{annotation_conv_id}.json"
+            if old_file.exists():
+                old_file.rename(new_file)
+            conversation['id'] = annotation_conv_id
+        
+        # 构建消息（包含图像）
+        user_message = {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{base64_image}"
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": task_prompt
+                }
+            ],
+            "timestamp": datetime.now().isoformat(),
+            "metadata": {
+                "action": "generate_visual_annotation",
+                "pdf_filename": pdf_filename,
+                "window_id": window_id,
+                "page": page,
+                "style": request_body.get('style', 'default'),
+                "image_path": image_path
+            }
+        }
+        
+        # 调用LLM生成注释（独立上下文）
+        messages = [user_message]
+        
+        # 准备SSE流式响应
+        async def generate_visual_annotation_stream():
+            accumulated_content = ""
+            
+            try:
+                async for chunk in llm_service.chat_completion(messages, stream=True):
+                    if chunk:
+                        accumulated_content += chunk
+                        yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
+                
+                # 保存LLM响应到对话历史
+                assistant_message = {
+                    "role": "assistant",
+                    "content": accumulated_content,
+                    "timestamp": datetime.now().isoformat(),
+                    "metadata": {
+                        "content_length": len(accumulated_content),
+                        "generated_at": datetime.now().isoformat(),
+                        "method": "visual"
+                    }
+                }
+                conversation_manager.add_message(board_id, annotation_conv_id, user_message)
+                conversation_manager.add_message(board_id, annotation_conv_id, assistant_message)
+                
+                # 保存注释到note文件
+                existing_note = content_manager.get_pdf_annotation(board_id, window_id, page)
+                
+                llm_annotation = f"<!-- LLM视觉生成的注释 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n"
+                llm_annotation += accumulated_content
+                llm_annotation += "\n\n---\n\n"
+                
+                if existing_note:
+                    llm_annotation += existing_note
+                
+                content_manager.save_pdf_annotation(board_id, window_id, page, llm_annotation)
+                
+                # 在主对话中添加系统通知（包含图像路径）
+                try:
+                    conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                    if conversations_dir:
+                        main_conversations = sorted(
+                            conversations_dir.glob("conv-*.json"),
+                            key=lambda x: x.stat().st_mtime,
+                            reverse=True
+                        )
+                        
+                        if main_conversations:
+                            main_conv_id = main_conversations[0].stem
+                            
+                            system_notification = {
+                                "role": "system",
+                                "content": f"[系统通知] 用户对PDF文件《{pdf_filename}》的第{page}页执行了视觉生成注释操作。",
+                                "timestamp": datetime.now().isoformat(),
+                                "metadata": {
+                                    "type": "annotation_action",
+                                    "pdf_filename": pdf_filename,
+                                    "window_id": window_id,
+                                    "page": page,
+                                    "action": "generate_visual_annotation",
+                                    "thumbnail_path": image_path
+                                }
+                            }
+                            
+                            conversation_manager.add_message(board_id, main_conv_id, system_notification)
+                            info(f"已向主对话添加视觉生成系统通知: {main_conv_id}")
+                            
+                            yield f"data: {json.dumps({'type': 'notification_added', 'conversation_id': main_conv_id}, ensure_ascii=False)}\n\n"
+                
+                except Exception as e:
+                    error(f"添加系统通知失败: {e}")
+                
+                yield f"data: {json.dumps({'type': 'done', 'success': True, 'image_path': image_path}, ensure_ascii=False)}\n\n"
+                
+            except Exception as e:
+                error(f"视觉生成注释失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+        
+        return StreamingResponse(
+            generate_visual_annotation_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"视觉生成PDF注释失败: {e}")
+        raise HTTPException(status_code=500, detail=f"视觉生成PDF注释失败: {str(e)}")
+
 @app.get("/api/media/serve")
 async def serve_media_file(path: str):
     """全新的媒体文件服务API - 避免路由冲突"""

@@ -969,9 +969,83 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
                       </button>
                       
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           console.log('视觉生成功能');
                           setShowLLMMenu(false);
+                          setAnnotationMode('preview');
+                          
+                          try {
+                            // 准备提示词模板
+                            let promptTemplate = '';
+                            if (annotationSettings.style === 'custom') {
+                              promptTemplate = annotationSettings.customPrompt;
+                            } else if (annotationStyles[annotationSettings.style]) {
+                              promptTemplate = annotationStyles[annotationSettings.style].prompt;
+                            }
+                            
+                            console.log('使用视觉生成，注释风格:', annotationSettings.style);
+                            
+                            // 调用后端API视觉生成注释
+                            const response = await fetch(
+                              `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/${currentPage}/generate-visual`,
+                              {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                  promptTemplate: promptTemplate,
+                                  style: annotationSettings.style
+                                })
+                              }
+                            );
+                            
+                            if (!response.ok) {
+                              throw new Error('视觉生成注释失败');
+                            }
+                            
+                            // 处理流式响应
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder();
+                            let buffer = '';
+                            
+                            while (true) {
+                              const {done, value} = await reader.read();
+                              if (done) break;
+                              
+                              buffer += decoder.decode(value, {stream: true});
+                              const lines = buffer.split('\n\n');
+                              buffer = lines.pop() || '';
+                              
+                              for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                  const data = JSON.parse(line.slice(6));
+                                  
+                                  if (data.type === 'content') {
+                                    setAnnotations(prev => ({
+                                      ...prev,
+                                      [currentPage]: (prev[currentPage] || '') + data.content
+                                    }));
+                                  } else if (data.type === 'notification_added') {
+                                    console.log('系统通知已添加（视觉生成）');
+                                    const refreshEvent = new CustomEvent('refreshChatConversation', {
+                                      detail: { conversationId: data.conversation_id }
+                                    });
+                                    window.dispatchEvent(refreshEvent);
+                                  } else if (data.type === 'done') {
+                                    console.log('视觉生成注释完成');
+                                    loadAnnotation(currentPage);
+                                  } else if (data.type === 'error') {
+                                    console.error('视觉生成错误:', data.error);
+                                    alert('视觉生成注释失败: ' + data.error);
+                                  }
+                                }
+                              }
+                            }
+                          } catch (error) {
+                            console.error('视觉生成失败:', error);
+                            alert('视觉生成注释失败: ' + error.message);
+                          }
                         }}
                         style={{
                           width: '100%',
@@ -987,7 +1061,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        视觉生成
+                        👁️ 视觉生成
                       </button>
                       
                       <button
