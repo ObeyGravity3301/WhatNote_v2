@@ -999,17 +999,15 @@ function ChatWindow({
   // 流式AI回复函数
   const generateStreamingAIResponse = useCallback(async (userMessage, aiMessageId) => {
     try {
-      // 过滤掉system消息，只发送user和assistant消息给LLM
-      const conversationMessages = messages
-        .filter(msg => msg.role !== 'system')
-        .map(msg => ({
-          role: msg.role,
-          content: msg.content,
-          files: msg.files
-        }));
+      // 包含所有消息（包括system消息），让LLM了解用户的操作历史
+      const conversationMessages = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        files: msg.files
+      }));
       
       console.log('发送给LLM的消息数:', conversationMessages.length);
-      console.log('已过滤system消息');
+      console.log('包含system消息，让LLM了解用户操作');
       
       // 直接使用传入的userMessage对象
       const currentUserMessage = {
