@@ -142,23 +142,72 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
     const isAnnotationAction = metadata.type === 'annotation_action';
     const hasThumbnail = metadata.thumbnail_path && metadata.action === 'generate_visual_annotation';
     
+    // 点击系统通知打开对应PDF页面
+    const handleNotificationClick = () => {
+      if (isAnnotationAction && metadata.window_id && metadata.page) {
+        console.log('📖 点击系统通知，打开PDF页面:', {
+          windowId: metadata.window_id,
+          page: metadata.page,
+          filename: metadata.pdf_filename
+        });
+        
+        // 触发全局事件，通知BoardCanvas打开PDF窗口并跳转到指定页面
+        const event = new CustomEvent('openPDFPage', {
+          detail: {
+            windowId: metadata.window_id,
+            page: metadata.page,
+            filename: metadata.pdf_filename
+          }
+        });
+        window.dispatchEvent(event);
+      }
+    };
+    
     return (
-      <div style={{
-        margin: '8px 0',
-        padding: '6px 10px',
-        backgroundColor: '#fffacd',
-        border: '1px solid #f0e68c',
-        borderLeft: '3px solid #ffd700',
-        fontSize: '10px',
-        fontFamily: 'MS Sans Serif, sans-serif',
-        color: '#666',
-        borderRadius: '2px'
-      }}>
+      <div 
+        style={{
+          margin: '8px 0',
+          padding: '6px 10px',
+          backgroundColor: '#fffacd',
+          border: '1px solid #f0e68c',
+          borderLeft: '3px solid #ffd700',
+          fontSize: '10px',
+          fontFamily: 'MS Sans Serif, sans-serif',
+          color: '#666',
+          borderRadius: '2px',
+          cursor: isAnnotationAction ? 'pointer' : 'default',
+          transition: 'all 0.2s'
+        }}
+        onClick={handleNotificationClick}
+        onMouseEnter={(e) => {
+          if (isAnnotationAction) {
+            e.currentTarget.style.backgroundColor = '#fff8dc';
+            e.currentTarget.style.borderLeftColor = '#ffa500';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (isAnnotationAction) {
+            e.currentTarget.style.backgroundColor = '#fffacd';
+            e.currentTarget.style.borderLeftColor = '#ffd700';
+          }
+        }}
+        title={isAnnotationAction ? `点击打开PDF《${metadata.pdf_filename}》第${metadata.page}页` : ''}
+      >
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
           <span style={{ fontSize: '12px', marginTop: '2px' }}>ℹ️</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
               {message.content}
+              {isAnnotationAction && (
+                <span style={{ 
+                  marginLeft: '6px', 
+                  fontSize: '9px', 
+                  color: '#0078d4',
+                  fontWeight: 'normal'
+                }}>
+                  (点击打开)
+                </span>
+              )}
             </div>
             {isAnnotationAction && (
               <>

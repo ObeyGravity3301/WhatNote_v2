@@ -34,9 +34,9 @@ const debounce = (func, wait) => {
 };
 
 // PDF分页组件
-function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
+function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }) {
   const [pdfDocument, setPdfDocument] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(initialPage || 1);
   const [totalPages, setTotalPages] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -110,10 +110,17 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
         
         setPdfDocument(pdf);
         setTotalPages(pdf.numPages);
-        setCurrentPage(1);
-        setIsLoading(false);
         
-        console.log('PDF加载成功，总页数:', pdf.numPages);
+        // 如果有初始页码，跳转到该页，否则默认第1页
+        if (initialPage && initialPage >= 1 && initialPage <= pdf.numPages) {
+          setCurrentPage(initialPage);
+          console.log('PDF加载成功，跳转到第', initialPage, '页');
+        } else {
+          setCurrentPage(1);
+          console.log('PDF加载成功，总页数:', pdf.numPages);
+        }
+        
+        setIsLoading(false);
       } catch (err) {
         console.error('PDF加载失败:', err);
         setError('PDF加载失败: ' + err.message);
@@ -124,7 +131,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
     if (pdfUrl) {
       loadPDF();
     }
-  }, [pdfUrl]);
+  }, [pdfUrl, initialPage]);
 
   // 页面切换时加载注释和文件信息
   useEffect(() => {
@@ -1600,12 +1607,31 @@ function DocumentWindowRenderer({ window, onUpload, boardId }) {
 // PDF窗口渲染器组件
 function PDFWindowRenderer({ window, onUpload, boardId }) {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
+  const [targetPage, setTargetPage] = useState(null);
 
   console.log('📄 PDF窗口渲染:', {
     windowId: window.id,
     windowContent: window.content,
     hasContent: !!window.content
   });
+
+  // 监听打开PDF页面事件
+  useEffect(() => {
+    const handleOpenPDFPageInternal = (event) => {
+      const { windowId, page } = event.detail || {};
+      
+      if (windowId === window.id) {
+        console.log('📖 PDF窗口收到跳转请求:', { windowId, page });
+        setIsPaginationMode(true);
+        setTargetPage(page);
+      }
+    };
+
+    window.addEventListener('openPDFPageInternal', handleOpenPDFPageInternal);
+    return () => {
+      window.removeEventListener('openPDFPageInternal', handleOpenPDFPageInternal);
+    };
+  }, [window.id]);
 
   if (!hasRealMediaContent(window)) {
     console.log('📄 PDF窗口无内容，显示占位符');
@@ -1631,9 +1657,13 @@ function PDFWindowRenderer({ window, onUpload, boardId }) {
     return (
       <PDFPaginationViewer 
         pdfUrl={pdfUrl} 
-        onClose={() => setIsPaginationMode(false)}
+        onClose={() => {
+          setIsPaginationMode(false);
+          setTargetPage(null);
+        }}
         boardId={boardId}
         windowId={window.id}
+        initialPage={targetPage}
       />
     );
   }
@@ -4218,6 +4248,58 @@ function BoardCanvas({
       window.removeEventListener('toggleChatWindow', handleToggleChatWindow);
     };
   }, [boardName, minimizedWindows]);
+
+  // 监听打开PDF页面事件
+  useEffect(() => {
+    const handleOpenPDFPage = (event) => {
+      const { windowId, page, filename } = event.detail || {};
+      console.log('📖 收到打开PDF页面事件:', { windowId, page, filename });
+      
+      if (!windowId) return;
+      
+      // 查找对应的窗口
+      const targetWindow = windows.find(w => w.id === windowId);
+      
+      if (!targetWindow) {
+        console.warn('⚠️ 未找到窗口:', windowId);
+        return;
+      }
+      
+      console.log('✅ 找到目标窗口:', targetWindow.title);
+      
+      // 如果窗口被最小化，恢复它
+      if (minimizedWindows && minimizedWindows.has(windowId)) {
+        console.log('🔄 恢复最小化的窗口');
+        handleWindowMinimizeLocal(windowId);
+      }
+      
+      // 如果窗口被隐藏，显示它
+      if (hiddenWindows && hiddenWindows.has(windowId)) {
+        console.log('🔄 显示隐藏的窗口');
+        if (onWindowShow) {
+          onWindowShow(windowId);
+        }
+      }
+      
+      // 设置窗口为焦点
+      setTimeout(() => {
+        handleWindowFocusLocal(windowId);
+      }, 100);
+      
+      // 触发PDF窗口打开分页模式并跳转到指定页面
+      setTimeout(() => {
+        const pdfPageEvent = new CustomEvent('openPDFPageInternal', {
+          detail: { windowId, page }
+        });
+        window.dispatchEvent(pdfPageEvent);
+      }, 200);
+    };
+
+    window.addEventListener('openPDFPage', handleOpenPDFPage);
+    return () => {
+      window.removeEventListener('openPDFPage', handleOpenPDFPage);
+    };
+  }, [windows, minimizedWindows, hiddenWindows, onWindowShow]);
 
 
   // 组件卸载时清理事件监听器
