@@ -928,6 +928,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId }) {
                                       ...prev,
                                       [currentPage]: (prev[currentPage] || '') + data.content
                                     }));
+                                  } else if (data.type === 'notification_added') {
+                                    console.log('系统通知已添加到主对话:', data.conversation_id);
+                                    // 触发全局事件，通知ChatWindow刷新
+                                    const refreshEvent = new CustomEvent('refreshChatConversation', {
+                                      detail: { conversationId: data.conversation_id }
+                                    });
+                                    window.dispatchEvent(refreshEvent);
                                   } else if (data.type === 'done') {
                                     console.log('注释生成完成');
                                     // 重新加载注释以获取完整内容

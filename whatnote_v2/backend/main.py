@@ -1011,6 +1011,9 @@ async def generate_pdf_annotation(
                             
                             conversation_manager.add_message(board_id, main_conv_id, system_notification)
                             info(f"已向主对话添加系统通知: {main_conv_id}")
+                            
+                            # 通知前端刷新主对话
+                            yield f"data: {json.dumps({'type': 'notification_added', 'conversation_id': main_conv_id}, ensure_ascii=False)}\n\n"
                         else:
                             info("未找到主对话，跳过系统通知")
                     

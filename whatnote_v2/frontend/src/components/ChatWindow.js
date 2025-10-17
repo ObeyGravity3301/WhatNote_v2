@@ -999,11 +999,17 @@ function ChatWindow({
   // 流式AI回复函数
   const generateStreamingAIResponse = useCallback(async (userMessage, aiMessageId) => {
     try {
-      const conversationMessages = messages.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-        files: msg.files
-      }));
+      // 过滤掉system消息，只发送user和assistant消息给LLM
+      const conversationMessages = messages
+        .filter(msg => msg.role !== 'system')
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          files: msg.files
+        }));
+      
+      console.log('发送给LLM的消息数:', conversationMessages.length);
+      console.log('已过滤system消息');
       
       // 直接使用传入的userMessage对象
       const currentUserMessage = {
@@ -1240,6 +1246,44 @@ function ChatWindow({
       return () => document.removeEventListener('mousedown', handleClickOutside, true);
     }
   }, [showSettings]);
+
+  // 监听注释生成完成事件，实时刷新对话
+  useEffect(() => {
+    const handleRefreshConversation = async (event) => {
+      const { conversationId: updatedConvId } = event.detail || {};
+      console.log('🔄 收到刷新对话事件:', updatedConvId, '当前对话ID:', conversationId);
+      
+      if (conversationId && updatedConvId === conversationId) {
+        console.log('✅ 对话ID匹配，重新加载最新消息');
+        
+        try {
+          // 重新加载最新的消息（只加载最新的一页）
+          const response = await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${conversationId}?page=0&limit=${ITEMS_PER_PAGE}`);
+          if (response.ok) {
+            const conversation = await response.json();
+            const newMessages = conversation.messages || [];
+            
+            console.log('🔄 重新加载的消息数:', newMessages.length);
+            
+            // 更新消息列表
+            setMessages(newMessages);
+            
+            // 滚动到底部以显示新的系统通知
+            setTimeout(() => {
+              scrollToBottom(true);
+            }, 100);
+          }
+        } catch (error) {
+          console.error('重新加载对话失败:', error);
+        }
+      }
+    };
+    
+    window.addEventListener('refreshChatConversation', handleRefreshConversation);
+    return () => {
+      window.removeEventListener('refreshChatConversation', handleRefreshConversation);
+    };
+  }, [conversationId, boardId, scrollToBottom]);
 
   if (!isVisible) return null;
 
