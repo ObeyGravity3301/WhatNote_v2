@@ -1354,7 +1354,7 @@ const toMediaUrl = (windowOrContent, boardId) => {
     if (courseIndex !== -1) {
       const courseId = pathParts[courseIndex];
       console.log('🔍 从content绝对路径提取课程ID:', courseId);
-      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${filename}`;
+      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${encodeURIComponent(filename)}`;
       console.log('🔗 从content绝对路径生成静态URL:', staticUrl);
       return staticUrl;
     }
@@ -1376,7 +1376,7 @@ const toMediaUrl = (windowOrContent, boardId) => {
       courseId = courseMatch ? courseMatch[1] : 'course-1756987907632'; // 默认值作为备选
       console.log('🔍 提取的课程ID:', courseId);
       
-      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${filename}`;
+      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${encodeURIComponent(filename)}`;
       console.log('🔗 从file_path生成静态URL:', staticUrl, 'courseId:', courseId);
       return staticUrl;
     } else if (filePath.includes('\\') || filePath.includes('/')) {
@@ -1398,7 +1398,7 @@ const toMediaUrl = (windowOrContent, boardId) => {
       }
       
       console.log('🔍 从绝对路径提取:', { filename, courseId, filePath });
-      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${filename}`;
+      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${encodeURIComponent(filename)}`;
       console.log('🔗 从绝对路径生成静态URL:', staticUrl);
       return staticUrl;
     }
