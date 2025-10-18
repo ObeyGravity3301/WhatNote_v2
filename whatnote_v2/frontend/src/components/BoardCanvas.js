@@ -1137,6 +1137,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     setBatchOutline(data.outline);
                                     setBatchOutlineStatus('大纲生成完成！');
                                     setIsBatchGenerating(false);
+                                  } else if (data.type === 'warning') {
+                                    console.warn('大纲生成警告:', data.message);
+                                    setBatchOutlineStatus(prev => prev + '\n⚠️ ' + data.message);
                                   } else if (data.type === 'done') {
                                     console.log('批量生成流程完成');
                                     if (!data.outline) {

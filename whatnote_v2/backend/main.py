@@ -32,6 +32,92 @@ app = FastAPI(title="WhatNote V2 API", version="2.0.0")
 # 挂载静态文件服务 - 简单可靠的文件访问方式
 app.mount("/static/files", StaticFiles(directory=str(DATA_DIR)), name="static_files")
 
+def validate_outline_page_ranges(outline_data, total_pages):
+    """
+    验证大纲的页码范围是否有重叠
+    
+    Args:
+        outline_data: 大纲数据
+        total_pages: 总页数
+    
+    Returns:
+        dict: {'has_overlap': bool, 'errors': list, 'coverage': dict}
+    """
+    errors = []
+    coverage = {}
+    
+    if not outline_data or 'outline' not in outline_data:
+        return {'has_overlap': True, 'errors': ['大纲数据格式错误'], 'coverage': {}}
+    
+    outline = outline_data['outline']
+    if not outline:
+        return {'has_overlap': True, 'errors': ['大纲为空'], 'coverage': {}}
+    
+    # 检查页码范围
+    page_ranges = []
+    for i, section in enumerate(outline):
+        if 'page_start' not in section or 'page_end' not in section:
+            errors.append(f"第{i+1}部分缺少页码信息")
+            continue
+        
+        start = section['page_start']
+        end = section['page_end']
+        
+        # 验证页码范围
+        if start < 1 or end < 1:
+            errors.append(f"第{i+1}部分页码不能小于1")
+            continue
+        
+        if start > end:
+            errors.append(f"第{i+1}部分起始页码({start})不能大于结束页码({end})")
+            continue
+        
+        if start > total_pages or end > total_pages:
+            errors.append(f"第{i+1}部分页码超出总页数({total_pages})")
+            continue
+        
+        page_ranges.append((start, end, i+1))
+    
+    # 检查重叠
+    page_ranges.sort(key=lambda x: x[0])  # 按起始页码排序
+    
+    for i in range(len(page_ranges) - 1):
+        current_start, current_end, current_section = page_ranges[i]
+        next_start, next_end, next_section = page_ranges[i + 1]
+        
+        if current_end >= next_start:
+            errors.append(f"第{current_section}部分(第{current_start}-{current_end}页)与第{next_section}部分(第{next_start}-{next_end}页)重叠")
+    
+    # 检查覆盖率
+    covered_pages = set()
+    for start, end, section_num in page_ranges:
+        for page in range(start, end + 1):
+            if page in covered_pages:
+                errors.append(f"第{page}页被多个部分覆盖")
+            covered_pages.add(page)
+    
+    # 检查是否有遗漏的页面
+    missing_pages = []
+    for page in range(1, total_pages + 1):
+        if page not in covered_pages:
+            missing_pages.append(page)
+    
+    if missing_pages:
+        errors.append(f"以下页面未被覆盖: {missing_pages}")
+    
+    coverage = {
+        'total_pages': total_pages,
+        'covered_pages': len(covered_pages),
+        'missing_pages': missing_pages,
+        'coverage_rate': len(covered_pages) / total_pages if total_pages > 0 else 0
+    }
+    
+    return {
+        'has_overlap': len(errors) > 0,
+        'errors': errors,
+        'coverage': coverage
+    }
+
 # 应用启动和关闭事件
 @app.on_event("startup")
 async def startup_event():
@@ -1336,7 +1422,7 @@ async def generate_batch_outline(
    - 部分编号（从1开始）
    - 简洁的标题
    - 简要描述（50-100字）
-   - 起始页码和结束页码（页码范围不能重叠）
+   - 起始页码和结束页码（**重要：页码范围绝对不能重叠，每页只能属于一个部分**）
 
 **输出格式**（必须严格遵守JSON格式）：
 ```json
@@ -1359,6 +1445,11 @@ async def generate_batch_outline(
   ]
 }}
 ```
+
+**重要提醒**：
+- page_end必须小于下一个section的page_start
+- 例如：如果第1部分page_end=5，那么第2部分page_start必须≥6
+- 确保所有页码从1到{total_pages}都被覆盖且无重叠
 
 请直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
                     
@@ -1411,6 +1502,13 @@ async def generate_batch_outline(
                             content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
                         
                         outline_data = json.loads(content)
+                        
+                        # 验证页码范围是否有重叠
+                        validation_result = validate_outline_page_ranges(outline_data, total_pages)
+                        if validation_result['has_overlap']:
+                            error(f"检测到页码范围重叠: {validation_result['errors']}")
+                            yield f"data: {json.dumps({'type': 'warning', 'message': '检测到页码范围重叠，请重新生成大纲'}, ensure_ascii=False)}\n\n"
+                        
                         yield f"data: {json.dumps({'type': 'outline', 'outline': outline_data}, ensure_ascii=False)}\n\n"
                     except json.JSONDecodeError as e:
                         error(f"解析大纲JSON失败: {e}")
@@ -1468,7 +1566,7 @@ async def generate_batch_outline(
    - 部分编号（从1开始，仅用于本组内）
    - 简洁的标题
    - 简要描述（50-100字）
-   - 起始页码和结束页码（基于实际页码）
+   - 起始页码和结束页码（**重要：本组内页码范围不能重叠，每页只能属于一个部分**）
 
 **输出格式**（必须严格遵守JSON格式）：
 ```json
@@ -1583,8 +1681,9 @@ async def generate_batch_outline(
 1. 整合所有分组的大纲，形成一个连贯的整体大纲
 2. 合并相似或重复的章节
 3. 调整部分编号，确保从1开始连续
-4. 确保页码范围连续且不重叠
+4. **关键要求：确保页码范围连续且绝对不重叠，每页只能属于一个部分**
 5. 优化章节标题和描述，使其更加清晰连贯
+6. 检查所有页码从1到{total_pages}都被完整覆盖
 
 **输出格式**（必须严格遵守JSON格式）：
 ```json
@@ -1607,6 +1706,11 @@ async def generate_batch_outline(
   ]
 }}
 ```
+
+**重要提醒**：
+- page_end必须小于下一个section的page_start
+- 例如：如果第1部分page_end=5，那么第2部分page_start必须≥6
+- 确保所有页码从1到{total_pages}都被覆盖且无重叠
 
 请直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
                     
@@ -1657,6 +1761,13 @@ async def generate_batch_outline(
                             content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
                         
                         final_outline_data = json.loads(content)
+                        
+                        # 验证最终大纲的页码范围
+                        validation_result = validate_outline_page_ranges(final_outline_data, total_pages)
+                        if validation_result['has_overlap']:
+                            error(f"最终大纲检测到页码范围重叠: {validation_result['errors']}")
+                            yield f"data: {json.dumps({'type': 'warning', 'message': '检测到页码范围重叠，请重新生成大纲'}, ensure_ascii=False)}\n\n"
+                        
                         yield f"data: {json.dumps({'type': 'outline', 'outline': final_outline_data}, ensure_ascii=False)}\n\n"
                     except json.JSONDecodeError as e:
                         error(f"解析最终大纲JSON失败: {e}")
