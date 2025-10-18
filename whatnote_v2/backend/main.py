@@ -1439,7 +1439,10 @@ async def generate_batch_outline(
                     group_outlines = []
                     for group in groups:
                         group_num = group['group_number']
-                        yield f"data: {json.dumps({'type': 'status', 'message': f'正在分析第{group_num}组 (第{group[\"page_start\"]}-{group[\"page_end\"]}页)...'}, ensure_ascii=False)}\n\n"
+                        page_start = group['page_start']
+                        page_end = group['page_end']
+                        status_message = f'正在分析第{group_num}组 (第{page_start}-{page_end}页)...'
+                        yield f"data: {json.dumps({'type': 'status', 'message': status_message}, ensure_ascii=False)}\n\n"
                         
                         # 构建组文本
                         group_text = "\n\n".join([
