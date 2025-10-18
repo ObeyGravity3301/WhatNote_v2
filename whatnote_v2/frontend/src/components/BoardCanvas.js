@@ -62,6 +62,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   const [showLLMMenu, setShowLLMMenu] = useState(false); // 显示LLM菜单
   const [showAnnotationSettings, setShowAnnotationSettings] = useState(false); // 显示注释设置面板
   
+  // 批量生成状态
+  const [showBatchOutlineModal, setShowBatchOutlineModal] = useState(false); // 显示批量生成大纲模态窗口
+  const [batchOutlineStatus, setBatchOutlineStatus] = useState(''); // 批量生成状态信息
+  const [batchOutline, setBatchOutline] = useState(null); // 生成的大纲数据
+  const [isBatchGenerating, setIsBatchGenerating] = useState(false); // 是否正在生成
+  
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
     // 从localStorage加载设置
@@ -1076,9 +1082,79 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       </button>
                       
                       <button
-                        onClick={() => {
-                          console.log('批量处理功能');
+                        onClick={async () => {
+                          console.log('批量生成功能');
                           setShowLLMMenu(false);
+                          setShowBatchOutlineModal(true);
+                          setBatchOutlineStatus('正在准备...');
+                          setBatchOutline(null);
+                          setIsBatchGenerating(true);
+                          
+                          try {
+                            // 调用后端API生成大纲
+                            const response = await fetch(
+                              `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/outline`,
+                              {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                }
+                              }
+                            );
+                            
+                            if (!response.ok) {
+                              throw new Error('生成批量大纲失败');
+                            }
+                            
+                            // 处理流式响应
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder();
+                            let buffer = '';
+                            
+                            while (true) {
+                              const {done, value} = await reader.read();
+                              if (done) break;
+                              
+                              buffer += decoder.decode(value, {stream: true});
+                              const lines = buffer.split('\n\n');
+                              buffer = lines.pop() || '';
+                              
+                              for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                  const data = JSON.parse(line.slice(6));
+                                  
+                                  if (data.type === 'status') {
+                                    setBatchOutlineStatus(data.message);
+                                  } else if (data.type === 'content') {
+                                    // 显示LLM生成的内容
+                                    setBatchOutlineStatus(prev => prev + data.content);
+                                  } else if (data.type === 'group_done') {
+                                    setBatchOutlineStatus(prev => prev + `\n✅ 分组${data.group}完成`);
+                                  } else if (data.type === 'merge_content') {
+                                    setBatchOutlineStatus(prev => prev + data.content);
+                                  } else if (data.type === 'outline') {
+                                    console.log('大纲生成完成:', data.outline);
+                                    setBatchOutline(data.outline);
+                                    setBatchOutlineStatus('大纲生成完成！');
+                                    setIsBatchGenerating(false);
+                                  } else if (data.type === 'done') {
+                                    console.log('批量生成流程完成');
+                                    if (!data.outline) {
+                                      setIsBatchGenerating(false);
+                                    }
+                                  } else if (data.type === 'error') {
+                                    console.error('生成大纲错误:', data.error);
+                                    setBatchOutlineStatus('错误: ' + data.error);
+                                    setIsBatchGenerating(false);
+                                  }
+                                }
+                              }
+                            }
+                          } catch (error) {
+                            console.error('生成批量大纲失败:', error);
+                            setBatchOutlineStatus('生成失败: ' + error.message);
+                            setIsBatchGenerating(false);
+                          }
                         }}
                         style={{
                           width: '100%',
@@ -1094,7 +1170,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        批量...
+                        📚 批量...
                       </button>
                       
                       <button
@@ -1383,6 +1459,197 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                   fontSize: '10px'
                 }}>
                   💡 当前使用: {annotationSettings.style === 'custom' ? '自定义提示词' : annotationStyles[annotationSettings.style]?.name}
+                </div>
+              </div>
+            )}
+            
+            {/* 批量生成大纲模态窗口 */}
+            {showBatchOutlineModal && (
+              <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2000
+              }}>
+                <div style={{
+                  backgroundColor: '#c0c0c0',
+                  border: '3px outset #c0c0c0',
+                  borderRadius: '0px',
+                  padding: '8px',
+                  width: '80%',
+                  maxWidth: '800px',
+                  maxHeight: '80%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  boxShadow: '4px 4px 8px rgba(0,0,0,0.5)',
+                  fontFamily: 'MS Sans Serif, sans-serif'
+                }}>
+                  {/* 标题栏 */}
+                  <div style={{
+                    backgroundColor: '#000080',
+                    color: '#ffffff',
+                    padding: '2px 4px',
+                    marginBottom: '8px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '11px',
+                    fontWeight: 'bold'
+                  }}>
+                    <span>批量注释 - 生成大纲</span>
+                    <button
+                      onClick={() => {
+                        if (!isBatchGenerating || confirm('生成正在进行中，确定要关闭吗？')) {
+                          setShowBatchOutlineModal(false);
+                        }
+                      }}
+                      style={{
+                        backgroundColor: '#c0c0c0',
+                        border: '1px outset #c0c0c0',
+                        cursor: 'pointer',
+                        fontSize: '10px',
+                        padding: '0 4px',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  
+                  {/* 内容区域 */}
+                  <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    overflowY: 'auto',
+                    backgroundColor: '#ffffff',
+                    border: '2px inset #c0c0c0',
+                    padding: '8px'
+                  }}>
+                    {/* 状态信息 */}
+                    {isBatchGenerating && (
+                      <div style={{
+                        padding: '8px',
+                        backgroundColor: '#ffffcc',
+                        border: '1px solid #ffcc00',
+                        fontSize: '11px',
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap'
+                      }}>
+                        {batchOutlineStatus}
+                      </div>
+                    )}
+                    
+                    {/* 大纲展示 */}
+                    {batchOutline && batchOutline.outline && (
+                      <div style={{
+                        padding: '8px',
+                        fontSize: '11px'
+                      }}>
+                        <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
+                          📋 文档大纲
+                        </h3>
+                        {batchOutline.outline.map((section, index) => (
+                          <div
+                            key={index}
+                            style={{
+                              padding: '8px',
+                              marginBottom: '8px',
+                              backgroundColor: '#f0f0f0',
+                              border: '1px solid #d0d0d0',
+                              borderLeft: '3px solid #0078d4',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e8e8e8'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
+                            onClick={() => {
+                              console.log('点击章节:', section);
+                              // 未来可以在这里添加跳转到对应页面的功能
+                            }}
+                          >
+                            <div style={{
+                              fontWeight: 'bold',
+                              marginBottom: '4px',
+                              fontSize: '12px',
+                              color: '#0078d4'
+                            }}>
+                              {section.section_number}. {section.title}
+                            </div>
+                            <div style={{
+                              fontSize: '10px',
+                              color: '#666',
+                              marginBottom: '4px'
+                            }}>
+                              📖 第{section.page_start}页 - 第{section.page_end}页
+                            </div>
+                            <div style={{
+                              fontSize: '10px',
+                              lineHeight: '1.4'
+                            }}>
+                              {section.description}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* 加载完成后的操作按钮 */}
+                    {!isBatchGenerating && batchOutline && (
+                      <div style={{
+                        padding: '8px',
+                        borderTop: '1px solid #d0d0d0',
+                        display: 'flex',
+                        gap: '8px',
+                        justifyContent: 'flex-end'
+                      }}>
+                        <button
+                          onClick={() => {
+                            console.log('开始批量生成注释（未实现）');
+                            alert('批量生成注释功能即将推出！');
+                          }}
+                          style={{
+                            padding: '4px 12px',
+                            fontSize: '11px',
+                            backgroundColor: '#0078d4',
+                            color: '#ffffff',
+                            border: '2px outset #0078d4',
+                            borderRadius: '0px',
+                            cursor: 'pointer',
+                            fontFamily: 'MS Sans Serif, sans-serif',
+                            fontWeight: 'bold'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#005a9e'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = '#0078d4'}
+                        >
+                          ✨ 开始批量生成
+                        </button>
+                        <button
+                          onClick={() => setShowBatchOutlineModal(false)}
+                          style={{
+                            padding: '4px 12px',
+                            fontSize: '11px',
+                            backgroundColor: '#c0c0c0',
+                            border: '2px outset #c0c0c0',
+                            borderRadius: '0px',
+                            cursor: 'pointer',
+                            fontFamily: 'MS Sans Serif, sans-serif'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
+                        >
+                          关闭
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

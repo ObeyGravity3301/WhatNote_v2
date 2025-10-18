@@ -1233,6 +1233,453 @@ async def generate_pdf_annotation_visual(
         error(f"视觉生成PDF注释失败: {e}")
         raise HTTPException(status_code=500, detail=f"视觉生成PDF注释失败: {str(e)}")
 
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/outline")
+async def generate_batch_outline(
+    board_id: str,
+    window_id: str,
+    request: Request
+):
+    """生成PDF批量注释大纲（使用LLM3进行全局分析）"""
+    try:
+        info(f"生成批量注释大纲: board_id={board_id}, window_id={window_id}")
+        
+        # 配置参数
+        SMALL_FILE_THRESHOLD = 30000  # 小文件阈值（字符数）
+        PAGES_PER_GROUP = 10  # 大文件分组时每组页数
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        if target_window.get('type') != 'pdf':
+            raise HTTPException(status_code=400, detail="只有PDF文件支持批量注释功能")
+        
+        pdf_filename = target_window.get('title', 'unknown')
+        info(f"开始分析PDF文件: {pdf_filename}")
+        
+        # 读取PDF所有页面内容
+        all_pages_content = []
+        total_chars = 0
+        page_num = 1
+        
+        while True:
+            page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
+            if not page_content.get('current'):
+                break
+            
+            page_text = page_content['current']
+            all_pages_content.append({
+                'page': page_num,
+                'content': page_text,
+                'length': len(page_text)
+            })
+            total_chars += len(page_text)
+            page_num += 1
+        
+        total_pages = len(all_pages_content)
+        info(f"PDF总页数: {total_pages}, 总字符数: {total_chars}")
+        
+        if total_pages == 0:
+            raise HTTPException(status_code=400, detail="PDF文件无内容")
+        
+        # 创建或获取大纲对话记录
+        outline_conv_id = f"outline-pdf-{window_id}-3"
+        conversation = conversation_manager.get_conversation(board_id, outline_conv_id, page=None, limit=None)
+        if not conversation:
+            conversation = conversation_manager.create_conversation(
+                board_id,
+                title=f"批量注释大纲 - {pdf_filename}"
+            )
+            conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+            old_file = conversations_dir / f"{conversation['id']}.json"
+            new_file = conversations_dir / f"{outline_conv_id}.json"
+            if old_file.exists():
+                old_file.rename(new_file)
+            conversation['id'] = outline_conv_id
+        
+        # 准备SSE流式响应
+        async def generate_outline_stream():
+            try:
+                # 判断使用哪种方法
+                if total_chars <= SMALL_FILE_THRESHOLD:
+                    # 方法1：小文件，直接发送全部内容给LLM3
+                    info(f"使用直接方法（文件较小）: {total_chars} 字符")
+                    yield f"data: {json.dumps({'type': 'status', 'message': '文件较小，直接分析中...'}, ensure_ascii=False)}\n\n"
+                    
+                    # 构建完整文本
+                    full_text = "\n\n".join([
+                        f"=== 第{p['page']}页 ===\n{p['content']}"
+                        for p in all_pages_content
+                    ])
+                    
+                    # 构建提示词
+                    prompt = f"""你是一位专业的文档分析助手。请分析以下PDF文档的全部内容，并生成一个结构化的大纲。
+
+**文档信息**：
+- 文件名: {pdf_filename}
+- 总页数: {total_pages}
+
+**文档内容**：
+{full_text}
+
+**任务要求**：
+1. 分析文档的整体结构和内容
+2. 将文档划分为若干个逻辑部分（章节、主题等）
+3. 为每个部分提供：
+   - 部分编号（从1开始）
+   - 简洁的标题
+   - 简要描述（50-100字）
+   - 起始页码和结束页码（页码范围不能重叠）
+
+**输出格式**（必须严格遵守JSON格式）：
+```json
+{{
+  "outline": [
+    {{
+      "section_number": 1,
+      "title": "章节标题",
+      "description": "章节描述",
+      "page_start": 1,
+      "page_end": 5
+    }},
+    {{
+      "section_number": 2,
+      "title": "章节标题",
+      "description": "章节描述",
+      "page_start": 6,
+      "page_end": 10
+    }}
+  ]
+}}
+```
+
+请直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
+                    
+                    # 发送给LLM3
+                    user_message = {
+                        "role": "user",
+                        "content": prompt,
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "action": "generate_batch_outline",
+                            "pdf_filename": pdf_filename,
+                            "window_id": window_id,
+                            "total_pages": total_pages,
+                            "total_chars": total_chars,
+                            "method": "direct"
+                        }
+                    }
+                    
+                    messages = [user_message]
+                    accumulated_content = ""
+                    
+                    async for chunk in llm_service.chat_completion(messages, stream=True):
+                        if chunk:
+                            accumulated_content += chunk
+                            yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
+                    
+                    # 保存助手消息
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": accumulated_content,
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "action": "generate_batch_outline",
+                            "method": "direct",
+                            "total_pages": total_pages,
+                            "total_chars": total_chars
+                        }
+                    }
+                    
+                    conversation_manager.add_message(board_id, outline_conv_id, user_message)
+                    conversation_manager.add_message(board_id, outline_conv_id, assistant_message)
+                    
+                    # 解析JSON结果
+                    try:
+                        # 尝试提取JSON（可能被包裹在代码块中）
+                        content = accumulated_content.strip()
+                        if content.startswith('```'):
+                            # 移除代码块标记
+                            lines = content.split('\n')
+                            content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                        
+                        outline_data = json.loads(content)
+                        yield f"data: {json.dumps({'type': 'outline', 'outline': outline_data}, ensure_ascii=False)}\n\n"
+                    except json.JSONDecodeError as e:
+                        error(f"解析大纲JSON失败: {e}")
+                        yield f"data: {json.dumps({'type': 'error', 'error': 'JSON解析失败，请查看原始输出'}, ensure_ascii=False)}\n\n"
+                    
+                else:
+                    # 方法2：大文件，分割后发送给多个子模型
+                    info(f"使用分割方法（文件较大）: {total_chars} 字符")
+                    yield f"data: {json.dumps({'type': 'status', 'message': '文件较大，使用分组分析...'}, ensure_ascii=False)}\n\n"
+                    
+                    # 分割页面
+                    groups = []
+                    for i in range(0, total_pages, PAGES_PER_GROUP):
+                        group_pages = all_pages_content[i:i+PAGES_PER_GROUP]
+                        groups.append({
+                            'group_number': len(groups) + 1,
+                            'pages': group_pages,
+                            'page_start': group_pages[0]['page'],
+                            'page_end': group_pages[-1]['page']
+                        })
+                    
+                    info(f"分为{len(groups)}组进行分析")
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'分为{len(groups)}组进行分析...'}, ensure_ascii=False)}\n\n"
+                    
+                    # 对每组进行分析
+                    group_outlines = []
+                    for group in groups:
+                        group_num = group['group_number']
+                        yield f"data: {json.dumps({'type': 'status', 'message': f'正在分析第{group_num}组 (第{group[\"page_start\"]}-{group[\"page_end\"]}页)...'}, ensure_ascii=False)}\n\n"
+                        
+                        # 构建组文本
+                        group_text = "\n\n".join([
+                            f"=== 第{p['page']}页 ===\n{p['content']}"
+                            for p in group['pages']
+                        ])
+                        
+                        # 构建子模型提示词
+                        sub_prompt = f"""你是一位专业的文档分析助手。请分析以下PDF文档片段的内容，并生成一个结构化的大纲。
+
+**文档信息**：
+- 文件名: {pdf_filename}
+- 分析范围: 第{group['page_start']}-{group['page_end']}页（共{total_pages}页）
+- 组号: {group_num}/{len(groups)}
+
+**文档片段内容**：
+{group_text}
+
+**任务要求**：
+1. 分析这个片段的结构和内容
+2. 将片段划分为若干个逻辑部分
+3. 为每个部分提供：
+   - 部分编号（从1开始，仅用于本组内）
+   - 简洁的标题
+   - 简要描述（50-100字）
+   - 起始页码和结束页码（基于实际页码）
+
+**输出格式**（必须严格遵守JSON格式）：
+```json
+{{
+  "outline": [
+    {{
+      "section_number": 1,
+      "title": "章节标题",
+      "description": "章节描述",
+      "page_start": {group['page_start']},
+      "page_end": {group['page_end']}
+    }}
+  ]
+}}
+```
+
+请直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
+                        
+                        # 创建子对话记录
+                        sub_conv_id = f"outline-pdf-{window_id}-3{chr(64+group_num)}"  # 3A, 3B, 3C...
+                        sub_conversation = conversation_manager.get_conversation(board_id, sub_conv_id, page=None, limit=None)
+                        if not sub_conversation:
+                            sub_conversation = conversation_manager.create_conversation(
+                                board_id,
+                                title=f"批量注释大纲-分组{group_num} - {pdf_filename}"
+                            )
+                            conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                            old_file = conversations_dir / f"{sub_conversation['id']}.json"
+                            new_file = conversations_dir / f"{sub_conv_id}.json"
+                            if old_file.exists():
+                                old_file.rename(new_file)
+                            sub_conversation['id'] = sub_conv_id
+                        
+                        # 发送给子模型
+                        sub_user_message = {
+                            "role": "user",
+                            "content": sub_prompt,
+                            "timestamp": datetime.now().isoformat(),
+                            "metadata": {
+                                "action": "generate_batch_outline_sub",
+                                "pdf_filename": pdf_filename,
+                                "window_id": window_id,
+                                "group_number": group_num,
+                                "page_start": group['page_start'],
+                                "page_end": group['page_end'],
+                                "method": "split"
+                            }
+                        }
+                        
+                        sub_messages = [sub_user_message]
+                        sub_accumulated_content = ""
+                        
+                        async for chunk in llm_service.chat_completion(sub_messages, stream=True):
+                            if chunk:
+                                sub_accumulated_content += chunk
+                        
+                        # 保存子模型消息
+                        sub_assistant_message = {
+                            "role": "assistant",
+                            "content": sub_accumulated_content,
+                            "timestamp": datetime.now().isoformat(),
+                            "metadata": {
+                                "action": "generate_batch_outline_sub",
+                                "group_number": group_num,
+                                "method": "split"
+                            }
+                        }
+                        
+                        conversation_manager.add_message(board_id, sub_conv_id, sub_user_message)
+                        conversation_manager.add_message(board_id, sub_conv_id, sub_assistant_message)
+                        
+                        # 解析子模型结果
+                        try:
+                            content = sub_accumulated_content.strip()
+                            if content.startswith('```'):
+                                lines = content.split('\n')
+                                content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                            
+                            sub_outline_data = json.loads(content)
+                            group_outlines.append({
+                                'group_number': group_num,
+                                'outline': sub_outline_data.get('outline', [])
+                            })
+                            yield f"data: {json.dumps({'type': 'group_done', 'group': group_num, 'outline': sub_outline_data}, ensure_ascii=False)}\n\n"
+                        except json.JSONDecodeError as e:
+                            error(f"解析分组{group_num}大纲JSON失败: {e}")
+                            group_outlines.append({
+                                'group_number': group_num,
+                                'outline': [],
+                                'error': str(e)
+                            })
+                    
+                    # 汇总所有分组结果
+                    yield f"data: {json.dumps({'type': 'status', 'message': '正在汇总所有分组结果...'}, ensure_ascii=False)}\n\n"
+                    
+                    # 构建汇总提示词
+                    groups_summary = "\n\n".join([
+                        f"**分组{g['group_number']}**:\n{json.dumps(g['outline'], ensure_ascii=False, indent=2)}"
+                        for g in group_outlines if 'error' not in g
+                    ])
+                    
+                    merge_prompt = f"""你是一位专业的文档分析助手。我已经将一个PDF文档分成{len(groups)}组进行了分析，现在需要你将所有分组的大纲整合成一个统一的、连贯的大纲。
+
+**文档信息**：
+- 文件名: {pdf_filename}
+- 总页数: {total_pages}
+
+**各分组大纲**：
+{groups_summary}
+
+**任务要求**：
+1. 整合所有分组的大纲，形成一个连贯的整体大纲
+2. 合并相似或重复的章节
+3. 调整部分编号，确保从1开始连续
+4. 确保页码范围连续且不重叠
+5. 优化章节标题和描述，使其更加清晰连贯
+
+**输出格式**（必须严格遵守JSON格式）：
+```json
+{{
+  "outline": [
+    {{
+      "section_number": 1,
+      "title": "章节标题",
+      "description": "章节描述",
+      "page_start": 1,
+      "page_end": 5
+    }},
+    {{
+      "section_number": 2,
+      "title": "章节标题",
+      "description": "章节描述",
+      "page_start": 6,
+      "page_end": 10
+    }}
+  ]
+}}
+```
+
+请直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
+                    
+                    # 发送给LLM3进行汇总
+                    merge_user_message = {
+                        "role": "user",
+                        "content": merge_prompt,
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "action": "generate_batch_outline_merge",
+                            "pdf_filename": pdf_filename,
+                            "window_id": window_id,
+                            "total_pages": total_pages,
+                            "total_groups": len(groups),
+                            "method": "split_merge"
+                        }
+                    }
+                    
+                    merge_messages = [merge_user_message]
+                    merge_accumulated_content = ""
+                    
+                    async for chunk in llm_service.chat_completion(merge_messages, stream=True):
+                        if chunk:
+                            merge_accumulated_content += chunk
+                            yield f"data: {json.dumps({'type': 'merge_content', 'content': chunk}, ensure_ascii=False)}\n\n"
+                    
+                    # 保存汇总消息
+                    merge_assistant_message = {
+                        "role": "assistant",
+                        "content": merge_accumulated_content,
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "action": "generate_batch_outline_merge",
+                            "method": "split_merge",
+                            "total_pages": total_pages,
+                            "total_groups": len(groups)
+                        }
+                    }
+                    
+                    conversation_manager.add_message(board_id, outline_conv_id, merge_user_message)
+                    conversation_manager.add_message(board_id, outline_conv_id, merge_assistant_message)
+                    
+                    # 解析最终大纲
+                    try:
+                        content = merge_accumulated_content.strip()
+                        if content.startswith('```'):
+                            lines = content.split('\n')
+                            content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                        
+                        final_outline_data = json.loads(content)
+                        yield f"data: {json.dumps({'type': 'outline', 'outline': final_outline_data}, ensure_ascii=False)}\n\n"
+                    except json.JSONDecodeError as e:
+                        error(f"解析最终大纲JSON失败: {e}")
+                        yield f"data: {json.dumps({'type': 'error', 'error': 'JSON解析失败，请查看原始输出'}, ensure_ascii=False)}\n\n"
+                
+                yield f"data: {json.dumps({'type': 'done', 'success': True}, ensure_ascii=False)}\n\n"
+                
+            except Exception as e:
+                error(f"生成批量注释大纲失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+        
+        return StreamingResponse(
+            generate_outline_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"生成批量注释大纲失败: {e}")
+        raise HTTPException(status_code=500, detail=f"生成批量注释大纲失败: {str(e)}")
+
 @app.get("/api/media/serve")
 async def serve_media_file(path: str):
     """全新的媒体文件服务API - 避免路由冲突"""
