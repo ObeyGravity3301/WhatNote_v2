@@ -1841,7 +1841,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       // 实时显示LLM生成的内容
                                       setBatchOutlineStatus(prev => prev + data.content);
                                     } else if (data.type === 'section_done') {
-                                      setBatchOutlineStatus(prev => prev + `\n✅ 分段${data.section}细分完成，共${data.subdivision.subdivisions.length}个细分单元`);
+                                      setBatchOutlineStatus(prev => prev + `\n✅ 分段${data.section}细分完成，共${data.subdivision.subdivisions.length}个细分单元 (${data.completed}/${data.total})`);
                                     } else if (data.type === 'complete') {
                                       console.log('所有分段细分完成:', data.data);
                                       setBatchSubdivisions(data.data); // 保存细分数据
