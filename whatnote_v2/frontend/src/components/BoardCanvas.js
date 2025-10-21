@@ -1591,21 +1591,21 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                 {/* 量子化方格进度条 */}
                                 <div style={{
                                   display: 'flex',
-                                  gap: '2px',
+                                  gap: '3px',
                                   alignItems: 'center'
                                 }}>
-                                  {Array.from({ length: 20 }, (_, index) => {
+                                  {Array.from({ length: 10 }, (_, index) => {
                                     const progressPercentage = (batchProgress.completed / batchProgress.total) * 100;
-                                    const isActive = (index + 1) * 5 <= progressPercentage; // 每格代表5%
+                                    const isActive = (index + 1) * 10 <= progressPercentage; // 每格代表10%
                                     
                                     return (
                                       <div
                                         key={index}
                                         style={{
-                                          width: '12px',
+                                          width: '20px',
                                           height: '14px',
                                           backgroundColor: isActive ? '#0080ff' : 'transparent',
-                                          border: isActive ? '1px outset #0080ff' : '1px solid transparent',
+                                          border: '1px solid transparent',
                                           borderRadius: '0px',
                                           display: 'flex',
                                           alignItems: 'center',
