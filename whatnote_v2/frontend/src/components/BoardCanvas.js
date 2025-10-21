@@ -1654,9 +1654,80 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         justifyContent: 'flex-end'
                       }}>
                         <button
-                          onClick={() => {
-                            console.log('开始批量生成注释（未实现）');
-                            alert('批量生成注释功能即将推出！');
+                          onClick={async () => {
+                            console.log('开始第二阶段：细分分段');
+                            setShowBatchOutlineModal(false);
+                            setIsBatchGenerating(true);
+                            setBatchOutlineStatus('正在细分各个分段...');
+                            setShowBatchOutlineModal(true);
+                            
+                            try {
+                              // 调用第二阶段API
+                              const response = await fetch(
+                                `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivide`,
+                                {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                  }
+                                }
+                              );
+                              
+                              if (!response.ok) {
+                                throw new Error('细分处理失败');
+                              }
+                              
+                              // 处理流式响应
+                              const reader = response.body.getReader();
+                              const decoder = new TextDecoder();
+                              let buffer = '';
+                              let currentSection = null;
+                              
+                              while (true) {
+                                const {done, value} = await reader.read();
+                                if (done) break;
+                                
+                                buffer += decoder.decode(value, {stream: true});
+                                const lines = buffer.split('\n\n');
+                                buffer = lines.pop() || '';
+                                
+                                for (const line of lines) {
+                                  if (line.startsWith('data: ')) {
+                                    const data = JSON.parse(line.slice(6));
+                                    
+                                    if (data.type === 'status') {
+                                      setBatchOutlineStatus(data.message);
+                                    } else if (data.type === 'section_start') {
+                                      currentSection = data.section;
+                                      setBatchOutlineStatus(prev => prev + `\n\n🔍 正在处理分段${data.section}: ${data.title} (第${data.pages}页)...`);
+                                    } else if (data.type === 'section_content') {
+                                      // 实时显示LLM生成的内容
+                                      setBatchOutlineStatus(prev => prev + data.content);
+                                    } else if (data.type === 'section_done') {
+                                      setBatchOutlineStatus(prev => prev + `\n✅ 分段${data.section}细分完成，共${data.subdivision.subdivisions.length}个细分单元`);
+                                    } else if (data.type === 'complete') {
+                                      console.log('所有分段细分完成:', data.data);
+                                      setBatchOutlineStatus(prev => prev + '\n\n🎉 所有分段细分完成！');
+                                      setIsBatchGenerating(false);
+                                      alert('第二阶段完成！细分数据已保存。');
+                                    } else if (data.type === 'warning') {
+                                      setBatchOutlineStatus(prev => prev + `\n⚠️ ${data.message}`);
+                                    } else if (data.type === 'done') {
+                                      console.log('细分流程完成');
+                                      setIsBatchGenerating(false);
+                                    } else if (data.type === 'error') {
+                                      console.error('细分错误:', data.error);
+                                      setBatchOutlineStatus(prev => prev + `\n❌ 错误: ${data.error}`);
+                                      setIsBatchGenerating(false);
+                                    }
+                                  }
+                                }
+                              }
+                            } catch (error) {
+                              console.error('细分处理失败:', error);
+                              setBatchOutlineStatus(prev => prev + `\n❌ 细分失败: ${error.message}`);
+                              setIsBatchGenerating(false);
+                            }
                           }}
                           style={{
                             padding: '4px 12px',

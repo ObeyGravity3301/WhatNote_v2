@@ -1446,7 +1446,7 @@ async def generate_batch_outline(
       "section_number": 2,
       "title": "章节标题",
       "description": "章节描述",
-      "page_start": 6,
+      "page_start": 5,
       "page_end": 10
     }}
   ]
@@ -1456,7 +1456,7 @@ async def generate_batch_outline(
 **提示**：
 - 页码范围应该根据内容的逻辑结构划分
 - 重要的跨章节内容可以在多个部分中出现
-- 尽量确保所有页码从1到{total_pages}都被覆盖
+- 确保所有页码从1到{total_pages}都被覆盖
 
 请直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
                     
@@ -1833,6 +1833,256 @@ async def generate_batch_outline(
     except Exception as e:
         error(f"生成批量注释大纲失败: {e}")
         raise HTTPException(status_code=500, detail=f"生成批量注释大纲失败: {str(e)}")
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/subdivide")
+async def subdivide_outline_sections(
+    board_id: str,
+    window_id: str,
+    request: Request
+):
+    """第二阶段：对大纲的每个分段进行细分分析（使用LLM-2）"""
+    try:
+        info(f"开始第二阶段：细分大纲分段 board_id={board_id}, window_id={window_id}")
+        
+        # 读取第一阶段生成的大纲数据
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        if not outline_file.exists():
+            raise HTTPException(status_code=404, detail="未找到大纲数据，请先执行第一阶段生成大纲")
+        
+        with open(outline_file, 'r', encoding='utf-8') as f:
+            outline_data = json.load(f)
+        
+        if 'outline' not in outline_data or not outline_data['outline']:
+            raise HTTPException(status_code=400, detail="大纲数据为空")
+        
+        outline = outline_data['outline']
+        total_sections = len(outline)
+        info(f"读取到{total_sections}个分段，准备细分")
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        pdf_filename = target_window.get('title', 'unknown')
+        
+        # 准备SSE流式响应
+        async def subdivide_stream():
+            try:
+                # 存储所有细分结果
+                all_subdivisions = []
+                
+                yield f"data: {json.dumps({'type': 'status', 'message': f'开始处理{total_sections}个分段...'}, ensure_ascii=False)}\n\n"
+                
+                # 逐个处理每个分段
+                for section_idx, section in enumerate(outline):
+                    section_num = section.get('section_number', section_idx + 1)
+                    section_title = section.get('title', f'分段{section_num}')
+                    page_start = section.get('page_start')
+                    page_end = section.get('page_end')
+                    
+                    yield f"data: {json.dumps({'type': 'section_start', 'section': section_num, 'title': section_title, 'pages': f'{page_start}-{page_end}'}, ensure_ascii=False)}\n\n"
+                    
+                    # 读取该分段所有页面的内容
+                    section_pages_content = []
+                    for page_num in range(page_start, page_end + 1):
+                        page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
+                        if page_content.get('current'):
+                            section_pages_content.append({
+                                'page': page_num,
+                                'content': page_content['current']
+                            })
+                    
+                    if not section_pages_content:
+                        yield f"data: {json.dumps({'type': 'warning', 'message': f'分段{section_num}无内容，跳过'}, ensure_ascii=False)}\n\n"
+                        continue
+                    
+                    # 构建该分段的完整文本
+                    section_full_text = "\n\n".join([
+                        f"=== 第{p['page']}页 ===\n{p['content']}"
+                        for p in section_pages_content
+                    ])
+                    
+                    # 构建给LLM-2的提示词
+                    subdivision_prompt = f"""你是一位专业的文档分析助手。我需要你对以下PDF文档的一个分段进行深入分析和细分。
+
+**文档信息**：
+- 文件名: {pdf_filename}
+- 当前分段: {section_title}
+- 页码范围: 第{page_start}页 - 第{page_end}页
+
+**分段内容**：
+{section_full_text}
+
+**任务要求**：
+1. 仔细阅读并理解这个分段的内容
+2. 生成这个分段的概括性介绍（100-200字）
+3. 将这个分段进一步细分为更小的逻辑单元
+4. 为每个细分单元提供：
+   - 细分编号（从1开始）
+   - 简洁的标题
+   - 起始页码和结束页码（基于第{page_start}页到第{page_end}页的范围）
+5. 如果内容无法进一步细分，则返回一个细分单元，页码范围为第{page_start}页到第{page_end}页
+
+**输出格式**（必须严格遵守JSON格式）：
+```json
+{{
+  "section_summary": "这个分段的概括性介绍...",
+  "subdivisions": [
+    {{
+      "subdivision_number": 1,
+      "title": "细分标题",
+      "page_start": {page_start},
+      "page_end": {page_start}
+    }},
+    {{
+      "subdivision_number": 2,
+      "title": "细分标题",
+      "page_start": {page_start + 1},
+      "page_end": {page_end}
+    }}
+  ]
+}}
+```
+
+**提示**：
+- 细分应该基于内容的逻辑结构（如：不同的知识点、概念、步骤等）
+- 细分的页码范围应该在第{page_start}页到第{page_end}页之内
+- 如果内容较少或逻辑统一，可以不细分（只返回一个单元）
+
+请直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
+                    
+                    # 创建LLM-2对话记录
+                    llm2_conv_id = f"subdivision-{window_id}-section{section_num}-2"
+                    llm2_conversation = conversation_manager.get_conversation(board_id, llm2_conv_id, page=None, limit=None)
+                    if not llm2_conversation:
+                        llm2_conversation = conversation_manager.create_conversation(
+                            board_id,
+                            title=f"分段细分-{section_title} - {pdf_filename}"
+                        )
+                        conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                        old_file = conversations_dir / f"{llm2_conversation['id']}.json"
+                        new_file = conversations_dir / f"{llm2_conv_id}.json"
+                        if old_file.exists():
+                            old_file.rename(new_file)
+                        llm2_conversation['id'] = llm2_conv_id
+                    
+                    # 发送给LLM-2
+                    user_message = {
+                        "role": "user",
+                        "content": subdivision_prompt,
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "action": "subdivide_section",
+                            "pdf_filename": pdf_filename,
+                            "window_id": window_id,
+                            "section_number": section_num,
+                            "section_title": section_title,
+                            "page_start": page_start,
+                            "page_end": page_end,
+                            "total_pages": len(section_pages_content)
+                        }
+                    }
+                    
+                    messages = [user_message]
+                    accumulated_content = ""
+                    
+                    # 流式接收LLM-2的响应
+                    async for chunk in llm_service.chat_completion(messages, stream=True):
+                        if chunk:
+                            accumulated_content += chunk
+                            yield f"data: {json.dumps({'type': 'section_content', 'section': section_num, 'content': chunk}, ensure_ascii=False)}\n\n"
+                    
+                    # 保存助手消息
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": accumulated_content,
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "action": "subdivide_section",
+                            "section_number": section_num,
+                            "content_length": len(accumulated_content)
+                        }
+                    }
+                    
+                    conversation_manager.add_message(board_id, llm2_conv_id, user_message)
+                    conversation_manager.add_message(board_id, llm2_conv_id, assistant_message)
+                    
+                    # 解析JSON结果
+                    try:
+                        content = accumulated_content.strip()
+                        if content.startswith('```'):
+                            lines = content.split('\n')
+                            content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                        
+                        subdivision_data = json.loads(content)
+                        
+                        # 验证细分数据
+                        if 'section_summary' in subdivision_data and 'subdivisions' in subdivision_data:
+                            subdivision_result = {
+                                'section_number': section_num,
+                                'section_title': section_title,
+                                'page_start': page_start,
+                                'page_end': page_end,
+                                'section_summary': subdivision_data['section_summary'],
+                                'subdivisions': subdivision_data['subdivisions']
+                            }
+                            all_subdivisions.append(subdivision_result)
+                            
+                            yield f"data: {json.dumps({'type': 'section_done', 'section': section_num, 'subdivision': subdivision_data}, ensure_ascii=False)}\n\n"
+                            info(f"分段{section_num}细分完成，共{len(subdivision_data['subdivisions'])}个细分单元")
+                        else:
+                            yield f"data: {json.dumps({'type': 'warning', 'message': f'分段{section_num}返回数据格式错误'}, ensure_ascii=False)}\n\n"
+                    
+                    except json.JSONDecodeError as e:
+                        error(f"解析分段{section_num}细分JSON失败: {e}")
+                        yield f"data: {json.dumps({'type': 'error', 'message': f'分段{section_num}解析失败'}, ensure_ascii=False)}\n\n"
+                
+                # 保存所有细分结果
+                subdivision_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
+                subdivision_complete_data = {
+                    'pdf_filename': pdf_filename,
+                    'window_id': window_id,
+                    'board_id': board_id,
+                    'total_sections': total_sections,
+                    'subdivisions': all_subdivisions,
+                    'created_at': datetime.now().isoformat()
+                }
+                
+                with open(subdivision_file, 'w', encoding='utf-8') as f:
+                    json.dump(subdivision_complete_data, f, ensure_ascii=False, indent=2)
+                
+                info(f"所有细分结果已保存: {subdivision_file}")
+                
+                yield f"data: {json.dumps({'type': 'complete', 'data': subdivision_complete_data}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'success': True}, ensure_ascii=False)}\n\n"
+                
+            except Exception as e:
+                error(f"细分处理失败: {e}")
+                import traceback
+                error(f"详细错误: {traceback.format_exc()}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+        
+        return StreamingResponse(
+            subdivide_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"细分大纲分段失败: {e}")
+        raise HTTPException(status_code=500, detail=f"细分大纲分段失败: {str(e)}")
 
 @app.get("/api/media/serve")
 async def serve_media_file(path: str):
