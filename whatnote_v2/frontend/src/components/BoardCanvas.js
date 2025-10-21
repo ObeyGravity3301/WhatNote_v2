@@ -69,6 +69,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   const [isBatchGenerating, setIsBatchGenerating] = useState(false); // 是否正在生成
   const [batchSubdivisions, setBatchSubdivisions] = useState(null); // 第二阶段细分数据
   const [selectedSection, setSelectedSection] = useState(null); // 当前选中的分段
+  const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 }); // 批量处理进度
+  const [isStage2, setIsStage2] = useState(false); // 是否是第二阶段
   
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
@@ -125,7 +127,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
           console.log('PDF加载成功，跳转到第', initialPage, '页');
         } else {
           setCurrentPage(1);
-          console.log('PDF加载成功，总页数:', pdf.numPages);
+        console.log('PDF加载成功，总页数:', pdf.numPages);
         }
         
         setIsLoading(false);
@@ -1091,6 +1093,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           setBatchOutlineStatus('正在准备...');
                           setBatchOutline(null);
                           setIsBatchGenerating(true);
+                          setIsStage2(false);
+                          setBatchProgress({ completed: 0, total: 0 });
                           
                           try {
                             // 调用后端API生成大纲
@@ -1416,9 +1420,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       overflowY: 'auto'
                     }}>
                       {annotationStyles[annotationSettings.style]?.prompt}
-                    </div>
-                  </div>
-                )}
+            </div>
+          </div>
+        )}
                 
                 {/* 自定义提示词 */}
                 {annotationSettings.style === 'custom' && (
@@ -1451,8 +1455,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       marginTop: '2px'
                     }}>
                       提示：使用 {'{page}'} 作为页码占位符
-                    </div>
-                  </div>
+      </div>
+    </div>
                 )}
                 
                 {/* 状态提示 */}
@@ -1540,15 +1544,70 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                   }}>
                     {/* 状态信息 */}
                     {isBatchGenerating && (
-                      <div style={{
-                        padding: '8px',
-                        backgroundColor: '#ffffcc',
-                        border: '1px solid #ffcc00',
-                        fontSize: '11px',
-                        fontFamily: 'monospace',
-                        whiteSpace: 'pre-wrap'
-                      }}>
-                        {batchOutlineStatus}
+                      <div>
+                        {/* 第二阶段进度条 */}
+                        {isStage2 && batchProgress.total > 0 && (
+                          <div style={{
+                            padding: '12px',
+                            marginBottom: '8px',
+                            backgroundColor: '#f0f8ff',
+                            border: '2px solid #4caf50',
+                            borderRadius: '2px'
+                          }}>
+                            <div style={{
+                              fontSize: '12px',
+                              fontWeight: 'bold',
+                              marginBottom: '8px',
+                              color: '#2e7d32',
+                              textAlign: 'center'
+                            }}>
+                              🔄 并行处理中... {batchProgress.completed} / {batchProgress.total}
+                            </div>
+                            
+                            {/* 进度条 */}
+                            <div style={{
+                              width: '100%',
+                              height: '24px',
+                              backgroundColor: '#e0e0e0',
+                              border: '2px inset #c0c0c0',
+                              borderRadius: '0px',
+                              overflow: 'hidden',
+                              position: 'relative'
+                            }}>
+                              <div style={{
+                                width: `${(batchProgress.completed / batchProgress.total) * 100}%`,
+                                height: '100%',
+                                backgroundColor: '#4caf50',
+                                transition: 'width 0.3s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}>
+                                <span style={{
+                                  color: '#ffffff',
+                                  fontSize: '10px',
+                                  fontWeight: 'bold',
+                                  textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
+                                }}>
+                                  {Math.round((batchProgress.completed / batchProgress.total) * 100)}%
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* 状态文本（第一阶段或其他信息） */}
+                        {(!isStage2 || !batchProgress.total) && (
+                          <div style={{
+                            padding: '8px',
+                            backgroundColor: '#ffffcc',
+                            border: '1px solid #ffcc00',
+                            fontSize: '11px',
+                            whiteSpace: 'pre-wrap'
+                          }}>
+                            {batchOutlineStatus}
+                          </div>
+                        )}
                       </div>
                     )}
                     
@@ -1795,7 +1854,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             console.log('开始第二阶段：细分分段');
                             setShowBatchOutlineModal(false);
                             setIsBatchGenerating(true);
-                            setBatchOutlineStatus('正在细分各个分段...');
+                            setIsStage2(true);
+                            setBatchOutlineStatus('正在并行细分各个分段...');
+                            setBatchProgress({ completed: 0, total: batchOutline.outline.length });
                             setShowBatchOutlineModal(true);
                             
                             try {
@@ -1836,17 +1897,19 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       setBatchOutlineStatus(data.message);
                                     } else if (data.type === 'section_start') {
                                       currentSection = data.section;
-                                      setBatchOutlineStatus(prev => prev + `\n\n🔍 正在处理分段${data.section}: ${data.title} (第${data.pages}页)...`);
+                                      // 第二阶段不显示详细信息，只记录
                                     } else if (data.type === 'section_content') {
-                                      // 实时显示LLM生成的内容
-                                      setBatchOutlineStatus(prev => prev + data.content);
+                                      // 第二阶段不显示流式输出内容，避免混乱
                                     } else if (data.type === 'section_done') {
-                                      setBatchOutlineStatus(prev => prev + `\n✅ 分段${data.section}细分完成，共${data.subdivision.subdivisions.length}个细分单元 (${data.completed}/${data.total})`);
+                                      // 更新进度
+                                      setBatchProgress({ completed: data.completed, total: data.total });
+                                      setBatchOutlineStatus(`正在并行细分各个分段...\n进度: ${data.completed}/${data.total}`);
                                     } else if (data.type === 'complete') {
                                       console.log('所有分段细分完成:', data.data);
                                       setBatchSubdivisions(data.data); // 保存细分数据
-                                      setBatchOutlineStatus(prev => prev + '\n\n🎉 所有分段细分完成！\n💡 点击任意分段查看细分内容');
+                                      setBatchOutlineStatus('🎉 所有分段细分完成！\n💡 点击任意分段查看细分内容');
                                       setIsBatchGenerating(false);
+                                      setIsStage2(false);
                                     } else if (data.type === 'warning') {
                                       setBatchOutlineStatus(prev => prev + `\n⚠️ ${data.message}`);
                                     } else if (data.type === 'done') {
@@ -3193,13 +3256,13 @@ function BoardCanvas({
 
     // 添加事件监听器
     if (typeof window !== 'undefined') {
-      window.addEventListener('fileWatcherUpdate', handleFileWatcherUpdate);
+    window.addEventListener('fileWatcherUpdate', handleFileWatcherUpdate);
     }
     
     // 清理函数
     return () => {
       if (typeof window !== 'undefined') {
-        window.removeEventListener('fileWatcherUpdate', handleFileWatcherUpdate);
+      window.removeEventListener('fileWatcherUpdate', handleFileWatcherUpdate);
       }
     };
   }, [boardId, fetchBoardWindows]);
@@ -4753,7 +4816,7 @@ function BoardCanvas({
           if (minimizedWindows.has(CHAT_WINDOW_ID)) {
             // 如果被最小化，恢复显示
             handleWindowMinimizeLocal(CHAT_WINDOW_ID);
-          } else {
+        } else {
             // 如果正在显示，最小化它
             handleWindowMinimizeLocal(CHAT_WINDOW_ID);
           }
@@ -4774,11 +4837,11 @@ function BoardCanvas({
     };
 
     if (typeof window !== 'undefined') {
-      window.addEventListener('toggleChatWindow', handleToggleChatWindow);
+    window.addEventListener('toggleChatWindow', handleToggleChatWindow);
     }
     return () => {
       if (typeof window !== 'undefined') {
-        window.removeEventListener('toggleChatWindow', handleToggleChatWindow);
+      window.removeEventListener('toggleChatWindow', handleToggleChatWindow);
       }
     };
   }, [boardName, minimizedWindows]);
@@ -5111,18 +5174,18 @@ function BoardCanvas({
               <div className="window-controls">
                 {/* Chat 窗口只显示关闭按钮，关闭时执行最小化 */}
                 {window.type !== 'chat' && (
-                  <button 
-                    className="minimize-btn"
-                    onClick={(e) => {
-                      console.log('点击了最小化按钮:', window.id);
-                      e.stopPropagation();
-                      e.preventDefault();
-                      handleWindowMinimizeLocal(window.id);
-                    }}
-                    title="最小化"
-                  >
-                    ⁻
-                  </button>
+                <button 
+                  className="minimize-btn"
+                  onClick={(e) => {
+                    console.log('点击了最小化按钮:', window.id);
+                    e.stopPropagation();
+                    e.preventDefault();
+                    handleWindowMinimizeLocal(window.id);
+                  }}
+                  title="最小化"
+                >
+                  ⁻
+                </button>
                 )}
                 <button 
                   className="close-btn"
@@ -5134,7 +5197,7 @@ function BoardCanvas({
                     if (window.type === 'chat') {
                       handleWindowMinimizeLocal(window.id);
                     } else {
-                      handleWindowCloseLocal(window.id);
+                    handleWindowCloseLocal(window.id);
                     }
                   }}
                   title={window.type === 'chat' ? "最小化" : "关闭窗口"}
