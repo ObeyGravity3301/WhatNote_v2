@@ -1603,8 +1603,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                         key={index}
                                         style={{
                                           width: '20px',
-                                          height: '14px',
-                                          backgroundColor: isActive ? '#0080ff' : 'transparent',
+                                          height: '18px',
+                                          backgroundColor: isActive ? '#0000FF' : 'transparent',
                                           border: '1px solid transparent',
                                           borderRadius: '0px',
                                           display: 'flex',
@@ -1621,8 +1621,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                             bottom: '1px',
                                             left: '1px',
                                             right: '1px',
-                                            height: '6px',
-                                            background: 'linear-gradient(0deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.05) 100%)',
+                                            height: '8px',
+                                            backgroundColor: '#000080',
                                             borderRadius: '0px'
                                           }} />
                                         )}
