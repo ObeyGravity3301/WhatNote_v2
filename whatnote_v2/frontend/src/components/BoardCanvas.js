@@ -1614,30 +1614,17 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                           boxSizing: 'border-box'
                                         }}
                                       >
-                                        {/* 方格内部3D效果 */}
+                                        {/* 方格阴影效果 */}
                                         {isActive && (
-                                          <>
-                                            {/* 高光效果 */}
-                                            <div style={{
-                                              position: 'absolute',
-                                              top: '1px',
-                                              left: '1px',
-                                              right: '1px',
-                                              height: '6px',
-                                              background: 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 100%)',
-                                              borderRadius: '0px'
-                                            }} />
-                                            {/* 阴影效果 */}
-                                            <div style={{
-                                              position: 'absolute',
-                                              bottom: '1px',
-                                              left: '1px',
-                                              right: '1px',
-                                              height: '6px',
-                                              background: 'linear-gradient(0deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.05) 100%)',
-                                              borderRadius: '0px'
-                                            }} />
-                                          </>
+                                          <div style={{
+                                            position: 'absolute',
+                                            bottom: '1px',
+                                            left: '1px',
+                                            right: '1px',
+                                            height: '6px',
+                                            background: 'linear-gradient(0deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.05) 100%)',
+                                            borderRadius: '0px'
+                                          }} />
                                         )}
                                       </div>
                                     );
