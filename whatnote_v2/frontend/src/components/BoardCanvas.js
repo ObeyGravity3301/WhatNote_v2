@@ -1593,7 +1593,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                 {/* 量子化方格进度条 */}
                                 <div style={{
                                   display: 'flex',
-                                  gap: '3px',
+                                  width: '100%',
+                                  gap: '2px',
                                   alignItems: 'center'
                                 }}>
                                   {Array.from({ length: 10 }, (_, index) => {
@@ -1604,8 +1605,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       <div
                                         key={index}
                                         style={{
-                                          width: '20px',
-                                          height: '18px',
+                                          flex: 1,
+                                          height: '14px',
                                           backgroundColor: isActive ? '#000080' : 'transparent',
                                           border: '1px solid transparent',
                                           borderRadius: '0px',
@@ -1616,8 +1617,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                           boxSizing: 'border-box'
                                         }}
                                       >
-    </div>
-  );
+                                      </div>
+                                    );
                                   })}
                                 </div>
                               </div>
