@@ -1137,9 +1137,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     setBatchOutline(data.outline);
                                     setBatchOutlineStatus('大纲生成完成！');
                                     setIsBatchGenerating(false);
-                                  } else if (data.type === 'warning') {
-                                    console.warn('大纲生成警告:', data.message);
-                                    setBatchOutlineStatus(prev => prev + '\n⚠️ ' + data.message);
+                                  } else if (data.type === 'info') {
+                                    console.log('大纲生成信息:', data.message);
+                                    setBatchOutlineStatus(prev => prev + '\n💡 ' + data.message);
                                   } else if (data.type === 'done') {
                                     console.log('批量生成流程完成');
                                     if (!data.outline) {
@@ -1559,7 +1559,31 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
                           📋 文档大纲
                         </h3>
-                        {batchOutline.outline.map((section, index) => (
+                        
+                        {/* 重叠信息提示 */}
+                        {batchOutline.page_analysis && batchOutline.page_analysis.statistics.overlapping_pages_count > 0 && (
+                          <div style={{
+                            padding: '8px',
+                            marginBottom: '12px',
+                            backgroundColor: '#e8f4fd',
+                            border: '1px solid #b8daff',
+                            borderRadius: '2px',
+                            fontSize: '10px'
+                          }}>
+                            💡 检测到 <strong>{batchOutline.page_analysis.statistics.overlapping_pages_count}</strong> 个重叠页面
+                            （第 {batchOutline.page_analysis.statistics.multi_annotated_pages.join(', ')} 页），
+                            这些页面会被多次注释，后续将自动融合为一个完整注释。
+                          </div>
+                        )}
+                        
+                        {batchOutline.outline.map((section, index) => {
+                          // 检查这个章节是否包含重叠页面
+                          const hasOverlap = batchOutline.page_analysis && 
+                            batchOutline.page_analysis.statistics.multi_annotated_pages.some(
+                              page => page >= section.page_start && page <= section.page_end
+                            );
+                          
+                          return (
                           <div
                             key={index}
                             style={{
@@ -1567,7 +1591,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                               marginBottom: '8px',
                               backgroundColor: '#f0f0f0',
                               border: '1px solid #d0d0d0',
-                              borderLeft: '3px solid #0078d4',
+                              borderLeft: hasOverlap ? '3px solid #ff9800' : '3px solid #0078d4',
                               cursor: 'pointer',
                               transition: 'background-color 0.2s'
                             }}
@@ -1582,9 +1606,24 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                               fontWeight: 'bold',
                               marginBottom: '4px',
                               fontSize: '12px',
-                              color: '#0078d4'
+                              color: hasOverlap ? '#ff9800' : '#0078d4',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
                             }}>
                               {section.section_number}. {section.title}
+                              {hasOverlap && (
+                                <span style={{
+                                  fontSize: '9px',
+                                  backgroundColor: '#fff3e0',
+                                  color: '#e65100',
+                                  padding: '2px 4px',
+                                  borderRadius: '2px',
+                                  fontWeight: 'normal'
+                                }} title="此章节包含会被多次注释的页面">
+                                  🔗 含重叠页
+                                </span>
+                              )}
                             </div>
                             <div style={{
                               fontSize: '10px',
@@ -1600,7 +1639,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                               {section.description}
                             </div>
                           </div>
-                        ))}
+                        );
+                        })}
                       </div>
                     )}
                     
