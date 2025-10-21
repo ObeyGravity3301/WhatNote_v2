@@ -1569,7 +1569,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             {/* Windows 98风格量子化方格进度条 */}
                             <div style={{
                               width: '100%',
-                              height: '20px',
+                              height: '30px',
                               backgroundColor: '#c0c0c0',
                               border: '2px inset #c0c0c0',
                               borderRadius: '0px',
@@ -1582,7 +1582,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                               {/* 进度条背景 */}
                               <div style={{
                                 width: '100%',
-                                height: '18px',
+                                height: '27px',
                                 backgroundColor: '#f0f0f0',
                                 border: '1px inset #c0c0c0',
                                 display: 'flex',
@@ -1606,7 +1606,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                         key={index}
                                         style={{
                                           flex: 1,
-                                          height: '14px',
+                                          height: '21px',
                                           backgroundColor: isActive ? '#000080' : 'transparent',
                                           border: '1px solid transparent',
                                           borderRadius: '0px',
