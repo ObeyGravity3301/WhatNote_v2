@@ -1590,8 +1590,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                 <div style={{
                                   width: `${(batchProgress.completed / batchProgress.total) * 100}%`,
                                   height: '100%',
-                                  backgroundColor: '#0080ff',
-                                  backgroundImage: `
+                                  background: `
                                     repeating-linear-gradient(
                                       90deg,
                                       #0080ff 0px,
@@ -1615,7 +1614,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     left: 0,
                                     right: 0,
                                     bottom: 0,
-                                    backgroundImage: `
+                                    background: `
                                       repeating-linear-gradient(
                                         90deg,
                                         transparent 0px,
@@ -1647,7 +1646,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                   left: `${(batchProgress.completed / batchProgress.total) * 100}%`,
                                   right: 0,
                                   bottom: 0,
-                                  backgroundImage: `
+                                  background: `
                                     repeating-linear-gradient(
                                       90deg,
                                       transparent 0px,
