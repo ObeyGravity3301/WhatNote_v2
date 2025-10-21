@@ -1522,9 +1522,10 @@ async def generate_batch_outline(
                         
                         # 记录重叠情况
                         if analysis_result['statistics']['overlapping_pages_count'] > 0:
-                            info(f"检测到{analysis_result['statistics']['overlapping_pages_count']}个重叠页面，将用于后续注释融合")
+                            overlap_count = analysis_result['statistics']['overlapping_pages_count']
+                            info(f"检测到{overlap_count}个重叠页面，将用于后续注释融合")
                             info(f"重叠页面列表: {analysis_result['statistics']['multi_annotated_pages']}")
-                            yield f"data: {json.dumps({'type': 'info', 'message': f'检测到{analysis_result[\"statistics\"][\"overlapping_pages_count\"]}个页面会被多次注释，后续将自动融合'}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'type': 'info', 'message': f'检测到{overlap_count}个页面会被多次注释，后续将自动融合'}, ensure_ascii=False)}\n\n"
                         
                         # 保存大纲数据（包含重叠信息）到文件
                         outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
@@ -1796,9 +1797,10 @@ async def generate_batch_outline(
                         
                         # 记录重叠情况
                         if analysis_result['statistics']['overlapping_pages_count'] > 0:
-                            info(f"检测到{analysis_result['statistics']['overlapping_pages_count']}个重叠页面，将用于后续注释融合")
+                            overlap_count = analysis_result['statistics']['overlapping_pages_count']
+                            info(f"检测到{overlap_count}个重叠页面，将用于后续注释融合")
                             info(f"重叠页面列表: {analysis_result['statistics']['multi_annotated_pages']}")
-                            yield f"data: {json.dumps({'type': 'info', 'message': f'检测到{analysis_result[\"statistics\"][\"overlapping_pages_count\"]}个页面会被多次注释，后续将自动融合'}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'type': 'info', 'message': f'检测到{overlap_count}个页面会被多次注释，后续将自动融合'}, ensure_ascii=False)}\n\n"
                         
                         # 保存大纲数据（包含重叠信息）到文件
                         outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
