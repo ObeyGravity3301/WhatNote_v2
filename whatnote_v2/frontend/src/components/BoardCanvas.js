@@ -1551,7 +1551,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             padding: '8px',
                             marginBottom: '8px',
                             backgroundColor: '#c0c0c0',
-                            border: '2px inset #c0c0c0'
+                            border: '2px inset #c0c0c0',
+                            borderRadius: '0px'
                           }}>
                             <div style={{
                               fontSize: '11px',
@@ -1563,74 +1564,76 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                               🔄 并行处理中... {batchProgress.completed} / {batchProgress.total}
                             </div>
                             
-                            {/* 自定义Windows 98风格进度条 */}
+                            {/* Windows 98风格独立方格进度条 */}
                             <div style={{
-                              width: '100%',
-                              height: '20px',
-                              backgroundColor: '#c0c0c0',
-                              border: '1px inset #c0c0c0',
                               display: 'flex',
+                              gap: '2px',
+                              justifyContent: 'center',
                               alignItems: 'center',
-                              padding: '1px'
+                              flexWrap: 'wrap'
                             }}>
-                              {/* 进度条容器 */}
-                              <div style={{
-                                width: '100%',
-                                height: '18px',
-                                backgroundColor: '#f0f0f0',
-                                border: '1px inset #c0c0c0',
-                                display: 'flex',
-                                position: 'relative'
-                              }}>
-                                {/* 动态生成方格 */}
-                                {Array.from({ length: batchProgress.total }, (_, index) => {
-                                  const isCompleted = index < batchProgress.completed;
-                                  return (
-                                    <div
-                                      key={index}
-                                      style={{
-                                        width: `${100 / batchProgress.total}%`,
-                                        height: '100%',
-                                        backgroundColor: isCompleted ? '#0080ff' : '#f0f0f0',
-                                        border: isCompleted ? '1px solid #0066cc' : '1px solid #c0c0c0',
-                                        borderRight: index < batchProgress.total - 1 ? '1px solid #ffffff' : 'none',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        position: 'relative',
-                                        boxSizing: 'border-box'
-                                      }}
-                                    >
-                                      {/* 方格内部渐变效果 */}
-                                      {isCompleted && (
+                              {Array.from({ length: 20 }, (_, index) => {
+                                const progressPercentage = (batchProgress.completed / batchProgress.total) * 100;
+                                const isActive = (index + 1) * 5 <= progressPercentage; // 每格代表5%
+                                
+                                return (
+                                  <div
+                                    key={index}
+                                    style={{
+                                      width: '12px',
+                                      height: '16px',
+                                      backgroundColor: isActive ? '#0080ff' : '#e0e0e0',
+                                      border: '1px outset #c0c0c0',
+                                      borderRadius: '0px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      position: 'relative',
+                                      boxSizing: 'border-box'
+                                    }}
+                                  >
+                                    {/* 方格内部3D效果 */}
+                                    {isActive && (
+                                      <>
+                                        {/* 高光效果 */}
                                         <div style={{
                                           position: 'absolute',
                                           top: '1px',
                                           left: '1px',
                                           right: '1px',
-                                          bottom: '1px',
-                                          background: 'linear-gradient(180deg, #4da6ff 0%, #0066cc 100%)',
-                                          border: '1px solid #0080ff'
+                                          height: '6px',
+                                          background: 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 100%)',
+                                          borderRadius: '0px'
                                         }} />
-                                      )}
-                                      
-                                      {/* 百分比文字（只在最后一个完成的方格显示） */}
-                                      {isCompleted && index === batchProgress.completed - 1 && (
-                                        <span style={{
-                                          color: '#ffffff',
-                                          fontSize: '8px',
-                                          fontWeight: 'bold',
-                                          textShadow: '1px 1px 1px rgba(0,0,0,0.8)',
-                                          zIndex: 1,
-                                          position: 'relative'
-                                        }}>
-                                          {Math.round((batchProgress.completed / batchProgress.total) * 100)}%
-                                        </span>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                                        {/* 阴影效果 */}
+                                        <div style={{
+                                          position: 'absolute',
+                                          bottom: '1px',
+                                          left: '1px',
+                                          right: '1px',
+                                          height: '6px',
+                                          background: 'linear-gradient(0deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.05) 100%)',
+                                          borderRadius: '0px'
+                                        }} />
+                                      </>
+                                    )}
+                                    
+                                    {/* 百分比文字（只在最后一个完成的方格显示） */}
+                                    {isActive && index === Math.floor(progressPercentage / 5) - 1 && (
+                                      <span style={{
+                                        color: '#ffffff',
+                                        fontSize: '6px',
+                                        fontWeight: 'bold',
+                                        textShadow: '1px 1px 1px rgba(0,0,0,0.8)',
+                                        zIndex: 1,
+                                        position: 'relative'
+                                      }}>
+                                        {Math.round(progressPercentage)}%
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
