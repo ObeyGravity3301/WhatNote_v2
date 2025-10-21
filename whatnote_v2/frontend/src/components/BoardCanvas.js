@@ -1949,6 +1949,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       setBatchOutlineStatus(`正在并行细分各个分段...\n进度: ${data.completed}/${data.total}`);
                                     } else if (data.type === 'complete') {
                                       console.log('所有分段细分完成:', data.data);
+                                      // 确保进度条显示为100%完成状态
+                                      setBatchProgress(prev => ({ completed: prev.total, total: prev.total }));
                                       setBatchSubdivisions(data.data); // 保存细分数据
                                       setBatchOutlineStatus('🎉 所有分段细分完成！\n💡 点击任意分段查看细分内容');
                                       setIsBatchGenerating(false);
