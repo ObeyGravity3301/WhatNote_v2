@@ -1564,76 +1564,101 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                               🔄 并行处理中... {batchProgress.completed} / {batchProgress.total}
                             </div>
                             
-                            {/* Windows 98风格独立方格进度条 */}
+                            {/* Windows 98风格连续方格进度条 */}
                             <div style={{
+                              width: '100%',
+                              height: '20px',
+                              backgroundColor: '#c0c0c0',
+                              border: '2px inset #c0c0c0',
+                              borderRadius: '0px',
+                              overflow: 'hidden',
+                              position: 'relative',
                               display: 'flex',
-                              gap: '2px',
-                              justifyContent: 'center',
                               alignItems: 'center',
-                              flexWrap: 'wrap'
+                              padding: '1px'
                             }}>
-                              {Array.from({ length: 20 }, (_, index) => {
-                                const progressPercentage = (batchProgress.completed / batchProgress.total) * 100;
-                                const isActive = (index + 1) * 5 <= progressPercentage; // 每格代表5%
+                              {/* 进度条背景 */}
+                              <div style={{
+                                width: '100%',
+                                height: '18px',
+                                backgroundColor: '#f0f0f0',
+                                border: '1px inset #c0c0c0',
+                                display: 'flex',
+                                position: 'relative'
+                              }}>
+                                {/* 蓝色方格进度条 */}
+                                <div style={{
+                                  width: `${(batchProgress.completed / batchProgress.total) * 100}%`,
+                                  height: '100%',
+                                  backgroundColor: '#0080ff',
+                                  backgroundImage: `
+                                    repeating-linear-gradient(
+                                      90deg,
+                                      #0080ff 0px,
+                                      #0080ff 6px,
+                                      #0066cc 6px,
+                                      #0066cc 8px
+                                    )
+                                  `,
+                                  backgroundSize: '8px 100%',
+                                  backgroundRepeat: 'repeat-x',
+                                  transition: 'width 0.3s ease',
+                                  position: 'relative',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}>
+                                  {/* 白色分割线效果 */}
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    backgroundImage: `
+                                      repeating-linear-gradient(
+                                        90deg,
+                                        transparent 0px,
+                                        transparent 6px,
+                                        rgba(255,255,255,0.4) 6px,
+                                        rgba(255,255,255,0.4) 8px
+                                      )
+                                    `,
+                                    backgroundSize: '8px 100%'
+                                  }} />
+                                  
+                                  {/* 百分比文字 */}
+                                  <span style={{
+                                    color: '#ffffff',
+                                    fontSize: '10px',
+                                    fontWeight: 'bold',
+                                    textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+                                    zIndex: 1,
+                                    position: 'relative'
+                                  }}>
+                                    {Math.round((batchProgress.completed / batchProgress.total) * 100)}%
+                                  </span>
+                                </div>
                                 
-                                return (
-                                  <div
-                                    key={index}
-                                    style={{
-                                      width: '12px',
-                                      height: '16px',
-                                      backgroundColor: isActive ? '#0080ff' : '#e0e0e0',
-                                      border: '1px outset #c0c0c0',
-                                      borderRadius: '0px',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      position: 'relative',
-                                      boxSizing: 'border-box'
-                                    }}
-                                  >
-                                    {/* 方格内部3D效果 */}
-                                    {isActive && (
-                                      <>
-                                        {/* 高光效果 */}
-                                        <div style={{
-                                          position: 'absolute',
-                                          top: '1px',
-                                          left: '1px',
-                                          right: '1px',
-                                          height: '6px',
-                                          background: 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 100%)',
-                                          borderRadius: '0px'
-                                        }} />
-                                        {/* 阴影效果 */}
-                                        <div style={{
-                                          position: 'absolute',
-                                          bottom: '1px',
-                                          left: '1px',
-                                          right: '1px',
-                                          height: '6px',
-                                          background: 'linear-gradient(0deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.05) 100%)',
-                                          borderRadius: '0px'
-                                        }} />
-                                      </>
-                                    )}
-                                    
-                                    {/* 百分比文字（只在最后一个完成的方格显示） */}
-                                    {isActive && index === Math.floor(progressPercentage / 5) - 1 && (
-                                      <span style={{
-                                        color: '#ffffff',
-                                        fontSize: '6px',
-                                        fontWeight: 'bold',
-                                        textShadow: '1px 1px 1px rgba(0,0,0,0.8)',
-                                        zIndex: 1,
-                                        position: 'relative'
-                                      }}>
-                                        {Math.round(progressPercentage)}%
-                                      </span>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                                {/* 未完成部分的网格背景 */}
+                                <div style={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  left: `${(batchProgress.completed / batchProgress.total) * 100}%`,
+                                  right: 0,
+                                  bottom: 0,
+                                  backgroundImage: `
+                                    repeating-linear-gradient(
+                                      90deg,
+                                      transparent 0px,
+                                      transparent 6px,
+                                      rgba(192,192,192,0.3) 6px,
+                                      rgba(192,192,192,0.3) 8px
+                                    )
+                                  `,
+                                  backgroundSize: '8px 100%'
+                                }} />
+                              </div>
                             </div>
                           </div>
                         )}
