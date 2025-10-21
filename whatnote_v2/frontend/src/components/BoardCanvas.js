@@ -1597,9 +1597,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                   gap: '2px',
                                   alignItems: 'center'
                                 }}>
-                                  {Array.from({ length: 10 }, (_, index) => {
+                                  {Array.from({ length: 20 }, (_, index) => {
                                     const progressPercentage = (batchProgress.completed / batchProgress.total) * 100;
-                                    const isActive = (index + 1) * 10 <= progressPercentage; // 每格代表10%
+                                    const isActive = (index + 1) * 5 <= progressPercentage; // 每格代表5%
                                     
                                     return (
                                       <div
@@ -1617,8 +1617,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                           boxSizing: 'border-box'
                                         }}
                                       >
-                                      </div>
-                                    );
+    </div>
+  );
                                   })}
                                 </div>
                               </div>
