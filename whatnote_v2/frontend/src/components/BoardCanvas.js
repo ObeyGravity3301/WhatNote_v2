@@ -1604,7 +1604,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                         style={{
                                           width: '20px',
                                           height: '18px',
-                                          backgroundColor: isActive ? '#0000FF' : 'transparent',
+                                          backgroundColor: isActive ? '#000080' : 'transparent',
                                           border: '1px solid transparent',
                                           borderRadius: '0px',
                                           display: 'flex',
@@ -1614,18 +1614,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                           boxSizing: 'border-box'
                                         }}
                                       >
-                                        {/* 方格阴影效果 */}
-                                        {isActive && (
-                                          <div style={{
-                                            position: 'absolute',
-                                            bottom: '1px',
-                                            left: '1px',
-                                            right: '1px',
-                                            height: '8px',
-                                            backgroundColor: '#000080',
-                                            borderRadius: '0px'
-                                          }} />
-                                        )}
                                       </div>
                                     );
                                   })}
