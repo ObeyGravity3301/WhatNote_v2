@@ -71,6 +71,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   const [selectedSection, setSelectedSection] = useState(null); // 当前选中的分段
   const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 }); // 批量处理进度
   const [isStage2, setIsStage2] = useState(false); // 是否是第二阶段
+  const [stage2Completed, setStage2Completed] = useState(false); // 第二阶段是否已完成
   
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
@@ -1094,6 +1095,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           setBatchOutline(null);
                           setIsBatchGenerating(true);
                           setIsStage2(false);
+                          setStage2Completed(false);
                           setBatchProgress({ completed: 0, total: 0 });
                           
                           try {
@@ -1543,10 +1545,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                     padding: '8px'
                   }}>
                     {/* 状态信息 */}
-                    {isBatchGenerating && (
+                    {(isBatchGenerating || stage2Completed) && (
                       <div>
                         {/* 第二阶段进度条 */}
-                        {isStage2 && batchProgress.total > 0 && (
+                        {(isStage2 || stage2Completed) && batchProgress.total > 0 && (
                           <div style={{
                             padding: '8px',
                             marginBottom: '8px',
@@ -1561,7 +1563,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                               color: '#000000',
                               textAlign: 'center'
                             }}>
-                              🔄 并行处理中... {batchProgress.completed} / {batchProgress.total}
+                              {stage2Completed ? '✅ 处理完成！' : '🔄 并行处理中...'} {batchProgress.completed} / {batchProgress.total}
                             </div>
                             
                             {/* Windows 98风格量子化方格进度条 */}
@@ -1614,8 +1616,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                           boxSizing: 'border-box'
                                         }}
                                       >
-                                      </div>
-                                    );
+    </div>
+  );
                                   })}
                                 </div>
                               </div>
@@ -1624,11 +1626,24 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         )}
                         
                         {/* 状态文本（第一阶段或其他信息） */}
-                        {(!isStage2 || !batchProgress.total) && (
+                        {(!isStage2 && !stage2Completed) && (
                           <div style={{
                             padding: '8px',
                             backgroundColor: '#ffffcc',
                             border: '1px solid #ffcc00',
+                            fontSize: '11px',
+                            whiteSpace: 'pre-wrap'
+                          }}>
+                            {batchOutlineStatus}
+                          </div>
+                        )}
+                        
+                        {/* 第二阶段完成后的提示信息 */}
+                        {stage2Completed && (
+                          <div style={{
+                            padding: '8px',
+                            backgroundColor: '#e0ffe0',
+                            border: '1px solid #00cc00',
                             fontSize: '11px',
                             whiteSpace: 'pre-wrap'
                           }}>
@@ -1882,6 +1897,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             setShowBatchOutlineModal(false);
                             setIsBatchGenerating(true);
                             setIsStage2(true);
+                            setStage2Completed(false);
                             setBatchOutlineStatus('正在并行细分各个分段...');
                             setBatchProgress({ completed: 0, total: batchOutline.outline.length });
                             setShowBatchOutlineModal(true);
@@ -1936,7 +1952,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       setBatchSubdivisions(data.data); // 保存细分数据
                                       setBatchOutlineStatus('🎉 所有分段细分完成！\n💡 点击任意分段查看细分内容');
                                       setIsBatchGenerating(false);
-                                      setIsStage2(false);
+                                      setStage2Completed(true); // 标记第二阶段完成，但保留进度条显示
                                     } else if (data.type === 'warning') {
                                       setBatchOutlineStatus(prev => prev + `\n⚠️ ${data.message}`);
                                     } else if (data.type === 'done') {
