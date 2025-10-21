@@ -67,6 +67,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   const [batchOutlineStatus, setBatchOutlineStatus] = useState(''); // 批量生成状态信息
   const [batchOutline, setBatchOutline] = useState(null); // 生成的大纲数据
   const [isBatchGenerating, setIsBatchGenerating] = useState(false); // 是否正在生成
+  const [batchSubdivisions, setBatchSubdivisions] = useState(null); // 第二阶段细分数据
+  const [selectedSection, setSelectedSection] = useState(null); // 当前选中的分段
   
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
@@ -1550,8 +1552,116 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       </div>
                     )}
                     
+                    {/* 细分内容展示 */}
+                    {selectedSection && (
+                      <div style={{
+                        padding: '8px',
+                        fontSize: '11px'
+                      }}>
+                        {/* 返回按钮 */}
+                        <button
+                          onClick={() => setSelectedSection(null)}
+                          style={{
+                            marginBottom: '12px',
+                            padding: '4px 8px',
+                            fontSize: '11px',
+                            backgroundColor: '#c0c0c0',
+                            border: '2px outset #c0c0c0',
+                            borderRadius: '0px',
+                            cursor: 'pointer',
+                            fontFamily: 'MS Sans Serif, sans-serif'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
+                        >
+                          ← 返回大纲
+                        </button>
+                        
+                        <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
+                          📖 分段详情：{selectedSection.section_title}
+                        </h3>
+                        
+                        {/* 分段基本信息 */}
+                        <div style={{
+                          padding: '8px',
+                          marginBottom: '12px',
+                          backgroundColor: '#e8f4fd',
+                          border: '1px solid #b8daff',
+                          borderRadius: '2px',
+                          fontSize: '10px'
+                        }}>
+                          <div style={{ marginBottom: '4px' }}>
+                            📄 <strong>页码范围：</strong>第{selectedSection.page_start}页 - 第{selectedSection.page_end}页
+                          </div>
+                        </div>
+                        
+                        {/* 分段概括 */}
+                        <div style={{
+                          padding: '8px',
+                          marginBottom: '12px',
+                          backgroundColor: '#fff8e1',
+                          border: '1px solid #ffe082',
+                          borderRadius: '2px'
+                        }}>
+                          <div style={{ 
+                            fontWeight: 'bold', 
+                            marginBottom: '6px',
+                            fontSize: '11px',
+                            color: '#f57c00'
+                          }}>
+                            💡 内容概括
+                          </div>
+                          <div style={{
+                            fontSize: '10px',
+                            lineHeight: '1.5',
+                            whiteSpace: 'pre-wrap'
+                          }}>
+                            {selectedSection.section_summary}
+                          </div>
+                        </div>
+                        
+                        {/* 细分列表 */}
+                        <div style={{
+                          fontWeight: 'bold',
+                          marginBottom: '8px',
+                          fontSize: '11px'
+                        }}>
+                          🔍 细分内容（共{selectedSection.subdivisions.length}个单元）
+                        </div>
+                        
+                        {selectedSection.subdivisions.map((sub, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              padding: '8px',
+                              marginBottom: '8px',
+                              backgroundColor: '#f5f5f5',
+                              border: '1px solid #e0e0e0',
+                              borderLeft: '3px solid #4caf50',
+                              borderRadius: '2px'
+                            }}
+                          >
+                            <div style={{
+                              fontWeight: 'bold',
+                              marginBottom: '4px',
+                              fontSize: '11px',
+                              color: '#2e7d32'
+                            }}>
+                              {sub.subdivision_number}. {sub.title}
+                            </div>
+                            <div style={{
+                              fontSize: '10px',
+                              color: '#666'
+                            }}>
+                              📖 第{sub.page_start}页 - 第{sub.page_end}页
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
                     {/* 大纲展示 */}
-                    {batchOutline && batchOutline.outline && (
+                    {!selectedSection && batchOutline && batchOutline.outline && (
                       <div style={{
                         padding: '8px',
                         fontSize: '11px'
@@ -1559,6 +1669,21 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
                           📋 文档大纲
                         </h3>
+                        
+                        {/* 操作提示 */}
+                        {batchSubdivisions && (
+                          <div style={{
+                            padding: '6px 8px',
+                            marginBottom: '12px',
+                            backgroundColor: '#e8f5e9',
+                            border: '1px solid #a5d6a7',
+                            borderRadius: '2px',
+                            fontSize: '10px',
+                            color: '#2e7d32'
+                          }}>
+                            💡 点击任意分段可查看该分段的细分内容和概括
+                          </div>
+                        )}
                         
                         {/* 重叠信息提示 */}
                         {batchOutline.page_analysis && batchOutline.page_analysis.statistics.overlapping_pages_count > 0 && (
@@ -1599,7 +1724,19 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
                             onClick={() => {
                               console.log('点击章节:', section);
-                              // 未来可以在这里添加跳转到对应页面的功能
+                              // 如果有细分数据，展示该分段的细分内容
+                              if (batchSubdivisions && batchSubdivisions.subdivisions) {
+                                const subdivision = batchSubdivisions.subdivisions.find(
+                                  s => s.section_number === section.section_number
+                                );
+                                if (subdivision) {
+                                  setSelectedSection(subdivision);
+                                } else {
+                                  alert('该分段暂无细分数据，请先执行第二阶段');
+                                }
+                              } else {
+                                alert('请先执行第二阶段：点击"开始批量生成"按钮');
+                              }
                             }}
                           >
                             <div style={{
@@ -1645,7 +1782,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                     )}
                     
                     {/* 加载完成后的操作按钮 */}
-                    {!isBatchGenerating && batchOutline && (
+                    {!isBatchGenerating && !selectedSection && batchOutline && (
                       <div style={{
                         padding: '8px',
                         borderTop: '1px solid #d0d0d0',
@@ -1707,9 +1844,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       setBatchOutlineStatus(prev => prev + `\n✅ 分段${data.section}细分完成，共${data.subdivision.subdivisions.length}个细分单元`);
                                     } else if (data.type === 'complete') {
                                       console.log('所有分段细分完成:', data.data);
-                                      setBatchOutlineStatus(prev => prev + '\n\n🎉 所有分段细分完成！');
+                                      setBatchSubdivisions(data.data); // 保存细分数据
+                                      setBatchOutlineStatus(prev => prev + '\n\n🎉 所有分段细分完成！\n💡 点击任意分段查看细分内容');
                                       setIsBatchGenerating(false);
-                                      alert('第二阶段完成！细分数据已保存。');
                                     } else if (data.type === 'warning') {
                                       setBatchOutlineStatus(prev => prev + `\n⚠️ ${data.message}`);
                                     } else if (data.type === 'done') {
@@ -1743,7 +1880,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           onMouseEnter={(e) => e.target.style.backgroundColor = '#005a9e'}
                           onMouseLeave={(e) => e.target.style.backgroundColor = '#0078d4'}
                         >
-                          ✨ 开始批量生成
+                          {batchSubdivisions ? '🔄 重新细分' : '➡️ 开始第二阶段'}
                         </button>
                         <button
                           onClick={() => setShowBatchOutlineModal(false)}
