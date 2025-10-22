@@ -1489,8 +1489,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                 zIndex: 2000
               }}>
                 <div style={{
-                  backgroundColor: '#c0c0c0',
-                  border: '3px outset #c0c0c0',
+                  backgroundColor: '#bfbfbf',
+                  border: '3px outset #bfbfbf',
                   borderRadius: '0px',
                   padding: '8px',
                   width: '80%',
@@ -1788,14 +1788,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             style={{
                               padding: '8px',
                               marginBottom: '8px',
-                              backgroundColor: '#bfbfbf',
+                              backgroundColor: '#f0f0f0',
                               border: '1px solid #d0d0d0',
                               borderLeft: hasOverlap ? '3px solid #ff9800' : '3px solid #0078d4',
                               cursor: 'pointer',
                               transition: 'background-color 0.2s'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#b0b0b0'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#bfbfbf'}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e8e8e8'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
                             onClick={() => {
                               console.log('点击章节:', section);
                               // 如果有细分数据，展示该分段的细分内容
