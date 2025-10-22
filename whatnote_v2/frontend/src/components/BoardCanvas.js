@@ -867,6 +867,21 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
               padding: '8px',
               backgroundColor: '#f0f0f0'
             }}>
+              {/* 第一阶段：生成中的流式输出 */}
+              {isBatchGenerating && !batchOutline && (
+                <div style={{
+                  padding: '12px',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px inset #c0c0c0',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  whiteSpace: 'pre-wrap',
+                  minHeight: '100px'
+                }}>
+                  {batchOutlineStatus}
+                </div>
+              )}
+
               {/* 第一阶段：大纲展示 */}
               {batchOutline && batchOutline.outline && (
                 <div>
@@ -969,6 +984,113 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       </div>
                     );
                   })}
+
+                  {/* 第二阶段启动按键 */}
+                  {!isBatchGenerating && !batchSubdivisions && (
+                    <div style={{
+                      marginTop: '12px',
+                      padding: '8px',
+                      display: 'flex',
+                      justifyContent: 'flex-end'
+                    }}>
+                      <button
+                        onClick={async () => {
+                          console.log('开始第二阶段：细分分段');
+                          setIsBatchGenerating(true);
+                          setIsStage2(true);
+                          setStage2Completed(false);
+                          setBatchOutlineStatus('正在并行细分各个分段...');
+                          setBatchProgress({ completed: 0, total: batchOutline.outline.length });
+                          
+                          try {
+                            // 调用第二阶段API
+                            const response = await fetch(
+                              `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivide`,
+                              {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                }
+                              }
+                            );
+                            
+                            if (!response.ok) {
+                              throw new Error('细分处理失败');
+                            }
+                            
+                            // 处理流式响应
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder();
+                            let buffer = '';
+                            let currentSection = null;
+                            
+                            while (true) {
+                              const {done, value} = await reader.read();
+                              if (done) break;
+                              
+                              buffer += decoder.decode(value, {stream: true});
+                              const lines = buffer.split('\n\n');
+                              buffer = lines.pop() || '';
+                              
+                              for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                  const data = JSON.parse(line.slice(6));
+                                  
+                                  if (data.type === 'status') {
+                                    setBatchOutlineStatus(data.message);
+                                  } else if (data.type === 'section_start') {
+                                    currentSection = data.section;
+                                    // 第二阶段不显示详细信息，只记录
+                                  } else if (data.type === 'section_content') {
+                                    // 第二阶段不显示流式输出内容，避免混乱
+                                  } else if (data.type === 'section_done') {
+                                    // 更新进度
+                                    setBatchProgress({ completed: data.completed, total: data.total });
+                                    setBatchOutlineStatus(`正在并行细分各个分段...\n进度: ${data.completed}/${data.total}`);
+                                  } else if (data.type === 'complete') {
+                                    console.log('所有分段细分完成:', data.data);
+                                    // 确保进度条显示为100%完成状态
+                                    setBatchProgress(prev => ({ completed: prev.total, total: prev.total }));
+                                    setBatchSubdivisions(data.data); // 保存细分数据
+                                    setIsBatchGenerating(false);
+                                    setStage2Completed(true); // 标记第二阶段完成，但保留进度条显示
+                                  } else if (data.type === 'warning') {
+                                    setBatchOutlineStatus(prev => prev + `\n警告: ${data.message}`);
+                                  } else if (data.type === 'done') {
+                                    console.log('细分流程完成');
+                                    setIsBatchGenerating(false);
+                                  } else if (data.type === 'error') {
+                                    console.error('细分错误:', data.error);
+                                    setBatchOutlineStatus(prev => prev + `\n错误: ${data.error}`);
+                                    setIsBatchGenerating(false);
+                                  }
+                                }
+                              }
+                            }
+                          } catch (error) {
+                            console.error('细分处理失败:', error);
+                            setBatchOutlineStatus(prev => prev + `\n细分失败: ${error.message}`);
+                            setIsBatchGenerating(false);
+                          }
+                        }}
+                        style={{
+                          padding: '6px 16px',
+                          fontSize: '11px',
+                          backgroundColor: '#0078d4',
+                          color: '#ffffff',
+                          border: '2px outset #0078d4',
+                          borderRadius: '0px',
+                          cursor: 'pointer',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          fontWeight: 'bold'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#005a9e'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#0078d4'}
+                      >
+                        {batchSubdivisions ? '重新细分' : '开始第二阶段'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1415,7 +1537,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         onClick={async () => {
                           console.log('批量生成功能');
                           setShowLLMMenu(false);
-                          setShowBatchOutlineModal(true);
+                          setShowOutlinePanel(true); // 直接打开侧栏，不打开弹窗
                           setBatchOutlineStatus('正在准备...');
                           setBatchOutline(null);
                           setIsBatchGenerating(true);
@@ -1470,11 +1592,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     setBatchOutline(data.outline);
                                     setBatchOutlineStatus('大纲生成完成！');
                                     setIsBatchGenerating(false);
-                                    // 关闭弹窗，打开大纲侧栏
-                                    setTimeout(() => {
-                                      setShowBatchOutlineModal(false);
-                                      setShowOutlinePanel(true);
-                                    }, 500);
                                   } else if (data.type === 'info') {
                                     console.log('大纲生成信息:', data.message);
                                     setBatchOutlineStatus(prev => prev + '\n' + data.message);
@@ -2198,13 +2315,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         <button
                           onClick={async () => {
                             console.log('开始第二阶段：细分分段');
-                            setShowBatchOutlineModal(false);
                             setIsBatchGenerating(true);
                             setIsStage2(true);
                             setStage2Completed(false);
                             setBatchOutlineStatus('正在并行细分各个分段...');
                             setBatchProgress({ completed: 0, total: batchOutline.outline.length });
-                            setShowBatchOutlineModal(true);
                             
                             try {
                               // 调用第二阶段API
@@ -2258,11 +2373,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       setBatchSubdivisions(data.data); // 保存细分数据
                                       setIsBatchGenerating(false);
                                       setStage2Completed(true); // 标记第二阶段完成，但保留进度条显示
-                                      // 关闭弹窗，打开大纲侧栏
-                                      setTimeout(() => {
-                                        setShowBatchOutlineModal(false);
-                                        setShowOutlinePanel(true);
-                                      }, 1000);
                                     } else if (data.type === 'warning') {
                                       setBatchOutlineStatus(prev => prev + `\n警告: ${data.message}`);
                                     } else if (data.type === 'done') {
