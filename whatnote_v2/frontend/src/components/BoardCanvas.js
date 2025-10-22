@@ -941,7 +941,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       color: '#0078d4',
                       fontFamily: 'MS Sans Serif, sans-serif'
                     }}>
-                      {batchOutline.outline[selectedSection].title || batchOutline.outline[selectedSection].section_title || `章节 ${selectedSection + 1}`}
+                      {batchOutline.outline[selectedSection].section_number || (selectedSection + 1)}. {batchOutline.outline[selectedSection].title || batchOutline.outline[selectedSection].section_title || `章节 ${selectedSection + 1}`}
                     </div>
                     
                     {/* 第二阶段返回的section_summary - 更详细的概括 */}
@@ -1224,9 +1224,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             fontWeight: 'bold',
                             fontSize: '11px',
                             flex: 1,
-                            color: '#000000'
+                            color: '#000000',
+                            fontFamily: 'MS Sans Serif, sans-serif'
                           }}>
-                            {section.title || section.section_title || `章节 ${index + 1}`}
+                            {section.section_number || (index + 1)}. {section.title || section.section_title || `章节 ${index + 1}`}
                           </div>
                           <div style={{
                             fontSize: '10px',
