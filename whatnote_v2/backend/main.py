@@ -2342,7 +2342,7 @@ async def generate_section_annotations(
                             
                             if save_success:
                                 completed_pages += 1
-                                yield f"data: {json.dumps({'type': 'page_done', 'page': page_num, 'completed': completed_pages, 'total': len(annotations)}, ensure_ascii=False)}\n\n"
+                                yield f"data: {json.dumps({'type': 'page_done', 'page': page_num, 'completed': completed_pages, 'total': len(annotations), 'annotation': timestamped_content}, ensure_ascii=False)}\n\n"
                     
                     yield f"data: {json.dumps({'type': 'complete', 'completed_pages': completed_pages, 'total_pages': len(annotations)}, ensure_ascii=False)}\n\n"
                     

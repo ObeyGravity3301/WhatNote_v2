@@ -1118,9 +1118,42 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     console.log('LLM输出:', data.content);
                                   } else if (data.type === 'page_done') {
                                     console.log(`第${data.page}页注释完成 (${data.completed}/${data.total})`);
+                                    
+                                    // 实时刷新注释显示
+                                    if (data.annotation && win.currentPage === data.page) {
+                                      // 如果用户正在查看这一页，立即更新注释内容
+                                      setAnnotations(prev => ({
+                                        ...prev,
+                                        [win.id]: {
+                                          ...prev[win.id],
+                                          [data.page]: data.annotation
+                                        }
+                                      }));
+                                      console.log(`✅ 已更新第${data.page}页的注释显示`);
+                                    }
                                   } else if (data.type === 'complete') {
                                     console.log('分段注释全部完成:', data);
                                     alert(`注释生成完成！共生成 ${data.completed_pages} 页注释`);
+                                    
+                                    // 生成完成后，如果用户在当前分段的页面范围内，刷新当前页的注释
+                                    const currentPage = win.currentPage;
+                                    if (currentPage >= section.page_start && currentPage <= section.page_end) {
+                                      // 重新加载当前页的注释
+                                      fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/${currentPage}`)
+                                        .then(res => res.json())
+                                        .then(result => {
+                                          if (result.success && result.annotation) {
+                                            setAnnotations(prev => ({
+                                              ...prev,
+                                              [win.id]: {
+                                                ...prev[win.id],
+                                                [currentPage]: result.annotation
+                                              }
+                                            }));
+                                          }
+                                        })
+                                        .catch(err => console.error('刷新注释失败:', err));
+                                    }
                                   } else if (data.type === 'error') {
                                     console.error('后端错误:', data.error);
                                     throw new Error(data.error);
