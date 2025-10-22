@@ -1064,6 +1064,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           const section = batchOutline.outline[selectedSection];
                           
                           try {
+                            console.log('发送请求数据:', {
+                              section_index: selectedSection,
+                              section_data: section,
+                              subdivision_data: batchSubdivisions.subdivisions[selectedSection],
+                              annotation_style: annotationSettings.style,
+                              custom_prompt: annotationSettings.customPrompt
+                            });
+                            
                             const response = await fetch(
                               `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/generate-section`,
                               {
@@ -1082,7 +1090,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             );
                             
                             if (!response.ok) {
-                              throw new Error('生成注释失败');
+                              const errorText = await response.text();
+                              console.error('API错误响应:', errorText);
+                              throw new Error(`生成注释失败: ${response.status} - ${errorText}`);
                             }
                             
                             // 处理流式响应
@@ -1104,17 +1114,22 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                   
                                   if (data.type === 'status') {
                                     console.log('注释生成状态:', data.message);
+                                  } else if (data.type === 'content') {
+                                    console.log('LLM输出:', data.content);
                                   } else if (data.type === 'page_done') {
-                                    console.log(`第${data.page}页注释完成`);
+                                    console.log(`第${data.page}页注释完成 (${data.completed}/${data.total})`);
                                   } else if (data.type === 'complete') {
                                     console.log('分段注释全部完成:', data);
                                     alert(`注释生成完成！共生成 ${data.completed_pages} 页注释`);
+                                  } else if (data.type === 'error') {
+                                    console.error('后端错误:', data.error);
+                                    throw new Error(data.error);
                                   }
                                 }
                               }
                             }
                           } catch (error) {
-                            console.error('生成注释失败:', error);
+                            console.error('生成注释失败，详细错误:', error);
                             alert('生成注释失败: ' + error.message);
                           }
                         }}

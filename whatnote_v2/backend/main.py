@@ -2184,20 +2184,27 @@ async def generate_section_annotations(
         
         async def generate_stream():
             try:
+                info(f"generate_stream 开始执行，分段索引: {section_index}")
                 yield f"data: {json.dumps({'type': 'status', 'message': f'正在为分段 {section_index + 1} 生成注释...'}, ensure_ascii=False)}\n\n"
                 
                 # 读取该分段所有页面的内容
+                info(f"开始读取页面内容，范围: {page_start} - {page_end}")
                 pages_content = []
                 for page in range(page_start, page_end + 1):
                     page_data = content_manager.get_pdf_page_contents(board_id, window_id, page)
+                    info(f"读取第{page}页，是否有内容: {bool(page_data and page_data.get('current'))}")
                     if page_data and page_data.get('current'):
                         pages_content.append({
                             'page': page,
                             'content': page_data['current']
                         })
                 
+                info(f"共读取到 {len(pages_content)} 页内容")
+                
                 if not pages_content:
-                    yield f"data: {json.dumps({'type': 'error', 'error': '未找到分段内容'}, ensure_ascii=False)}\n\n"
+                    error_msg = f'未找到分段内容，页码范围: {page_start}-{page_end}'
+                    error(error_msg)
+                    yield f"data: {json.dumps({'type': 'error', 'error': error_msg}, ensure_ascii=False)}\n\n"
                     return
                 
                 # 构建完整的内容文本
@@ -2247,21 +2254,67 @@ async def generate_section_annotations(
 请为第{page_start}页到第{page_end}页的每一页都生成注释，确保annotations数组包含所有页面。
 直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
                 
-                # 创建LLM对话
+                # 创建或获取LLM对话
+                annotation_conv = conversation_manager.create_conversation(
+                    board_id,
+                    title=f"批量注释-分段{section_index + 1} - {pdf_filename}"
+                )
+                annotation_conv_id = annotation_conv['id']
+                
+                # 重命名对话文件
+                conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                old_file = conversations_dir / f"{annotation_conv_id}.json"
+                new_filename = f"annotation-{window_id}-section{section_index}-3.json"
+                new_file = conversations_dir / new_filename
+                
+                if old_file.exists():
+                    old_file.rename(new_file)
+                    annotation_conv_id = new_filename.replace('.json', '')
+                    info(f"注释对话文件已重命名: {new_filename}")
+                
+                # 创建LLM对话消息
                 user_message = {
                     "role": "user",
                     "content": prompt,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "metadata": {
+                        "action": "generate_section_annotations",
+                        "pdf_filename": pdf_filename,
+                        "window_id": window_id,
+                        "section_index": section_index,
+                        "page_start": page_start,
+                        "page_end": page_end,
+                        "annotation_style": annotation_style
+                    }
                 }
                 
                 messages = [user_message]
                 accumulated_content = ""
                 
                 # 调用LLM
+                info(f"开始调用LLM生成分段注释，页码范围: {page_start}-{page_end}")
                 async for chunk in llm_service.chat_completion(messages, stream=True):
                     if chunk:
                         accumulated_content += chunk
                         yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
+                
+                info(f"LLM生成完成，返回内容长度: {len(accumulated_content)}")
+                
+                # 保存助手消息
+                assistant_message = {
+                    "role": "assistant",
+                    "content": accumulated_content,
+                    "timestamp": datetime.now().isoformat(),
+                    "metadata": {
+                        "action": "generate_section_annotations",
+                        "section_index": section_index,
+                        "page_range": f"{page_start}-{page_end}"
+                    }
+                }
+                
+                conversation_manager.add_message(board_id, annotation_conv_id, user_message)
+                conversation_manager.add_message(board_id, annotation_conv_id, assistant_message)
+                info(f"注释对话已保存: {annotation_conv_id}")
                 
                 # 解析JSON结果
                 try:
