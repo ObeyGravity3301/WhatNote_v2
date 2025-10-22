@@ -2141,7 +2141,7 @@ async def generate_section_annotations(
         section_data = request_body.get('section_data')
         subdivision_data = request_body.get('subdivision_data')
         annotation_style = request_body.get('annotation_style', 'detailed')
-        custom_prompt = request_body.get('custom_prompt', '')
+        prompt_template = request_body.get('promptTemplate', '')  # 与单页注释API保持一致
         
         info(f"开始为分段 {section_index} 生成注释")
         
@@ -2162,26 +2162,6 @@ async def generate_section_annotations(
         
         page_start = section_data['page_start']
         page_end = section_data['page_end']
-        
-        # 获取注释风格提示词
-        annotation_styles = {
-            'detailed': {
-                'name': '详细注释',
-                'prompt': '请为第{page}页生成详细的注释，包括：\n1. 核心内容总结\n2. 重要概念解释\n3. 关键论点分析\n4. 与其他内容的关联'
-            },
-            'simple': {
-                'name': '简洁注释',
-                'prompt': '请为第{page}页生成简洁的注释，提炼核心要点，每页控制在3-5句话以内。'
-            },
-            'academic': {
-                'name': '学术注释',
-                'prompt': '请为第{page}页生成学术性注释，包括：\n1. 理论框架分析\n2. 研究方法评价\n3. 学术贡献总结\n4. 可能的批判性思考'
-            },
-            'qanda': {
-                'name': '问答式注释',
-                'prompt': '请为第{page}页生成问答式注释：\n1. 提出3-5个关键问题\n2. 为每个问题提供简明答案\n3. 标注重要知识点'
-            }
-        }
         
         async def generate_stream():
             try:
@@ -2216,11 +2196,13 @@ async def generate_section_annotations(
                 # 获取分段描述
                 section_description = subdivision_data.get('section_summary') or section_data.get('description') or ''
                 
-                # 构建提示词
-                if annotation_style == 'custom' and custom_prompt:
-                    base_prompt = custom_prompt
+                # 构建注释要求（使用prompt_template作为用户的注释风格要求）
+                if prompt_template:
+                    # 用户配置了提示词模板，直接使用
+                    annotation_requirement = prompt_template
                 else:
-                    base_prompt = annotation_styles.get(annotation_style, annotation_styles['detailed'])['prompt']
+                    # 没有配置提示词，使用默认要求
+                    annotation_requirement = "请为每一页生成注释，包括：\n1. 页面主要内容概要\n2. 重要知识点\n3. 需要注意的细节"
                 
                 prompt = f"""你是一个专业的文档注释助手。我需要你为PDF文档的一个分段生成逐页注释。
 
@@ -2234,25 +2216,26 @@ async def generate_section_annotations(
 {full_content}
 
 **注释要求**：
-{base_prompt}
+{annotation_requirement}
 
 **输出格式**（必须严格遵守JSON格式）：
 ```json
 {{
   "annotations": [
     {{
-      "page": 1,
-      "annotation": "第1页的注释内容..."
+      "page": {page_start},
+      "annotation": "第{page_start}页的注释内容..."
     }},
     {{
-      "page": 2,
-      "annotation": "第2页的注释内容..."
+      "page": {page_start + 1},
+      "annotation": "第{page_start + 1}页的注释内容..."
     }}
   ]
 }}
 ```
 
 请为第{page_start}页到第{page_end}页的每一页都生成注释，确保annotations数组包含所有页面。
+每页注释请用Markdown格式输出。
 直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
                 
                 # 创建或获取LLM对话

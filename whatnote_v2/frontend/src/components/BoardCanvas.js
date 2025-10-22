@@ -1064,12 +1064,20 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           const section = batchOutline.outline[selectedSection];
                           
                           try {
+                            // 准备提示词模板（与单页注释保持一致）
+                            let promptTemplate = '';
+                            if (annotationSettings.style === 'custom') {
+                              promptTemplate = annotationSettings.customPrompt;
+                            } else if (annotationStyles[annotationSettings.style]) {
+                              promptTemplate = annotationStyles[annotationSettings.style].prompt;
+                            }
+                            
                             console.log('发送请求数据:', {
                               section_index: selectedSection,
                               section_data: section,
                               subdivision_data: batchSubdivisions.subdivisions[selectedSection],
                               annotation_style: annotationSettings.style,
-                              custom_prompt: annotationSettings.customPrompt
+                              promptTemplate: promptTemplate
                             });
                             
                             const response = await fetch(
@@ -1084,7 +1092,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                   section_data: section,
                                   subdivision_data: batchSubdivisions.subdivisions[selectedSection],
                                   annotation_style: annotationSettings.style,
-                                  custom_prompt: annotationSettings.customPrompt
+                                  promptTemplate: promptTemplate
                                 })
                               }
                             );
