@@ -867,6 +867,85 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
               padding: '8px',
               backgroundColor: '#f0f0f0'
             }}>
+              {/* 第二阶段进度条 - 放在最上面 */}
+              {(isStage2 || stage2Completed) && batchProgress.total > 0 && (
+                <div style={{
+                  marginBottom: '12px',
+                  padding: '8px',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px inset #c0c0c0',
+                  borderRadius: '0px'
+                }}>
+                  <div style={{
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    marginBottom: '6px',
+                    color: '#000000',
+                    textAlign: 'center'
+                  }}>
+                    {stage2Completed ? '并行结束' : '并行...'} {batchProgress.completed} / {batchProgress.total}
+                  </div>
+                  
+                  {/* Windows 98风格量子化方格进度条 */}
+                  <div style={{
+                    width: '100%',
+                    height: '30px',
+                    backgroundColor: '#c0c0c0',
+                    border: '2px inset #c0c0c0',
+                    borderRadius: '0px',
+                    overflow: 'hidden',
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '1px'
+                  }}>
+                    {/* 进度条背景 */}
+                    <div style={{
+                      width: '100%',
+                      height: '27px',
+                      backgroundColor: '#f0f0f0',
+                      border: '1px inset #c0c0c0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start',
+                      padding: '2px'
+                    }}>
+                      {/* 量子化方格进度条 */}
+                      <div style={{
+                        display: 'flex',
+                        width: '100%',
+                        gap: '2px',
+                        alignItems: 'center'
+                      }}>
+                        {Array.from({ length: 25 }, (_, index) => {
+                          const progressPercentage = (batchProgress.completed / batchProgress.total) * 100;
+                          const isActive = (index + 1) * 4 <= progressPercentage; // 每格代表4%
+                          
+                          return (
+                            <div
+                              key={index}
+                              style={{
+                                flex: 1,
+                                height: '21px',
+                                backgroundColor: isActive ? '#000080' : 'transparent',
+                                border: '1px solid transparent',
+                                borderRadius: '0px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                position: 'relative',
+                                boxSizing: 'border-box'
+                              }}
+                            >
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* 第一阶段：生成中的流式输出 */}
               {isBatchGenerating && !batchOutline && (
                 <div style={{
@@ -1204,82 +1283,111 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                 </div>
               )}
 
-              {/* 第二阶段进度条 */}
-              {(isStage2 || stage2Completed) && batchProgress.total > 0 && (
+              {/* 重新细分按键 - 放在底部 */}
+              {stage2Completed && batchSubdivisions && (
                 <div style={{
                   marginTop: '12px',
                   padding: '8px',
-                  backgroundColor: '#c0c0c0',
-                  border: '2px inset #c0c0c0',
-                  borderRadius: '0px'
+                  display: 'flex',
+                  justifyContent: 'flex-end'
                 }}>
-                  <div style={{
-                    fontSize: '11px',
-                    fontWeight: 'bold',
-                    marginBottom: '6px',
-                    color: '#000000',
-                    textAlign: 'center'
-                  }}>
-                    {stage2Completed ? '并行结束' : '并行...'} {batchProgress.completed} / {batchProgress.total}
-                  </div>
-                  
-                  {/* Windows 98风格量子化方格进度条 */}
-                  <div style={{
-                    width: '100%',
-                    height: '30px',
-                    backgroundColor: '#c0c0c0',
-                    border: '2px inset #c0c0c0',
-                    borderRadius: '0px',
-                    overflow: 'hidden',
-                    position: 'relative',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '1px'
-                  }}>
-                    {/* 进度条背景 */}
-                    <div style={{
-                      width: '100%',
-                      height: '27px',
-                      backgroundColor: '#f0f0f0',
-                      border: '1px inset #c0c0c0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'flex-start',
-                      padding: '2px'
-                    }}>
-                      {/* 量子化方格进度条 */}
-                      <div style={{
-                        display: 'flex',
-                        width: '100%',
-                        gap: '2px',
-                        alignItems: 'center'
-                      }}>
-                        {Array.from({ length: 25 }, (_, index) => {
-                          const progressPercentage = (batchProgress.completed / batchProgress.total) * 100;
-                          const isActive = (index + 1) * 4 <= progressPercentage; // 每格代表4%
+                  <button
+                    onClick={async () => {
+                      console.log('重新开始第二阶段：细分分段');
+                      setIsBatchGenerating(true);
+                      setIsStage2(true);
+                      setStage2Completed(false);
+                      setSelectedSection(null); // 清空选中
+                      setBatchOutlineStatus('正在并行细分各个分段...');
+                      setBatchProgress({ completed: 0, total: batchOutline.outline.length });
+                      
+                      try {
+                        // 调用第二阶段API
+                        const response = await fetch(
+                          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivide`,
+                          {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            }
+                          }
+                        );
+                        
+                        if (!response.ok) {
+                          throw new Error('细分处理失败');
+                        }
+                        
+                        // 处理流式响应
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = '';
+                        let currentSection = null;
+                        
+                        while (true) {
+                          const {done, value} = await reader.read();
+                          if (done) break;
                           
-                          return (
-                            <div
-                              key={index}
-                              style={{
-                                flex: 1,
-                                height: '21px',
-                                backgroundColor: isActive ? '#000080' : 'transparent',
-                                border: '1px solid transparent',
-                                borderRadius: '0px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                position: 'relative',
-                                boxSizing: 'border-box'
-                              }}
-                            >
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
+                          buffer += decoder.decode(value, {stream: true});
+                          const lines = buffer.split('\n\n');
+                          buffer = lines.pop() || '';
+                          
+                          for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                              const data = JSON.parse(line.slice(6));
+                              
+                              if (data.type === 'status') {
+                                setBatchOutlineStatus(data.message);
+                              } else if (data.type === 'section_start') {
+                                currentSection = data.section;
+                                // 第二阶段不显示详细信息，只记录
+                              } else if (data.type === 'section_content') {
+                                // 第二阶段不显示流式输出内容，避免混乱
+                              } else if (data.type === 'section_done') {
+                                // 更新进度
+                                setBatchProgress({ completed: data.completed, total: data.total });
+                                setBatchOutlineStatus(`正在并行细分各个分段...\n进度: ${data.completed}/${data.total}`);
+                              } else if (data.type === 'complete') {
+                                console.log('所有分段细分完成:', data.data);
+                                // 确保进度条显示为100%完成状态
+                                setBatchProgress(prev => ({ completed: prev.total, total: prev.total }));
+                                setBatchSubdivisions(data.data); // 保存细分数据
+                                setIsBatchGenerating(false);
+                                setStage2Completed(true); // 标记第二阶段完成，但保留进度条显示
+                              } else if (data.type === 'warning') {
+                                setBatchOutlineStatus(prev => prev + `\n警告: ${data.message}`);
+                              } else if (data.type === 'done') {
+                                console.log('细分流程完成');
+                                setIsBatchGenerating(false);
+                              } else if (data.type === 'error') {
+                                console.error('细分错误:', data.error);
+                                setBatchOutlineStatus(prev => prev + `\n错误: ${data.error}`);
+                                setIsBatchGenerating(false);
+                              }
+                            }
+                          }
+                        }
+                      } catch (error) {
+                        console.error('细分处理失败:', error);
+                        setBatchOutlineStatus(prev => prev + `\n细分失败: ${error.message}`);
+                        setIsBatchGenerating(false);
+                      }
+                    }}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: '11px',
+                      backgroundColor: '#0078d4',
+                      color: '#ffffff',
+                      border: '2px outset #0078d4',
+                      borderRadius: '0px',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                    onMouseEnter={(e) => e.target.style.backgroundColor = '#005a9e'}
+                    onMouseLeave={(e) => e.target.style.backgroundColor = '#0078d4'}
+                  >
+                    重新细分
+                  </button>
                 </div>
               )}
             </div>
