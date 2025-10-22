@@ -2128,6 +2128,44 @@ async def subdivide_outline_sections(
         error(f"细分大纲分段失败: {e}")
         raise HTTPException(status_code=500, detail=f"细分大纲分段失败: {str(e)}")
 
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/outline-data")
+async def get_outline_data(board_id: str, window_id: str):
+    """获取已保存的大纲数据"""
+    try:
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        
+        if not outline_file.exists():
+            raise HTTPException(status_code=404, detail="大纲数据不存在")
+        
+        with open(outline_file, 'r', encoding='utf-8') as f:
+            outline_data = json.load(f)
+        
+        return outline_data
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"加载大纲数据失败: {e}")
+        raise HTTPException(status_code=500, detail=f"加载大纲数据失败: {str(e)}")
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/subdivision-data")
+async def get_subdivision_data(board_id: str, window_id: str):
+    """获取已保存的细分数据"""
+    try:
+        subdivision_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
+        
+        if not subdivision_file.exists():
+            raise HTTPException(status_code=404, detail="细分数据不存在")
+        
+        with open(subdivision_file, 'r', encoding='utf-8') as f:
+            subdivision_data = json.load(f)
+        
+        return subdivision_data
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"加载细分数据失败: {e}")
+        raise HTTPException(status_code=500, detail=f"加载细分数据失败: {str(e)}")
+
 @app.get("/api/media/serve")
 async def serve_media_file(path: str):
     """全新的媒体文件服务API - 避免路由冲突"""

@@ -65,6 +65,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   // 批量生成状态
   const [showBatchOutlineModal, setShowBatchOutlineModal] = useState(false); // 显示批量生成大纲模态窗口
   const [showOutlinePanel, setShowOutlinePanel] = useState(false); // 显示大纲侧栏
+  const [outlineView, setOutlineView] = useState('list'); // 'list' 或 'detail' - 大纲视图模式
   const [batchOutlineStatus, setBatchOutlineStatus] = useState(''); // 批量生成状态信息
   const [batchOutline, setBatchOutline] = useState(null); // 生成的大纲数据
   const [isBatchGenerating, setIsBatchGenerating] = useState(false); // 是否正在生成
@@ -152,6 +153,40 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
       loadAnnotationFileInfo(currentPage);
     }
   }, [currentPage, showAnnotationPanel, boardId, windowId]);
+
+  // 加载大纲数据
+  useEffect(() => {
+    const loadOutlineData = async () => {
+      if (!boardId || !windowId) return;
+      
+      try {
+        // 尝试加载大纲数据
+        const outlineResponse = await fetch(
+          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/outline-data`
+        );
+        if (outlineResponse.ok) {
+          const outlineData = await outlineResponse.json();
+          setBatchOutline(outlineData);
+          console.log('加载已有大纲数据:', outlineData);
+        }
+        
+        // 尝试加载细分数据
+        const subdivResponse = await fetch(
+          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
+        );
+        if (subdivResponse.ok) {
+          const subdivData = await subdivResponse.json();
+          setBatchSubdivisions(subdivData);
+          setStage2Completed(true);
+          console.log('加载已有细分数据:', subdivData);
+        }
+      } catch (error) {
+        console.log('未找到批量大纲数据（首次使用）');
+      }
+    };
+    
+    loadOutlineData();
+  }, [boardId, windowId]);
 
   // 点击外部区域或按ESC键关闭LLM菜单和设置面板
   useEffect(() => {
@@ -867,8 +902,133 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
               padding: '8px',
               backgroundColor: '#f0f0f0'
             }}>
-              {/* 第二阶段进度条 - 放在最上面 */}
-              {(isStage2 || stage2Completed) && batchProgress.total > 0 && (
+              {/* 细分内容详情页 */}
+              {outlineView === 'detail' && selectedSection !== null && batchSubdivisions && batchSubdivisions.subdivisions && batchSubdivisions.subdivisions[selectedSection] && (
+                <div>
+                  {/* 返回按钮 */}
+                  <button
+                    onClick={() => {
+                      setOutlineView('list');
+                      setSelectedSection(null);
+                    }}
+                    style={{
+                      padding: '4px 12px',
+                      marginBottom: '12px',
+                      fontSize: '11px',
+                      backgroundColor: '#c0c0c0',
+                      border: '2px outset #c0c0c0',
+                      borderRadius: '0px',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                    onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
+                    onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
+                  >
+                    ← 返回大纲
+                  </button>
+
+                  {/* 细分内容详情 */}
+                  <div style={{
+                    padding: '12px',
+                    backgroundColor: '#ffffff',
+                    border: '2px inset #c0c0c0'
+                  }}>
+                    <div style={{
+                      fontWeight: 'bold',
+                      fontSize: '12px',
+                      marginBottom: '12px',
+                      color: '#0078d4',
+                      fontFamily: 'MS Sans Serif, sans-serif'
+                    }}>
+                      {batchOutline.outline[selectedSection].title || batchOutline.outline[selectedSection].section_title || `章节 ${selectedSection + 1}`}
+                    </div>
+                    
+                    {batchSubdivisions.subdivisions[selectedSection].summary && (
+                      <div style={{
+                        marginBottom: '12px',
+                        padding: '8px',
+                        backgroundColor: '#ffffcc',
+                        border: '2px inset #c0c0c0'
+                      }}>
+                        <div style={{
+                          fontWeight: 'bold', 
+                          marginBottom: '6px',
+                          fontSize: '11px',
+                          color: '#000000',
+                          fontFamily: 'MS Sans Serif, sans-serif'
+                        }}>
+                          内容概括
+                        </div>
+                        <div style={{
+                          fontSize: '10px',
+                          lineHeight: '1.5',
+                          whiteSpace: 'pre-wrap',
+                          fontFamily: 'MS Sans Serif, sans-serif'
+                        }}>
+                          {batchSubdivisions.subdivisions[selectedSection].summary}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {batchSubdivisions.subdivisions[selectedSection].subdivisions && 
+                     batchSubdivisions.subdivisions[selectedSection].subdivisions.length > 0 && (
+                      <div>
+                        <div style={{
+                          fontWeight: 'bold',
+                          fontSize: '11px',
+                          marginBottom: '8px',
+                          color: '#000000',
+                          fontFamily: 'MS Sans Serif, sans-serif'
+                        }}>
+                          子分段列表:
+                        </div>
+                        {batchSubdivisions.subdivisions[selectedSection].subdivisions.map((sub, subIndex) => (
+                          <div
+                            key={subIndex}
+                            style={{
+                              padding: '8px',
+                              marginBottom: '8px',
+                              backgroundColor: '#ffffff',
+                              border: '1px solid #d0d0d0',
+                              borderLeft: '3px solid #4caf50'
+                            }}
+                          >
+                            <div style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: '4px'
+                            }}>
+                              <div style={{
+                                fontSize: '11px',
+                                fontWeight: 'bold',
+                                color: '#000000',
+                                fontFamily: 'MS Sans Serif, sans-serif'
+                              }}>
+                                {sub.title || `子分段 ${subIndex + 1}`}
+                              </div>
+                              <div style={{
+                                fontSize: '10px',
+                                color: '#666',
+                                fontFamily: 'MS Sans Serif, sans-serif'
+                              }}>
+                                p.{sub.page_start}-{sub.page_end}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 大纲列表视图 */}
+              {outlineView === 'list' && (
+                <>
+                  {/* 第二阶段进度条 - 放在最上面 */}
+                  {(isStage2 || stage2Completed) && batchProgress.total > 0 && (
                 <div style={{
                   marginBottom: '12px',
                   padding: '8px',
@@ -1020,8 +1180,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         onClick={() => {
                           if (isClickable) {
                             setSelectedSection(index);
-                            console.log('选中分段:', index);
-                            console.log('细分数据:', batchSubdivisions.subdivisions[index]);
+                            setOutlineView('detail'); // 切换到详情视图
+                            console.log('打开细分详情页:', index);
                           }
                         }}
                       >
@@ -1190,100 +1350,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                 </div>
               )}
 
-              {/* 第二阶段：细分展示 */}
-              {selectedSection !== null && batchSubdivisions && batchSubdivisions.subdivisions && batchSubdivisions.subdivisions[selectedSection] && (
-                <div style={{
-                  marginTop: '16px',
-                  padding: '12px',
-                  backgroundColor: '#ffffff',
-                  border: '2px solid #0078d4'
-                }}>
-                  <div style={{
-                    fontWeight: 'bold',
-                    fontSize: '12px',
-                    marginBottom: '12px',
-                    color: '#0078d4',
-                    fontFamily: 'MS Sans Serif, sans-serif'
-                  }}>
-                    细分内容
-                  </div>
-                  
-                  {batchSubdivisions.subdivisions[selectedSection].summary && (
-                    <div style={{
-                      marginBottom: '12px',
-                      padding: '8px',
-                      backgroundColor: '#f9f9f9',
-                      border: '1px solid #e0e0e0'
-                    }}>
-                      <div style={{
-                        fontWeight: 'bold', 
-                        marginBottom: '6px',
-                        fontSize: '11px',
-                        color: '#f57c00'
-                      }}>
-                        内容概括
-                      </div>
-                      <div style={{
-                        fontSize: '10px',
-                        lineHeight: '1.5',
-                        whiteSpace: 'pre-wrap'
-                      }}>
-                        {batchSubdivisions.subdivisions[selectedSection].summary}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {batchSubdivisions.subdivisions[selectedSection].subdivisions && 
-                   batchSubdivisions.subdivisions[selectedSection].subdivisions.length > 0 && (
-                    <div>
-                      <div style={{
-                        fontWeight: 'bold',
-                        fontSize: '11px',
-                        marginBottom: '8px',
-                        color: '#666',
-                        fontFamily: 'MS Sans Serif, sans-serif'
-                      }}>
-                        子分段:
-                      </div>
-                      {batchSubdivisions.subdivisions[selectedSection].subdivisions.map((sub, subIndex) => (
-                        <div
-                          key={subIndex}
-                          style={{
-                            padding: '6px',
-                            marginBottom: '6px',
-                            backgroundColor: '#fafafa',
-                            border: '1px solid #d0d0d0',
-                            borderLeft: '2px solid #4caf50'
-                          }}
-                        >
-                          <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: '4px'
-                          }}>
-                            <div style={{
-                              fontSize: '10px',
-                              fontWeight: 'bold',
-                              color: '#333'
-                            }}>
-                              {sub.title || `子分段 ${subIndex + 1}`}
-                            </div>
-                            <div style={{
-                              fontSize: '9px',
-                              color: '#888',
-                              fontFamily: 'MS Sans Serif, sans-serif'
-                            }}>
-                              p.{sub.page_start}-{sub.page_end}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* 重新细分按键 - 放在底部 */}
               {stage2Completed && batchSubdivisions && batchSubdivisions.subdivisions && (
                 <div style={{
@@ -1390,6 +1456,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                     重新细分
                   </button>
                 </div>
+              )}
+                </>
               )}
             </div>
           </div>
