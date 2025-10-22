@@ -944,6 +944,35 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       {batchOutline.outline[selectedSection].title || batchOutline.outline[selectedSection].section_title || `章节 ${selectedSection + 1}`}
                     </div>
                     
+                    {/* 第二阶段返回的section_summary - 更详细的概括 */}
+                    {batchSubdivisions.subdivisions[selectedSection].section_summary && (
+                      <div style={{
+                        marginBottom: '12px',
+                        padding: '8px',
+                        backgroundColor: '#e0f0ff',
+                        border: '2px inset #c0c0c0'
+                      }}>
+                        <div style={{
+                          fontWeight: 'bold', 
+                          marginBottom: '6px',
+                          fontSize: '11px',
+                          color: '#000000',
+                          fontFamily: 'MS Sans Serif, sans-serif'
+                        }}>
+                          分段概括
+                        </div>
+                        <div style={{
+                          fontSize: '10px',
+                          lineHeight: '1.5',
+                          whiteSpace: 'pre-wrap',
+                          fontFamily: 'MS Sans Serif, sans-serif'
+                        }}>
+                          {batchSubdivisions.subdivisions[selectedSection].section_summary}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* 原来的summary字段（如果有的话） */}
                     {batchSubdivisions.subdivisions[selectedSection].summary && (
                       <div style={{
                         marginBottom: '12px',
@@ -1210,7 +1239,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           </div>
                         </div>
                         
-                        {section.summary && (
+                        {(section.description || section.summary) && (
                           <div style={{
                             fontSize: '10px',
                             color: '#555',
@@ -1218,7 +1247,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             marginBottom: '6px',
                             fontFamily: 'MS Sans Serif, sans-serif'
                           }}>
-                            {section.summary.length > 100 ? section.summary.substring(0, 100) + '...' : section.summary}
+                            {(() => {
+                              const text = section.description || section.summary;
+                              return text.length > 100 ? text.substring(0, 100) + '...' : text;
+                            })()}
                           </div>
                         )}
                         
