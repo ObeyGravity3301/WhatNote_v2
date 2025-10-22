@@ -910,23 +910,39 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         page => page >= section.page_start && page <= section.page_end
                       );
                     
+                    // 只有在第二阶段完成后才能点击
+                    const isClickable = batchSubdivisions && !isBatchGenerating;
+                    const isSelected = selectedSection === index;
+                    
                     return (
                       <div
                         key={index}
                         style={{
                           padding: '8px',
                           marginBottom: '8px',
-                          backgroundColor: '#ffffff',
+                          backgroundColor: isSelected ? '#e0e0e0' : '#ffffff',
                           border: '1px solid #d0d0d0',
                           borderLeft: hasOverlap ? '3px solid #ff9800' : '3px solid #0078d4',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.2s'
+                          cursor: isClickable ? 'pointer' : 'default',
+                          transition: 'background-color 0.2s, box-shadow 0.2s',
+                          boxShadow: 'none',
+                          opacity: isClickable ? 1 : 0.8
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f8f8'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                        onMouseEnter={(e) => {
+                          if (isClickable) {
+                            e.currentTarget.style.backgroundColor = isSelected ? '#d0d0d0' : '#f8f8f8';
+                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = isSelected ? '#e0e0e0' : '#ffffff';
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
                         onClick={() => {
-                          setSelectedSection(index);
-                          console.log('选中分段:', index);
+                          if (isClickable) {
+                            setSelectedSection(index);
+                            console.log('选中分段:', index);
+                          }
                         }}
                       >
                         <div style={{
@@ -1189,47 +1205,80 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
               )}
 
               {/* 第二阶段进度条 */}
-              {isStage2 && (
+              {(isStage2 || stage2Completed) && batchProgress.total > 0 && (
                 <div style={{
-                  marginTop: '16px',
-                  padding: '12px',
-                  backgroundColor: '#ffffff',
-                  border: '2px inset #c0c0c0'
+                  marginTop: '12px',
+                  padding: '8px',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px inset #c0c0c0',
+                  borderRadius: '0px'
                 }}>
                   <div style={{
                     fontSize: '11px',
-                    marginBottom: '8px',
-                    fontFamily: 'MS Sans Serif, sans-serif',
-                    fontWeight: 'bold'
+                    fontWeight: 'bold',
+                    marginBottom: '6px',
+                    color: '#000000',
+                    textAlign: 'center'
                   }}>
-                    细分进度: {batchProgress.completed} / {batchProgress.total}
+                    {stage2Completed ? '并行结束' : '并行...'} {batchProgress.completed} / {batchProgress.total}
                   </div>
+                  
+                  {/* Windows 98风格量子化方格进度条 */}
                   <div style={{
-                    display: 'flex',
-                    gap: '2px',
-                    height: '21px',
+                    width: '100%',
+                    height: '30px',
                     backgroundColor: '#c0c0c0',
                     border: '2px inset #c0c0c0',
-                    padding: '2px'
+                    borderRadius: '0px',
+                    overflow: 'hidden',
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '1px'
                   }}>
-                    {Array.from({ length: 25 }, (_, i) => {
-                      const percentage = batchProgress.total > 0 
-                        ? (batchProgress.completed / batchProgress.total) * 100 
-                        : 0;
-                      const isActive = ((i + 1) * 4) <= percentage;
-                      
-                      return (
-                        <div
-                          key={i}
-                          style={{
-                            flex: 1,
-                            backgroundColor: isActive ? '#0078d4' : '#ffffff',
-                            border: '1px solid #808080',
-                            transition: 'background-color 0.3s ease'
-                          }}
-                        />
-                      );
-                    })}
+                    {/* 进度条背景 */}
+                    <div style={{
+                      width: '100%',
+                      height: '27px',
+                      backgroundColor: '#f0f0f0',
+                      border: '1px inset #c0c0c0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start',
+                      padding: '2px'
+                    }}>
+                      {/* 量子化方格进度条 */}
+                      <div style={{
+                        display: 'flex',
+                        width: '100%',
+                        gap: '2px',
+                        alignItems: 'center'
+                      }}>
+                        {Array.from({ length: 25 }, (_, index) => {
+                          const progressPercentage = (batchProgress.completed / batchProgress.total) * 100;
+                          const isActive = (index + 1) * 4 <= progressPercentage; // 每格代表4%
+                          
+                          return (
+                            <div
+                              key={index}
+                              style={{
+                                flex: 1,
+                                height: '21px',
+                                backgroundColor: isActive ? '#000080' : 'transparent',
+                                border: '1px solid transparent',
+                                borderRadius: '0px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                position: 'relative',
+                                boxSizing: 'border-box'
+                              }}
+                            >
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
