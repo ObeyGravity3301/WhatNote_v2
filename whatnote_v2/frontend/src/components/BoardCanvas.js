@@ -64,6 +64,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   
   // 批量生成状态
   const [showBatchOutlineModal, setShowBatchOutlineModal] = useState(false); // 显示批量生成大纲模态窗口
+  const [showOutlinePanel, setShowOutlinePanel] = useState(false); // 显示大纲侧栏
   const [batchOutlineStatus, setBatchOutlineStatus] = useState(''); // 批量生成状态信息
   const [batchOutline, setBatchOutline] = useState(null); // 生成的大纲数据
   const [isBatchGenerating, setIsBatchGenerating] = useState(false); // 是否正在生成
@@ -682,6 +683,35 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
           </button>
         </div>
 
+        {/* 大纲按钮 - 只有在批量生成后才显示 */}
+        {batchOutline && (
+          <button
+            onClick={() => {
+              setShowOutlinePanel(!showOutlinePanel);
+              console.log('大纲面板切换:', !showOutlinePanel);
+            }}
+            style={{
+              padding: '1px 8px',
+              fontSize: '11px',
+              backgroundColor: showOutlinePanel ? '#a0a0a0' : '#c0c0c0',
+              border: '2px outset #c0c0c0',
+              borderRadius: '0px',
+              cursor: 'pointer',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              height: '20px',
+              minWidth: '50px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginLeft: 'auto',
+              marginRight: '8px'
+            }}
+            title={showOutlinePanel ? "隐藏大纲" : "显示大纲"}
+          >
+            大纲
+          </button>
+        )}
+
         {/* 注释按钮 */}
         <button
           onClick={() => {
@@ -701,7 +731,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            marginLeft: 'auto',
+            marginLeft: batchOutline ? '0' : 'auto',
             marginRight: '8px'
           }}
           title={showAnnotationPanel ? "隐藏注释" : "显示注释"}
@@ -789,6 +819,301 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
           />
         </div>
         </div>
+        
+        {/* 大纲侧栏 */}
+        {showOutlinePanel && batchOutline && (
+          <div style={{
+            width: '320px',
+            backgroundColor: '#f0f0f0',
+            borderLeft: '2px inset #c0c0c0',
+            borderRight: '2px inset #c0c0c0',
+            display: 'flex',
+            flexDirection: 'column',
+            flexShrink: 0,
+            overflow: 'hidden'
+          }}>
+            {/* 大纲侧栏工具栏 */}
+            <div style={{
+              backgroundColor: '#c0c0c0',
+              borderBottom: '2px outset #c0c0c0',
+              padding: '4px 8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '11px',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              fontWeight: 'bold'
+            }}>
+              <span>文档大纲</span>
+              <button
+                onClick={() => setShowOutlinePanel(false)}
+                style={{
+                  backgroundColor: '#c0c0c0',
+                  border: '1px outset #c0c0c0',
+                  cursor: 'pointer',
+                  fontSize: '10px',
+                  padding: '0 4px',
+                  fontFamily: 'MS Sans Serif, sans-serif'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 大纲内容区域 */}
+            <div style={{
+              flex: 1,
+              overflow: 'auto',
+              padding: '8px',
+              backgroundColor: '#f0f0f0'
+            }}>
+              {/* 第一阶段：大纲展示 */}
+              {batchOutline && batchOutline.outline && (
+                <div>
+                  {/* 重叠信息提示 */}
+                  {batchOutline.page_analysis && batchOutline.page_analysis.statistics.overlapping_pages_count > 0 && (
+                    <div style={{
+                      padding: '6px 8px',
+                      marginBottom: '12px',
+                      backgroundColor: '#ffffcc',
+                      border: '2px inset #c0c0c0',
+                      fontSize: '10px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'normal'
+                    }}>
+                      检测到 <strong>{batchOutline.page_analysis.statistics.overlapping_pages_count}</strong> 个重叠页面
+                      （第 {batchOutline.page_analysis.statistics.multi_annotated_pages.join(', ')} 页），
+                      这些页面会被多次注释，后续将自动融合为一个完整注释。
+                    </div>
+                  )}
+                  
+                  {/* 大纲章节列表 */}
+                  {batchOutline.outline.map((section, index) => {
+                    // 检查这个章节是否包含重叠页面
+                    const hasOverlap = batchOutline.page_analysis && 
+                      batchOutline.page_analysis.statistics.multi_annotated_pages.some(
+                        page => page >= section.page_start && page <= section.page_end
+                      );
+                    
+                    return (
+                      <div
+                        key={index}
+                        style={{
+                          padding: '8px',
+                          marginBottom: '8px',
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #d0d0d0',
+                          borderLeft: hasOverlap ? '3px solid #ff9800' : '3px solid #0078d4',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f8f8'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                        onClick={() => {
+                          setSelectedSection(index);
+                          console.log('选中分段:', index);
+                        }}
+                      >
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          marginBottom: '6px'
+                        }}>
+                          <div style={{
+                            fontWeight: 'bold',
+                            fontSize: '11px',
+                            flex: 1,
+                            color: '#000000'
+                          }}>
+                            {section.title || section.section_title || `章节 ${index + 1}`}
+                          </div>
+                          <div style={{
+                            fontSize: '10px',
+                            color: '#666',
+                            marginLeft: '8px',
+                            whiteSpace: 'nowrap',
+                            fontFamily: 'MS Sans Serif, sans-serif'
+                          }}>
+                            p.{section.page_start}-{section.page_end}
+                          </div>
+                        </div>
+                        
+                        {section.summary && (
+                          <div style={{
+                            fontSize: '10px',
+                            color: '#555',
+                            lineHeight: '1.4',
+                            marginBottom: '6px',
+                            fontFamily: 'MS Sans Serif, sans-serif'
+                          }}>
+                            {section.summary.length > 100 ? section.summary.substring(0, 100) + '...' : section.summary}
+                          </div>
+                        )}
+                        
+                        {hasOverlap && (
+                          <span style={{
+                            display: 'inline-block',
+                            fontSize: '9px',
+                            padding: '2px 4px',
+                            backgroundColor: '#fff3e0',
+                            border: '1px solid #ffb74d',
+                            color: '#e65100',
+                            marginTop: '4px',
+                            fontFamily: 'MS Sans Serif, sans-serif',
+                            fontWeight: 'normal'
+                          }} title="此章节包含会被多次注释的页面">
+                            ! 含重叠页
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 第二阶段：细分展示 */}
+              {selectedSection !== null && batchSubdivisions && batchSubdivisions[selectedSection] && (
+                <div style={{
+                  marginTop: '16px',
+                  padding: '12px',
+                  backgroundColor: '#ffffff',
+                  border: '2px solid #0078d4'
+                }}>
+                  <div style={{
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    marginBottom: '12px',
+                    color: '#0078d4',
+                    fontFamily: 'MS Sans Serif, sans-serif'
+                  }}>
+                    细分内容
+                  </div>
+                  
+                  {batchSubdivisions[selectedSection].summary && (
+                    <div style={{
+                      marginBottom: '12px',
+                      padding: '8px',
+                      backgroundColor: '#f9f9f9',
+                      border: '1px solid #e0e0e0'
+                    }}>
+                      <div style={{
+                        fontWeight: 'bold', 
+                        marginBottom: '6px',
+                        fontSize: '11px',
+                        color: '#f57c00'
+                      }}>
+                        内容概括
+                      </div>
+                      <div style={{
+                        fontSize: '10px',
+                        lineHeight: '1.5',
+                        whiteSpace: 'pre-wrap'
+                      }}>
+                        {batchSubdivisions[selectedSection].summary}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {batchSubdivisions[selectedSection].subdivisions && 
+                   batchSubdivisions[selectedSection].subdivisions.length > 0 && (
+                    <div>
+                      <div style={{
+                        fontWeight: 'bold',
+                        fontSize: '11px',
+                        marginBottom: '8px',
+                        color: '#666',
+                        fontFamily: 'MS Sans Serif, sans-serif'
+                      }}>
+                        子分段:
+                      </div>
+                      {batchSubdivisions[selectedSection].subdivisions.map((sub, subIndex) => (
+                        <div
+                          key={subIndex}
+                          style={{
+                            padding: '6px',
+                            marginBottom: '6px',
+                            backgroundColor: '#fafafa',
+                            border: '1px solid #d0d0d0',
+                            borderLeft: '2px solid #4caf50'
+                          }}
+                        >
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '4px'
+                          }}>
+                            <div style={{
+                              fontSize: '10px',
+                              fontWeight: 'bold',
+                              color: '#333'
+                            }}>
+                              {sub.title || `子分段 ${subIndex + 1}`}
+                            </div>
+                            <div style={{
+                              fontSize: '9px',
+                              color: '#888',
+                              fontFamily: 'MS Sans Serif, sans-serif'
+                            }}>
+                              p.{sub.page_start}-{sub.page_end}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 第二阶段进度条 */}
+              {isStage2 && (
+                <div style={{
+                  marginTop: '16px',
+                  padding: '12px',
+                  backgroundColor: '#ffffff',
+                  border: '2px inset #c0c0c0'
+                }}>
+                  <div style={{
+                    fontSize: '11px',
+                    marginBottom: '8px',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    fontWeight: 'bold'
+                  }}>
+                    细分进度: {batchProgress.completed} / {batchProgress.total}
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    gap: '2px',
+                    height: '21px',
+                    backgroundColor: '#c0c0c0',
+                    border: '2px inset #c0c0c0',
+                    padding: '2px'
+                  }}>
+                    {Array.from({ length: 25 }, (_, i) => {
+                      const percentage = batchProgress.total > 0 
+                        ? (batchProgress.completed / batchProgress.total) * 100 
+                        : 0;
+                      const isActive = ((i + 1) * 4) <= percentage;
+                      
+                      return (
+                        <div
+                          key={i}
+                          style={{
+                            flex: 1,
+                            backgroundColor: isActive ? '#0078d4' : '#ffffff',
+                            border: '1px solid #808080',
+                            transition: 'background-color 0.3s ease'
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         
         {/* 注释侧栏 */}
         {showAnnotationPanel && (
@@ -1145,6 +1470,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     setBatchOutline(data.outline);
                                     setBatchOutlineStatus('大纲生成完成！');
                                     setIsBatchGenerating(false);
+                                    // 关闭弹窗，打开大纲侧栏
+                                    setTimeout(() => {
+                                      setShowBatchOutlineModal(false);
+                                      setShowOutlinePanel(true);
+                                    }, 500);
                                   } else if (data.type === 'info') {
                                     console.log('大纲生成信息:', data.message);
                                     setBatchOutlineStatus(prev => prev + '\n' + data.message);
@@ -1928,6 +2258,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       setBatchSubdivisions(data.data); // 保存细分数据
                                       setIsBatchGenerating(false);
                                       setStage2Completed(true); // 标记第二阶段完成，但保留进度条显示
+                                      // 关闭弹窗，打开大纲侧栏
+                                      setTimeout(() => {
+                                        setShowBatchOutlineModal(false);
+                                        setShowOutlinePanel(true);
+                                      }, 1000);
                                     } else if (data.type === 'warning') {
                                       setBatchOutlineStatus(prev => prev + `\n警告: ${data.message}`);
                                     } else if (data.type === 'done') {
