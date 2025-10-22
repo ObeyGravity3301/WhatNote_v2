@@ -1638,19 +1638,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             {batchOutlineStatus}
                           </div>
                         )}
-                        
-                        {/* 第二阶段完成后的提示信息 */}
-                        {stage2Completed && (
-                          <div style={{
-                            padding: '8px',
-                            backgroundColor: '#e0ffe0',
-                            border: '1px solid #00cc00',
-                            fontSize: '11px',
-                            whiteSpace: 'pre-wrap'
-                          }}>
-                            {batchOutlineStatus}
-                          </div>
-                        )}
                       </div>
                     )}
                     
