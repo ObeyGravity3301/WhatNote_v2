@@ -1021,6 +1021,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           if (isClickable) {
                             setSelectedSection(index);
                             console.log('选中分段:', index);
+                            console.log('batchSubdivisions:', batchSubdivisions);
+                            console.log('batchSubdivisions[index]:', batchSubdivisions ? batchSubdivisions[index] : 'null');
                           }
                         }}
                       >
@@ -1190,7 +1192,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
               )}
 
               {/* 第二阶段：细分展示 */}
-              {selectedSection !== null && batchSubdivisions && batchSubdivisions[selectedSection] && (
+              {(() => {
+                console.log('细分展示条件检查:', {
+                  selectedSection,
+                  hasBatchSubdivisions: !!batchSubdivisions,
+                  hasSelectedData: batchSubdivisions && batchSubdivisions[selectedSection],
+                  batchSubdivisionsKeys: batchSubdivisions ? Object.keys(batchSubdivisions) : []
+                });
+                return selectedSection !== null && batchSubdivisions && batchSubdivisions[selectedSection];
+              })() && (
                 <div style={{
                   marginTop: '16px',
                   padding: '12px',
