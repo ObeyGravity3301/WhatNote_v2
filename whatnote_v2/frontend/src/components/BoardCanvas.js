@@ -73,6 +73,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   const [selectedSection, setSelectedSection] = useState(null); // 当前选中的分段
   const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 }); // 批量处理进度
   const [isStage2, setIsStage2] = useState(false); // 是否是第二阶段
+  const [annotationProgress, setAnnotationProgress] = useState({ completed: 0, total: 0, currentPage: null, isGenerating: false }); // 注释生成进度
   const [stage2Completed, setStage2Completed] = useState(false); // 第二阶段是否已完成
   
   // 注释设置状态
@@ -928,6 +929,64 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                     ← 返回大纲
                   </button>
 
+                  {/* 注释生成进度条 */}
+                  {annotationProgress.total > 0 && (
+                    <div style={{
+                      marginBottom: '12px',
+                      padding: '8px',
+                      backgroundColor: '#ffffff',
+                      border: '2px inset #c0c0c0'
+                    }}>
+                      <div style={{
+                        fontSize: '10px',
+                        marginBottom: '6px',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        color: '#000000'
+                      }}>
+                        {annotationProgress.isGenerating 
+                          ? `正在生成第 ${annotationProgress.currentPage} 页注释... (${annotationProgress.completed}/${annotationProgress.total})`
+                          : `注释生成完成 (${annotationProgress.completed}/${annotationProgress.total})`
+                        }
+                      </div>
+                      <div style={{
+                        width: '100%',
+                        height: '21px',
+                        backgroundColor: '#c0c0c0',
+                        border: '2px inset #c0c0c0',
+                        display: 'flex',
+                        gap: '2px',
+                        padding: '2px'
+                      }}>
+                        {Array.from({ length: 25 }).map((_, index) => {
+                          const percentage = (annotationProgress.completed / annotationProgress.total) * 100;
+                          const squarePercentage = ((index + 1) / 25) * 100;
+                          const isActive = squarePercentage <= percentage;
+                          
+                          return (
+                            <div
+                              key={index}
+                              style={{
+                                flex: 1,
+                                height: '100%',
+                                backgroundColor: isActive ? '#000080' : '#ffffff',
+                                border: '1px solid #808080'
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div style={{
+                        fontSize: '10px',
+                        marginTop: '4px',
+                        textAlign: 'right',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        color: '#000000'
+                      }}>
+                        {Math.round((annotationProgress.completed / annotationProgress.total) * 100)}%
+                      </div>
+                    </div>
+                  )}
+
                   {/* 细分内容详情 */}
                   <div style={{
                     padding: '12px',
@@ -1062,6 +1121,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         onClick={async () => {
                           console.log('开始生成当前分段的注释');
                           const section = batchOutline.outline[selectedSection];
+                          const totalPages = section.page_end - section.page_start + 1;
+                          
+                          // 初始化进度
+                          setAnnotationProgress({
+                            completed: 0,
+                            total: totalPages,
+                            currentPage: section.page_start,
+                            isGenerating: true
+                          });
                           
                           try {
                             // 准备提示词模板（与单页注释保持一致）
@@ -1100,6 +1168,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             if (!response.ok) {
                               const errorText = await response.text();
                               console.error('API错误响应:', errorText);
+                              setAnnotationProgress(prev => ({ ...prev, isGenerating: false }));
                               throw new Error(`生成注释失败: ${response.status} - ${errorText}`);
                             }
                             
@@ -1127,6 +1196,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                   } else if (data.type === 'page_done') {
                                     console.log(`第${data.page}页注释完成 (${data.completed}/${data.total})`);
                                     
+                                    // 更新进度
+                                    setAnnotationProgress({
+                                      completed: data.completed,
+                                      total: data.total,
+                                      currentPage: data.page,
+                                      isGenerating: true
+                                    });
+                                    
                                     // 实时刷新注释显示
                                     if (data.annotation && currentPage === data.page) {
                                       // 如果用户正在查看这一页，立即更新注释内容
@@ -1138,6 +1215,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     }
                                   } else if (data.type === 'complete') {
                                     console.log('分段注释全部完成:', data);
+                                    
+                                    // 设置进度为100%并保持
+                                    setAnnotationProgress({
+                                      completed: data.total_pages,
+                                      total: data.total_pages,
+                                      currentPage: null,
+                                      isGenerating: false
+                                    });
+                                    
                                     alert(`注释生成完成！共生成 ${data.completed_pages} 页注释`);
                                     
                                     // 生成完成后，如果用户在当前分段的页面范围内，刷新当前页的注释
@@ -1157,6 +1243,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     }
                                   } else if (data.type === 'error') {
                                     console.error('后端错误:', data.error);
+                                    setAnnotationProgress(prev => ({ ...prev, isGenerating: false }));
                                     throw new Error(data.error);
                                   }
                                 }
@@ -1164,6 +1251,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             }
                           } catch (error) {
                             console.error('生成注释失败，详细错误:', error);
+                            setAnnotationProgress(prev => ({ ...prev, isGenerating: false }));
                             alert('生成注释失败: ' + error.message);
                           }
                         }}
