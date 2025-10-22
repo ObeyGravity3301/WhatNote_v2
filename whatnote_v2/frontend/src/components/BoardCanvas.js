@@ -990,7 +990,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       );
                     
                     // 只有在第二阶段完成后才能点击
-                    const isClickable = batchSubdivisions && !isBatchGenerating;
+                    const isClickable = batchSubdivisions && batchSubdivisions.subdivisions && !isBatchGenerating;
                     const isSelected = selectedSection === index;
                     
                     return (
@@ -1021,8 +1021,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           if (isClickable) {
                             setSelectedSection(index);
                             console.log('选中分段:', index);
-                            console.log('batchSubdivisions:', batchSubdivisions);
-                            console.log('batchSubdivisions[index]:', batchSubdivisions ? batchSubdivisions[index] : 'null');
+                            console.log('细分数据:', batchSubdivisions.subdivisions[index]);
                           }
                         }}
                       >
@@ -1192,15 +1191,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
               )}
 
               {/* 第二阶段：细分展示 */}
-              {(() => {
-                console.log('细分展示条件检查:', {
-                  selectedSection,
-                  hasBatchSubdivisions: !!batchSubdivisions,
-                  hasSelectedData: batchSubdivisions && batchSubdivisions[selectedSection],
-                  batchSubdivisionsKeys: batchSubdivisions ? Object.keys(batchSubdivisions) : []
-                });
-                return selectedSection !== null && batchSubdivisions && batchSubdivisions[selectedSection];
-              })() && (
+              {selectedSection !== null && batchSubdivisions && batchSubdivisions.subdivisions && batchSubdivisions.subdivisions[selectedSection] && (
                 <div style={{
                   marginTop: '16px',
                   padding: '12px',
@@ -1217,7 +1208,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                     细分内容
                   </div>
                   
-                  {batchSubdivisions[selectedSection].summary && (
+                  {batchSubdivisions.subdivisions[selectedSection].summary && (
                     <div style={{
                       marginBottom: '12px',
                       padding: '8px',
@@ -1237,13 +1228,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         lineHeight: '1.5',
                         whiteSpace: 'pre-wrap'
                       }}>
-                        {batchSubdivisions[selectedSection].summary}
+                        {batchSubdivisions.subdivisions[selectedSection].summary}
                       </div>
                     </div>
                   )}
                   
-                  {batchSubdivisions[selectedSection].subdivisions && 
-                   batchSubdivisions[selectedSection].subdivisions.length > 0 && (
+                  {batchSubdivisions.subdivisions[selectedSection].subdivisions && 
+                   batchSubdivisions.subdivisions[selectedSection].subdivisions.length > 0 && (
                     <div>
                       <div style={{
                         fontWeight: 'bold',
@@ -1254,7 +1245,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       }}>
                         子分段:
                       </div>
-                      {batchSubdivisions[selectedSection].subdivisions.map((sub, subIndex) => (
+                      {batchSubdivisions.subdivisions[selectedSection].subdivisions.map((sub, subIndex) => (
                         <div
                           key={subIndex}
                           style={{
@@ -1294,7 +1285,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
               )}
 
               {/* 重新细分按键 - 放在底部 */}
-              {stage2Completed && batchSubdivisions && (
+              {stage2Completed && batchSubdivisions && batchSubdivisions.subdivisions && (
                 <div style={{
                   marginTop: '12px',
                   padding: '8px',
