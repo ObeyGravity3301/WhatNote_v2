@@ -2065,8 +2065,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                   } else if (data.type === 'content') {
                                     // 显示LLM生成的内容
                                     setBatchOutlineStatus(prev => prev + data.content);
+                                  } else if (data.type === 'group_content') {
+                                    // 显示子模型的流式输出
+                                    setBatchOutlineStatus(prev => prev + data.content);
                                   } else if (data.type === 'group_done') {
-                                    setBatchOutlineStatus(prev => prev + `\n分组${data.group}完成`);
+                                    setBatchOutlineStatus(prev => prev + `\n\n分组${data.group}完成\n`);
                                   } else if (data.type === 'merge_content') {
                                     setBatchOutlineStatus(prev => prev + data.content);
                                   } else if (data.type === 'outline') {

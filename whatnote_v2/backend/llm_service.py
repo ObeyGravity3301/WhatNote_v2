@@ -334,7 +334,9 @@ class LLMService:
         }
         
         try:
-            async with aiohttp.ClientSession() as session:
+            # 设置超时：读取超时300秒（5分钟），连接超时60秒
+            timeout = aiohttp.ClientTimeout(total=None, connect=60, sock_read=300)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -393,7 +395,9 @@ class LLMService:
         }
         
         try:
-            async with aiohttp.ClientSession() as session:
+            # 设置超时：读取超时300秒（5分钟），连接超时60秒
+            timeout = aiohttp.ClientTimeout(total=None, connect=60, sock_read=300)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -477,7 +481,9 @@ class LLMService:
         url += f"&key={config['apiKey']}"
         
         try:
-            async with aiohttp.ClientSession() as session:
+            # 设置超时：读取超时300秒（5分钟），连接超时60秒
+            timeout = aiohttp.ClientTimeout(total=None, connect=60, sock_read=300)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -528,7 +534,9 @@ class LLMService:
         }
         
         try:
-            async with aiohttp.ClientSession() as session:
+            # 设置超时：读取超时300秒（5分钟），连接超时60秒
+            timeout = aiohttp.ClientTimeout(total=None, connect=60, sock_read=300)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()

@@ -1646,6 +1646,8 @@ async def generate_batch_outline(
                         async for chunk in llm_service.chat_completion(sub_messages, stream=True):
                             if chunk:
                                 sub_accumulated_content += chunk
+                                # 将子模型的输出也流式传递给前端
+                                yield f"data: {json.dumps({'type': 'group_content', 'group': group_num, 'content': chunk}, ensure_ascii=False)}\n\n"
                         
                         # 保存子模型消息
                         sub_assistant_message = {
