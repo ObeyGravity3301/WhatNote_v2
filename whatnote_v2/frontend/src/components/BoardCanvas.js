@@ -1137,7 +1137,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     // 显示LLM生成的内容
                                     setBatchOutlineStatus(prev => prev + data.content);
                                   } else if (data.type === 'group_done') {
-                                    setBatchOutlineStatus(prev => prev + `\n✅ 分组${data.group}完成`);
+                                    setBatchOutlineStatus(prev => prev + `\n分组${data.group}完成`);
                                   } else if (data.type === 'merge_content') {
                                     setBatchOutlineStatus(prev => prev + data.content);
                                   } else if (data.type === 'outline') {
@@ -1147,7 +1147,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     setIsBatchGenerating(false);
                                   } else if (data.type === 'info') {
                                     console.log('大纲生成信息:', data.message);
-                                    setBatchOutlineStatus(prev => prev + '\n💡 ' + data.message);
+                                    setBatchOutlineStatus(prev => prev + '\n' + data.message);
                                   } else if (data.type === 'done') {
                                     console.log('批量生成流程完成');
                                     if (!data.outline) {
@@ -1469,7 +1469,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                   border: '1px solid #b0d0f0',
                   fontSize: '10px'
                 }}>
-                  💡 当前使用: {annotationSettings.style === 'custom' ? '自定义提示词' : annotationStyles[annotationSettings.style]?.name}
+                  当前使用: {annotationSettings.style === 'custom' ? '自定义提示词' : annotationStyles[annotationSettings.style]?.name}
                 </div>
               </div>
             )}
@@ -1698,7 +1698,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             fontSize: '11px',
                             color: '#f57c00'
                           }}>
-                            💡 内容概括
+                            内容概括
                           </div>
                           <div style={{
                             fontSize: '10px',
@@ -1762,14 +1762,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         {/* 重叠信息提示 */}
                         {batchOutline.page_analysis && batchOutline.page_analysis.statistics.overlapping_pages_count > 0 && (
                           <div style={{
-                            padding: '8px',
+                            padding: '6px 8px',
                             marginBottom: '12px',
-                            backgroundColor: '#e8f4fd',
-                            border: '1px solid #b8daff',
-                            borderRadius: '2px',
-                            fontSize: '10px'
+                            backgroundColor: '#ffffcc',
+                            border: '2px inset #c0c0c0',
+                            fontSize: '10px',
+                            fontFamily: 'MS Sans Serif, sans-serif',
+                            fontWeight: 'normal'
                           }}>
-                            💡 检测到 <strong>{batchOutline.page_analysis.statistics.overlapping_pages_count}</strong> 个重叠页面
+                            检测到 <strong>{batchOutline.page_analysis.statistics.overlapping_pages_count}</strong> 个重叠页面
                             （第 {batchOutline.page_analysis.statistics.multi_annotated_pages.join(', ')} 页），
                             这些页面会被多次注释，后续将自动融合为一个完整注释。
                           </div>
@@ -1832,7 +1833,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                   borderRadius: '2px',
                                   fontWeight: 'normal'
                                 }} title="此章节包含会被多次注释的页面">
-                                  🔗 含重叠页
+                                  ! 含重叠页
                                 </span>
                               )}
                             </div>
@@ -1928,13 +1929,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       setIsBatchGenerating(false);
                                       setStage2Completed(true); // 标记第二阶段完成，但保留进度条显示
                                     } else if (data.type === 'warning') {
-                                      setBatchOutlineStatus(prev => prev + `\n⚠️ ${data.message}`);
+                                      setBatchOutlineStatus(prev => prev + `\n警告: ${data.message}`);
                                     } else if (data.type === 'done') {
                                       console.log('细分流程完成');
                                       setIsBatchGenerating(false);
                                     } else if (data.type === 'error') {
                                       console.error('细分错误:', data.error);
-                                      setBatchOutlineStatus(prev => prev + `\n❌ 错误: ${data.error}`);
+                                      setBatchOutlineStatus(prev => prev + `\n错误: ${data.error}`);
                                       setIsBatchGenerating(false);
                                     }
                                   }
@@ -1942,7 +1943,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                               }
                             } catch (error) {
                               console.error('细分处理失败:', error);
-                              setBatchOutlineStatus(prev => prev + `\n❌ 细分失败: ${error.message}`);
+                              setBatchOutlineStatus(prev => prev + `\n细分失败: ${error.message}`);
                               setIsBatchGenerating(false);
                             }
                           }}
@@ -1960,7 +1961,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           onMouseEnter={(e) => e.target.style.backgroundColor = '#005a9e'}
                           onMouseLeave={(e) => e.target.style.backgroundColor = '#0078d4'}
                         >
-                          {batchSubdivisions ? '🔄 重新细分' : '➡️ 开始第二阶段'}
+                          {batchSubdivisions ? '重新细分' : '开始第二阶段'}
                         </button>
                         <button
                           onClick={() => setShowBatchOutlineModal(false)}
