@@ -2128,6 +2128,193 @@ async def subdivide_outline_sections(
         error(f"细分大纲分段失败: {e}")
         raise HTTPException(status_code=500, detail=f"细分大纲分段失败: {str(e)}")
 
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/generate-section")
+async def generate_section_annotations(
+    board_id: str,
+    window_id: str,
+    request: Request
+):
+    """为一个分段的所有页面生成注释"""
+    try:
+        request_body = await request.json()
+        section_index = request_body.get('section_index')
+        section_data = request_body.get('section_data')
+        subdivision_data = request_body.get('subdivision_data')
+        annotation_style = request_body.get('annotation_style', 'detailed')
+        custom_prompt = request_body.get('custom_prompt', '')
+        
+        info(f"开始为分段 {section_index} 生成注释")
+        
+        # 获取窗口信息
+        target_window = None
+        for window in content_manager.get_windows(board_id):
+            if window['id'] == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        # 获取PDF文件名
+        pdf_path = Path(target_window['content'])
+        pdf_filename = pdf_path.stem + pdf_path.suffix
+        
+        page_start = section_data['page_start']
+        page_end = section_data['page_end']
+        
+        # 获取注释风格提示词
+        annotation_styles = {
+            'detailed': {
+                'name': '详细注释',
+                'prompt': '请为第{page}页生成详细的注释，包括：\n1. 核心内容总结\n2. 重要概念解释\n3. 关键论点分析\n4. 与其他内容的关联'
+            },
+            'simple': {
+                'name': '简洁注释',
+                'prompt': '请为第{page}页生成简洁的注释，提炼核心要点，每页控制在3-5句话以内。'
+            },
+            'academic': {
+                'name': '学术注释',
+                'prompt': '请为第{page}页生成学术性注释，包括：\n1. 理论框架分析\n2. 研究方法评价\n3. 学术贡献总结\n4. 可能的批判性思考'
+            },
+            'qanda': {
+                'name': '问答式注释',
+                'prompt': '请为第{page}页生成问答式注释：\n1. 提出3-5个关键问题\n2. 为每个问题提供简明答案\n3. 标注重要知识点'
+            }
+        }
+        
+        async def generate_stream():
+            try:
+                yield f"data: {json.dumps({'type': 'status', 'message': f'正在为分段 {section_index + 1} 生成注释...'}, ensure_ascii=False)}\n\n"
+                
+                # 读取该分段所有页面的内容
+                pages_content = []
+                for page in range(page_start, page_end + 1):
+                    page_data = content_manager.get_pdf_page_contents(board_id, window_id, page)
+                    if page_data and page_data.get('current'):
+                        pages_content.append({
+                            'page': page,
+                            'content': page_data['current']
+                        })
+                
+                if not pages_content:
+                    yield f"data: {json.dumps({'type': 'error', 'error': '未找到分段内容'}, ensure_ascii=False)}\n\n"
+                    return
+                
+                # 构建完整的内容文本
+                full_content = ""
+                for page_info in pages_content:
+                    full_content += f"\n\n=== 第{page_info['page']}页 ===\n{page_info['content']}"
+                
+                # 获取分段描述
+                section_description = subdivision_data.get('section_summary') or section_data.get('description') or ''
+                
+                # 构建提示词
+                if annotation_style == 'custom' and custom_prompt:
+                    base_prompt = custom_prompt
+                else:
+                    base_prompt = annotation_styles.get(annotation_style, annotation_styles['detailed'])['prompt']
+                
+                prompt = f"""你是一个专业的文档注释助手。我需要你为PDF文档的一个分段生成逐页注释。
+
+**分段信息**：
+- 分段编号: {section_data.get('section_number', section_index + 1)}
+- 分段标题: {section_data.get('title', '未命名')}
+- 分段描述: {section_description}
+- 页码范围: 第{page_start}页 - 第{page_end}页
+
+**分段完整内容**：
+{full_content}
+
+**注释要求**：
+{base_prompt}
+
+**输出格式**（必须严格遵守JSON格式）：
+```json
+{{
+  "annotations": [
+    {{
+      "page": 1,
+      "annotation": "第1页的注释内容..."
+    }},
+    {{
+      "page": 2,
+      "annotation": "第2页的注释内容..."
+    }}
+  ]
+}}
+```
+
+请为第{page_start}页到第{page_end}页的每一页都生成注释，确保annotations数组包含所有页面。
+直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
+                
+                # 创建LLM对话
+                user_message = {
+                    "role": "user",
+                    "content": prompt,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                messages = [user_message]
+                accumulated_content = ""
+                
+                # 调用LLM
+                async for chunk in llm_service.chat_completion(messages, stream=True):
+                    if chunk:
+                        accumulated_content += chunk
+                        yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
+                
+                # 解析JSON结果
+                try:
+                    content = accumulated_content.strip()
+                    if content.startswith('```'):
+                        lines = content.split('\n')
+                        content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                    
+                    result_data = json.loads(content)
+                    annotations = result_data.get('annotations', [])
+                    
+                    # 保存每一页的注释
+                    completed_pages = 0
+                    for ann in annotations:
+                        page_num = ann.get('page')
+                        annotation_content = ann.get('annotation', '')
+                        
+                        if page_num and annotation_content:
+                            # 添加生成时间戳
+                            timestamped_content = f"<!-- 批量生成的注释 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n{annotation_content}"
+                            
+                            # 保存注释
+                            save_result = content_manager.save_pdf_annotation(board_id, window_id, page_num, timestamped_content)
+                            
+                            if save_result.get('success'):
+                                completed_pages += 1
+                                yield f"data: {json.dumps({'type': 'page_done', 'page': page_num, 'completed': completed_pages, 'total': len(annotations)}, ensure_ascii=False)}\n\n"
+                    
+                    yield f"data: {json.dumps({'type': 'complete', 'completed_pages': completed_pages, 'total_pages': len(annotations)}, ensure_ascii=False)}\n\n"
+                    
+                except json.JSONDecodeError as e:
+                    error(f"解析注释JSON失败: {e}")
+                    yield f"data: {json.dumps({'type': 'error', 'error': f'解析结果失败: {str(e)}'}, ensure_ascii=False)}\n\n"
+                    
+            except Exception as e:
+                error(f"生成分段注释失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"生成分段注释失败: {e}")
+        raise HTTPException(status_code=500, detail=f"生成分段注释失败: {str(e)}")
+
 @app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/outline-data")
 async def get_outline_data(board_id: str, window_id: str):
     """获取已保存的大纲数据"""

@@ -1049,6 +1049,92 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         ))}
                       </div>
                     )}
+
+                    {/* 生成注释按键 */}
+                    <div style={{
+                      marginTop: '16px',
+                      padding: '8px',
+                      borderTop: '2px inset #c0c0c0',
+                      display: 'flex',
+                      justifyContent: 'flex-end'
+                    }}>
+                      <button
+                        onClick={async () => {
+                          console.log('开始生成当前分段的注释');
+                          const section = batchOutline.outline[selectedSection];
+                          
+                          try {
+                            const response = await fetch(
+                              `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/generate-section`,
+                              {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                  section_index: selectedSection,
+                                  section_data: section,
+                                  subdivision_data: batchSubdivisions.subdivisions[selectedSection],
+                                  annotation_style: annotationSettings.style,
+                                  custom_prompt: annotationSettings.customPrompt
+                                })
+                              }
+                            );
+                            
+                            if (!response.ok) {
+                              throw new Error('生成注释失败');
+                            }
+                            
+                            // 处理流式响应
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder();
+                            let buffer = '';
+                            
+                            while (true) {
+                              const {done, value} = await reader.read();
+                              if (done) break;
+                              
+                              buffer += decoder.decode(value, {stream: true});
+                              const lines = buffer.split('\n\n');
+                              buffer = lines.pop() || '';
+                              
+                              for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                  const data = JSON.parse(line.slice(6));
+                                  
+                                  if (data.type === 'status') {
+                                    console.log('注释生成状态:', data.message);
+                                  } else if (data.type === 'page_done') {
+                                    console.log(`第${data.page}页注释完成`);
+                                  } else if (data.type === 'complete') {
+                                    console.log('分段注释全部完成:', data);
+                                    alert(`注释生成完成！共生成 ${data.completed_pages} 页注释`);
+                                  }
+                                }
+                              }
+                            }
+                          } catch (error) {
+                            console.error('生成注释失败:', error);
+                            alert('生成注释失败: ' + error.message);
+                          }
+                        }}
+                        style={{
+                          padding: '6px 16px',
+                          fontSize: '11px',
+                          backgroundColor: '#008000',
+                          color: '#ffffff',
+                          border: '2px outset #008000',
+                          borderRadius: '0px',
+                          cursor: 'pointer',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          fontWeight: 'bold'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#006000'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#008000'}
+                      >
+                        生成注释
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
