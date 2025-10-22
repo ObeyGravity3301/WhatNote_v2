@@ -1358,6 +1358,174 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                 </div>
               )}
 
+              {/* 批量生成所有注释按钮 - 仅在第二阶段完成后显示 */}
+              {stage2Completed && batchOutline && batchSubdivisions && (
+                <div style={{
+                  marginBottom: '12px',
+                  padding: '8px',
+                  backgroundColor: '#ffffff',
+                  border: '2px inset #c0c0c0',
+                  display: 'flex',
+                  justifyContent: 'center'
+                }}>
+                  <button
+                    onClick={async () => {
+                      if (!batchOutline || !batchOutline.outline || !batchSubdivisions || !batchSubdivisions.subdivisions) {
+                        alert('大纲或细分数据不完整');
+                        return;
+                      }
+
+                      const confirmStart = window.confirm(
+                        `即将并行生成所有 ${batchOutline.outline.length} 个分段的注释，这可能需要较长时间。确认开始？`
+                      );
+                      
+                      if (!confirmStart) return;
+
+                      console.log('开始批量生成所有分段的注释');
+
+                      // 为每个分段创建生成任务（并行执行）
+                      const generatePromises = batchOutline.outline.map(async (section, sectionIndex) => {
+                        const subdivision = batchSubdivisions.subdivisions[sectionIndex];
+                        if (!subdivision) {
+                          console.warn(`分段${sectionIndex}没有细分数据，跳过`);
+                          return null;
+                        }
+
+                        const totalPages = section.page_end - section.page_start + 1;
+                        
+                        // 初始化该分段的进度（注意：这里只是示例，真正的进度需要从后端事件更新）
+                        console.log(`开始生成分段${sectionIndex}: ${section.title} (${totalPages}页)`);
+
+                        try {
+                          // 准备提示词模板
+                          let promptTemplate = '';
+                          if (annotationSettings.style === 'custom') {
+                            promptTemplate = annotationSettings.customPrompt;
+                          } else if (annotationStyles[annotationSettings.style]) {
+                            promptTemplate = annotationStyles[annotationSettings.style].prompt;
+                          }
+
+                          const response = await fetch(
+                            `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/generate-section`,
+                            {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                              },
+                              body: JSON.stringify({
+                                section_index: sectionIndex,
+                                section_data: section,
+                                subdivision_data: subdivision,
+                                annotation_style: annotationSettings.style,
+                                promptTemplate: promptTemplate
+                              })
+                            }
+                          );
+
+                          if (!response.ok) {
+                            throw new Error(`生成分段${sectionIndex}注释失败`);
+                          }
+
+                          // 处理流式响应
+                          const reader = response.body.getReader();
+                          const decoder = new TextDecoder();
+                          let buffer = '';
+
+                          while (true) {
+                            const {done, value} = await reader.read();
+                            if (done) break;
+
+                            buffer += decoder.decode(value, {stream: true});
+                            const lines = buffer.split('\n\n');
+                            buffer = lines.pop() || '';
+
+                            for (const line of lines) {
+                              if (line.startsWith('data: ')) {
+                                const data = JSON.parse(line.slice(6));
+
+                                if (data.type === 'page_done') {
+                                  console.log(`[分段${sectionIndex}] 第${data.page}页完成 (${data.completed}/${data.total})`);
+                                  
+                                  // 实时刷新注释显示
+                                  if (data.annotation && currentPage === data.page) {
+                                    setAnnotations(prev => ({
+                                      ...prev,
+                                      [data.page]: data.annotation
+                                    }));
+                                  }
+                                } else if (data.type === 'complete') {
+                                  console.log(`[分段${sectionIndex}] 全部完成: ${data.completed_pages}页`);
+                                  
+                                  // 如果用户在当前分段范围内，刷新当前页
+                                  if (currentPage >= section.page_start && currentPage <= section.page_end) {
+                                    fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/${currentPage}`)
+                                      .then(res => res.json())
+                                      .then(result => {
+                                        if (result.success && result.annotation) {
+                                          setAnnotations(prev => ({
+                                            ...prev,
+                                            [currentPage]: result.annotation
+                                          }));
+                                        }
+                                      })
+                                      .catch(err => console.error('刷新注释失败:', err));
+                                  }
+                                } else if (data.type === 'error') {
+                                  throw new Error(data.error);
+                                }
+                              }
+                            }
+                          }
+
+                          return { success: true, sectionIndex };
+                        } catch (error) {
+                          console.error(`分段${sectionIndex}生成失败:`, error);
+                          return { success: false, sectionIndex, error: error.message };
+                        }
+                      });
+
+                      // 等待所有分段完成
+                      console.log(`并行执行${generatePromises.length}个分段生成任务...`);
+                      const results = await Promise.all(generatePromises);
+                      
+                      // 统计结果
+                      const successCount = results.filter(r => r && r.success).length;
+                      const failCount = results.filter(r => r && !r.success).length;
+                      
+                      alert(`批量生成完成！\n成功: ${successCount} 个分段\n失败: ${failCount} 个分段`);
+                      console.log('批量生成结果:', results);
+                    }}
+                    style={{
+                      padding: '8px 20px',
+                      fontSize: '12px',
+                      backgroundColor: '#008000',
+                      color: '#ffffff',
+                      border: '2px outset #008000',
+                      borderRadius: '0px',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.backgroundColor = '#009000';
+                      e.target.style.borderStyle = 'outset';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.backgroundColor = '#008000';
+                      e.target.style.borderStyle = 'outset';
+                    }}
+                    onMouseDown={(e) => {
+                      e.target.style.borderStyle = 'inset';
+                    }}
+                    onMouseUp={(e) => {
+                      e.target.style.borderStyle = 'outset';
+                    }}
+                  >
+                    批量生成所有注释
+                  </button>
+                </div>
+              )}
+
               {/* 第一阶段：生成中的流式输出 */}
               {isBatchGenerating && !batchOutline && (
                 <div style={{
