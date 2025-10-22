@@ -1358,8 +1358,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                 </div>
               )}
 
-              {/* 批量生成所有注释按钮 - 仅在第二阶段完成后显示 */}
-              {stage2Completed && batchOutline && batchSubdivisions && (
+              {/* 批量生成所有注释按钮 - 只要有细分数据就显示 */}
+              {batchOutline && batchSubdivisions && batchSubdivisions.subdivisions && (
                 <div style={{
                   marginBottom: '12px',
                   padding: '8px',
