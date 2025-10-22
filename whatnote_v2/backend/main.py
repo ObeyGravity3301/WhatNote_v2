@@ -2146,8 +2146,9 @@ async def generate_section_annotations(
         info(f"开始为分段 {section_index} 生成注释")
         
         # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
         target_window = None
-        for window in content_manager.get_windows(board_id):
+        for window in windows:
             if window['id'] == window_id:
                 target_window = window
                 break
