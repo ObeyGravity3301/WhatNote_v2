@@ -1563,7 +1563,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                               color: '#000000',
                               textAlign: 'center'
                             }}>
-                              {stage2Completed ? '✅ 处理完成！' : '🔄 并行处理中...'} {batchProgress.completed} / {batchProgress.total}
+                              {stage2Completed ? '并行结束' : '并行...'} {batchProgress.completed} / {batchProgress.total}
                             </div>
                             
                             {/* Windows 98风格量子化方格进度条 */}
@@ -1631,7 +1631,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           <div style={{
                             padding: '8px',
                             backgroundColor: '#ffffcc',
-                            border: '1px solid #ffcc00',
+                            border: '1px solid #c0c0c0',
                             fontSize: '11px',
                             whiteSpace: 'pre-wrap'
                           }}>
@@ -1769,23 +1769,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         fontSize: '11px'
                       }}>
                         <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
-                          📋 文档大纲
+                          文档大纲
                         </h3>
-                        
-                        {/* 操作提示 */}
-                        {batchSubdivisions && (
-                          <div style={{
-                            padding: '6px 8px',
-                            marginBottom: '12px',
-                            backgroundColor: '#e8f5e9',
-                            border: '1px solid #a5d6a7',
-                            borderRadius: '2px',
-                            fontSize: '10px',
-                            color: '#2e7d32'
-                          }}>
-                            💡 点击任意分段可查看该分段的细分内容和概括
-                          </div>
-                        )}
                         
                         {/* 重叠信息提示 */}
                         {batchOutline.page_analysis && batchOutline.page_analysis.statistics.overlapping_pages_count > 0 && (
@@ -1953,7 +1938,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       // 确保进度条显示为100%完成状态
                                       setBatchProgress(prev => ({ completed: prev.total, total: prev.total }));
                                       setBatchSubdivisions(data.data); // 保存细分数据
-                                      setBatchOutlineStatus('🎉 所有分段细分完成！\n💡 点击任意分段查看细分内容');
                                       setIsBatchGenerating(false);
                                       setStage2Completed(true); // 标记第二阶段完成，但保留进度条显示
                                     } else if (data.type === 'warning') {
