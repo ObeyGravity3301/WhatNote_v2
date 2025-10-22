@@ -2338,9 +2338,9 @@ async def generate_section_annotations(
                             timestamped_content = f"<!-- 批量生成的注释 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n{annotation_content}"
                             
                             # 保存注释
-                            save_result = content_manager.save_pdf_annotation(board_id, window_id, page_num, timestamped_content)
+                            save_success = content_manager.save_pdf_annotation(board_id, window_id, page_num, timestamped_content)
                             
-                            if save_result.get('success'):
+                            if save_success:
                                 completed_pages += 1
                                 yield f"data: {json.dumps({'type': 'page_done', 'page': page_num, 'completed': completed_pages, 'total': len(annotations)}, ensure_ascii=False)}\n\n"
                     
