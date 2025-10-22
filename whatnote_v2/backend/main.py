@@ -2088,16 +2088,27 @@ async def subdivide_outline_sections(
                 # 等待完成任务结束
                 await completion_task
                 
-                # 保存所有细分结果（过滤掉None值）
-                valid_subdivisions = [s for s in all_subdivisions if s is not None]
+                # 保存所有细分结果（保留None值以保持索引对应，但记录失败的分段）
+                failed_sections = []
+                for idx, subdiv in enumerate(all_subdivisions):
+                    if subdiv is None:
+                        failed_sections.append({
+                            'section_index': idx,
+                            'section_number': outline[idx].get('section_number', idx + 1),
+                            'section_title': outline[idx].get('title', f'分段{idx+1}')
+                        })
+                
+                valid_count = sum(1 for s in all_subdivisions if s is not None)
+                
                 subdivision_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
                 subdivision_complete_data = {
                     'pdf_filename': pdf_filename,
                     'window_id': window_id,
                     'board_id': board_id,
                     'total_sections': total_sections,
-                    'completed_sections': len(valid_subdivisions),
-                    'subdivisions': valid_subdivisions,
+                    'completed_sections': valid_count,
+                    'failed_sections': failed_sections,
+                    'subdivisions': all_subdivisions,  # 保留所有元素，包括None
                     'created_at': datetime.now().isoformat()
                 }
                 

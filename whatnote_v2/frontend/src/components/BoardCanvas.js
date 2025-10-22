@@ -1358,8 +1358,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                 </div>
               )}
 
-              {/* 批量生成所有注释按钮 - 只要有细分数据就显示 */}
-              {batchOutline && batchSubdivisions && batchSubdivisions.subdivisions && (
+              {/* 批量生成所有注释按钮 - 仅在第二阶段完成后显示 */}
+              {stage2Completed && batchOutline && batchSubdivisions && (
                 <div style={{
                   marginBottom: '12px',
                   padding: '8px',
@@ -1544,6 +1544,28 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
               {/* 第一阶段：大纲展示 */}
               {batchOutline && batchOutline.outline && (
                 <div>
+                  {/* 细分失败提示 */}
+                  {batchSubdivisions && batchSubdivisions.failed_sections && batchSubdivisions.failed_sections.length > 0 && (
+                    <div style={{
+                      padding: '6px 8px',
+                      marginBottom: '12px',
+                      backgroundColor: '#ffe0e0',
+                      border: '2px inset #c0c0c0',
+                      fontSize: '10px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'normal'
+                    }}>
+                      <strong>{batchSubdivisions.failed_sections.length}</strong> 个分段细分失败，
+                      无法生成注释：
+                      {batchSubdivisions.failed_sections.map((failed, idx) => (
+                        <span key={idx}>
+                          {idx > 0 && '、'}
+                          第{failed.section_number}段
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  
                   {/* 重叠信息提示 */}
                   {batchOutline.page_analysis && batchOutline.page_analysis.statistics.overlapping_pages_count > 0 && (
                     <div style={{
@@ -1569,8 +1591,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         page => page >= section.page_start && page <= section.page_end
                       );
                     
-                    // 只有在第二阶段完成后才能点击
-                    const isClickable = batchSubdivisions && batchSubdivisions.subdivisions && !isBatchGenerating;
+                    // 只有在第二阶段完成后且该分段有细分数据才能点击
+                    const hasSubdivisionData = batchSubdivisions && 
+                                                batchSubdivisions.subdivisions && 
+                                                batchSubdivisions.subdivisions[index] !== null && 
+                                                batchSubdivisions.subdivisions[index] !== undefined;
+                    const isClickable = hasSubdivisionData && !isBatchGenerating;
                     const isSelected = selectedSection === index;
                     
                     return (
@@ -1579,13 +1605,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         style={{
                           padding: '8px',
                           marginBottom: '8px',
-                          backgroundColor: isSelected ? '#e0e0e0' : '#ffffff',
+                          backgroundColor: isSelected ? '#e0e0e0' : (hasSubdivisionData ? '#ffffff' : '#f5f5f5'),
                           border: '1px solid #d0d0d0',
-                          borderLeft: hasOverlap ? '3px solid #ff9800' : '3px solid #0078d4',
-                          cursor: isClickable ? 'pointer' : 'default',
+                          borderLeft: hasSubdivisionData 
+                            ? (hasOverlap ? '3px solid #ff9800' : '3px solid #0078d4')
+                            : '3px solid #808080',
+                          cursor: isClickable ? 'pointer' : 'not-allowed',
                           transition: 'background-color 0.2s, box-shadow 0.2s',
                           boxShadow: 'none',
-                          opacity: isClickable ? 1 : 0.8
+                          opacity: isClickable ? 1 : 0.5
                         }}
                         onMouseEnter={(e) => {
                           if (isClickable) {
@@ -1615,10 +1643,20 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             fontWeight: 'bold',
                             fontSize: '11px',
                             flex: 1,
-                            color: '#000000',
+                            color: hasSubdivisionData ? '#000000' : '#808080',
                             fontFamily: 'MS Sans Serif, sans-serif'
                           }}>
                             {section.section_number || (index + 1)}. {section.title || section.section_title || `章节 ${index + 1}`}
+                            {!hasSubdivisionData && (
+                              <span style={{
+                                marginLeft: '6px',
+                                fontSize: '9px',
+                                color: '#ff0000',
+                                fontWeight: 'normal'
+                              }}>
+                                [细分失败]
+                              </span>
+                            )}
                           </div>
                           <div style={{
                             fontSize: '10px',
