@@ -857,7 +857,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
         </div>
         
         {/* 大纲侧栏 */}
-        {showOutlinePanel && batchOutline && (
+        {showOutlinePanel && (
           <div style={{
             width: '320px',
             backgroundColor: '#f0f0f0',
@@ -880,7 +880,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
               fontFamily: 'MS Sans Serif, sans-serif',
               fontWeight: 'bold'
             }}>
-              <span>文档大纲</span>
+              <span>
+                {isBatchGenerating && !batchOutline 
+                  ? '正在生成大纲...' 
+                  : (isBatchGenerating && isStage2 
+                      ? '正在细分分段...' 
+                      : '文档大纲')}
+              </span>
               <button
                 onClick={() => setShowOutlinePanel(false)}
                 style={{
