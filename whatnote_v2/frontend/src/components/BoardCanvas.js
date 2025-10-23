@@ -34,7 +34,7 @@ const debounce = (func, wait) => {
 };
 
 // PDF分页组件
-function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }) {
+function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage }) {
   const [pdfDocument, setPdfDocument] = useState(null);
   const [currentPage, setCurrentPage] = useState(initialPage || 1);
   const [totalPages, setTotalPages] = useState(0);
@@ -978,51 +978,76 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       border: '2px inset #c0c0c0'
                     }}>
                       <div style={{
-                        fontSize: '10px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
                         marginBottom: '6px',
-                        fontFamily: 'MS Sans Serif, sans-serif',
-                        color: '#000000'
+                        color: '#000000',
+                        textAlign: 'center'
                       }}>
                         {annotationProgress.isGenerating 
-                          ? `正在生成第 ${annotationProgress.currentPage} 页注释... (${annotationProgress.completed}/${annotationProgress.total})`
-                          : `注释生成完成 (${annotationProgress.completed}/${annotationProgress.total})`
+                          ? `正在生成... ${annotationProgress.completed}/${annotationProgress.total}`
+                          : `生成完成 ${annotationProgress.completed}/${annotationProgress.total}`
                         }
                       </div>
+                      
+                      {/* Windows 98风格量子化方格进度条 */}
                       <div style={{
                         width: '100%',
-                        height: '21px',
+                        height: '30px',
                         backgroundColor: '#c0c0c0',
                         border: '2px inset #c0c0c0',
+                        borderRadius: '0px',
+                        overflow: 'hidden',
+                        position: 'relative',
                         display: 'flex',
-                        gap: '2px',
-                        padding: '2px'
+                        alignItems: 'center',
+                        padding: '1px'
                       }}>
-                        {Array.from({ length: 25 }).map((_, index) => {
-                          const percentage = (annotationProgress.completed / annotationProgress.total) * 100;
-                          const squarePercentage = ((index + 1) / 25) * 100;
-                          const isActive = squarePercentage <= percentage;
-                          
-                          return (
-                            <div
-                              key={index}
-                              style={{
-                                flex: 1,
-                                height: '100%',
-                                backgroundColor: isActive ? '#000080' : '#ffffff',
-                                border: '1px solid #808080'
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                      <div style={{
-                        fontSize: '10px',
-                        marginTop: '4px',
-                        textAlign: 'right',
-                        fontFamily: 'MS Sans Serif, sans-serif',
-                        color: '#000000'
-                      }}>
-                        {Math.round((annotationProgress.completed / annotationProgress.total) * 100)}%
+                        {/* 进度条背景 */}
+                        <div style={{
+                          width: '100%',
+                          height: '27px',
+                          backgroundColor: '#f0f0f0',
+                          border: '1px inset #c0c0c0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-start',
+                          padding: '2px'
+                        }}>
+                          {/* 量子化方格进度条 */}
+                          <div style={{
+                            display: 'flex',
+                            width: '100%',
+                            gap: '2px',
+                            alignItems: 'center'
+                          }}>
+                            {Array.from({ length: 25 }, (_, index) => {
+                              const progressPercentage = annotationProgress.total > 0
+                                ? (annotationProgress.completed / annotationProgress.total) * 100
+                                : 0;
+                              const isActive = (index + 1) * 4 <= progressPercentage; // 每格代表4%
+                              
+                              return (
+                                <div
+                                  key={index}
+                                  style={{
+                                    flex: 1,
+                                    height: '21px',
+                                    backgroundColor: isActive ? '#000080' : 'transparent',
+                                    border: '1px solid transparent',
+                                    borderRadius: '0px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    position: 'relative',
+                                    boxSizing: 'border-box'
+                                  }}
+                                >
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -4121,6 +4146,7 @@ function DocumentWindowRenderer({ window: windowData, onUpload, boardId }) {
         onClose={() => setIsPaginationMode(false)}
         boardId={boardId}
         windowId={windowData.id}
+        addMessage={addMessage}
       />
     );
   }
@@ -4244,6 +4270,7 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId }) {
         boardId={boardId}
         windowId={windowData.id}
         initialPage={targetPage}
+        addMessage={addMessage}
       />
     );
   }
