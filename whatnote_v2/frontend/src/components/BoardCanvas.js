@@ -2390,7 +2390,294 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        📚 批量...
+                        📚 生成大纲
+                      </button>
+                      
+                      <button
+                        onClick={async () => {
+                          console.log('逐页注释 - 一键到底');
+                          setShowLLMMenu(false);
+                          
+                          // 获取PDF总页数
+                          const pdfInfo = windows.find(w => w.id === windowId);
+                          if (!pdfInfo) {
+                            alert('无法获取PDF信息');
+                            return;
+                          }
+                          
+                          // 估算总页数（从currentPage和已知信息推断）
+                          const estimatedTotalPages = pdfInfo.totalPages || currentPage || 10;
+                          const SMALL_FILE_THRESHOLD = 20; // 20页以下为小文件
+                          
+                          // 根据文件大小决定是否需要确认
+                          if (estimatedTotalPages > SMALL_FILE_THRESHOLD) {
+                            const userConfirm = window.confirm(
+                              `检测到文档共约 ${estimatedTotalPages} 页。\n\n` +
+                              `逐页注释功能将自动执行以下操作：\n` +
+                              `  1. 生成文档大纲\n` +
+                              `  2. 细分各个分段\n` +
+                              `  3. 为所有页面生成注释\n\n` +
+                              `此操作将消耗大量 Token 和时间。\n` +
+                              `估算耗时：${Math.ceil(estimatedTotalPages / 2)} - ${estimatedTotalPages} 分钟\n\n` +
+                              `是否继续？`
+                            );
+                            
+                            if (!userConfirm) {
+                              console.log('用户取消逐页注释');
+                              return;
+                            }
+                          }
+                          
+                          console.log('开始自动执行三阶段流程');
+                          
+                          // 保存旧数据用于比对
+                          const oldOutline = batchOutline;
+                          const oldSubdivisions = batchSubdivisions;
+                          
+                          setShowOutlinePanel(true);
+                          setBatchOutlineStatus('阶段1/3: 正在生成大纲...');
+                          setBatchOutline(null);
+                          setIsBatchGenerating(true);
+                          setIsStage2(false);
+                          setStage2Completed(false);
+                          setBatchProgress({ completed: 0, total: 0 });
+                          
+                          try {
+                            // ========== 阶段1：生成大纲 ==========
+                            console.log('开始阶段1：生成大纲');
+                            const stage1Response = await fetch(
+                              `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/outline`,
+                              {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' }
+                              }
+                            );
+                            
+                            if (!stage1Response.ok) {
+                              throw new Error('生成大纲失败');
+                            }
+                            
+                            let newOutline = null;
+                            const reader1 = stage1Response.body.getReader();
+                            const decoder1 = new TextDecoder();
+                            let buffer1 = '';
+                            
+                            while (true) {
+                              const {done, value} = await reader1.read();
+                              if (done) break;
+                              
+                              buffer1 += decoder1.decode(value, {stream: true});
+                              const lines = buffer1.split('\n\n');
+                              buffer1 = lines.pop() || '';
+                              
+                              for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                  const data = JSON.parse(line.slice(6));
+                                  
+                                  if (data.type === 'status' || data.type === 'content' || 
+                                      data.type === 'group_content' || data.type === 'merge_content') {
+                                    setBatchOutlineStatus(prev => prev + (data.content || data.message || ''));
+                                  } else if (data.type === 'outline') {
+                                    newOutline = data.outline;
+                                    console.log('阶段1完成，大纲生成:', newOutline);
+                                  }
+                                }
+                              }
+                            }
+                            
+                            if (!newOutline) {
+                              throw new Error('未能生成大纲');
+                            }
+                            
+                            // 检查大纲冲突（简化版，不中断流程）
+                            if (oldOutline && oldSubdivisions) {
+                              console.log('检测到旧大纲，自动使用新大纲并清空细分数据');
+                              setBatchSubdivisions(null);
+                              setStage2Completed(false);
+                            }
+                            
+                            setBatchOutline(newOutline);
+                            setBatchOutlineStatus('阶段1完成！开始阶段2...');
+                            
+                            // ========== 阶段2：细分分段 ==========
+                            console.log('开始阶段2：细分分段');
+                            setIsStage2(true);
+                            setBatchProgress({ completed: 0, total: newOutline.outline.length });
+                            
+                            const stage2Response = await fetch(
+                              `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivide`,
+                              {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' }
+                              }
+                            );
+                            
+                            if (!stage2Response.ok) {
+                              throw new Error('细分分段失败');
+                            }
+                            
+                            const reader2 = stage2Response.body.getReader();
+                            const decoder2 = new TextDecoder();
+                            let buffer2 = '';
+                            
+                            while (true) {
+                              const {done, value} = await reader2.read();
+                              if (done) break;
+                              
+                              buffer2 += decoder2.decode(value, {stream: true});
+                              const lines = buffer2.split('\n\n');
+                              buffer2 = lines.pop() || '';
+                              
+                              for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                  const data = JSON.parse(line.slice(6));
+                                  
+                                  if (data.type === 'section_done') {
+                                    setBatchProgress({ 
+                                      completed: data.completed, 
+                                      total: data.total 
+                                    });
+                                  } else if (data.type === 'complete') {
+                                    setBatchSubdivisions(data.data);
+                                    setStage2Completed(true);
+                                    console.log('阶段2完成，细分数据:', data.data);
+                                  }
+                                }
+                              }
+                            }
+                            
+                            setIsBatchGenerating(false);
+                            setBatchOutlineStatus('阶段2完成！开始阶段3...');
+                            
+                            // ========== 阶段3：批量生成所有注释 ==========
+                            console.log('开始阶段3：批量生成所有注释');
+                            
+                            const subdivisions = batchSubdivisions || (await (async () => {
+                              const resp = await fetch(
+                                `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
+                              );
+                              if (resp.ok) return await resp.json();
+                              return null;
+                            })());
+                            
+                            if (!subdivisions || !subdivisions.subdivisions) {
+                              throw new Error('未能获取细分数据');
+                            }
+                            
+                            // 准备注释样式
+                            let promptTemplate = '';
+                            if (annotationSettings.style === 'custom') {
+                              promptTemplate = annotationSettings.customPrompt;
+                            } else if (annotationStyles[annotationSettings.style]) {
+                              promptTemplate = annotationStyles[annotationSettings.style].prompt;
+                            }
+                            
+                            // 并行生成所有分段的注释
+                            const generatePromises = newOutline.outline.map(async (section, sectionIndex) => {
+                              const subdivision = subdivisions.subdivisions[sectionIndex];
+                              if (!subdivision) {
+                                console.warn(`分段${sectionIndex}没有细分数据，跳过`);
+                                return null;
+                              }
+                              
+                              try {
+                                const response = await fetch(
+                                  `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/generate-section`,
+                                  {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      section_index: sectionIndex,
+                                      section_data: section,
+                                      subdivision_data: subdivision,
+                                      annotation_style: annotationSettings.style,
+                                      promptTemplate: promptTemplate
+                                    })
+                                  }
+                                );
+                                
+                                if (!response.ok) {
+                                  throw new Error(`生成分段${sectionIndex}注释失败`);
+                                }
+                                
+                                // 处理流式响应（不阻塞其他分段）
+                                const reader = response.body.getReader();
+                                const decoder = new TextDecoder();
+                                let buffer = '';
+                                
+                                while (true) {
+                                  const {done, value} = await reader.read();
+                                  if (done) break;
+                                  
+                                  buffer += decoder.decode(value, {stream: true});
+                                  const lines = buffer.split('\n\n');
+                                  buffer = lines.pop() || '';
+                                  
+                                  for (const line of lines) {
+                                    if (line.startsWith('data: ')) {
+                                      const data = JSON.parse(line.slice(6));
+                                      
+                                      if (data.type === 'page_done') {
+                                        console.log(`[分段${sectionIndex}] 第${data.page}页完成`);
+                                        
+                                        if (data.annotation && currentPage === data.page) {
+                                          setAnnotations(prev => ({
+                                            ...prev,
+                                            [data.page]: data.annotation
+                                          }));
+                                        }
+                                      } else if (data.type === 'complete') {
+                                        console.log(`[分段${sectionIndex}] 完成: ${data.completed_pages}页`);
+                                      }
+                                    }
+                                  }
+                                }
+                                
+                                return { success: true, sectionIndex };
+                              } catch (error) {
+                                console.error(`分段${sectionIndex}失败:`, error);
+                                return { success: false, sectionIndex, error: error.message };
+                              }
+                            });
+                            
+                            console.log(`并行生成${generatePromises.length}个分段的注释...`);
+                            const results = await Promise.all(generatePromises);
+                            
+                            const successCount = results.filter(r => r && r.success).length;
+                            const failCount = results.filter(r => r && !r.success).length;
+                            
+                            setBatchOutlineStatus('所有阶段完成！');
+                            alert(
+                              `逐页注释完成！\n\n` +
+                              `阶段1: 大纲生成 ✓\n` +
+                              `阶段2: 细分分段 ✓\n` +
+                              `阶段3: 注释生成 ✓\n\n` +
+                              `成功: ${successCount} 个分段\n` +
+                              `失败: ${failCount} 个分段`
+                            );
+                            
+                          } catch (error) {
+                            console.error('逐页注释失败:', error);
+                            setBatchOutlineStatus('错误: ' + error.message);
+                            setIsBatchGenerating(false);
+                            alert('逐页注释失败: ' + error.message);
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          backgroundColor: '#c0c0c0',
+                          border: 'none',
+                          borderBottom: '1px solid #a0a0a0',
+                          cursor: 'pointer',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          textAlign: 'left'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
+                      >
+                        📝 逐页注释
                       </button>
                       
                       <button
