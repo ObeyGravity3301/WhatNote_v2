@@ -4845,34 +4845,49 @@ function BoardCanvas({
   };
   
   const openMessageCenter = () => {
+    console.log('📬 openMessageCenter被调用');
     setUnreadCount(0); // 打开时清除未读计数
     
     // 检查消息中心窗口是否已存在
     const existingWindow = windows.find(w => w.id === MESSAGE_CENTER_WINDOW_ID);
+    console.log('📬 检查现有窗口:', { 
+      existingWindow: existingWindow ? existingWindow.id : 'null',
+      isMinimized: minimizedWindows.has(MESSAGE_CENTER_WINDOW_ID),
+      isHidden: hiddenWindows.has(MESSAGE_CENTER_WINDOW_ID),
+      allWindows: windows.map(w => ({ id: w.id, type: w.type }))
+    });
     
     if (existingWindow) {
+      console.log('📬 找到现有窗口，准备恢复');
       // 如果窗口存在但被最小化或隐藏，恢复它
       if (minimizedWindows.has(MESSAGE_CENTER_WINDOW_ID)) {
+        console.log('📬 窗口已最小化，执行恢复');
         onWindowMinimize(MESSAGE_CENTER_WINDOW_ID);
       }
       if (hiddenWindows.has(MESSAGE_CENTER_WINDOW_ID)) {
+        console.log('📬 窗口已隐藏，执行显示');
         onWindowShow(MESSAGE_CENTER_WINDOW_ID);
       }
       // 设置为焦点窗口
+      console.log('📬 设置窗口焦点');
       onWindowFocus(MESSAGE_CENTER_WINDOW_ID);
     } else {
+      console.log('📬 未找到现有窗口，创建新窗口');
       // 创建新的消息中心窗口
       const newWindow = createMessageCenterWindow();
       setWindows(prevWindows => {
         // 确保消息中心窗口不重复
         if (prevWindows.some(w => w.id === MESSAGE_CENTER_WINDOW_ID)) {
+          console.log('📬 窗口已存在于数组中，不重复添加');
           return prevWindows;
         }
+        console.log('📬 添加新窗口到数组');
         return [...prevWindows, newWindow];
       });
       
       // 设置为焦点窗口
       setTimeout(() => {
+        console.log('📬 延迟设置窗口焦点');
         onWindowFocus(MESSAGE_CENTER_WINDOW_ID);
       }, 100);
     }
@@ -7278,8 +7293,8 @@ function BoardCanvas({
                 </span>
               )}
               <div className="window-controls">
-                {/* Chat 窗口只显示关闭按钮，关闭时执行最小化 */}
-                {window.type !== 'chat' && (
+                {/* Chat 和消息中心窗口只显示关闭按钮，关闭时执行最小化 */}
+                {window.type !== 'chat' && window.type !== 'message-center' && (
                 <button 
                   className="minimize-btn"
                   onClick={(e) => {
