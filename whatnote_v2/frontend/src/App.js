@@ -607,10 +607,18 @@ function App() {
           
           {selectedBoard ? (
             <>
-              {currentBoardWindows.filter(window => !hiddenWindows.has(window.id)).length > 0 ? (
+              {currentBoardWindows.filter(window => 
+                !hiddenWindows.has(window.id) && 
+                window.type !== 'chat' && 
+                window.type !== 'message-center'
+              ).length > 0 ? (
                 <>
                   <span className="taskbar-label">窗口:</span>
-                  {currentBoardWindows.filter(window => !hiddenWindows.has(window.id)).map(window => {
+                  {currentBoardWindows.filter(window => 
+                    !hiddenWindows.has(window.id) && 
+                    window.type !== 'chat' && 
+                    window.type !== 'message-center'
+                  ).map(window => {
                     const isMinimized = minimizedWindows.has(window.id);
                     const isFocused = focusedWindowId === window.id;
                     return (
