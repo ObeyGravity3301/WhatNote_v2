@@ -1,7 +1,7 @@
 import React from 'react';
 import './Header.css';
 
-function Header({ isConnected, onToggleConsole }) {
+function Header({ isConnected, onToggleConsole, onOpenMessageCenter, unreadCount = 0 }) {
   return (
     <header className="header">
       <div className="header-left">
@@ -18,6 +18,16 @@ function Header({ isConnected, onToggleConsole }) {
       </div>
       
       <div className="header-right">
+        <button 
+          className="message-center-btn"
+          onClick={onOpenMessageCenter}
+          title="消息中心"
+        >
+          📬 消息
+          {unreadCount > 0 && (
+            <span className="message-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+          )}
+        </button>
         <button 
           className="console-toggle"
           onClick={onToggleConsole}

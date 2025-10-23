@@ -643,21 +643,39 @@ function App() {
           {/* 右侧聊天按钮和连接状态 */}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
             {selectedBoard && (
-              <button 
-                className="taskbar-item"
-                onClick={() => {
-                  // 通过事件通知BoardCanvas打开聊天窗口
-                  const event = new CustomEvent('toggleChatWindow');
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(event);
-                  }
-                }}
-                title="AI助手聊天"
-                style={{ minWidth: 'auto', width: '80px' }}
-              >
-                <span className="taskbar-icon">💬</span>
-                <span className="taskbar-text">AI助手</span>
-              </button>
+              <>
+                <button 
+                  className="taskbar-item"
+                  onClick={() => {
+                    // 通过事件通知BoardCanvas打开聊天窗口
+                    const event = new CustomEvent('toggleChatWindow');
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(event);
+                    }
+                  }}
+                  title="AI助手聊天"
+                  style={{ minWidth: 'auto', width: '80px' }}
+                >
+                  <span className="taskbar-icon">💬</span>
+                  <span className="taskbar-text">AI助手</span>
+                </button>
+                
+                <button 
+                  className="taskbar-item message-center-taskbar-btn"
+                  onClick={() => {
+                    // 通过事件通知BoardCanvas打开消息中心
+                    const event = new CustomEvent('toggleMessageCenter');
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(event);
+                    }
+                  }}
+                  title="消息中心"
+                  style={{ minWidth: 'auto', width: '80px', position: 'relative' }}
+                >
+                  <span className="taskbar-icon">📬</span>
+                  <span className="taskbar-text">消息</span>
+                </button>
+              </>
             )}
             
             {/* 连接状态指示器 */}

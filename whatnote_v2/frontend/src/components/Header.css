@@ -35,6 +35,44 @@
   background: #e74c3c;
 }
 
+.header-right {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.message-center-btn {
+  padding: 0.5rem 1rem;
+  background: #9b59b6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  position: relative;
+  font-family: 'MS Sans Serif', sans-serif;
+  font-size: 14px;
+}
+
+.message-center-btn:hover {
+  background: #8e44ad;
+}
+
+.message-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #e74c3c;
+  color: white;
+  border-radius: 10px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: bold;
+  min-width: 18px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
 .console-toggle {
   padding: 0.5rem 1rem;
   background: #3498db;

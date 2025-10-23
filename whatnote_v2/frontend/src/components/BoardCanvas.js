@@ -7,6 +7,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import ChatWindow from './ChatWindow';
+import MessageCenter from './MessageCenter';
 
 // 配置PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -78,6 +79,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
+  // 消息中心状态
+  const [isMessageCenterOpen, setIsMessageCenterOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
     // 从localStorage加载设置
@@ -112,6 +118,38 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   const saveAnnotationSettings = (newSettings) => {
     setAnnotationSettings(newSettings);
     localStorage.setItem('annotationSettings', JSON.stringify(newSettings));
+  };
+  
+  // 消息中心辅助函数
+  const addMessage = (title, details, type = 'info') => {
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    const newMessage = {
+      id: Date.now(),
+      title,
+      details,
+      type, // 'success', 'error', 'warning', 'info'
+      time: timeStr,
+      timestamp: now
+    };
+    
+    setMessages(prev => [newMessage, ...prev]);
+    setUnreadCount(prev => prev + 1);
+  };
+  
+  const clearAllMessages = () => {
+    setMessages([]);
+    setUnreadCount(0);
+  };
+  
+  const openMessageCenter = () => {
+    setIsMessageCenterOpen(true);
+    setUnreadCount(0); // 打开时清除未读计数
+  };
+  
+  const closeMessageCenter = () => {
+    setIsMessageCenterOpen(false);
   };
 
   // 加载PDF文档
@@ -6790,6 +6828,23 @@ function BoardCanvas({
       }
     };
   }, [boardName, minimizedWindows]);
+  
+  // 监听打开消息中心事件
+  useEffect(() => {
+    const handleToggleMessageCenter = () => {
+      console.log('📬 收到打开消息中心事件');
+      openMessageCenter();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('toggleMessageCenter', handleToggleMessageCenter);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('toggleMessageCenter', handleToggleMessageCenter);
+      }
+    };
+  }, []);
 
   // 监听打开PDF页面事件
   useEffect(() => {
@@ -7343,6 +7398,14 @@ function BoardCanvas({
         y={contextMenu.y}
         type={contextMenu.type}
         onAction={(action) => handleContextMenuAction(action, contextMenu.targetIconId)}
+      />
+      
+      {/* 消息中心 */}
+      <MessageCenter
+        isOpen={isMessageCenterOpen}
+        onClose={closeMessageCenter}
+        messages={messages}
+        onClearAll={clearAllMessages}
       />
     </div>
   );
