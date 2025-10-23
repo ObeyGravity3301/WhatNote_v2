@@ -34,7 +34,7 @@ const debounce = (func, wait) => {
 };
 
 // PDF分页组件
-function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage }) {
+function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter }) {
   const [pdfDocument, setPdfDocument] = useState(null);
   const [currentPage, setCurrentPage] = useState(initialPage || 1);
   const [totalPages, setTotalPages] = useState(0);
@@ -4078,7 +4078,7 @@ const toMediaUrl = (windowOrContent, boardId) => {
 };
 
 // 文档窗口渲染器组件（Word文档等）
-function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMessage }) {
+function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter }) {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
 
   console.log('📄 文档窗口渲染:', {
@@ -4115,6 +4115,7 @@ function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMess
         boardId={boardId}
         windowId={windowData.id}
         addMessage={addMessage}
+        openMessageCenter={openMessageCenter}
       />
     );
   }
@@ -4175,7 +4176,7 @@ function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMess
 }
 
 // PDF窗口渲染器组件
-function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage }) {
+function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter }) {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
   const [targetPage, setTargetPage] = useState(null);
 
@@ -4239,6 +4240,7 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage }
         windowId={windowData.id}
         initialPage={targetPage}
         addMessage={addMessage}
+        openMessageCenter={openMessageCenter}
       />
     );
   }
@@ -7535,6 +7537,7 @@ function BoardCanvas({
                   onUpload={(files) => handleUpload(window.id, 'pdfs', files)}
                   boardId={boardId}
                   addMessage={addMessage}
+                  openMessageCenter={openMessageCenter}
                 />
               )}
               {window.type === 'document' && (
@@ -7543,6 +7546,7 @@ function BoardCanvas({
                   onUpload={(files) => handleUpload(window.id, 'documents', files)}
                   boardId={boardId}
                   addMessage={addMessage}
+                  openMessageCenter={openMessageCenter}
                 />
               )}
             </div>
