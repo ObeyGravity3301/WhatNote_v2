@@ -1509,6 +1509,22 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
 
                       console.log('开始批量生成所有分段的注释');
 
+                      // 计算总注释数和重叠信息
+                      const totalAnnotations = batchOutline.outline.reduce((sum, section) => {
+                        return sum + (section.page_end - section.page_start + 1);
+                      }, 0);
+                      const overlappingPages = batchOutline.page_analysis?.statistics?.overlapping_pages_count || 0;
+                      const actualPages = batchOutline.outline[batchOutline.outline.length - 1]?.page_end || 0;
+
+                      // 初始化阶段3进度
+                      setStage3Progress({
+                        completedAnnotations: 0,
+                        totalAnnotations,
+                        actualPages,
+                        overlappingPages,
+                        isGenerating: true
+                      });
+
                       // 为每个分段创建生成任务（并行执行）
                       const generatePromises = batchOutline.outline.map(async (section, sectionIndex) => {
                         const subdivision = batchSubdivisions.subdivisions[sectionIndex];
@@ -1582,6 +1598,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                 } else if (data.type === 'complete') {
                                   console.log(`[分段${sectionIndex}] 全部完成: ${data.completed_pages}页`);
                                   
+                                  // 更新阶段3进度
+                                  const sectionPageCount = section.page_end - section.page_start + 1;
+                                  setStage3Progress(prev => ({
+                                    ...prev,
+                                    completedAnnotations: prev.completedAnnotations + sectionPageCount
+                                  }));
+                                  
                                   // 如果用户在当前分段范围内，刷新当前页
                                   if (currentPage >= section.page_start && currentPage <= section.page_end) {
                                     fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/${currentPage}`)
@@ -1618,8 +1641,109 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       const successCount = results.filter(r => r && r.success).length;
                       const failCount = results.filter(r => r && !r.success).length;
                       
-                      alert(`批量生成完成！\n成功: ${successCount} 个分段\n失败: ${failCount} 个分段`);
-                      console.log('批量生成结果:', results);
+                      // 阶段3完成
+                      setStage3Progress(prev => ({
+                        ...prev,
+                        isGenerating: false
+                      }));
+                      
+                      console.log('阶段3完成，批量生成结果:', results);
+                      
+                      // ========== 阶段4：融合重叠页注释 ==========
+                      const overlappingPagesCount = batchOutline.page_analysis?.statistics?.overlapping_pages_count || 0;
+                      
+                      if (overlappingPagesCount > 0) {
+                        console.log(`开始阶段4：融合${overlappingPagesCount}个重叠页`);
+                        
+                        // 初始化阶段4进度
+                        setStage4Progress({
+                          completed: 0,
+                          total: overlappingPagesCount,
+                          isGenerating: true
+                        });
+                        
+                        try {
+                          const mergeResponse = await fetch(
+                            `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/merge-overlapping`,
+                            {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' }
+                            }
+                          );
+                          
+                          if (!mergeResponse.ok) {
+                            throw new Error('融合重叠页失败');
+                          }
+                          
+                          const mergeReader = mergeResponse.body.getReader();
+                          const mergeDecoder = new TextDecoder();
+                          let mergeBuffer = '';
+                          
+                          while (true) {
+                            const {done, value} = await mergeReader.read();
+                            if (done) break;
+                            
+                            mergeBuffer += mergeDecoder.decode(value, {stream: true});
+                            const lines = mergeBuffer.split('\n\n');
+                            mergeBuffer = lines.pop() || '';
+                            
+                            for (const line of lines) {
+                              if (line.startsWith('data: ')) {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (data.type === 'merge_done' || data.type === 'merge_skip') {
+                                  console.log(`融合第${data.page}页完成 (${data.completed}/${data.total})`);
+                                  setStage4Progress({
+                                    completed: data.completed,
+                                    total: data.total,
+                                    isGenerating: true
+                                  });
+                                } else if (data.type === 'complete') {
+                                  console.log('阶段4完成，融合结果:', data);
+                                  setStage4Progress(prev => ({
+                                    ...prev,
+                                    isGenerating: false
+                                  }));
+                                }
+                              }
+                            }
+                          }
+                          
+                          console.log('阶段4融合完成');
+                          
+                          alert(
+                            `所有注释生成完成！\n\n` +
+                            `阶段3: 生成注释 ✓\n` +
+                            `  成功: ${successCount} 个分段\n` +
+                            `  失败: ${failCount} 个分段\n\n` +
+                            `阶段4: 融合重叠页 ✓\n` +
+                            `  已融合: ${overlappingPagesCount} 个重叠页`
+                          );
+                          
+                        } catch (mergeError) {
+                          console.error('阶段4融合失败:', mergeError);
+                          setStage4Progress(prev => ({ ...prev, isGenerating: false }));
+                          
+                          alert(
+                            `注释生成完成，但融合失败！\n\n` +
+                            `阶段3: 生成注释 ✓\n` +
+                            `  成功: ${successCount} 个分段\n` +
+                            `  失败: ${failCount} 个分段\n\n` +
+                            `阶段4: 融合重叠页 ✗\n` +
+                            `  错误: ${mergeError.message}`
+                          );
+                        }
+                      } else {
+                        // 没有重叠页，直接完成
+                        console.log('没有重叠页，跳过阶段4');
+                        
+                        alert(
+                          `批量生成完成！\n\n` +
+                          `成功: ${successCount} 个分段\n` +
+                          `失败: ${failCount} 个分段\n\n` +
+                          `无重叠页，无需融合`
+                        );
+                      }
                     }}
                     style={{
                       padding: '8px 20px',
@@ -2688,6 +2812,22 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             // ========== 阶段3：批量生成所有注释 ==========
                             console.log('开始阶段3：批量生成所有注释');
                             
+                            // 计算总注释数和重叠信息
+                            const totalAnnotations = newOutline.outline.reduce((sum, section) => {
+                              return sum + (section.page_end - section.page_start + 1);
+                            }, 0);
+                            const overlappingPagesCount = newOutline.page_analysis?.statistics?.overlapping_pages_count || 0;
+                            const actualPages = newOutline.outline[newOutline.outline.length - 1]?.page_end || 0;
+
+                            // 初始化阶段3进度
+                            setStage3Progress({
+                              completedAnnotations: 0,
+                              totalAnnotations,
+                              actualPages,
+                              overlappingPages: overlappingPagesCount,
+                              isGenerating: true
+                            });
+                            
                             const subdivisions = batchSubdivisions || (await (async () => {
                               const resp = await fetch(
                                 `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
@@ -2764,6 +2904,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                         }
                                       } else if (data.type === 'complete') {
                                         console.log(`[分段${sectionIndex}] 完成: ${data.completed_pages}页`);
+                                        
+                                        // 更新阶段3进度
+                                        const sectionPageCount = section.page_end - section.page_start + 1;
+                                        setStage3Progress(prev => ({
+                                          ...prev,
+                                          completedAnnotations: prev.completedAnnotations + sectionPageCount
+                                        }));
                                       }
                                     }
                                   }
@@ -2782,15 +2929,115 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                             const successCount = results.filter(r => r && r.success).length;
                             const failCount = results.filter(r => r && !r.success).length;
                             
-                            setBatchOutlineStatus('所有阶段完成！');
-                            alert(
-                              `逐页注释完成！\n\n` +
-                              `阶段1: 大纲生成 ✓\n` +
-                              `阶段2: 细分分段 ✓\n` +
-                              `阶段3: 注释生成 ✓\n\n` +
-                              `成功: ${successCount} 个分段\n` +
-                              `失败: ${failCount} 个分段`
-                            );
+                            // 阶段3完成
+                            setStage3Progress(prev => ({
+                              ...prev,
+                              isGenerating: false
+                            }));
+                            
+                            console.log('阶段3完成');
+                            
+                            // ========== 阶段4：融合重叠页注释 ==========
+                            if (overlappingPagesCount > 0) {
+                              console.log(`开始阶段4：融合${overlappingPagesCount}个重叠页`);
+                              setBatchOutlineStatus('阶段3完成！开始阶段4...');
+                              
+                              // 初始化阶段4进度
+                              setStage4Progress({
+                                completed: 0,
+                                total: overlappingPagesCount,
+                                isGenerating: true
+                              });
+                              
+                              try {
+                                const mergeResponse = await fetch(
+                                  `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/merge-overlapping`,
+                                  {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' }
+                                  }
+                                );
+                                
+                                if (!mergeResponse.ok) {
+                                  throw new Error('融合重叠页失败');
+                                }
+                                
+                                const mergeReader = mergeResponse.body.getReader();
+                                const mergeDecoder = new TextDecoder();
+                                let mergeBuffer = '';
+                                
+                                while (true) {
+                                  const {done, value} = await mergeReader.read();
+                                  if (done) break;
+                                  
+                                  mergeBuffer += mergeDecoder.decode(value, {stream: true});
+                                  const lines = mergeBuffer.split('\n\n');
+                                  mergeBuffer = lines.pop() || '';
+                                  
+                                  for (const line of lines) {
+                                    if (line.startsWith('data: ')) {
+                                      const data = JSON.parse(line.slice(6));
+                                      
+                                      if (data.type === 'merge_done' || data.type === 'merge_skip') {
+                                        console.log(`融合第${data.page}页完成 (${data.completed}/${data.total})`);
+                                        setStage4Progress({
+                                          completed: data.completed,
+                                          total: data.total,
+                                          isGenerating: true
+                                        });
+                                      } else if (data.type === 'complete') {
+                                        console.log('阶段4完成，融合结果:', data);
+                                        setStage4Progress(prev => ({
+                                          ...prev,
+                                          isGenerating: false
+                                        }));
+                                      }
+                                    }
+                                  }
+                                }
+                                
+                                setBatchOutlineStatus('所有阶段完成！');
+                                alert(
+                                  `逐页注释完成！\n\n` +
+                                  `阶段1: 大纲生成 ✓\n` +
+                                  `阶段2: 细分分段 ✓\n` +
+                                  `阶段3: 注释生成 ✓\n` +
+                                  `  成功: ${successCount} 个分段\n` +
+                                  `  失败: ${failCount} 个分段\n\n` +
+                                  `阶段4: 融合重叠页 ✓\n` +
+                                  `  已融合: ${overlappingPagesCount} 个重叠页`
+                                );
+                                
+                              } catch (mergeError) {
+                                console.error('阶段4融合失败:', mergeError);
+                                setStage4Progress(prev => ({ ...prev, isGenerating: false }));
+                                
+                                alert(
+                                  `逐页注释完成（融合失败）！\n\n` +
+                                  `阶段1: 大纲生成 ✓\n` +
+                                  `阶段2: 细分分段 ✓\n` +
+                                  `阶段3: 注释生成 ✓\n` +
+                                  `  成功: ${successCount} 个分段\n` +
+                                  `  失败: ${failCount} 个分段\n\n` +
+                                  `阶段4: 融合重叠页 ✗\n` +
+                                  `  错误: ${mergeError.message}`
+                                );
+                              }
+                            } else {
+                              // 没有重叠页，跳过阶段4
+                              console.log('没有重叠页，跳过阶段4');
+                              setBatchOutlineStatus('所有阶段完成！');
+                              
+                              alert(
+                                `逐页注释完成！\n\n` +
+                                `阶段1: 大纲生成 ✓\n` +
+                                `阶段2: 细分分段 ✓\n` +
+                                `阶段3: 注释生成 ✓\n\n` +
+                                `成功: ${successCount} 个分段\n` +
+                                `失败: ${failCount} 个分段\n\n` +
+                                `无重叠页，无需融合`
+                              );
+                            }
                             
                           } catch (error) {
                             console.error('逐页注释失败:', error);
