@@ -7,7 +7,6 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import ChatWindow from './ChatWindow';
-import MessageCenter from './MessageCenter';
 
 // 配置PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -1265,7 +1264,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                       isGenerating: false
                                     });
                                     
-                                    alert(`注释生成完成！共生成 ${data.completed_pages} 页注释`);
+                                    addMessage(
+                                      '✓ 分段注释生成完成',
+                                      `共生成 ${data.completed_pages} 页注释`,
+                                      'success'
+                                    );
                                     
                                     // 生成完成后，如果用户在当前分段的页面范围内，刷新当前页的注释
                                     if (currentPage >= section.page_start && currentPage <= section.page_end) {
@@ -1293,7 +1296,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           } catch (error) {
                             console.error('生成注释失败，详细错误:', error);
                             setAnnotationProgress(prev => ({ ...prev, isGenerating: false }));
-                            alert('生成注释失败: ' + error.message);
+                            addMessage(
+                              '✗ 生成注释失败',
+                              error.message,
+                              'error'
+                            );
                           }
                         }}
                         style={{
@@ -1580,7 +1587,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       <button
                     onClick={async () => {
                       if (!batchOutline || !batchOutline.outline || !batchSubdivisions || !batchSubdivisions.subdivisions) {
-                        alert('大纲或细分数据不完整');
+                        addMessage('⚠ 数据不完整', '大纲或细分数据不完整', 'warning');
                         return;
                       }
 
@@ -2434,14 +2441,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     loadAnnotation(currentPage);
                                   } else if (data.type === 'error') {
                                     console.error('生成注释错误:', data.error);
-                                    alert('生成注释失败: ' + data.error);
+                                    addMessage('✗ 生成注释失败', data.error, 'error');
                                   }
                                 }
                               }
                             }
                           } catch (error) {
                             console.error('生成注释失败:', error);
-                            alert('生成注释失败: ' + error.message);
+                            addMessage('✗ 生成注释失败', error.message, 'error');
                           }
                         }}
                         style={{
@@ -2532,14 +2539,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     loadAnnotation(currentPage);
                                   } else if (data.type === 'error') {
                                     console.error('视觉生成错误:', data.error);
-                                    alert('视觉生成注释失败: ' + data.error);
+                                    addMessage('✗ 视觉生成注释失败', data.error, 'error');
                                   }
                                 }
                               }
                             }
                           } catch (error) {
                             console.error('视觉生成失败:', error);
-                            alert('视觉生成注释失败: ' + error.message);
+                            addMessage('✗ 视觉生成注释失败', error.message, 'error');
                           }
                         }}
                         style={{
@@ -3775,10 +3782,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                 if (subdivision) {
                                   setSelectedSection(subdivision);
                                 } else {
-                                  alert('该分段暂无细分数据，请先执行第二阶段');
+                                  addMessage('⚠ 缺少细分数据', '该分段暂无细分数据，请先执行第二阶段', 'warning');
                                 }
                               } else {
-                                alert('请先执行第二阶段：点击"开始批量生成"按钮');
+                                addMessage('⚠ 请先执行第二阶段', '点击"开始批量生成"按钮', 'warning');
                               }
                             }}
                           >
@@ -4341,7 +4348,7 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
         }
       } catch (error) {
         console.error('文件上传失败:', error);
-        alert('文件上传失败: ' + error.message);
+        addMessage('✗ 文件上传失败', error.message, 'error');
       }
       
       // 清理文件输入元素
@@ -4763,8 +4770,9 @@ function BoardCanvas({
   const [messages, setMessages] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   
-  // 聊天窗口ID常量
+  // 特殊窗口ID常量
   const CHAT_WINDOW_ID = 'chat-window-special';
+  const MESSAGE_CENTER_WINDOW_ID = 'message-center-window-special';
   
   // 创建聊天窗口对象
   const createChatWindow = () => {
@@ -4774,6 +4782,20 @@ function BoardCanvas({
       title: `💬 AI助手 - ${boardName}`,
       position: { x: 150, y: 100 },
       size: { width: 400, height: 500 },
+      content: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  };
+  
+  // 创建消息中心窗口对象
+  const createMessageCenterWindow = () => {
+    return {
+      id: MESSAGE_CENTER_WINDOW_ID,
+      type: 'message-center',
+      title: `📬 消息中心`,
+      position: { x: 200, y: 150 },
+      size: { width: 500, height: 600 },
       content: '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -4804,12 +4826,37 @@ function BoardCanvas({
   };
   
   const openMessageCenter = () => {
-    setIsMessageCenterOpen(true);
     setUnreadCount(0); // 打开时清除未读计数
-  };
-  
-  const closeMessageCenter = () => {
-    setIsMessageCenterOpen(false);
+    
+    // 检查消息中心窗口是否已存在
+    const existingWindow = windows.find(w => w.id === MESSAGE_CENTER_WINDOW_ID);
+    
+    if (existingWindow) {
+      // 如果窗口存在但被最小化或隐藏，恢复它
+      if (minimizedWindows.has(MESSAGE_CENTER_WINDOW_ID)) {
+        onWindowMinimize(MESSAGE_CENTER_WINDOW_ID);
+      }
+      if (hiddenWindows.has(MESSAGE_CENTER_WINDOW_ID)) {
+        onWindowShow(MESSAGE_CENTER_WINDOW_ID);
+      }
+      // 设置为焦点窗口
+      onWindowFocus(MESSAGE_CENTER_WINDOW_ID);
+    } else {
+      // 创建新的消息中心窗口
+      const newWindow = createMessageCenterWindow();
+      setWindows(prevWindows => {
+        // 确保消息中心窗口不重复
+        if (prevWindows.some(w => w.id === MESSAGE_CENTER_WINDOW_ID)) {
+          return prevWindows;
+        }
+        return [...prevWindows, newWindow];
+      });
+      
+      // 设置为焦点窗口
+      setTimeout(() => {
+        onWindowFocus(MESSAGE_CENTER_WINDOW_ID);
+      }, 100);
+    }
   };
   
   // 包装setWindows来跟踪调用来源
@@ -5932,9 +5979,9 @@ function BoardCanvas({
         return false;
       }
 
-      // 聊天窗口不需要保存到后端文件系统
-      if (window.type === 'chat') {
-        console.log('💬 聊天窗口状态不保存到后端，跳过保存');
+      // 聊天窗口和消息中心窗口不需要保存到后端文件系统
+      if (window.type === 'chat' || window.type === 'message-center') {
+        console.log(`${window.type === 'chat' ? '💬 聊天' : '📬 消息中心'}窗口状态不保存到后端，跳过保存`);
         return true;
       }
 
@@ -7231,14 +7278,14 @@ function BoardCanvas({
                     console.log('点击了关闭按钮:', window.id);
                     e.stopPropagation();
                     e.preventDefault();
-                    // Chat 窗口关闭时执行最小化，其他窗口执行真正的关闭
-                    if (window.type === 'chat') {
+                    // Chat 和消息中心窗口关闭时执行最小化，其他窗口执行真正的关闭
+                    if (window.type === 'chat' || window.type === 'message-center') {
                       handleWindowMinimizeLocal(window.id);
                     } else {
                     handleWindowCloseLocal(window.id);
                     }
                   }}
-                  title={window.type === 'chat' ? "最小化" : "关闭窗口"}
+                  title={(window.type === 'chat' || window.type === 'message-center') ? "最小化" : "关闭窗口"}
                 >
                   ✕
                 </button>
@@ -7290,6 +7337,136 @@ function BoardCanvas({
                     // 位置变化通过现有的拖拽系统处理
                   }}
                 />
+              )}
+              {window.type === 'message-center' && (
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  backgroundColor: '#ffffff',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  overflow: 'hidden'
+                }}>
+                  {/* 消息列表 */}
+                  {messages.length === 0 ? (
+                    <div style={{
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '40px',
+                      textAlign: 'center',
+                      fontSize: '14px'
+                    }}>
+                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+                      <div style={{ color: '#808080' }}>暂无消息</div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{
+                        flex: 1,
+                        overflowY: 'auto',
+                        padding: '8px'
+                      }}>
+                        {messages.map((msg, index) => (
+                          <div
+                            key={msg.id || index}
+                            style={{
+                              backgroundColor: '#ffffff',
+                              border: '1px solid #808080',
+                              marginBottom: '4px',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.1s'
+                            }}
+                            onClick={() => {
+                              // 切换展开/收起
+                              setMessages(prev => prev.map((m, i) => 
+                                i === index ? { ...m, expanded: !m.expanded } : m
+                              ));
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                          >
+                            <div style={{
+                              padding: '6px 8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '11px'
+                            }}>
+                              <span style={{
+                                width: '16px',
+                                height: '16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 'bold',
+                                borderRadius: '50%',
+                                flexShrink: 0,
+                                backgroundColor: 
+                                  msg.type === 'success' ? '#008000' :
+                                  msg.type === 'error' ? '#c00000' :
+                                  msg.type === 'warning' ? '#ff8000' : '#0000c0',
+                                color: '#ffffff'
+                              }}>
+                                {msg.type === 'success' && '✓'}
+                                {msg.type === 'error' && '✗'}
+                                {msg.type === 'warning' && '⚠'}
+                                {msg.type === 'info' && 'ℹ'}
+                              </span>
+                              <span style={{ flex: 1, fontWeight: 'bold' }}>{msg.title}</span>
+                              <span style={{ fontSize: '10px', color: '#808080', flexShrink: 0 }}>
+                                {msg.time}
+                              </span>
+                            </div>
+                            
+                            {msg.expanded && msg.details && (
+                              <div style={{
+                                padding: '8px 12px',
+                                borderTop: '1px solid #d0d0d0',
+                                backgroundColor: '#f8f8f8',
+                                fontSize: '11px',
+                                lineHeight: '1.5',
+                                whiteSpace: 'pre-wrap',
+                                maxHeight: '200px',
+                                overflowY: 'auto'
+                              }}>
+                                {msg.details}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* 底部按钮 */}
+                      <div style={{
+                        padding: '6px',
+                        backgroundColor: '#c0c0c0',
+                        borderTop: '1px solid #808080',
+                        display: 'flex',
+                        justifyContent: 'flex-end'
+                      }}>
+                        <button
+                          onClick={clearAllMessages}
+                          style={{
+                            padding: '4px 12px',
+                            fontSize: '11px',
+                            fontFamily: 'MS Sans Serif, sans-serif',
+                            backgroundColor: '#c0c0c0',
+                            border: '2px outset #dfdfdf',
+                            cursor: 'pointer'
+                          }}
+                          onMouseDown={(e) => e.currentTarget.style.borderStyle = 'inset'}
+                          onMouseUp={(e) => e.currentTarget.style.borderStyle = 'outset'}
+                        >
+                          清空所有消息
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
               {window.type === 'image' && (
                 <label className="image-placeholder" title={window.content || '点击上传图片'}>
@@ -7436,14 +7613,6 @@ function BoardCanvas({
         y={contextMenu.y}
         type={contextMenu.type}
         onAction={(action) => handleContextMenuAction(action, contextMenu.targetIconId)}
-      />
-      
-      {/* 消息中心 */}
-      <MessageCenter
-        isOpen={isMessageCenterOpen}
-        onClose={closeMessageCenter}
-        messages={messages}
-        onClearAll={clearAllMessages}
       />
     </div>
   );
