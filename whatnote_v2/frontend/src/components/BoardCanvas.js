@@ -1366,17 +1366,135 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                 </div>
               )}
 
-              {/* 批量生成所有注释按钮 - 仅在第二阶段完成后显示 */}
+              {/* 批量生成所有注释按钮/进度条 - 仅在第二阶段完成后显示 */}
               {stage2Completed && batchOutline && batchSubdivisions && (
                 <div style={{
                   marginBottom: '12px',
                   padding: '8px',
                   backgroundColor: '#ffffff',
-                  border: '2px inset #c0c0c0',
-                  display: 'flex',
-                  justifyContent: 'center'
+                  border: '2px inset #c0c0c0'
                 }}>
-                  <button
+                  {/* 阶段3：生成注释进度条 */}
+                  {stage3Progress.isGenerating ? (
+                    <div>
+                      <div style={{
+                        fontSize: '11px',
+                        marginBottom: '6px',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        color: '#000000',
+                        textAlign: 'center'
+                      }}>
+                        正在生成注释... {stage3Progress.completedAnnotations}/{stage3Progress.totalAnnotations}
+                      </div>
+                      {stage3Progress.overlappingPages > 0 && (
+                        <div style={{
+                          fontSize: '10px',
+                          marginBottom: '6px',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          color: '#666',
+                          textAlign: 'center'
+                        }}>
+                          (共{stage3Progress.actualPages}页，{stage3Progress.overlappingPages}个重叠页)
+                        </div>
+                      )}
+                      <div style={{
+                        width: '100%',
+                        height: '21px',
+                        backgroundColor: '#c0c0c0',
+                        border: '2px inset #c0c0c0',
+                        display: 'flex',
+                        gap: '2px',
+                        padding: '2px'
+                      }}>
+                        {Array.from({ length: 25 }).map((_, index) => {
+                          const percentage = stage3Progress.totalAnnotations > 0 
+                            ? (stage3Progress.completedAnnotations / stage3Progress.totalAnnotations) * 100 
+                            : 0;
+                          const squarePercentage = ((index + 1) / 25) * 100;
+                          const isActive = squarePercentage <= percentage;
+                          
+                          return (
+                            <div
+                              key={index}
+                              style={{
+                                flex: 1,
+                                height: '100%',
+                                backgroundColor: isActive ? '#000080' : '#ffffff',
+                                border: '1px solid #808080'
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div style={{
+                        fontSize: '10px',
+                        marginTop: '4px',
+                        textAlign: 'right',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        color: '#000000'
+                      }}>
+                        {stage3Progress.totalAnnotations > 0 
+                          ? Math.round((stage3Progress.completedAnnotations / stage3Progress.totalAnnotations) * 100)
+                          : 0}%
+                      </div>
+                    </div>
+                  ) : stage4Progress.isGenerating ? (
+                    /* 阶段4：融合注释进度条 */
+                    <div>
+                      <div style={{
+                        fontSize: '11px',
+                        marginBottom: '6px',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        color: '#000000',
+                        textAlign: 'center'
+                      }}>
+                        正在融合重叠页... {stage4Progress.completed}/{stage4Progress.total}
+                      </div>
+                      <div style={{
+                        width: '100%',
+                        height: '21px',
+                        backgroundColor: '#c0c0c0',
+                        border: '2px inset #c0c0c0',
+                        display: 'flex',
+                        gap: '2px',
+                        padding: '2px'
+                      }}>
+                        {Array.from({ length: 25 }).map((_, index) => {
+                          const percentage = stage4Progress.total > 0 
+                            ? (stage4Progress.completed / stage4Progress.total) * 100 
+                            : 0;
+                          const squarePercentage = ((index + 1) / 25) * 100;
+                          const isActive = squarePercentage <= percentage;
+                          
+                          return (
+                            <div
+                              key={index}
+                              style={{
+                                flex: 1,
+                                height: '100%',
+                                backgroundColor: isActive ? '#008000' : '#ffffff',
+                                border: '1px solid #808080'
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div style={{
+                        fontSize: '10px',
+                        marginTop: '4px',
+                        textAlign: 'right',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        color: '#000000'
+                      }}>
+                        {stage4Progress.total > 0 
+                          ? Math.round((stage4Progress.completed / stage4Progress.total) * 100)
+                          : 0}%
+                      </div>
+                    </div>
+                  ) : (
+                    /* 按钮：批量生成所有注释 */
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <button
                     onClick={async () => {
                       if (!batchOutline || !batchOutline.outline || !batchSubdivisions || !batchSubdivisions.subdivisions) {
                         alert('大纲或细分数据不完整');
@@ -1531,6 +1649,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                   >
                     批量生成所有注释
                   </button>
+                    </div>
+                  )}
                 </div>
               )}
 
