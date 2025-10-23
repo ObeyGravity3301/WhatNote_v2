@@ -2330,10 +2330,19 @@ async def generate_section_annotations(
                         annotation_content = ann.get('annotation', '')
                         
                         if page_num and annotation_content:
-                            # 添加生成时间戳
-                            timestamped_content = f"<!-- 批量生成的注释 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n{annotation_content}"
+                            # 添加生成时间戳和分段标记
+                            section_title = section_data.get('title', f'分段{section_index + 1}')
+                            page_range = f"{section_data.get('page_start', '?')}-{section_data.get('page_end', '?')}"
+                            timestamped_content = f"<!-- 批量生成的注释 - 分段{section_index}: {section_title} (页{page_range}) - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n{annotation_content}"
                             
-                            # 保存注释
+                            # 保存注释到临时文件（用于后续融合）
+                            temp_annotations_dir = conversation_manager.get_board_conversations_dir(board_id) / "temp_annotations" / window_id
+                            temp_annotations_dir.mkdir(parents=True, exist_ok=True)
+                            temp_file = temp_annotations_dir / f"page_{page_num}_section_{section_index}.md"
+                            with open(temp_file, 'w', encoding='utf-8') as f:
+                                f.write(timestamped_content)
+                            
+                            # 保存注释到正式位置（可能会被覆盖）
                             save_success = content_manager.save_pdf_annotation(board_id, window_id, page_num, timestamped_content)
                             
                             if save_success:
@@ -2364,6 +2373,151 @@ async def generate_section_annotations(
     except Exception as e:
         error(f"生成分段注释失败: {e}")
         raise HTTPException(status_code=500, detail=f"生成分段注释失败: {str(e)}")
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/merge-overlapping")
+async def merge_overlapping_annotations(
+    board_id: str,
+    window_id: str,
+    request: Request
+):
+    """第四阶段：融合重叠页面的注释"""
+    try:
+        info(f"开始第四阶段：融合重叠页面注释 board_id={board_id}, window_id={window_id}")
+        
+        # 读取大纲数据获取重叠页面信息
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        if not outline_file.exists():
+            raise HTTPException(status_code=404, detail="未找到大纲数据")
+        
+        with open(outline_file, 'r', encoding='utf-8') as f:
+            outline_data = json.load(f)
+        
+        overlapping_pages = outline_data.get('page_analysis', {}).get('overlapping_pages', {})
+        
+        if not overlapping_pages:
+            info("没有重叠页面，跳过融合")
+            return {
+                'success': True,
+                'merged_pages': 0,
+                'message': '没有需要融合的重叠页面'
+            }
+        
+        # 创建融合对话记录
+        merge_conv = conversation_manager.create_conversation(
+            board_id,
+            title=f"注释融合 - {window_id}"
+        )
+        merge_conv_id = f"annotation-{window_id}-merge4"
+        
+        # 重命名对话文件
+        conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+        old_file = conversations_dir / f"{merge_conv['id']}.json"
+        new_file = conversations_dir / f"{merge_conv_id}.json"
+        if old_file.exists():
+            old_file.rename(new_file)
+        
+        # 准备SSE流式响应
+        async def merge_stream():
+            try:
+                temp_annotations_dir = conversations_dir / "temp_annotations" / window_id
+                total_overlapping = len(overlapping_pages)
+                completed = 0
+                
+                yield f"data: {json.dumps({'type': 'status', 'message': f'开始融合{total_overlapping}个重叠页面...'}, ensure_ascii=False)}\n\n"
+                
+                for page_num_str, section_indices in overlapping_pages.items():
+                    page_num = int(page_num_str)
+                    
+                    info(f"融合第{page_num}页，涉及{len(section_indices)}个分段")
+                    
+                    # 收集该页面所有分段的注释
+                    annotations_parts = []
+                    for section_idx in section_indices:
+                        temp_file = temp_annotations_dir / f"page_{page_num}_section_{section_idx}.md"
+                        if temp_file.exists():
+                            with open(temp_file, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                annotations_parts.append({
+                                    'section_index': section_idx,
+                                    'content': content
+                                })
+                    
+                    if len(annotations_parts) > 1:
+                        # 构建融合后的注释
+                        merged_content = f"<!-- 融合注释 - 第{page_num}页 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n"
+                        merged_content += f"<!-- 此页面在{len(annotations_parts)}个分段中出现，注释已自动融合 -->\n\n"
+                        
+                        for i, part in enumerate(annotations_parts, 1):
+                            section_idx = part['section_index']
+                            section_info = outline_data['outline'][section_idx]
+                            section_title = section_info.get('title', f'分段{section_idx + 1}')
+                            
+                            merged_content += f"## 视角{i}：{section_title}\n\n"
+                            
+                            # 移除原有的注释头部
+                            content = part['content']
+                            if content.startswith('<!--'):
+                                content_lines = content.split('\n')
+                                content = '\n'.join(content_lines[1:]).strip()
+                            
+                            merged_content += content + "\n\n"
+                            
+                            if i < len(annotations_parts):
+                                merged_content += "---\n\n"
+                        
+                        # 保存融合后的注释
+                        save_success = content_manager.save_pdf_annotation(board_id, window_id, page_num, merged_content)
+                        
+                        if save_success:
+                            completed += 1
+                            info(f"第{page_num}页融合完成 ({completed}/{total_overlapping})")
+                            yield f"data: {json.dumps({'type': 'merge_done', 'page': page_num, 'completed': completed, 'total': total_overlapping, 'sections_count': len(annotations_parts)}, ensure_ascii=False)}\n\n"
+                    else:
+                        # 只有一个分段，无需融合
+                        completed += 1
+                        yield f"data: {json.dumps({'type': 'merge_skip', 'page': page_num, 'completed': completed, 'total': total_overlapping}, ensure_ascii=False)}\n\n"
+                
+                # 清理临时文件
+                if temp_annotations_dir.exists():
+                    import shutil
+                    shutil.rmtree(temp_annotations_dir)
+                    info(f"已清理临时注释文件: {temp_annotations_dir}")
+                
+                # 保存融合日志到对话
+                merge_log = {
+                    "role": "assistant",
+                    "content": f"融合完成：共处理{total_overlapping}个重叠页面",
+                    "timestamp": datetime.now().isoformat(),
+                    "metadata": {
+                        "action": "merge_overlapping_annotations",
+                        "window_id": window_id,
+                        "total_overlapping": total_overlapping,
+                        "completed": completed
+                    }
+                }
+                conversation_manager.add_message(board_id, merge_conv_id, merge_log)
+                
+                yield f"data: {json.dumps({'type': 'complete', 'merged_pages': completed, 'total_pages': total_overlapping}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'success': True}, ensure_ascii=False)}\n\n"
+                
+            except Exception as e:
+                error(f"融合注释失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+        
+        return StreamingResponse(
+            merge_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"融合重叠页注释失败: {e}")
+        raise HTTPException(status_code=500, detail=f"融合重叠页注释失败: {str(e)}")
 
 @app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/outline-data")
 async def get_outline_data(board_id: str, window_id: str):
