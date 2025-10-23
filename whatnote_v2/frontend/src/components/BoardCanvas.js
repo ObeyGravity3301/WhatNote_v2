@@ -2398,15 +2398,29 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           console.log('逐页注释 - 一键到底');
                           setShowLLMMenu(false);
                           
-                          // 获取PDF总页数
-                          const pdfInfo = windows.find(w => w.id === windowId);
-                          if (!pdfInfo) {
-                            alert('无法获取PDF信息');
-                            return;
+                          // 获取PDF总页数（使用win对象中的信息）
+                          let estimatedTotalPages = 10; // 默认值
+                          
+                          // 尝试从后端获取窗口信息
+                          try {
+                            const windowsResp = await fetch(`http://localhost:8081/api/boards/${boardId}/windows`);
+                            if (windowsResp.ok) {
+                              const windowsData = await windowsResp.json();
+                              const pdfWindow = windowsData.find(w => w.id === windowId);
+                              if (pdfWindow && pdfWindow.totalPages) {
+                                estimatedTotalPages = pdfWindow.totalPages;
+                              } else if (win && win.totalPages) {
+                                estimatedTotalPages = win.totalPages;
+                              } else {
+                                // 从currentPage推测（假设用户至少浏览过一些页面）
+                                estimatedTotalPages = Math.max(currentPage * 2, 10);
+                              }
+                            }
+                          } catch (error) {
+                            console.warn('无法获取准确页数，使用估算值');
+                            estimatedTotalPages = Math.max(currentPage * 2, 10);
                           }
                           
-                          // 估算总页数（从currentPage和已知信息推断）
-                          const estimatedTotalPages = pdfInfo.totalPages || currentPage || 10;
                           const SMALL_FILE_THRESHOLD = 20; // 20页以下为小文件
                           
                           // 根据文件大小决定是否需要确认
