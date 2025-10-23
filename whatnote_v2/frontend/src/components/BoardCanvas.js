@@ -1799,38 +1799,41 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                           
                           console.log('阶段4融合完成');
                           
-                          alert(
-                            `所有注释生成完成！\n\n` +
-                            `阶段3: 生成注释 ✓\n` +
-                            `  成功: ${successCount} 个分段\n` +
-                            `  失败: ${failCount} 个分段\n\n` +
-                            `阶段4: 融合重叠页 ✓\n` +
-                            `  已融合: ${overlappingPagesCount} 个重叠页`
-                          );
+                          // 等待一小段时间确保进度条达到100%
+                          setTimeout(() => {
+                            addMessage(
+                              '✓ 批量注释生成完成',
+                              `阶段3: 生成注释 ✓\n  成功: ${successCount} 个分段\n  失败: ${failCount} 个分段\n\n阶段4: 融合重叠页 ✓\n  已融合: ${overlappingPagesCount} 个重叠页`,
+                              'success'
+                            );
+                            openMessageCenter();
+                          }, 300);
                           
                         } catch (mergeError) {
                           console.error('阶段4融合失败:', mergeError);
                           setStage4Progress(prev => ({ ...prev, isGenerating: false }));
                           
-                          alert(
-                            `注释生成完成，但融合失败！\n\n` +
-                            `阶段3: 生成注释 ✓\n` +
-                            `  成功: ${successCount} 个分段\n` +
-                            `  失败: ${failCount} 个分段\n\n` +
-                            `阶段4: 融合重叠页 ✗\n` +
-                            `  错误: ${mergeError.message}`
-                          );
+                          setTimeout(() => {
+                            addMessage(
+                              '⚠ 注释生成完成，但融合失败',
+                              `阶段3: 生成注释 ✓\n  成功: ${successCount} 个分段\n  失败: ${failCount} 个分段\n\n阶段4: 融合重叠页 ✗\n  错误: ${mergeError.message}`,
+                              'warning'
+                            );
+                            openMessageCenter();
+                          }, 300);
                         }
                       } else {
                         // 没有重叠页，直接完成
                         console.log('没有重叠页，跳过阶段4');
                         
-                        alert(
-                          `批量生成完成！\n\n` +
-                          `成功: ${successCount} 个分段\n` +
-                          `失败: ${failCount} 个分段\n\n` +
-                          `无重叠页，无需融合`
-                        );
+                        setTimeout(() => {
+                          addMessage(
+                            '✓ 批量生成完成',
+                            `成功: ${successCount} 个分段\n失败: ${failCount} 个分段\n\n无重叠页，无需融合`,
+                            'success'
+                          );
+                          openMessageCenter();
+                        }, 300);
                       }
                     }}
                     style={{
@@ -3085,53 +3088,56 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                 }
                                 
                                 setBatchOutlineStatus('所有阶段完成！');
-                                alert(
-                                  `逐页注释完成！\n\n` +
-                                  `阶段1: 大纲生成 ✓\n` +
-                                  `阶段2: 细分分段 ✓\n` +
-                                  `阶段3: 注释生成 ✓\n` +
-                                  `  成功: ${successCount} 个分段\n` +
-                                  `  失败: ${failCount} 个分段\n\n` +
-                                  `阶段4: 融合重叠页 ✓\n` +
-                                  `  已融合: ${overlappingPagesCount} 个重叠页`
-                                );
+                                
+                                // 等待一小段时间确保进度条达到100%
+                                setTimeout(() => {
+                                  addMessage(
+                                    '✓ 逐页注释完成',
+                                    `阶段1: 大纲生成 ✓\n阶段2: 细分分段 ✓\n阶段3: 注释生成 ✓\n  成功: ${successCount} 个分段\n  失败: ${failCount} 个分段\n\n阶段4: 融合重叠页 ✓\n  已融合: ${overlappingPagesCount} 个重叠页`,
+                                    'success'
+                                  );
+                                  openMessageCenter();
+                                }, 300);
                                 
                               } catch (mergeError) {
                                 console.error('阶段4融合失败:', mergeError);
                                 setStage4Progress(prev => ({ ...prev, isGenerating: false }));
                                 
-                                alert(
-                                  `逐页注释完成（融合失败）！\n\n` +
-                                  `阶段1: 大纲生成 ✓\n` +
-                                  `阶段2: 细分分段 ✓\n` +
-                                  `阶段3: 注释生成 ✓\n` +
-                                  `  成功: ${successCount} 个分段\n` +
-                                  `  失败: ${failCount} 个分段\n\n` +
-                                  `阶段4: 融合重叠页 ✗\n` +
-                                  `  错误: ${mergeError.message}`
-                                );
+                                setTimeout(() => {
+                                  addMessage(
+                                    '⚠ 逐页注释完成（融合失败）',
+                                    `阶段1: 大纲生成 ✓\n阶段2: 细分分段 ✓\n阶段3: 注释生成 ✓\n  成功: ${successCount} 个分段\n  失败: ${failCount} 个分段\n\n阶段4: 融合重叠页 ✗\n  错误: ${mergeError.message}`,
+                                    'warning'
+                                  );
+                                  openMessageCenter();
+                                }, 300);
                               }
                             } else {
                               // 没有重叠页，跳过阶段4
                               console.log('没有重叠页，跳过阶段4');
                               setBatchOutlineStatus('所有阶段完成！');
                               
-                              alert(
-                                `逐页注释完成！\n\n` +
-                                `阶段1: 大纲生成 ✓\n` +
-                                `阶段2: 细分分段 ✓\n` +
-                                `阶段3: 注释生成 ✓\n\n` +
-                                `成功: ${successCount} 个分段\n` +
-                                `失败: ${failCount} 个分段\n\n` +
-                                `无重叠页，无需融合`
-                              );
+                              setTimeout(() => {
+                                addMessage(
+                                  '✓ 逐页注释完成',
+                                  `阶段1: 大纲生成 ✓\n阶段2: 细分分段 ✓\n阶段3: 注释生成 ✓\n\n成功: ${successCount} 个分段\n失败: ${failCount} 个分段\n\n无重叠页，无需融合`,
+                                  'success'
+                                );
+                                openMessageCenter();
+                              }, 300);
                             }
                             
                           } catch (error) {
                             console.error('逐页注释失败:', error);
                             setBatchOutlineStatus('错误: ' + error.message);
                             setIsBatchGenerating(false);
-                            alert('逐页注释失败: ' + error.message);
+                            
+                            addMessage(
+                              '✗ 逐页注释失败',
+                              error.message,
+                              'error'
+                            );
+                            openMessageCenter();
                           }
                         }}
                         style={{
