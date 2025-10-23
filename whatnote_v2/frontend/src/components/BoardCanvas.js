@@ -1119,7 +1119,24 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                               marginBottom: '8px',
                               backgroundColor: '#ffffff',
                               border: '1px solid #d0d0d0',
-                              borderLeft: '3px solid #4caf50'
+                              borderLeft: '3px solid #4caf50',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onClick={() => {
+                              // 跳转到该子分段的起始页
+                              if (sub.page_start && onPageChange) {
+                                console.log(`📖 跳转到子分段起始页: ${sub.page_start}`);
+                                onPageChange(sub.page_start);
+                              }
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#f0f0f0';
+                              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#ffffff';
+                              e.currentTarget.style.boxShadow = 'none';
                             }}
                           >
                             <div style={{
