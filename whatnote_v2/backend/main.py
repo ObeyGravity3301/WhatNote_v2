@@ -2261,7 +2261,7 @@ async def generate_section_annotations(
                 # 重命名对话文件
                 conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
                 old_file = conversations_dir / f"{annotation_conv_id}.json"
-                new_filename = f"annotation-{window_id}-section{section_index}-3.json"
+                new_filename = f"annotation-{window_id}-section{section_index}.json"
                 new_file = conversations_dir / new_filename
                 
                 if old_file.exists():
