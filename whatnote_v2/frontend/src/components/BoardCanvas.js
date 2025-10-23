@@ -4876,13 +4876,13 @@ function BoardCanvas({
       // 创建新的消息中心窗口
       const newWindow = createMessageCenterWindow();
       setWindows(prevWindows => {
-        // 确保消息中心窗口不重复
-        if (prevWindows.some(w => w.id === MESSAGE_CENTER_WINDOW_ID)) {
-          console.log('📬 窗口已存在于数组中，不重复添加');
-          return prevWindows;
+        // 先移除可能存在的旧窗口，然后添加新窗口
+        const filteredWindows = prevWindows.filter(w => w.id !== MESSAGE_CENTER_WINDOW_ID);
+        if (filteredWindows.length < prevWindows.length) {
+          console.log('📬 移除了旧的消息中心窗口');
         }
         console.log('📬 添加新窗口到数组');
-        return [...prevWindows, newWindow];
+        return [...filteredWindows, newWindow];
       });
       
       // 设置为焦点窗口
