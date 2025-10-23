@@ -71,10 +71,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   const [isBatchGenerating, setIsBatchGenerating] = useState(false); // 是否正在生成
   const [batchSubdivisions, setBatchSubdivisions] = useState(null); // 第二阶段细分数据
   const [selectedSection, setSelectedSection] = useState(null); // 当前选中的分段
-  const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 }); // 批量处理进度
+  const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 }); // 批量处理进度（阶段2）
   const [isStage2, setIsStage2] = useState(false); // 是否是第二阶段
-  const [annotationProgress, setAnnotationProgress] = useState({ completed: 0, total: 0, currentPage: null, isGenerating: false }); // 注释生成进度
+  const [annotationProgress, setAnnotationProgress] = useState({ completed: 0, total: 0, currentPage: null, isGenerating: false }); // 单个分段注释生成进度
   const [stage2Completed, setStage2Completed] = useState(false); // 第二阶段是否已完成
+  const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
+  const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
