@@ -4078,7 +4078,7 @@ const toMediaUrl = (windowOrContent, boardId) => {
 };
 
 // 文档窗口渲染器组件（Word文档等）
-function DocumentWindowRenderer({ window: windowData, onUpload, boardId }) {
+function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMessage }) {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
 
   console.log('📄 文档窗口渲染:', {
@@ -4175,7 +4175,7 @@ function DocumentWindowRenderer({ window: windowData, onUpload, boardId }) {
 }
 
 // PDF窗口渲染器组件
-function PDFWindowRenderer({ window: windowData, onUpload, boardId }) {
+function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage }) {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
   const [targetPage, setTargetPage] = useState(null);
 
@@ -7534,6 +7534,7 @@ function BoardCanvas({
                   window={window} 
                   onUpload={(files) => handleUpload(window.id, 'pdfs', files)}
                   boardId={boardId}
+                  addMessage={addMessage}
                 />
               )}
               {window.type === 'document' && (
@@ -7541,6 +7542,7 @@ function BoardCanvas({
                   window={window} 
                   onUpload={(files) => handleUpload(window.id, 'documents', files)}
                   boardId={boardId}
+                  addMessage={addMessage}
                 />
               )}
             </div>
