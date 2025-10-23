@@ -68,5 +68,15 @@
       "gridX": 6,
       "gridY": 0
     }
+  },
+  "message-center-window-special": {
+    "position": {
+      "x": 580,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 7,
+      "gridY": 0
+    }
   }
 }

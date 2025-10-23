@@ -113,6 +113,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     setAnnotationSettings(newSettings);
     localStorage.setItem('annotationSettings', JSON.stringify(newSettings));
   };
+  
+  // 包装addMessage，自动添加windowId
+  const addMessageWithSource = (title, details, type = 'info') => {
+    if (addMessage) {
+      addMessage(title, details, type, windowId);
+    }
+  };
 
   // 加载PDF文档
   useEffect(() => {
@@ -1257,7 +1264,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                       isGenerating: false
                                     });
                                     
-                                    addMessage(
+                                    addMessageWithSource(
                                       '✓ 分段注释生成完成',
                                       `共生成 ${data.completed_pages} 页注释`,
                                       'success'
@@ -1289,7 +1296,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           } catch (error) {
                             console.error('生成注释失败，详细错误:', error);
                             setAnnotationProgress(prev => ({ ...prev, isGenerating: false }));
-                            addMessage(
+                            addMessageWithSource(
                               '✗ 生成注释失败',
                               error.message,
                               'error'
@@ -1580,7 +1587,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       <button
                     onClick={async () => {
                       if (!batchOutline || !batchOutline.outline || !batchSubdivisions || !batchSubdivisions.subdivisions) {
-                        addMessage('⚠ 数据不完整', '大纲或细分数据不完整', 'warning');
+                        addMessageWithSource('⚠ 数据不完整', '大纲或细分数据不完整', 'warning');
                         return;
                       }
 
@@ -1796,7 +1803,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           
                           // 等待一小段时间确保进度条达到100%
                           setTimeout(() => {
-                            addMessage(
+                            addMessageWithSource(
                               '✓ 批量注释生成完成',
                               `阶段3: 生成注释 ✓\n  成功: ${successCount} 个分段\n  失败: ${failCount} 个分段\n\n阶段4: 融合重叠页 ✓\n  已融合: ${overlappingPagesCount} 个重叠页`,
                               'success'
@@ -1809,7 +1816,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           setStage4Progress(prev => ({ ...prev, isGenerating: false }));
                           
                           setTimeout(() => {
-                            addMessage(
+                            addMessageWithSource(
                               '⚠ 注释生成完成，但融合失败',
                               `阶段3: 生成注释 ✓\n  成功: ${successCount} 个分段\n  失败: ${failCount} 个分段\n\n阶段4: 融合重叠页 ✗\n  错误: ${mergeError.message}`,
                               'warning'
@@ -1822,7 +1829,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         console.log('没有重叠页，跳过阶段4');
                         
                         setTimeout(() => {
-                          addMessage(
+                          addMessageWithSource(
                             '✓ 批量生成完成',
                             `成功: ${successCount} 个分段\n失败: ${failCount} 个分段\n\n无重叠页，无需融合`,
                             'success'
@@ -2434,14 +2441,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                     loadAnnotation(currentPage);
                                   } else if (data.type === 'error') {
                                     console.error('生成注释错误:', data.error);
-                                    addMessage('✗ 生成注释失败', data.error, 'error');
+                                    addMessageWithSource('✗ 生成注释失败', data.error, 'error');
                                   }
                                 }
                               }
                             }
                           } catch (error) {
                             console.error('生成注释失败:', error);
-                            addMessage('✗ 生成注释失败', error.message, 'error');
+                            addMessageWithSource('✗ 生成注释失败', error.message, 'error');
                           }
                         }}
                         style={{
@@ -2532,14 +2539,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                     loadAnnotation(currentPage);
                                   } else if (data.type === 'error') {
                                     console.error('视觉生成错误:', data.error);
-                                    addMessage('✗ 视觉生成注释失败', data.error, 'error');
+                                    addMessageWithSource('✗ 视觉生成注释失败', data.error, 'error');
                                   }
                                 }
                               }
                             }
                           } catch (error) {
                             console.error('视觉生成失败:', error);
-                            addMessage('✗ 视觉生成注释失败', error.message, 'error');
+                            addMessageWithSource('✗ 视觉生成注释失败', error.message, 'error');
                           }
                         }}
                         style={{
@@ -3090,7 +3097,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                 
                                 // 等待一小段时间确保进度条达到100%
                                 setTimeout(() => {
-                                  addMessage(
+                                  addMessageWithSource(
                                     '✓ 逐页注释完成',
                                     `阶段1: 大纲生成 ✓\n阶段2: 细分分段 ✓\n阶段3: 注释生成 ✓\n  成功: ${successCount} 个分段\n  失败: ${failCount} 个分段\n\n阶段4: 融合重叠页 ✓\n  已融合: ${overlappingPagesCount} 个重叠页`,
                                     'success'
@@ -3103,7 +3110,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                 setStage4Progress(prev => ({ ...prev, isGenerating: false }));
                                 
                                 setTimeout(() => {
-                                  addMessage(
+                                  addMessageWithSource(
                                     '⚠ 逐页注释完成（融合失败）',
                                     `阶段1: 大纲生成 ✓\n阶段2: 细分分段 ✓\n阶段3: 注释生成 ✓\n  成功: ${successCount} 个分段\n  失败: ${failCount} 个分段\n\n阶段4: 融合重叠页 ✗\n  错误: ${mergeError.message}`,
                                     'warning'
@@ -3117,7 +3124,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                               setBatchOutlineStatus('所有阶段完成！');
                               
                               setTimeout(() => {
-                                addMessage(
+                                addMessageWithSource(
                                   '✓ 逐页注释完成',
                                   `阶段1: 大纲生成 ✓\n阶段2: 细分分段 ✓\n阶段3: 注释生成 ✓\n\n成功: ${successCount} 个分段\n失败: ${failCount} 个分段\n\n无重叠页，无需融合`,
                                   'success'
@@ -3131,7 +3138,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             setBatchOutlineStatus('错误: ' + error.message);
                             setIsBatchGenerating(false);
                             
-                            addMessage(
+                            addMessageWithSource(
                               '✗ 逐页注释失败',
                               error.message,
                               'error'
@@ -3779,10 +3786,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                 if (subdivision) {
                                   setSelectedSection(subdivision);
                                 } else {
-                                  addMessage('⚠ 缺少细分数据', '该分段暂无细分数据，请先执行第二阶段', 'warning');
+                                  addMessageWithSource('⚠ 缺少细分数据', '该分段暂无细分数据，请先执行第二阶段', 'warning');
                                 }
                               } else {
-                                addMessage('⚠ 请先执行第二阶段', '点击"开始批量生成"按钮', 'warning');
+                                addMessageWithSource('⚠ 请先执行第二阶段', '点击"开始批量生成"按钮', 'warning');
                               }
                             }}
                           >
@@ -4349,7 +4356,7 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
         }
       } catch (error) {
         console.error('文件上传失败:', error);
-        addMessage('✗ 文件上传失败', error.message, 'error');
+        addMessageWithSource('✗ 文件上传失败', error.message, 'error');
       }
       
       // 清理文件输入元素
@@ -4804,9 +4811,19 @@ function BoardCanvas({
   };
   
   // 消息中心辅助函数
-  const addMessage = (title, details, type = 'info') => {
+  const addMessage = (title, details, type = 'info', sourceWindowId = null) => {
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    // 获取源信息
+    let source = boardName || '未知展板';
+    if (sourceWindowId) {
+      const sourceWindow = windows.find(w => w.id === sourceWindowId);
+      if (sourceWindow) {
+        const fileName = sourceWindow.title || '未知文件';
+        source = `${boardName} / ${fileName}`;
+      }
+    }
     
     const newMessage = {
       id: Date.now(),
@@ -4814,7 +4831,8 @@ function BoardCanvas({
       details,
       type, // 'success', 'error', 'warning', 'info'
       time: timeStr,
-      timestamp: now
+      timestamp: now,
+      source // 添加来源信息
     };
     
     setMessages(prev => [newMessage, ...prev]);
@@ -5371,8 +5389,10 @@ function BoardCanvas({
     console.log('🎯 当前桌面图标数量:', desktopIcons.length);
     console.log('🎯 隐藏窗口数量:', hiddenWindows ? hiddenWindows.size : 0);
     
-    // 过滤掉聊天窗口，聊天窗口不应该有桌面图标
-    const regularWindows = windows.filter(window => window.type !== 'chat');
+    // 过滤掉聊天窗口和消息中心窗口，这些特殊窗口不应该有桌面图标
+    const regularWindows = windows.filter(window => 
+      window.type !== 'chat' && window.type !== 'message-center'
+    );
     
     // 先更新网格占用状态，基于现有图标
     updateGridOccupancy(desktopIcons);
@@ -7393,34 +7413,53 @@ function BoardCanvas({
                             <div style={{
                               padding: '6px 8px',
                               display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              fontSize: '11px'
+                              flexDirection: 'column',
+                              gap: '4px'
                             }}>
-                              <span style={{
-                                width: '16px',
-                                height: '16px',
+                              {/* 标题行 */}
+                              <div style={{
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
-                                fontWeight: 'bold',
-                                borderRadius: '50%',
-                                flexShrink: 0,
-                                backgroundColor: 
-                                  msg.type === 'success' ? '#008000' :
-                                  msg.type === 'error' ? '#c00000' :
-                                  msg.type === 'warning' ? '#ff8000' : '#0000c0',
-                                color: '#ffffff'
+                                gap: '6px',
+                                fontSize: '11px'
                               }}>
-                                {msg.type === 'success' && '✓'}
-                                {msg.type === 'error' && '✗'}
-                                {msg.type === 'warning' && '⚠'}
-                                {msg.type === 'info' && 'ℹ'}
-                              </span>
-                              <span style={{ flex: 1, fontWeight: 'bold' }}>{msg.title}</span>
-                              <span style={{ fontSize: '10px', color: '#808080', flexShrink: 0 }}>
-                                {msg.time}
-                              </span>
+                                <span style={{
+                                  width: '16px',
+                                  height: '16px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontWeight: 'bold',
+                                  borderRadius: '50%',
+                                  flexShrink: 0,
+                                  backgroundColor: 
+                                    msg.type === 'success' ? '#008000' :
+                                    msg.type === 'error' ? '#c00000' :
+                                    msg.type === 'warning' ? '#ff8000' : '#0000c0',
+                                  color: '#ffffff'
+                                }}>
+                                  {msg.type === 'success' && '✓'}
+                                  {msg.type === 'error' && '✗'}
+                                  {msg.type === 'warning' && '⚠'}
+                                  {msg.type === 'info' && 'ℹ'}
+                                </span>
+                                <span style={{ flex: 1, fontWeight: 'bold' }}>{msg.title}</span>
+                                <span style={{ fontSize: '10px', color: '#808080', flexShrink: 0 }}>
+                                  {msg.time}
+                                </span>
+                              </div>
+                              
+                              {/* 来源信息 */}
+                              {msg.source && (
+                                <div style={{
+                                  fontSize: '9px',
+                                  color: '#606060',
+                                  paddingLeft: '22px',
+                                  fontFamily: 'monospace'
+                                }}>
+                                  📍 {msg.source}
+                                </div>
+                              )}
                             </div>
                             
                             {msg.expanded && msg.details && (
