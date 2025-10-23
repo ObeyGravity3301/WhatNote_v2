@@ -1125,9 +1125,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             }}
                             onClick={() => {
                               // 跳转到该子分段的起始页
-                              if (sub.page_start && onPageChange) {
+                              if (sub.page_start) {
                                 console.log(`📖 跳转到子分段起始页: ${sub.page_start}`);
-                                onPageChange(sub.page_start);
+                                setCurrentPage(sub.page_start);
                               }
                             }}
                             onMouseEnter={(e) => {
