@@ -2230,6 +2230,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                       <button
                         onClick={async () => {
                           console.log('批量生成功能');
+                          
+                          // 保存当前的大纲和细分数据（用于后续比对）
+                          const oldOutline = batchOutline;
+                          const oldSubdivisions = batchSubdivisions;
+                          
                           setShowLLMMenu(false);
                           setShowOutlinePanel(true); // 直接打开侧栏，不打开弹窗
                           setBatchOutlineStatus('正在准备...');
@@ -2286,9 +2291,69 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
                                     setBatchOutlineStatus(prev => prev + data.content);
                                   } else if (data.type === 'outline') {
                                     console.log('大纲生成完成:', data.outline);
-                                    setBatchOutline(data.outline);
-                                    setBatchOutlineStatus('大纲生成完成！');
-                                    setIsBatchGenerating(false);
+                                    const newOutline = data.outline;
+                                    
+                                    // 检查是否需要用户确认
+                                    let shouldUseNewOutline = true;
+                                    
+                                    if (oldOutline && oldSubdivisions && oldSubdivisions.subdivisions) {
+                                      // 比较新旧大纲是否不同
+                                      const isOutlineDifferent = 
+                                        oldOutline.outline.length !== newOutline.outline.length ||
+                                        oldOutline.outline.some((oldSec, idx) => {
+                                          const newSec = newOutline.outline[idx];
+                                          return !newSec || 
+                                                 oldSec.page_start !== newSec.page_start || 
+                                                 oldSec.page_end !== newSec.page_end;
+                                        });
+                                      
+                                      if (isOutlineDifferent) {
+                                        console.log('检测到大纲结构变化，提示用户确认');
+                                        
+                                        const validSubdivCount = oldSubdivisions.subdivisions.filter(s => s !== null).length;
+                                        
+                                        const userConfirm = window.confirm(
+                                          `新生成的大纲与现有大纲不同：\n\n` +
+                                          `原大纲：${oldOutline.outline.length} 个分段\n` +
+                                          `新大纲：${newOutline.outline.length} 个分段\n` +
+                                          `已完成细分：${validSubdivCount} 个分段\n\n` +
+                                          `如果使用新大纲，现有的细分数据将被清空，需要重新执行第二阶段。\n\n` +
+                                          `是否使用新大纲？\n` +
+                                          `  • 点击"确定"：使用新大纲，清空细分数据\n` +
+                                          `  • 点击"取消"：保留原大纲和细分数据`
+                                        );
+                                        
+                                        shouldUseNewOutline = userConfirm;
+                                        
+                                        if (!userConfirm) {
+                                          console.log('用户选择保留原大纲');
+                                          // 恢复旧数据
+                                          setBatchOutline(oldOutline);
+                                          setBatchSubdivisions(oldSubdivisions);
+                                          setBatchOutlineStatus('已保留原大纲');
+                                          setIsBatchGenerating(false);
+                                          return; // 不继续处理
+                                        } else {
+                                          console.log('用户选择使用新大纲，清空细分数据');
+                                          // 清空细分相关数据
+                                          setBatchSubdivisions(null);
+                                          setStage2Completed(false);
+                                          setSelectedSection(null);
+                                          setAnnotationProgress({ 
+                                            completed: 0, 
+                                            total: 0, 
+                                            currentPage: null, 
+                                            isGenerating: false 
+                                          });
+                                        }
+                                      }
+                                    }
+                                    
+                                    if (shouldUseNewOutline) {
+                                      setBatchOutline(newOutline);
+                                      setBatchOutlineStatus('大纲生成完成！');
+                                      setIsBatchGenerating(false);
+                                    }
                                   } else if (data.type === 'info') {
                                     console.log('大纲生成信息:', data.message);
                                     setBatchOutlineStatus(prev => prev + '\n' + data.message);
