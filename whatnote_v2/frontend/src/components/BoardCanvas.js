@@ -113,38 +113,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     setAnnotationSettings(newSettings);
     localStorage.setItem('annotationSettings', JSON.stringify(newSettings));
   };
-  
-  // 消息中心辅助函数
-  const addMessage = (title, details, type = 'info') => {
-    const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
-    const newMessage = {
-      id: Date.now(),
-      title,
-      details,
-      type, // 'success', 'error', 'warning', 'info'
-      time: timeStr,
-      timestamp: now
-    };
-    
-    setMessages(prev => [newMessage, ...prev]);
-    setUnreadCount(prev => prev + 1);
-  };
-  
-  const clearAllMessages = () => {
-    setMessages([]);
-    setUnreadCount(0);
-  };
-  
-  const openMessageCenter = () => {
-    setIsMessageCenterOpen(true);
-    setUnreadCount(0); // 打开时清除未读计数
-  };
-  
-  const closeMessageCenter = () => {
-    setIsMessageCenterOpen(false);
-  };
 
   // 加载PDF文档
   useEffect(() => {
