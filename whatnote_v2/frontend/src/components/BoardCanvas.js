@@ -2589,7 +2589,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             );
                             
                             if (!response.ok) {
-                              throw new Error('生成批量大纲失败');
+                              const errorData = await response.json().catch(() => ({}));
+                              const errorMsg = errorData.detail || '生成批量大纲失败';
+                              throw new Error(errorMsg);
                             }
                             
                             // 处理流式响应
@@ -2800,7 +2802,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             );
                             
                             if (!stage1Response.ok) {
-                              throw new Error('生成大纲失败');
+                              const errorData = await stage1Response.json().catch(() => ({}));
+                              const errorMsg = errorData.detail || '生成大纲失败';
+                              throw new Error(errorMsg);
                             }
                             
                             let newOutline = null;

@@ -38,5 +38,35 @@
       "gridX": 3,
       "gridY": 0
     }
+  },
+  "window_1760121859454": {
+    "position": {
+      "x": 340,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 4,
+      "gridY": 0
+    }
+  },
+  "window_1760121928438": {
+    "position": {
+      "x": 420,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 5,
+      "gridY": 0
+    }
+  },
+  "window_1761249278764": {
+    "position": {
+      "x": 500,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 6,
+      "gridY": 0
+    }
   }
 }
