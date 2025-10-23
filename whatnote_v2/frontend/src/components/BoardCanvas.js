@@ -79,11 +79,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage }
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
-  // 消息中心状态
-  const [isMessageCenterOpen, setIsMessageCenterOpen] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
     // 从localStorage加载设置
@@ -4763,6 +4758,11 @@ function BoardCanvas({
 }) {
   const [windows, setWindows] = useState([]);
   
+  // 消息中心状态
+  const [isMessageCenterOpen, setIsMessageCenterOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  
   // 聊天窗口ID常量
   const CHAT_WINDOW_ID = 'chat-window-special';
   
@@ -4778,6 +4778,38 @@ function BoardCanvas({
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+  };
+  
+  // 消息中心辅助函数
+  const addMessage = (title, details, type = 'info') => {
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    const newMessage = {
+      id: Date.now(),
+      title,
+      details,
+      type, // 'success', 'error', 'warning', 'info'
+      time: timeStr,
+      timestamp: now
+    };
+    
+    setMessages(prev => [newMessage, ...prev]);
+    setUnreadCount(prev => prev + 1);
+  };
+  
+  const clearAllMessages = () => {
+    setMessages([]);
+    setUnreadCount(0);
+  };
+  
+  const openMessageCenter = () => {
+    setIsMessageCenterOpen(true);
+    setUnreadCount(0); // 打开时清除未读计数
+  };
+  
+  const closeMessageCenter = () => {
+    setIsMessageCenterOpen(false);
   };
   
   // 包装setWindows来跟踪调用来源
