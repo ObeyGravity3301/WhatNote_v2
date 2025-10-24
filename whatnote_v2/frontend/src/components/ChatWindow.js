@@ -140,22 +140,67 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
   if (isSystem) {
     const metadata = message.metadata || {};
     const isAnnotationAction = metadata.type === 'annotation_action';
+    const isOutlineAction = metadata.type === 'batch_outline_generated';
+    const isSectionAnnotationAction = metadata.type === 'batch_section_annotation_generated';
+    const isClickable = isAnnotationAction || isOutlineAction || isSectionAnnotationAction;
     const hasThumbnail = metadata.thumbnail_path && metadata.action === 'generate_visual_annotation';
     
-    // 点击系统通知打开对应PDF页面
+    // 获取左边框颜色
+    const getBorderColor = () => {
+      if (isOutlineAction) return '#4169e1'; // 蓝色 - 大纲
+      if (isSectionAnnotationAction) return '#ff8c00'; // 橙色 - 分段注释
+      return '#ffd700'; // 金色 - 默认/单页注释
+    };
+    
+    // 点击系统通知的处理
     const handleNotificationClick = () => {
       if (isAnnotationAction && metadata.window_id && metadata.page) {
+        // 单页注释：跳转到对应页面
         console.log('📖 点击系统通知，打开PDF页面:', {
           windowId: metadata.window_id,
           page: metadata.page,
           filename: metadata.pdf_filename
         });
         
-        // 触发全局事件，通知BoardCanvas打开PDF窗口并跳转到指定页面
         const event = new CustomEvent('openPDFPage', {
           detail: {
             windowId: metadata.window_id,
             page: metadata.page,
+            filename: metadata.pdf_filename
+          }
+        });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(event);
+        }
+      } else if (isOutlineAction && metadata.window_id) {
+        // 大纲生成：打开大纲侧栏
+        console.log('📚 点击大纲通知，打开大纲侧栏:', {
+          windowId: metadata.window_id,
+          filename: metadata.pdf_filename
+        });
+        
+        const event = new CustomEvent('openPDFOutline', {
+          detail: {
+            windowId: metadata.window_id,
+            filename: metadata.pdf_filename
+          }
+        });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(event);
+        }
+      } else if (isSectionAnnotationAction && metadata.window_id && metadata.page_range) {
+        // 分段注释：跳转到该分段的起始页
+        const startPage = metadata.page_range[0];
+        console.log('⚡ 点击分段注释通知，打开PDF页面:', {
+          windowId: metadata.window_id,
+          page: startPage,
+          filename: metadata.pdf_filename
+        });
+        
+        const event = new CustomEvent('openPDFPage', {
+          detail: {
+            windowId: metadata.window_id,
+            page: startPage,
             filename: metadata.pdf_filename
           }
         });
@@ -172,35 +217,40 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
           padding: '6px 10px',
           backgroundColor: '#fffacd',
           border: '1px solid #f0e68c',
-          borderLeft: '3px solid #ffd700',
+          borderLeft: `3px solid ${getBorderColor()}`,
           fontSize: '10px',
           fontFamily: 'MS Sans Serif, sans-serif',
           color: '#666',
           borderRadius: '2px',
-          cursor: isAnnotationAction ? 'pointer' : 'default',
+          cursor: isClickable ? 'pointer' : 'default',
           transition: 'all 0.2s'
         }}
         onClick={handleNotificationClick}
         onMouseEnter={(e) => {
-          if (isAnnotationAction) {
+          if (isClickable) {
             e.currentTarget.style.backgroundColor = '#fff8dc';
             e.currentTarget.style.borderLeftColor = '#ffa500';
           }
         }}
         onMouseLeave={(e) => {
-          if (isAnnotationAction) {
+          if (isClickable) {
             e.currentTarget.style.backgroundColor = '#fffacd';
-            e.currentTarget.style.borderLeftColor = '#ffd700';
+            e.currentTarget.style.borderLeftColor = getBorderColor();
           }
         }}
-        title={isAnnotationAction ? `点击打开PDF《${metadata.pdf_filename}》第${metadata.page}页` : ''}
+        title={
+          isAnnotationAction ? `点击打开PDF《${metadata.pdf_filename}》第${metadata.page}页` :
+          isOutlineAction ? `点击打开PDF《${metadata.pdf_filename}》的大纲` :
+          isSectionAnnotationAction ? `点击打开PDF《${metadata.pdf_filename}》第${metadata.section_title}分段` :
+          ''
+        }
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
           <span style={{ fontSize: '12px', marginTop: '2px' }}>ℹ️</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
               {message.content}
-              {isAnnotationAction && (
+              {isClickable && (
                 <span style={{ 
                   marginLeft: '6px', 
                   fontSize: '9px', 
@@ -211,6 +261,8 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
                 </span>
               )}
             </div>
+            
+            {/* 单页注释详情 */}
             {isAnnotationAction && (
               <>
                 <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
@@ -233,6 +285,48 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
                   </div>
                 )}
               </>
+            )}
+            
+            {/* 大纲生成详情 */}
+            {isOutlineAction && (
+              <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
+                📄 文件: {metadata.pdf_filename} | 📊 分段数: {metadata.total_sections} | ⏰ {new Date(message.timestamp).toLocaleString('zh-CN')}
+                {metadata.sections_summary && metadata.sections_summary.length > 0 && (
+                  <div style={{ marginTop: '6px', maxHeight: '100px', overflowY: 'auto' }}>
+                    {metadata.sections_summary.slice(0, 5).map((section, idx) => (
+                      <div key={idx} style={{ fontSize: '9px', color: '#666', padding: '2px 0' }}>
+                        {section.index}. {section.title} (p.{section.pages[0]}-{section.pages[1]})
+                      </div>
+                    ))}
+                    {metadata.sections_summary.length > 5 && (
+                      <div style={{ fontSize: '9px', color: '#999', fontStyle: 'italic' }}>
+                        ... 还有 {metadata.sections_summary.length - 5} 个分段
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* 分段注释详情 */}
+            {isSectionAnnotationAction && (
+              <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
+                📄 文件: {metadata.pdf_filename} | 📑 分段: 第{metadata.section_number}节 | 📖 页码: {metadata.page_range[0]}-{metadata.page_range[1]} | 📝 注释数: {metadata.annotation_count} | ⏰ {new Date(message.timestamp).toLocaleString('zh-CN')}
+                {metadata.section_summary && (
+                  <div style={{ 
+                    marginTop: '4px', 
+                    padding: '4px', 
+                    backgroundColor: '#f8f8f8', 
+                    borderRadius: '2px',
+                    fontSize: '9px',
+                    color: '#555',
+                    maxHeight: '60px',
+                    overflowY: 'auto'
+                  }}>
+                    <strong>分段简介：</strong>{metadata.section_summary.substring(0, 100)}{metadata.section_summary.length > 100 ? '...' : ''}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

@@ -1810,6 +1810,53 @@ async def generate_batch_outline(
                             json.dump(final_outline_data, f, ensure_ascii=False, indent=2)
                         info(f"大纲数据已保存: {outline_file}")
                         
+                        # 在主对话（AI助手）中添加系统通知
+                        try:
+                            conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                            if conversations_dir:
+                                # 查找最新的主对话（conv-开头的）
+                                main_conversations = sorted(
+                                    conversations_dir.glob("conv-*.json"),
+                                    key=lambda x: x.stat().st_mtime,
+                                    reverse=True
+                                )
+                                
+                                if main_conversations:
+                                    main_conv_file = main_conversations[0]
+                                    main_conv_id = main_conv_file.stem
+                                    
+                                    # 准备大纲摘要（用于LLM理解）
+                                    sections_summary = []
+                                    for section in final_outline_data.get('outline', []):
+                                        sections_summary.append({
+                                            "index": section.get('section_number', len(sections_summary)),
+                                            "title": section.get('title', section.get('section_title', '未命名')),
+                                            "pages": [section.get('page_start'), section.get('page_end')]
+                                        })
+                                    
+                                    # 添加系统消息
+                                    system_notification = {
+                                        "role": "system",
+                                        "content": f"📚 用户对PDF文件《{pdf_filename}》生成了文档大纲，共{len(sections_summary)}个分段。",
+                                        "timestamp": datetime.now().isoformat(),
+                                        "metadata": {
+                                            "type": "batch_outline_generated",
+                                            "pdf_filename": pdf_filename,
+                                            "window_id": window_id,
+                                            "total_sections": len(sections_summary),
+                                            "sections_summary": sections_summary
+                                        }
+                                    }
+                                    
+                                    conversation_manager.add_message(board_id, main_conv_id, system_notification)
+                                    info(f"已向主对话添加大纲生成通知: {main_conv_id}")
+                                    
+                                    yield f"data: {json.dumps({'type': 'notification_added', 'conversation_id': main_conv_id}, ensure_ascii=False)}\n\n"
+                                else:
+                                    info("未找到主对话，跳过系统通知")
+                        except Exception as e:
+                            error(f"添加系统通知失败: {e}")
+                        
                         yield f"data: {json.dumps({'type': 'outline', 'outline': final_outline_data}, ensure_ascii=False)}\n\n"
                     except json.JSONDecodeError as e:
                         error(f"解析最终大纲JSON失败: {e}")
@@ -2348,6 +2395,53 @@ async def generate_section_annotations(
                             if save_success:
                                 completed_pages += 1
                                 yield f"data: {json.dumps({'type': 'page_done', 'page': page_num, 'completed': completed_pages, 'total': len(annotations), 'annotation': timestamped_content}, ensure_ascii=False)}\n\n"
+                    
+                    # 在主对话（AI助手）中添加系统通知
+                    try:
+                        conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                        if conversations_dir:
+                            # 查找最新的主对话（conv-开头的）
+                            main_conversations = sorted(
+                                conversations_dir.glob("conv-*.json"),
+                                key=lambda x: x.stat().st_mtime,
+                                reverse=True
+                            )
+                            
+                            if main_conversations:
+                                main_conv_file = main_conversations[0]
+                                main_conv_id = main_conv_file.stem
+                                
+                                # 获取分段信息
+                                section_title = section_data.get('title', section_data.get('section_title', '未命名分段'))
+                                section_description = subdivision_data.get('section_summary') or section_data.get('description', '')
+                                section_num = section_data.get('section_number', section_index + 1)
+                                
+                                # 添加系统消息
+                                system_notification = {
+                                    "role": "system",
+                                    "content": f"⚡ 用户对PDF文件《{pdf_filename}》的第{section_num}分段「{section_title}」（第{page_start}-{page_end}页）生成了注释。",
+                                    "timestamp": datetime.now().isoformat(),
+                                    "metadata": {
+                                        "type": "batch_section_annotation_generated",
+                                        "pdf_filename": pdf_filename,
+                                        "window_id": window_id,
+                                        "section_index": section_index,
+                                        "section_number": section_num,
+                                        "section_title": section_title,
+                                        "section_summary": section_description,
+                                        "page_range": [page_start, page_end],
+                                        "annotation_count": completed_pages
+                                    }
+                                }
+                                
+                                conversation_manager.add_message(board_id, main_conv_id, system_notification)
+                                info(f"已向主对话添加分段注释生成通知: {main_conv_id}")
+                                
+                                yield f"data: {json.dumps({'type': 'notification_added', 'conversation_id': main_conv_id}, ensure_ascii=False)}\n\n"
+                            else:
+                                info("未找到主对话，跳过系统通知")
+                    except Exception as e:
+                        error(f"添加系统通知失败: {e}")
                     
                     yield f"data: {json.dumps({'type': 'complete', 'completed_pages': completed_pages, 'total_pages': len(annotations)}, ensure_ascii=False)}\n\n"
                     

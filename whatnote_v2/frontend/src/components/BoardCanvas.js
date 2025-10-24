@@ -7038,6 +7038,62 @@ function BoardCanvas({
     };
   }, [windows, minimizedWindows, hiddenWindows, onWindowShow]);
 
+  // 监听打开PDF大纲事件（从AI助手点击大纲通知）
+  useEffect(() => {
+    const handleOpenPDFOutline = (event) => {
+      const { windowId } = event.detail || {};
+      console.log('📚 收到打开PDF大纲事件:', { windowId });
+      
+      if (!windowId) return;
+      
+      // 查找对应的窗口
+      const targetWindow = windows.find(w => w.id === windowId);
+      if (!targetWindow) {
+        console.log('⚠️ 未找到窗口:', windowId);
+        return;
+      }
+      
+      // 如果窗口被最小化，恢复它
+      if (minimizedWindows && minimizedWindows.has(windowId)) {
+        console.log('🔄 恢复最小化的窗口');
+        if (onWindowMinimize) {
+          onWindowMinimize(windowId);
+        }
+      }
+      
+      // 如果窗口被隐藏，显示它
+      if (hiddenWindows && hiddenWindows.has(windowId)) {
+        console.log('🔄 显示隐藏的窗口');
+        if (onWindowShow) {
+          onWindowShow(windowId);
+        }
+      }
+      
+      // 设置窗口为焦点
+      setTimeout(() => {
+        handleWindowFocusLocal(windowId);
+      }, 100);
+      
+      // 触发打开大纲侧栏
+      setTimeout(() => {
+        const outlineEvent = new CustomEvent('showPDFOutline', {
+          detail: { windowId }
+        });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(outlineEvent);
+        }
+      }, 200);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('openPDFOutline', handleOpenPDFOutline);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('openPDFOutline', handleOpenPDFOutline);
+      }
+    };
+  }, [windows, minimizedWindows, hiddenWindows, onWindowShow, onWindowMinimize]);
 
   // 组件卸载时清理事件监听器
   useEffect(() => {
