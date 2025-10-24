@@ -78,6 +78,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
+  // 确认对话框状态
+  const [confirmDialog, setConfirmDialog] = useState(null); // { message, onConfirm, onCancel, data }
+  
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
     // 从localStorage加载设置
@@ -2682,16 +2685,25 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                         
                                         const validSubdivCount = oldSubdivisions.subdivisions.filter(s => s !== null).length;
                                         
-                                        const userConfirm = window.confirm(
-                                          `新生成的大纲与现有大纲不同：\n\n` +
-                                          `原大纲：${oldOutline.outline.length} 个分段\n` +
-                                          `新大纲：${newOutline.outline.length} 个分段\n` +
-                                          `已完成细分：${validSubdivCount} 个分段\n\n` +
-                                          `如果使用新大纲，现有的细分数据将被清空，需要重新执行第二阶段。\n\n` +
-                                          `是否使用新大纲？\n` +
-                                          `  • 点击"确定"：使用新大纲，清空细分数据\n` +
-                                          `  • 点击"取消"：保留原大纲和细分数据`
-                                        );
+                                        // 使用自定义确认对话框
+                                        const userConfirm = await new Promise((resolve) => {
+                                          setConfirmDialog({
+                                            title: '⚠️ 检测到大纲变化',
+                                            message: {
+                                              oldSections: oldOutline.outline.length,
+                                              newSections: newOutline.outline.length,
+                                              completedSubdivisions: validSubdivCount
+                                            },
+                                            onConfirm: () => {
+                                              setConfirmDialog(null);
+                                              resolve(true);
+                                            },
+                                            onCancel: () => {
+                                              setConfirmDialog(null);
+                                              resolve(false);
+                                            }
+                                          });
+                                        });
                                         
                                         shouldUseNewOutline = userConfirm;
                                         
@@ -7766,13 +7778,157 @@ function BoardCanvas({
       )}
 
       {/* 右键菜单 */}
-      <ContextMenu 
+      <ContextMenu
         visible={contextMenu.visible}
         x={contextMenu.x}
         y={contextMenu.y}
         type={contextMenu.type}
         onAction={(action) => handleContextMenuAction(action, contextMenu.targetIconId)}
       />
+
+      {/* 确认对话框 */}
+      {confirmDialog && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100000
+        }}>
+          <div style={{
+            width: '480px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #ffffff',
+            boxShadow: '4px 4px 10px rgba(0, 0, 0, 0.5)',
+            fontFamily: 'MS Sans Serif, sans-serif'
+          }}>
+            {/* 标题栏 */}
+            <div style={{
+              backgroundColor: '#000080',
+              color: '#ffffff',
+              padding: '3px 5px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '11px',
+              fontWeight: 'bold'
+            }}>
+              <span>⚠️</span>
+              <span style={{ flex: 1 }}>{confirmDialog.title}</span>
+            </div>
+
+            {/* 对话框内容 */}
+            <div style={{
+              padding: '20px',
+              backgroundColor: '#c0c0c0'
+            }}>
+              {/* 图标和消息 */}
+              <div style={{
+                display: 'flex',
+                gap: '16px',
+                marginBottom: '20px'
+              }}>
+                <div style={{
+                  fontSize: '48px',
+                  flexShrink: 0
+                }}>
+                  ⚠️
+                </div>
+                <div style={{
+                  flex: 1,
+                  fontSize: '11px',
+                  lineHeight: '1.6'
+                }}>
+                  <div style={{ marginBottom: '12px', fontWeight: 'bold' }}>
+                    新生成的大纲与现有大纲不同：
+                  </div>
+                  
+                  <div style={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #808080',
+                    padding: '8px',
+                    marginBottom: '12px'
+                  }}>
+                    <div style={{ marginBottom: '4px' }}>
+                      📊 <strong>原大纲：</strong>{confirmDialog.message.oldSections} 个分段
+                    </div>
+                    <div style={{ marginBottom: '4px' }}>
+                      📊 <strong>新大纲：</strong>{confirmDialog.message.newSections} 个分段
+                    </div>
+                    <div>
+                      ✓ <strong>已完成细分：</strong>{confirmDialog.message.completedSubdivisions} 个分段
+                    </div>
+                  </div>
+
+                  <div style={{ 
+                    backgroundColor: '#ffffcc',
+                    border: '1px solid #e0e000',
+                    padding: '8px',
+                    marginBottom: '12px'
+                  }}>
+                    ⚠️ 如果使用新大纲，现有的细分数据将被清空，需要重新执行第二阶段。
+                  </div>
+
+                  <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                    是否使用新大纲？
+                  </div>
+                  <div style={{ paddingLeft: '12px', fontSize: '10px', color: '#000080' }}>
+                    <div>• 点击"使用新大纲"：清空细分数据，使用新大纲</div>
+                    <div>• 点击"保留原大纲"：放弃新大纲，保留现有数据</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 按钮 */}
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                justifyContent: 'center'
+              }}>
+                <button
+                  onClick={confirmDialog.onConfirm}
+                  style={{
+                    minWidth: '100px',
+                    padding: '6px 20px',
+                    fontSize: '11px',
+                    backgroundColor: '#c0c0c0',
+                    border: '2px outset #ffffff',
+                    cursor: 'pointer',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    fontWeight: 'bold'
+                  }}
+                  onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
+                  onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
+                >
+                  使用新大纲
+                </button>
+                <button
+                  onClick={confirmDialog.onCancel}
+                  style={{
+                    minWidth: '100px',
+                    padding: '6px 20px',
+                    fontSize: '11px',
+                    backgroundColor: '#c0c0c0',
+                    border: '2px outset #ffffff',
+                    cursor: 'pointer',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    fontWeight: 'bold'
+                  }}
+                  onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
+                  onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
+                >
+                  保留原大纲
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
