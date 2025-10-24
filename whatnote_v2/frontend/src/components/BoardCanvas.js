@@ -34,7 +34,7 @@ const debounce = (func, wait) => {
 };
 
 // PDF分页组件
-function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter }) {
+function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter, setConfirmDialog }) {
   const [pdfDocument, setPdfDocument] = useState(null);
   const [currentPage, setCurrentPage] = useState(initialPage || 1);
   const [totalPages, setTotalPages] = useState(0);
@@ -77,9 +77,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [stage2Completed, setStage2Completed] = useState(false); // 第二阶段是否已完成
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
-  
-  // 确认对话框状态
-  const [confirmDialog, setConfirmDialog] = useState(null); // { message, onConfirm, onCancel, data }
   
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
@@ -4149,7 +4146,7 @@ const toMediaUrl = (windowOrContent, boardId) => {
 };
 
 // 文档窗口渲染器组件（Word文档等）
-function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter }) {
+function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter, setConfirmDialog }) {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
 
   console.log('📄 文档窗口渲染:', {
@@ -4187,6 +4184,7 @@ function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMess
         windowId={windowData.id}
         addMessage={addMessage}
         openMessageCenter={openMessageCenter}
+        setConfirmDialog={setConfirmDialog}
       />
     );
   }
@@ -4247,7 +4245,7 @@ function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMess
 }
 
 // PDF窗口渲染器组件
-function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter }) {
+function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter, setConfirmDialog }) {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
   const [targetPage, setTargetPage] = useState(null);
 
@@ -4312,6 +4310,7 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, 
         initialPage={targetPage}
         addMessage={addMessage}
         openMessageCenter={openMessageCenter}
+        setConfirmDialog={setConfirmDialog}
       />
     );
   }
@@ -4837,6 +4836,9 @@ function BoardCanvas({
   const [isMessageCenterOpen, setIsMessageCenterOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // 确认对话框状态
+  const [confirmDialog, setConfirmDialog] = useState(null);
   
   // 特殊窗口ID常量
   const CHAT_WINDOW_ID = 'chat-window-special';
@@ -7708,6 +7710,7 @@ function BoardCanvas({
                   boardId={boardId}
                   addMessage={addMessage}
                   openMessageCenter={openMessageCenter}
+                  setConfirmDialog={setConfirmDialog}
                 />
               )}
               {window.type === 'document' && (
@@ -7717,6 +7720,7 @@ function BoardCanvas({
                   boardId={boardId}
                   addMessage={addMessage}
                   openMessageCenter={openMessageCenter}
+                  setConfirmDialog={setConfirmDialog}
                 />
               )}
             </div>
