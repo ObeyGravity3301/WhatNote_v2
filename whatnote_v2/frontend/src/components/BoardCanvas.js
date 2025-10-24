@@ -1270,6 +1270,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                       }));
                                       console.log(`✅ 已更新第${data.page}页的注释显示`);
                                     }
+                                  } else if (data.type === 'notification_added') {
+                                    console.log('✅ 系统通知已添加到AI助手对话:', data.conversation_id);
+                                    const refreshEvent = new CustomEvent('refreshChatConversation', {
+                                      detail: { conversationId: data.conversation_id }
+                                    });
+                                    window.dispatchEvent(refreshEvent);
                                   } else if (data.type === 'complete') {
                                     console.log('分段注释全部完成:', data);
                                     
@@ -1702,6 +1708,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                       [data.page]: data.annotation
                                     }));
                                   }
+                                } else if (data.type === 'notification_added') {
+                                  console.log('✅ 系统通知已添加到AI助手对话:', data.conversation_id);
+                                  const refreshEvent = new CustomEvent('refreshChatConversation', {
+                                    detail: { conversationId: data.conversation_id }
+                                  });
+                                  window.dispatchEvent(refreshEvent);
                                 } else if (data.type === 'complete') {
                                   console.log(`[分段${sectionIndex}] 全部完成: ${data.completed_pages}页`);
                                   
@@ -2715,6 +2727,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                   } else if (data.type === 'info') {
                                     console.log('大纲生成信息:', data.message);
                                     setBatchOutlineStatus(prev => prev + '\n' + data.message);
+                                  } else if (data.type === 'notification_added') {
+                                    console.log('✅ 系统通知已添加到AI助手对话:', data.conversation_id);
+                                    // 触发AI助手对话刷新
+                                    const refreshEvent = new CustomEvent('refreshChatConversation', {
+                                      detail: { conversationId: data.conversation_id }
+                                    });
+                                    window.dispatchEvent(refreshEvent);
                                   } else if (data.type === 'done') {
                                     console.log('批量生成流程完成');
                                     if (!data.outline) {
@@ -2851,6 +2870,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                   if (data.type === 'status' || data.type === 'content' || 
                                       data.type === 'group_content' || data.type === 'merge_content') {
                                     setBatchOutlineStatus(prev => prev + (data.content || data.message || ''));
+                                  } else if (data.type === 'notification_added') {
+                                    console.log('✅ 系统通知已添加到AI助手对话:', data.conversation_id);
+                                    const refreshEvent = new CustomEvent('refreshChatConversation', {
+                                      detail: { conversationId: data.conversation_id }
+                                    });
+                                    window.dispatchEvent(refreshEvent);
                                   } else if (data.type === 'outline') {
                                     newOutline = data.outline;
                                     console.log('阶段1完成，大纲生成:', newOutline);
@@ -3016,6 +3041,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                             [data.page]: data.annotation
                                           }));
                                         }
+                                      } else if (data.type === 'notification_added') {
+                                        console.log('✅ 系统通知已添加到AI助手对话:', data.conversation_id);
+                                        const refreshEvent = new CustomEvent('refreshChatConversation', {
+                                          detail: { conversationId: data.conversation_id }
+                                        });
+                                        window.dispatchEvent(refreshEvent);
                                       } else if (data.type === 'complete') {
                                         console.log(`[分段${sectionIndex}] 完成: ${data.completed_pages}页`);
                                         

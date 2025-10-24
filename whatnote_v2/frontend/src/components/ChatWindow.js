@@ -1342,6 +1342,43 @@ function ChatWindow({
     }
   }, [boardId, isVisible, initializeConversation]);
 
+  // 监听刷新对话事件（来自批量注释系统消息）
+  useEffect(() => {
+    const handleRefreshConversation = async (event) => {
+      const { conversationId: targetConversationId } = event.detail || {};
+      console.log('🔄 收到刷新对话请求:', targetConversationId, '当前对话:', conversationId);
+      
+      // 如果目标对话是当前对话，刷新消息列表
+      if (targetConversationId === conversationId) {
+        try {
+          const response = await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${conversationId}?page=0&limit=${ITEMS_PER_PAGE}`);
+          if (response.ok) {
+            const conversation = await response.json();
+            const newMessages = conversation.messages || [];
+            console.log('✅ 对话已刷新，新消息数:', newMessages.length);
+            setMessages(newMessages);
+            setCurrentPage(0);
+            // 刷新后滚动到底部查看新消息
+            setTimeout(() => {
+              scrollToBottom();
+            }, 100);
+          }
+        } catch (error) {
+          console.error('刷新对话失败:', error);
+        }
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('refreshChatConversation', handleRefreshConversation);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('refreshChatConversation', handleRefreshConversation);
+      }
+    };
+  }, [boardId, conversationId, scrollToBottom]);
+
   // 初始化显示的消息
   useEffect(() => {
     updateDisplayedMessages();
