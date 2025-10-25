@@ -72,7 +72,7 @@ const RadialMindMap = ({
     return root;
   }, [pdfFilename, outline, subdivisions]);
 
-  // 2. 计算径向布局（改进版：每层均匀分布 + 自适应半径）
+  // 2. 计算径向布局（自适应防重叠算法）
   const calculateRadialLayout = useCallback((tree, centerX, centerY, baseRadius) => {
     if (!tree) return null;
 
@@ -89,72 +89,78 @@ const RadialMindMap = ({
     
     console.log('各层节点数:', levels.map(l => l.length));
     
-    // Step 1.5: 动态计算每层的最佳半径（自适应算法）
-    const levelRadius = [0]; // Level 0 (根节点) 固定在中心
+    // Step 2: 动态计算每层的最小安全半径
+    const calculateMinRadius = (nodeCount, depth) => {
+      // 估算节点尺寸（包含文字和边距）
+      const nodeSizes = {
+        0: { width: 140, height: 40 },  // 根节点（文件名）
+        1: { width: 120, height: 32 },  // 分段
+        2: { width: 100, height: 28 },  // 细分
+        3: { width: 60, height: 24 }    // 页码
+      };
+      
+      const nodeSize = nodeSizes[depth] || nodeSizes[3];
+      
+      if (nodeCount === 0) return 0;
+      if (nodeCount === 1) return baseRadius * (depth + 1);
+      
+      // 使用弦长公式计算最小半径，确保节点不重叠
+      // 弦长 = 2 * r * sin(θ/2)
+      // 要求弦长 >= 节点宽度 * 1.3 (留30%安全间距)
+      const angleStep = (2 * Math.PI) / nodeCount;
+      const minChord = nodeSize.width * 1.3;
+      const minRadius = minChord / (2 * Math.sin(angleStep / 2));
+      
+      return minRadius;
+    };
     
-    // 估算各层节点的平均尺寸（像素）
-    const nodeSizes = [
-      { width: 200, height: 40 },  // Level 0: 文件名（较大）
-      { width: 150, height: 35 },  // Level 1: 分段
-      { width: 120, height: 30 },  // Level 2: 细分
-      { width: 60, height: 25 }    // Level 3: 页码（较小）
-    ];
+    // Step 3: 从外向内计算实际层级半径
+    const maxDepth = levels.length - 1;
+    const levelRadius = [];
     
-    let currentRadius = 0;
+    // 先计算最外层（叶子）的半径
+    const leafCount = levels[maxDepth]?.length || 0;
+    const leafMinRadius = calculateMinRadius(leafCount, maxDepth);
+    levelRadius[maxDepth] = Math.max(leafMinRadius, baseRadius * 5);
     
-    for (let depth = 1; depth < levels.length; depth++) {
-      const nodeCount = levels[depth].length;
-      const nodeSize = nodeSizes[depth] || { width: 80, height: 25 };
+    console.log(`第${maxDepth}层（页码）: ${leafCount}个节点, 最小半径=${Math.round(leafMinRadius)}px, 实际半径=${Math.round(levelRadius[maxDepth])}px`);
+    
+    // 从外向内依次计算中间层
+    for (let depth = maxDepth - 1; depth >= 1; depth--) {
+      const nodeCount = levels[depth]?.length || 0;
+      const minRadius = calculateMinRadius(nodeCount, depth);
       
-      // 计算该层节点均匀分布所需的最小半径
-      // 公式：周长 = 2πr，需要容纳 nodeCount 个节点，每个节点占用 nodeWidth + 间距
-      const spacing = 20; // 节点之间的最小间距（像素）
-      const requiredCircumference = nodeCount * (nodeSize.width + spacing);
-      const minRadiusForThisLevel = requiredCircumference / (2 * Math.PI);
+      // 层间距：固定距离
+      const layerGap = baseRadius * 2;
       
-      // 与上一层的最小间距（避免层与层之间节点重叠）
-      const minGapBetweenLevels = nodeSize.height + 40; // 节点高度 + 额外间距
+      // 实际半径：不小于最小半径，且比外层小一个层间距
+      const maxAllowed = levelRadius[depth + 1] - layerGap;
+      levelRadius[depth] = Math.max(minRadius, Math.min(maxAllowed, baseRadius * (3 + depth * 1.5)));
       
-      // 取两者中的较大值
-      const calculatedRadius = Math.max(
-        minRadiusForThisLevel,
-        currentRadius + minGapBetweenLevels
-      );
-      
-      levelRadius.push(calculatedRadius);
-      currentRadius = calculatedRadius;
-      
-      console.log(`Level ${depth} 自适应计算:`, {
-        节点数: nodeCount,
-        节点宽度: nodeSize.width,
-        所需周长: Math.round(requiredCircumference),
-        周长推算半径: Math.round(minRadiusForThisLevel),
-        层间距推算: Math.round(currentRadius + minGapBetweenLevels),
-        最终采用半径: Math.round(calculatedRadius)
-      });
+      console.log(`第${depth}层: ${nodeCount}个节点, 最小半径=${Math.round(minRadius)}px, 实际半径=${Math.round(levelRadius[depth])}px`);
     }
     
-    console.log('✅ 自适应层级半径:', levelRadius.map(r => Math.round(r)));
+    // Level 0 固定在中心
+    levelRadius[0] = 0;
     
-    // Step 2: 从外层向内层分配角度
-    // 最外层（叶子节点层）均匀分布
-    const maxDepth = levels.length - 1;
+    console.log('✅ 最终层级半径:', levelRadius.map(r => Math.round(r)));
+    
+    // Step 4: 最外层均匀分布
     const leafNodes = levels[maxDepth];
     const totalLeaves = leafNodes.length;
     
-    // 为每个叶子节点分配均匀角度
     leafNodes.forEach((leaf, idx) => {
       const angle = (idx / totalLeaves) * 2 * Math.PI - Math.PI / 2;
       leaf.angle = angle;
-      const radius = levelRadius[maxDepth] || baseRadius * (maxDepth + 1);
+      const radius = levelRadius[maxDepth];
       leaf.x = centerX + radius * Math.cos(angle);
       leaf.y = centerY + radius * Math.sin(angle);
     });
     
-    // Step 3: 从外向内，父节点位于子节点的平均角度
+    // Step 5: 从外向内，父节点位于子节点的平均角度
     for (let depth = maxDepth - 1; depth >= 0; depth--) {
       const nodesAtDepth = levels[depth];
-      const radius = levelRadius[depth] || baseRadius * (depth + 1);
+      const radius = levelRadius[depth];
       
       nodesAtDepth.forEach(node => {
         if (depth === 0) {
@@ -171,7 +177,7 @@ const RadialMindMap = ({
           node.x = centerX + radius * Math.cos(avgAngle);
           node.y = centerY + radius * Math.sin(avgAngle);
         } else {
-          // 没有子节点但不是叶子节点（异常情况，使用默认位置）
+          // 没有子节点但不是叶子节点（异常情况）
           const angle = Math.random() * 2 * Math.PI;
           node.angle = angle;
           node.x = centerX + radius * Math.cos(angle);
