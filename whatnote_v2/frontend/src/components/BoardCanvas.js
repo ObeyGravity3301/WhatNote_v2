@@ -57,12 +57,15 @@ function MindMapViewer({ outline, subdivisions, pdfFilename, onPageJump, mindMap
     const newEdges = [];
     let nodeId = 0;
     
-    // Level 0: 根节点 - PDF文件名
+    // Level 0: 根节点 - PDF文件名（在左侧中央）
     const rootNodeId = `node-${nodeId++}`;
+    const sectionsCount = outline.outline.length;
+    const rootY = sectionsCount > 1 ? (sectionsCount * 150) / 2 : 250; // 根节点垂直居中
+    
     newNodes.push({
       id: rootNodeId,
       type: 'default',
-      position: { x: 250, y: 50 },
+      position: { x: 50, y: rootY },
       data: { 
         label: (
           <div style={{ 
@@ -86,10 +89,14 @@ function MindMapViewer({ outline, subdivisions, pdfFilename, onPageJump, mindMap
     });
     
     // Level 1: 分段
+    // 使用树状布局：根节点在左侧，分段向右展开
+    const verticalSpacing = 150; // 分段之间的垂直间距
+    const startY = 50; // 分段从顶部开始
+    
     outline.outline.forEach((section, sectionIndex) => {
       const sectionNodeId = `node-${nodeId++}`;
-      const sectionY = 200 + sectionIndex * 300;
-      const sectionX = 250;
+      const sectionY = startY + sectionIndex * verticalSpacing;
+      const sectionX = 600; // 分段节点在根节点右侧
       
       newNodes.push({
         id: sectionNodeId,
@@ -119,7 +126,7 @@ function MindMapViewer({ outline, subdivisions, pdfFilename, onPageJump, mindMap
         }
       });
       
-      // 连接到根节点
+      // 只连接到根节点，分段之间不连接
       newEdges.push({
         id: `edge-${rootNodeId}-${sectionNodeId}`,
         source: rootNodeId,
@@ -133,10 +140,15 @@ function MindMapViewer({ outline, subdivisions, pdfFilename, onPageJump, mindMap
       if (subdivisions && subdivisions.subdivisions && subdivisions.subdivisions[sectionIndex]) {
         const sectionSubdivisions = subdivisions.subdivisions[sectionIndex];
         if (sectionSubdivisions && sectionSubdivisions.subdivisions) {
+          const subdivCount = sectionSubdivisions.subdivisions.length;
+          const subdivVerticalSpacing = 80; // 细分之间的垂直间距
+          // 细分节点垂直居中对齐分段节点
+          const subdivStartY = sectionY - ((subdivCount - 1) * subdivVerticalSpacing) / 2;
+          
           sectionSubdivisions.subdivisions.forEach((subdivision, subdivIndex) => {
             const subdivNodeId = `node-${nodeId++}`;
-            const subdivY = sectionY + 150 + subdivIndex * 100;
-            const subdivX = sectionX + 300 + (subdivIndex % 2) * 200;
+            const subdivY = subdivStartY + subdivIndex * subdivVerticalSpacing;
+            const subdivX = sectionX + 400; // 细分节点在分段节点右侧
             
             newNodes.push({
               id: subdivNodeId,
@@ -170,7 +182,7 @@ function MindMapViewer({ outline, subdivisions, pdfFilename, onPageJump, mindMap
               }
             });
             
-            // 连接到分段节点
+            // 只连接到对应的分段节点，细分之间不连接
             newEdges.push({
               id: `edge-${sectionNodeId}-${subdivNodeId}`,
               source: sectionNodeId,
