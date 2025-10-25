@@ -66,6 +66,7 @@ function MindMapViewer({ outline, subdivisions, pdfFilename, onPageJump, mindMap
       id: rootNodeId,
       type: 'default',
       position: { x: 50, y: rootY },
+      sourcePosition: 'right', // 连线从右侧出发
       data: { 
         label: (
           <div style={{ 
@@ -102,6 +103,8 @@ function MindMapViewer({ outline, subdivisions, pdfFilename, onPageJump, mindMap
         id: sectionNodeId,
         type: 'default',
         position: { x: sectionX, y: sectionY },
+        sourcePosition: 'right', // 连线从右侧出发（连到细分）
+        targetPosition: 'left',  // 连线从左侧进入（从根节点来）
         data: { 
           label: (
             <div style={{ 
@@ -154,6 +157,7 @@ function MindMapViewer({ outline, subdivisions, pdfFilename, onPageJump, mindMap
               id: subdivNodeId,
               type: 'default',
               position: { x: subdivX, y: subdivY },
+              targetPosition: 'left', // 连线从左侧进入（从分段节点来）
               data: { 
                 label: (
                   <div 
