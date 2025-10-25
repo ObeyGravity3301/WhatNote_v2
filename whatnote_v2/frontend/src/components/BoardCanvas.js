@@ -52,6 +52,17 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
   
+  // 使用ref存储最新的scale和pan值，避免闭包问题
+  const scaleRef = useRef(scale);
+  const panXRef = useRef(panX);
+  const panYRef = useRef(panY);
+  
+  useEffect(() => {
+    scaleRef.current = scale;
+    panXRef.current = panX;
+    panYRef.current = panY;
+  }, [scale, panX, panY]);
+  
   // 注释功能状态
   const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
   const [annotationMode, setAnnotationMode] = useState('preview'); // 'preview' 或 'edit'
@@ -483,28 +494,39 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
+    // 使用ref获取当前最新值
+    const currentScale = scaleRef.current;
+    const currentPanX = panXRef.current;
+    const currentPanY = panYRef.current;
+    
     // 计算缩放增量
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const newScale = Math.max(0.5, Math.min(3.0, currentScale + delta));
     
-    // 批量更新所有状态
-    setScale(prevScale => {
-      const newScale = Math.max(0.5, Math.min(3.0, prevScale + delta));
-      
-      // 使用prevScale计算新的pan值
-      setPanX(prevPanX => {
-        const contentX = (mouseX - prevPanX) / prevScale;
-        const newPanX = mouseX - contentX * newScale;
-        return newPanX;
-      });
-      
-      setPanY(prevPanY => {
-        const contentY = (mouseY - prevPanY) / prevScale;
-        const newPanY = mouseY - contentY * newScale;
-        return newPanY;
-      });
-      
-      return newScale;
+    // 计算鼠标在内容坐标系中的位置（缩放前）
+    const contentX = (mouseX - currentPanX) / currentScale;
+    const contentY = (mouseY - currentPanY) / currentScale;
+    
+    // 计算新的偏移量，使鼠标位置保持不变
+    const newPanX = mouseX - contentX * newScale;
+    const newPanY = mouseY - contentY * newScale;
+    
+    console.log('PDF缩放调试:', {
+      鼠标位置: { x: Math.round(mouseX), y: Math.round(mouseY) },
+      旧状态: { scale: currentScale.toFixed(2), panX: Math.round(currentPanX), panY: Math.round(currentPanY) },
+      内容坐标: { x: Math.round(contentX), y: Math.round(contentY) },
+      新状态: { scale: newScale.toFixed(2), panX: Math.round(newPanX), panY: Math.round(newPanY) },
+      验证: {
+        缩放后X: Math.round((mouseX - newPanX) / newScale),
+        缩放后Y: Math.round((mouseY - newPanY) / newScale),
+        是否匹配: Math.abs(contentX - (mouseX - newPanX) / newScale) < 1
+      }
     });
+    
+    // 一次性更新所有状态
+    setScale(newScale);
+    setPanX(newPanX);
+    setPanY(newPanY);
   }, []);
 
   // 拖拽处理
