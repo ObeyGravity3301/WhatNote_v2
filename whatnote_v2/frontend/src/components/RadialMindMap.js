@@ -239,6 +239,7 @@ const RadialMindMap = ({
 
   // 4. 初始化树结构
   useEffect(() => {
+    console.log(`🔄 重新构建思维导图 (显示层级: ${maxDisplayDepth})`);
     const treeData = buildTree();
     console.log('构建的树数据:', treeData);
     
@@ -254,7 +255,7 @@ const RadialMindMap = ({
       console.log('布局后的树:', positioned);
       setTree(positioned);
     }
-  }, [buildTree, calculateRadialLayout, dimensions]);
+  }, [buildTree, calculateRadialLayout, dimensions, maxDisplayDepth]);
 
   // 5. 绘制函数
   const drawTree = useCallback(() => {
