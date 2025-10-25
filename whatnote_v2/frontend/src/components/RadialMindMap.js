@@ -375,12 +375,20 @@ const RadialMindMap = ({
         ctx.textBaseline = 'middle';
         ctx.fillText(node.label, node.x, node.y);
       } else {
-        // 其他节点 - 圆角矩形
+        // 其他节点 - 圆角矩形（分段、细分）
         const rectWidth = size * 2.5;
         const rectHeight = size * 0.8;
         const radius = 4;
         
-        ctx.fillStyle = isHovered ? '#ffffcc' : '#c0c0c0';
+        // 根据层级决定颜色
+        let bgColor = '#c0c0c0';
+        if (node.level === 1) {
+          bgColor = '#90EE90'; // 🟢 绿色 - 分段
+        } else if (node.level === 2) {
+          bgColor = '#DDA0DD'; // 🟣 紫色 - 细分
+        }
+        
+        ctx.fillStyle = isHovered ? '#ffffcc' : bgColor;
         
         // 绘制圆角矩形
         ctx.beginPath();

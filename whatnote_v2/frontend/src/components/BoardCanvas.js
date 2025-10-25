@@ -473,11 +473,31 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     }
   };
 
-  // 滚轮缩放
+  // 滚轮缩放（以鼠标位置为中心）
   const handleWheel = (e) => {
     e.preventDefault();
+    
+    if (!containerRef.current) return;
+    
+    const rect = containerRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // 计算鼠标在内容坐标系中的位置（缩放前）
+    const contentX = (mouseX - panX) / scale;
+    const contentY = (mouseY - panY) / scale;
+    
+    // 计算新的缩放比例
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setScale(prev => Math.max(0.5, Math.min(3.0, prev + delta)));
+    const newScale = Math.max(0.5, Math.min(3.0, scale + delta));
+    
+    // 计算新的偏移量，使鼠标位置保持不变
+    const newPanX = mouseX - contentX * newScale;
+    const newPanY = mouseY - contentY * newScale;
+    
+    setScale(newScale);
+    setPanX(newPanX);
+    setPanY(newPanY);
   };
 
   // 拖拽处理
