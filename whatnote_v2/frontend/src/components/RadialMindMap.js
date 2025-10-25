@@ -72,49 +72,70 @@ const RadialMindMap = ({
     return root;
   }, [pdfFilename, outline, subdivisions]);
 
-  // 2. 计算径向布局（改进版）
+  // 2. 计算径向布局（改进版：每层均匀分布）
   const calculateRadialLayout = useCallback((tree, centerX, centerY, baseRadius) => {
     if (!tree) return null;
 
     const levelRadius = [0, baseRadius, baseRadius * 1.8, baseRadius * 2.6];
     
-    // 递归计算位置
-    const assignPositions = (node, depth = 0, startAngle = 0, angleSpan = 2 * Math.PI) => {
+    // Step 1: 收集每一层的所有节点
+    const levels = [];
+    const collectByLevel = (node, depth = 0) => {
+      if (!levels[depth]) levels[depth] = [];
+      levels[depth].push(node);
+      if (node.children) {
+        node.children.forEach(child => collectByLevel(child, depth + 1));
+      }
+    };
+    collectByLevel(tree);
+    
+    console.log('各层节点数:', levels.map(l => l.length));
+    
+    // Step 2: 从外层向内层分配角度
+    // 最外层（叶子节点层）均匀分布
+    const maxDepth = levels.length - 1;
+    const leafNodes = levels[maxDepth];
+    const totalLeaves = leafNodes.length;
+    
+    // 为每个叶子节点分配均匀角度
+    leafNodes.forEach((leaf, idx) => {
+      const angle = (idx / totalLeaves) * 2 * Math.PI - Math.PI / 2;
+      leaf.angle = angle;
+      const radius = levelRadius[maxDepth] || baseRadius * (maxDepth + 1);
+      leaf.x = centerX + radius * Math.cos(angle);
+      leaf.y = centerY + radius * Math.sin(angle);
+    });
+    
+    // Step 3: 从外向内，父节点位于子节点的平均角度
+    for (let depth = maxDepth - 1; depth >= 0; depth--) {
+      const nodesAtDepth = levels[depth];
       const radius = levelRadius[depth] || baseRadius * (depth + 1);
       
-      if (depth === 0) {
-        // 根节点在中心
-        node.x = centerX;
-        node.y = centerY;
-        node.angle = 0;
-      } else {
-        // 计算当前节点的角度
-        const siblingCount = node.parent?.children.length || 1;
-        const step = angleSpan / siblingCount;
-        const angle = startAngle + step * (node.indexInParent + 0.5);
-        
-        node.angle = angle;
-        node.x = centerX + radius * Math.cos(angle);
-        node.y = centerY + radius * Math.sin(angle);
-      }
-      
-      // 递归处理子节点
-      if (node.children && node.children.length > 0) {
-        const childAngleSpan = angleSpan / Math.max(node.children.length, 1);
-        node.children.forEach((child, idx) => {
-          child.parent = node;
-          child.indexInParent = idx;
-          const childStartAngle = node.angle - angleSpan / 2;
-          const childStep = angleSpan / node.children.length;
-          const childCenterAngle = childStartAngle + childStep * (idx + 0.5);
-          assignPositions(child, depth + 1, childCenterAngle, childStep);
-        });
-      }
-      
-      return node;
-    };
+      nodesAtDepth.forEach(node => {
+        if (depth === 0) {
+          // 根节点在中心
+          node.x = centerX;
+          node.y = centerY;
+          node.angle = 0;
+        } else if (node.children && node.children.length > 0) {
+          // 计算子节点的平均角度
+          const childAngles = node.children.map(c => c.angle);
+          const avgAngle = childAngles.reduce((sum, a) => sum + a, 0) / childAngles.length;
+          
+          node.angle = avgAngle;
+          node.x = centerX + radius * Math.cos(avgAngle);
+          node.y = centerY + radius * Math.sin(avgAngle);
+        } else {
+          // 没有子节点但不是叶子节点（异常情况，使用默认位置）
+          const angle = Math.random() * 2 * Math.PI;
+          node.angle = angle;
+          node.x = centerX + radius * Math.cos(angle);
+          node.y = centerY + radius * Math.sin(angle);
+        }
+      });
+    }
     
-    return assignPositions(tree, 0, -Math.PI / 2, 2 * Math.PI);
+    return tree;
   }, []);
 
   // 3. 监听容器尺寸变化
