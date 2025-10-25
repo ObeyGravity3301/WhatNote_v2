@@ -485,8 +485,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   };
 
   // 滚轮缩放（以鼠标位置为中心）
-  const handleWheel = useCallback((e) => {
-    console.log('🖱️ handleWheel被调用');
+  const handleWheelEvent = (e) => {
+    console.log('🖱️ handleWheel被调用', e.type);
     e.preventDefault();
     
     if (!containerRef.current) {
@@ -531,10 +531,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     setScale(newScale);
     setPanX(newPanX);
     setPanY(newPanY);
-  }, []);
+  };
   
   // 注册wheel事件（非passive，允许preventDefault）
   useEffect(() => {
+    console.log('🔧 useEffect执行 - 尝试注册wheel事件');
     const container = containerRef.current;
     if (!container) {
       console.log('❌ containerRef.current 为空，无法注册wheel事件');
@@ -542,13 +543,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     }
     
     console.log('✅ 注册wheel事件到container:', container);
-    container.addEventListener('wheel', handleWheel, { passive: false });
+    container.addEventListener('wheel', handleWheelEvent, { passive: false });
     
     return () => {
       console.log('🧹 清理wheel事件监听器');
-      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('wheel', handleWheelEvent);
     };
-  }, [handleWheel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 只在组件挂载时注册一次
 
   // 拖拽处理
   const handleMouseDown = (e) => {
