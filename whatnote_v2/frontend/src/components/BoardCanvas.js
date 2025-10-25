@@ -7,17 +7,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import ChatWindow from './ChatWindow';
-import ReactFlow, { 
-  MiniMap, 
-  Controls, 
-  Background, 
-  useNodesState, 
-  useEdgesState,
-  addEdge,
-  Handle,
-  Position
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+import RadialMindMap from './RadialMindMap';
 
 // 配置PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -43,246 +33,6 @@ const debounce = (func, wait) => {
     timeout = setTimeout(later, wait);
   };
 };
-
-// 思维导图查看器组件
-function MindMapViewer({ outline, subdivisions, pdfFilename, onPageJump, mindMapMode, setMindMapMode }) {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  
-  // 生成思维导图节点和边
-  useEffect(() => {
-    if (!outline || !outline.outline) return;
-    
-    const newNodes = [];
-    const newEdges = [];
-    let nodeId = 0;
-    
-    // Level 0: 根节点 - PDF文件名（在左侧中央）
-    const rootNodeId = `node-${nodeId++}`;
-    const sectionsCount = outline.outline.length;
-    const rootY = sectionsCount > 1 ? (sectionsCount * 150) / 2 : 250; // 根节点垂直居中
-    
-    newNodes.push({
-      id: rootNodeId,
-      type: 'default',
-      position: { x: 50, y: rootY },
-      sourcePosition: 'right', // 连线从右侧出发
-      data: { 
-        label: (
-          <div style={{ 
-            padding: '10px 20px', 
-            fontWeight: 'bold', 
-            fontSize: '14px',
-            color: '#000080',
-            textAlign: 'center'
-          }}>
-            📄 {pdfFilename}
-          </div>
-        )
-      },
-      style: {
-        background: '#ffffff',
-        border: '3px solid #000080',
-        borderRadius: '8px',
-        fontSize: '12px',
-        fontFamily: 'MS Sans Serif, sans-serif'
-      }
-    });
-    
-    // Level 1: 分段
-    // 使用树状布局：根节点在左侧，分段向右展开
-    const verticalSpacing = 150; // 分段之间的垂直间距
-    const startY = 50; // 分段从顶部开始
-    
-    outline.outline.forEach((section, sectionIndex) => {
-      const sectionNodeId = `node-${nodeId++}`;
-      const sectionY = startY + sectionIndex * verticalSpacing;
-      const sectionX = 600; // 分段节点在根节点右侧
-      
-      newNodes.push({
-        id: sectionNodeId,
-        type: 'default',
-        position: { x: sectionX, y: sectionY },
-        sourcePosition: 'right', // 连线从右侧出发（连到细分）
-        targetPosition: 'left',  // 连线从左侧进入（从根节点来）
-        data: { 
-          label: (
-            <div style={{ 
-              padding: '8px 15px', 
-              fontWeight: 'bold',
-              fontSize: '12px',
-              textAlign: 'center'
-            }}>
-              📚 {section.title || section.section_title || `章节 ${sectionIndex + 1}`}
-              <div style={{ fontSize: '10px', color: '#666', marginTop: '4px' }}>
-                p.{section.page_start}-{section.page_end}
-              </div>
-            </div>
-          )
-        },
-        style: {
-          background: '#ffffcc',
-          border: '2px solid #ffa500',
-          borderRadius: '6px',
-          fontSize: '11px',
-          fontFamily: 'MS Sans Serif, sans-serif'
-        }
-      });
-      
-      // 只连接到根节点，分段之间不连接
-      newEdges.push({
-        id: `edge-${rootNodeId}-${sectionNodeId}`,
-        source: rootNodeId,
-        target: sectionNodeId,
-        type: 'smoothstep',
-        animated: false,
-        style: { stroke: '#000080', strokeWidth: 2 }
-      });
-      
-      // Level 2: 细分（如果存在）
-      if (subdivisions && subdivisions.subdivisions && subdivisions.subdivisions[sectionIndex]) {
-        const sectionSubdivisions = subdivisions.subdivisions[sectionIndex];
-        if (sectionSubdivisions && sectionSubdivisions.subdivisions) {
-          const subdivCount = sectionSubdivisions.subdivisions.length;
-          const subdivVerticalSpacing = 80; // 细分之间的垂直间距
-          // 细分节点垂直居中对齐分段节点
-          const subdivStartY = sectionY - ((subdivCount - 1) * subdivVerticalSpacing) / 2;
-          
-          sectionSubdivisions.subdivisions.forEach((subdivision, subdivIndex) => {
-            const subdivNodeId = `node-${nodeId++}`;
-            const subdivY = subdivStartY + subdivIndex * subdivVerticalSpacing;
-            const subdivX = sectionX + 400; // 细分节点在分段节点右侧
-            
-            newNodes.push({
-              id: subdivNodeId,
-              type: 'default',
-              position: { x: subdivX, y: subdivY },
-              targetPosition: 'left', // 连线从左侧进入（从分段节点来）
-              data: { 
-                label: (
-                  <div 
-                    style={{ 
-                      padding: '6px 12px', 
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      textAlign: 'center'
-                    }}
-                    onClick={() => onPageJump(subdivision.page_start)}
-                  >
-                    📑 {subdivision.title || `细分 ${subdivIndex + 1}`}
-                    <div style={{ fontSize: '9px', color: '#666', marginTop: '2px' }}>
-                      p.{subdivision.page_start}
-                      {subdivision.page_end !== subdivision.page_start && `-${subdivision.page_end}`}
-                    </div>
-                  </div>
-                )
-              },
-              style: {
-                background: '#e6f3ff',
-                border: '2px solid #0078d4',
-                borderRadius: '4px',
-                fontSize: '10px',
-                fontFamily: 'MS Sans Serif, sans-serif'
-              }
-            });
-            
-            // 只连接到对应的分段节点，细分之间不连接
-            newEdges.push({
-              id: `edge-${sectionNodeId}-${subdivNodeId}`,
-              source: sectionNodeId,
-              target: subdivNodeId,
-              type: 'smoothstep',
-              animated: false,
-              style: { stroke: '#0078d4', strokeWidth: 1.5 }
-            });
-          });
-        }
-      }
-    });
-    
-    setNodes(newNodes);
-    setEdges(newEdges);
-  }, [outline, subdivisions, pdfFilename, onPageJump, setNodes, setEdges]);
-  
-  return (
-    <div style={{ 
-      width: '100%', 
-      height: '100%', 
-      backgroundColor: '#f0f0f0',
-      border: '2px inset #c0c0c0'
-    }}>
-      {/* 控制面板 */}
-      <div style={{
-        padding: '8px',
-        backgroundColor: '#c0c0c0',
-        borderBottom: '2px outset #c0c0c0',
-        display: 'flex',
-        gap: '8px',
-        alignItems: 'center',
-        fontSize: '10px',
-        fontFamily: 'MS Sans Serif, sans-serif'
-      }}>
-        <span style={{ fontWeight: 'bold' }}>显示模式:</span>
-        <button
-          onClick={() => setMindMapMode('compact')}
-          style={{
-            padding: '2px 8px',
-            backgroundColor: '#c0c0c0',
-            border: mindMapMode === 'compact' ? '2px inset #c0c0c0' : '2px outset #c0c0c0',
-            cursor: 'pointer',
-            fontSize: '10px',
-            fontFamily: 'MS Sans Serif, sans-serif'
-          }}
-        >
-          简洁
-        </button>
-        <button
-          onClick={() => setMindMapMode('detailed')}
-          style={{
-            padding: '2px 8px',
-            backgroundColor: '#c0c0c0',
-            border: mindMapMode === 'detailed' ? '2px inset #c0c0c0' : '2px outset #c0c0c0',
-            cursor: 'pointer',
-            fontSize: '10px',
-            fontFamily: 'MS Sans Serif, sans-serif'
-          }}
-        >
-          详细
-        </button>
-      </div>
-      
-      {/* 思维导图容器 */}
-      <div style={{ width: '100%', height: 'calc(100% - 40px)' }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          fitView
-          attributionPosition="bottom-right"
-        >
-          <MiniMap 
-            nodeColor={(node) => {
-              if (node.style?.background) return node.style.background;
-              return '#fff';
-            }}
-            style={{
-              backgroundColor: '#f0f0f0',
-              border: '2px inset #c0c0c0'
-            }}
-          />
-          <Controls 
-            style={{
-              border: '2px outset #c0c0c0',
-              backgroundColor: '#c0c0c0'
-            }}
-          />
-          <Background color="#c0c0c0" gap={16} />
-        </ReactFlow>
-      </div>
-    </div>
-  );
-}
 
 // PDF分页组件
 function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter, setConfirmDialog }) {
@@ -316,7 +66,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   // 批量生成状态
   const [showBatchOutlineModal, setShowBatchOutlineModal] = useState(false); // 显示批量生成大纲模态窗口
   const [showOutlinePanel, setShowOutlinePanel] = useState(false); // 显示大纲侧栏
-  const [outlineView, setOutlineView] = useState('list'); // 'list' 或 'detail' - 大纲视图模式
+  const [outlineView, setOutlineView] = useState('list'); // 'list', 'detail', 或 'mindmap' - 大纲视图模式
   const [batchOutlineStatus, setBatchOutlineStatus] = useState(''); // 批量生成状态信息
   const [batchOutline, setBatchOutline] = useState(null); // 生成的大纲数据
   const [isBatchGenerating, setIsBatchGenerating] = useState(false); // 是否正在生成
@@ -328,11 +78,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [stage2Completed, setStage2Completed] = useState(false); // 第二阶段是否已完成
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
-  
-  // 思维导图状态
-  const [mindMapExpanded, setMindMapExpanded] = useState(false); // 思维导图是否展开
-  const [mindMapMode, setMindMapMode] = useState('compact'); // 'compact' | 'detailed'
-  const [mindMapView, setMindMapView] = useState('outline'); // 'outline' | 'mindmap'
   
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
@@ -1143,7 +888,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               justifyContent: 'space-between',
               fontSize: '11px',
               fontFamily: 'MS Sans Serif, sans-serif',
-              fontWeight: 'bold'
+              fontWeight: 'bold',
+              flexWrap: 'wrap',
+              gap: '4px'
             }}>
               <span>
                 {isBatchGenerating && !batchOutline 
@@ -1152,25 +899,45 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       ? '正在细分分段...' 
                       : '文档大纲')}
               </span>
-              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                {/* 视图切换按钮 - 仅在有大纲数据时显示 */}
-                {batchOutline && outlineView === 'list' && (
-                  <button
-                    onClick={() => setMindMapView(mindMapView === 'outline' ? 'mindmap' : 'outline')}
-                    style={{
-                      backgroundColor: '#c0c0c0',
-                      border: mindMapView === 'mindmap' ? '2px inset #c0c0c0' : '2px outset #c0c0c0',
-                      cursor: 'pointer',
-                      fontSize: '10px',
-                      padding: '2px 8px',
-                      fontFamily: 'MS Sans Serif, sans-serif',
-                      fontWeight: 'bold'
-                    }}
-                    title={mindMapView === 'outline' ? '切换到思维导图' : '切换到列表'}
-                  >
-                    {mindMapView === 'outline' ? '🗺️' : '📋'}
-                  </button>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {/* 视图切换按钮 */}
+                {batchOutline && batchSubdivisions && (
+                  <>
+                    <button
+                      onClick={() => setOutlineView('list')}
+                      style={{
+                        padding: '2px 6px',
+                        fontSize: '10px',
+                        backgroundColor: outlineView === 'list' ? '#ffffff' : '#c0c0c0',
+                        border: outlineView === 'list' ? '2px inset #ffffff' : '2px outset #c0c0c0',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif'
+                      }}
+                      title="列表视图"
+                    >
+                      📋
+                    </button>
+                    <button
+                      onClick={() => {
+                        setOutlineView('mindmap');
+                        setSelectedSection(null);
+                      }}
+                      style={{
+                        padding: '2px 6px',
+                        fontSize: '10px',
+                        backgroundColor: outlineView === 'mindmap' ? '#ffffff' : '#c0c0c0',
+                        border: outlineView === 'mindmap' ? '2px inset #ffffff' : '2px outset #c0c0c0',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif'
+                      }}
+                      title="思维导图视图"
+                    >
+                      🌐
+                    </button>
+                  </>
                 )}
+                
                 <button
                   onClick={() => setShowOutlinePanel(false)}
                   style={{
@@ -1623,20 +1390,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 </div>
               )}
 
-              {/* 思维导图视图 */}
-              {outlineView === 'list' && mindMapView === 'mindmap' && batchOutline && (
-                <MindMapViewer 
-                  outline={batchOutline}
-                  subdivisions={batchSubdivisions}
-                  pdfFilename={pdfUrl ? pdfUrl.split('/').pop() : '未命名文档'}
-                  onPageJump={(page) => setCurrentPage(page)}
-                  mindMapMode={mindMapMode}
-                  setMindMapMode={setMindMapMode}
-                />
-              )}
-
               {/* 大纲列表视图 */}
-              {outlineView === 'list' && mindMapView === 'outline' && (
+              {outlineView === 'list' && (
                 <>
                   {/* 第二阶段进度条 - 放在最上面 */}
                   {(isStage2 || stage2Completed) && batchProgress.total > 0 && (
@@ -2582,6 +2337,50 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 </div>
               )}
                 </>
+              )}
+
+              {/* 思维导图视图 */}
+              {outlineView === 'mindmap' && batchOutline && batchSubdivisions && (
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  {/* 说明文字 */}
+                  <div style={{
+                    padding: '8px',
+                    backgroundColor: '#ffffcc',
+                    border: '1px solid #e0e000',
+                    fontSize: '10px',
+                    marginBottom: '8px',
+                    fontFamily: 'MS Sans Serif, sans-serif'
+                  }}>
+                    💡 <strong>操作提示：</strong>
+                    <div style={{ marginTop: '4px', paddingLeft: '16px' }}>
+                      • 点击节点跳转到对应页面<br/>
+                      • 滚轮缩放，拖拽移动画布<br/>
+                      • 蓝色=文件，绿色=分段，紫色=细分，圆形=页码
+                    </div>
+                  </div>
+                  
+                  {/* 思维导图组件 */}
+                  <div style={{ flex: 1, minHeight: 0 }}>
+                    <RadialMindMap
+                      pdfFilename={pdfUrl ? pdfUrl.split('/').pop() : 'Document'}
+                      outline={batchOutline.outline}
+                      subdivisions={batchSubdivisions.subdivisions}
+                      onPageClick={(page) => {
+                        console.log('思维导图：跳转到第', page, '页');
+                        setCurrentPage(page);
+                        // 可选：关闭思维导图，回到列表视图
+                        // setOutlineView('list');
+                      }}
+                      width={320}
+                      height={600}
+                    />
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -8070,7 +7869,7 @@ function BoardCanvas({
       )}
 
       {/* 右键菜单 */}
-      <ContextMenu
+      <ContextMenu 
         visible={contextMenu.visible}
         x={contextMenu.x}
         y={contextMenu.y}

@@ -1,0 +1,510 @@
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+
+/**
+ * RadialMindMap - 径向思维导图组件
+ * 展示PDF文档的层级结构（文件 → 分段 → 细分 → 页码）
+ */
+const RadialMindMap = ({ 
+  pdfFilename, 
+  outline, 
+  subdivisions, 
+  onPageClick,
+  width = 800,
+  height = 800
+}) => {
+  const canvasRef = useRef(null);
+  const [tree, setTree] = useState(null);
+  const [scale, setScale] = useState(1);
+  const [hoveredNode, setHoveredNode] = useState(null);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  // 1. 构建树结构
+  const buildTree = useCallback(() => {
+    if (!outline || !subdivisions) return null;
+
+    const root = {
+      id: 'root',
+      label: pdfFilename || 'Document',
+      level: 0,
+      children: []
+    };
+
+    outline.forEach((section, sIdx) => {
+      const sectionNode = {
+        id: `s-${sIdx}`,
+        label: section.title || section.section_title || `Section ${sIdx + 1}`,
+        level: 1,
+        pageRange: [section.page_start, section.page_end],
+        children: []
+      };
+
+      const subdivision = subdivisions[sIdx];
+      if (subdivision?.subdivisions && Array.isArray(subdivision.subdivisions)) {
+        subdivision.subdivisions.forEach((sub, subIdx) => {
+          const subNode = {
+            id: `s-${sIdx}-${subIdx}`,
+            label: sub.title || `Subsection ${subIdx + 1}`,
+            level: 2,
+            pageRange: [sub.page_start, sub.page_end],
+            children: []
+          };
+
+          // Level 3: 页码节点
+          for (let p = sub.page_start; p <= sub.page_end; p++) {
+            subNode.children.push({
+              id: `s-${sIdx}-${subIdx}-p${p}`,
+              label: `${p}`,
+              level: 3,
+              page: p,
+              children: []
+            });
+          }
+
+          sectionNode.children.push(subNode);
+        });
+      }
+
+      root.children.push(sectionNode);
+    });
+
+    return root;
+  }, [pdfFilename, outline, subdivisions]);
+
+  // 2. 计算径向布局
+  const calculateRadialLayout = useCallback((tree, centerX, centerY, baseRadius) => {
+    if (!tree) return null;
+
+    const levelRadius = [0, baseRadius, baseRadius * 1.8, baseRadius * 2.6];
+    
+    const assignPositions = (node, parentAngle, angleSpan, depth = 0) => {
+      const radius = levelRadius[depth] || baseRadius * (depth + 1);
+      
+      if (depth === 0) {
+        // 根节点在中心
+        node.x = centerX;
+        node.y = centerY;
+        node.angle = 0;
+      } else {
+        // 计算当前节点的角度
+        const siblingCount = node.parent?.children.length || 1;
+        const startAngle = parentAngle - angleSpan / 2;
+        const step = angleSpan / siblingCount;
+        const angle = startAngle + step * (node.indexInParent + 0.5);
+        
+        node.angle = angle;
+        node.x = centerX + radius * Math.cos(angle);
+        node.y = centerY + radius * Math.sin(angle);
+      }
+      
+      // 递归处理子节点
+      if (node.children && node.children.length > 0) {
+        const childAngleSpan = angleSpan / Math.max(node.children.length, 1);
+        node.children.forEach((child, idx) => {
+          child.parent = node;
+          child.indexInParent = idx;
+          const childStartAngle = node.angle - angleSpan / 2;
+          const childStep = angleSpan / node.children.length;
+          const childCenterAngle = childStartAngle + childStep * (idx + 0.5);
+          assignPositions(child, childCenterAngle, childStep, depth + 1);
+        });
+      }
+      
+      return node;
+    };
+    
+    return assignPositions(tree, -Math.PI / 2, 2 * Math.PI, 0);
+  }, []);
+
+  // 3. 初始化树结构
+  useEffect(() => {
+    const treeData = buildTree();
+    if (treeData) {
+      const positioned = calculateRadialLayout(
+        treeData,
+        width / 2,
+        height / 2,
+        80
+      );
+      setTree(positioned);
+    }
+  }, [buildTree, calculateRadialLayout, width, height]);
+
+  // 4. 绘制函数
+  const drawTree = useCallback(() => {
+    if (!tree || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+
+    // 设置Canvas分辨率
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.scale(dpr, dpr);
+
+    // 清空画布
+    ctx.clearRect(0, 0, width, height);
+
+    // 应用变换
+    ctx.save();
+    ctx.translate(offset.x, offset.y);
+    ctx.scale(scale, scale);
+
+    // 递归绘制连接线
+    const drawConnections = (node) => {
+      if (node.children) {
+        node.children.forEach(child => {
+          ctx.beginPath();
+          ctx.strokeStyle = '#808080';
+          ctx.lineWidth = 1.5;
+          ctx.moveTo(node.x, node.y);
+          ctx.lineTo(child.x, child.y);
+          ctx.stroke();
+          
+          drawConnections(child);
+        });
+      }
+    };
+
+    // 递归绘制节点
+    const drawNodes = (node) => {
+      const isHovered = hoveredNode?.id === node.id;
+      
+      // 节点大小和颜色
+      const sizes = [60, 45, 35, 25];
+      const colors = ['#000080', '#008000', '#800080', '#c08000'];
+      const size = sizes[node.level] || 20;
+      const color = colors[node.level] || '#808080';
+
+      if (node.level === 0) {
+        // 根节点 - 方形
+        const rectSize = size;
+        ctx.fillStyle = isHovered ? '#ffffcc' : color;
+        ctx.fillRect(node.x - rectSize, node.y - rectSize/2, rectSize * 2, rectSize);
+        
+        // Windows 98 边框
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(node.x - rectSize, node.y - rectSize/2, rectSize * 2, rectSize);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(node.x - rectSize + 2, node.y - rectSize/2 + 2, rectSize * 2 - 4, rectSize - 4);
+        
+        // 文字
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 13px "MS Sans Serif", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // 文字截断
+        let label = node.label;
+        const maxWidth = rectSize * 2 - 10;
+        while (ctx.measureText(label).width > maxWidth && label.length > 0) {
+          label = label.slice(0, -1);
+        }
+        if (label !== node.label) label += '...';
+        
+        ctx.fillText(label, node.x, node.y);
+      } else if (node.level === 3) {
+        // 页码节点 - 小圆形
+        ctx.fillStyle = isHovered ? '#ffffcc' : '#ffffff';
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // 边框
+        ctx.strokeStyle = '#808080';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        // 页码
+        ctx.fillStyle = '#0000ff';
+        ctx.font = 'bold 11px "MS Sans Serif", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(node.label, node.x, node.y);
+      } else {
+        // 其他节点 - 圆角矩形
+        const rectWidth = size * 2.5;
+        const rectHeight = size * 0.8;
+        const radius = 4;
+        
+        ctx.fillStyle = isHovered ? '#ffffcc' : '#c0c0c0';
+        
+        // 绘制圆角矩形
+        ctx.beginPath();
+        ctx.moveTo(node.x - rectWidth/2 + radius, node.y - rectHeight/2);
+        ctx.lineTo(node.x + rectWidth/2 - radius, node.y - rectHeight/2);
+        ctx.arcTo(node.x + rectWidth/2, node.y - rectHeight/2, node.x + rectWidth/2, node.y - rectHeight/2 + radius, radius);
+        ctx.lineTo(node.x + rectWidth/2, node.y + rectHeight/2 - radius);
+        ctx.arcTo(node.x + rectWidth/2, node.y + rectHeight/2, node.x + rectWidth/2 - radius, node.y + rectHeight/2, radius);
+        ctx.lineTo(node.x - rectWidth/2 + radius, node.y + rectHeight/2);
+        ctx.arcTo(node.x - rectWidth/2, node.y + rectHeight/2, node.x - rectWidth/2, node.y + rectHeight/2 - radius, radius);
+        ctx.lineTo(node.x - rectWidth/2, node.y - rectHeight/2 + radius);
+        ctx.arcTo(node.x - rectWidth/2, node.y - rectHeight/2, node.x - rectWidth/2 + radius, node.y - rectHeight/2, radius);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Windows 98 边框
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.strokeStyle = '#808080';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        // 文字
+        ctx.fillStyle = '#000000';
+        ctx.font = `${node.level === 1 ? 'bold ' : ''}11px "MS Sans Serif", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // 文字截断
+        let label = node.label;
+        const maxWidth = rectWidth - 10;
+        while (ctx.measureText(label).width > maxWidth && label.length > 0) {
+          label = label.slice(0, -1);
+        }
+        if (label !== node.label) label += '...';
+        
+        ctx.fillText(label, node.x, node.y);
+        
+        // 页码范围标签
+        if (node.pageRange) {
+          ctx.font = '9px "MS Sans Serif", sans-serif';
+          ctx.fillStyle = '#606060';
+          const rangeText = `p.${node.pageRange[0]}-${node.pageRange[1]}`;
+          ctx.fillText(rangeText, node.x, node.y + rectHeight/2 + 10);
+        }
+      }
+      
+      // 绘制子节点
+      if (node.children) {
+        node.children.forEach(drawNodes);
+      }
+    };
+
+    drawConnections(tree);
+    drawNodes(tree);
+
+    ctx.restore();
+  }, [tree, scale, hoveredNode, offset, width, height]);
+
+  // 5. 渲染
+  useEffect(() => {
+    drawTree();
+  }, [drawTree]);
+
+  // 6. 查找节点
+  const findNodeAtPosition = useCallback((node, px, py) => {
+    if (!node) return null;
+
+    const sizes = [60, 45, 35, 25];
+    const size = sizes[node.level] || 20;
+    
+    // 转换坐标
+    const transformedX = (px - offset.x) / scale;
+    const transformedY = (py - offset.y) / scale;
+    
+    const distance = Math.sqrt((node.x - transformedX) ** 2 + (node.y - transformedY) ** 2);
+    
+    if (distance <= size) {
+      return node;
+    }
+    
+    if (node.children) {
+      for (const child of node.children) {
+        const found = findNodeAtPosition(child, px, py);
+        if (found) return found;
+      }
+    }
+    
+    return null;
+  }, [offset, scale]);
+
+  // 7. 事件处理
+  const handleMouseMove = useCallback((e) => {
+    if (isDragging) {
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+      setOffset({ x: offset.x + dx, y: offset.y + dy });
+      setDragStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const node = findNodeAtPosition(tree, x, y);
+    setHoveredNode(node);
+    
+    if (canvasRef.current) {
+      canvasRef.current.style.cursor = node ? 'pointer' : 'grab';
+    }
+  }, [tree, findNodeAtPosition, isDragging, dragStart, offset]);
+
+  const handleMouseDown = useCallback((e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const node = findNodeAtPosition(tree, x, y);
+    if (!node) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+      if (canvasRef.current) {
+        canvasRef.current.style.cursor = 'grabbing';
+      }
+    }
+  }, [tree, findNodeAtPosition]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    if (canvasRef.current) {
+      canvasRef.current.style.cursor = hoveredNode ? 'pointer' : 'grab';
+    }
+  }, [hoveredNode]);
+
+  const handleClick = useCallback((e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const node = findNodeAtPosition(tree, x, y);
+    if (node) {
+      if (node.page) {
+        // 页码节点，直接跳转
+        onPageClick?.(node.page);
+      } else if (node.pageRange) {
+        // 分段或细分节点，跳转到起始页
+        onPageClick?.(node.pageRange[0]);
+      }
+    }
+  }, [tree, findNodeAtPosition, onPageClick]);
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setScale(prev => Math.max(0.3, Math.min(3, prev * delta)));
+  }, []);
+
+  return (
+    <div style={{
+      width: '100%',
+      height: '100%',
+      backgroundColor: '#c0c0c0',
+      border: '2px inset #ffffff',
+      position: 'relative',
+      overflow: 'hidden',
+      fontFamily: 'MS Sans Serif, sans-serif'
+    }}>
+      {/* 控制面板 */}
+      <div style={{
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        display: 'flex',
+        gap: 4,
+        zIndex: 10
+      }}>
+        <button
+          onClick={() => setScale(s => Math.min(s * 1.2, 3))}
+          style={{
+            padding: '4px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #ffffff',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif'
+          }}
+          onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
+          onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
+        >
+          放大 +
+        </button>
+        <button
+          onClick={() => setScale(s => Math.max(s * 0.8, 0.3))}
+          style={{
+            padding: '4px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #ffffff',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif'
+          }}
+          onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
+          onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
+        >
+          缩小 -
+        </button>
+        <button
+          onClick={() => {
+            setScale(1);
+            setOffset({ x: 0, y: 0 });
+          }}
+          style={{
+            padding: '4px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #ffffff',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif'
+          }}
+          onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
+          onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
+        >
+          重置
+        </button>
+      </div>
+
+      {/* 提示文字 */}
+      {hoveredNode && (
+        <div style={{
+          position: 'absolute',
+          bottom: 8,
+          left: 8,
+          backgroundColor: '#ffffcc',
+          border: '1px solid #000000',
+          padding: '4px 8px',
+          fontSize: '11px',
+          maxWidth: '300px',
+          wordWrap: 'break-word'
+        }}>
+          <strong>{hoveredNode.label}</strong>
+          {hoveredNode.pageRange && (
+            <div style={{ fontSize: '10px', color: '#606060' }}>
+              页码: {hoveredNode.pageRange[0]}-{hoveredNode.pageRange[1]}
+            </div>
+          )}
+          {hoveredNode.page && (
+            <div style={{ fontSize: '10px', color: '#0000ff' }}>
+              点击跳转到第 {hoveredNode.page} 页
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Canvas */}
+      <canvas
+        ref={canvasRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'block'
+        }}
+        onMouseMove={handleMouseMove}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onClick={handleClick}
+        onWheel={handleWheel}
+      />
+    </div>
+  );
+};
+
+export default RadialMindMap;
+
