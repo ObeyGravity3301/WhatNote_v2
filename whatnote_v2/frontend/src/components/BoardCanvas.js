@@ -7,6 +7,17 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import ChatWindow from './ChatWindow';
+import ReactFlow, { 
+  MiniMap, 
+  Controls, 
+  Background, 
+  useNodesState, 
+  useEdgesState,
+  addEdge,
+  Handle,
+  Position
+} from 'reactflow';
+import 'reactflow/dist/style.css';
 
 // 配置PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -32,6 +43,230 @@ const debounce = (func, wait) => {
     timeout = setTimeout(later, wait);
   };
 };
+
+// 思维导图查看器组件
+function MindMapViewer({ outline, subdivisions, pdfFilename, onPageJump, mindMapMode, setMindMapMode }) {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  
+  // 生成思维导图节点和边
+  useEffect(() => {
+    if (!outline || !outline.outline) return;
+    
+    const newNodes = [];
+    const newEdges = [];
+    let nodeId = 0;
+    
+    // Level 0: 根节点 - PDF文件名
+    const rootNodeId = `node-${nodeId++}`;
+    newNodes.push({
+      id: rootNodeId,
+      type: 'default',
+      position: { x: 250, y: 50 },
+      data: { 
+        label: (
+          <div style={{ 
+            padding: '10px 20px', 
+            fontWeight: 'bold', 
+            fontSize: '14px',
+            color: '#000080',
+            textAlign: 'center'
+          }}>
+            📄 {pdfFilename}
+          </div>
+        )
+      },
+      style: {
+        background: '#ffffff',
+        border: '3px solid #000080',
+        borderRadius: '8px',
+        fontSize: '12px',
+        fontFamily: 'MS Sans Serif, sans-serif'
+      }
+    });
+    
+    // Level 1: 分段
+    outline.outline.forEach((section, sectionIndex) => {
+      const sectionNodeId = `node-${nodeId++}`;
+      const sectionY = 200 + sectionIndex * 300;
+      const sectionX = 250;
+      
+      newNodes.push({
+        id: sectionNodeId,
+        type: 'default',
+        position: { x: sectionX, y: sectionY },
+        data: { 
+          label: (
+            <div style={{ 
+              padding: '8px 15px', 
+              fontWeight: 'bold',
+              fontSize: '12px',
+              textAlign: 'center'
+            }}>
+              📚 {section.title || section.section_title || `章节 ${sectionIndex + 1}`}
+              <div style={{ fontSize: '10px', color: '#666', marginTop: '4px' }}>
+                p.{section.page_start}-{section.page_end}
+              </div>
+            </div>
+          )
+        },
+        style: {
+          background: '#ffffcc',
+          border: '2px solid #ffa500',
+          borderRadius: '6px',
+          fontSize: '11px',
+          fontFamily: 'MS Sans Serif, sans-serif'
+        }
+      });
+      
+      // 连接到根节点
+      newEdges.push({
+        id: `edge-${rootNodeId}-${sectionNodeId}`,
+        source: rootNodeId,
+        target: sectionNodeId,
+        type: 'smoothstep',
+        animated: false,
+        style: { stroke: '#000080', strokeWidth: 2 }
+      });
+      
+      // Level 2: 细分（如果存在）
+      if (subdivisions && subdivisions.subdivisions && subdivisions.subdivisions[sectionIndex]) {
+        const sectionSubdivisions = subdivisions.subdivisions[sectionIndex];
+        if (sectionSubdivisions && sectionSubdivisions.subdivisions) {
+          sectionSubdivisions.subdivisions.forEach((subdivision, subdivIndex) => {
+            const subdivNodeId = `node-${nodeId++}`;
+            const subdivY = sectionY + 150 + subdivIndex * 100;
+            const subdivX = sectionX + 300 + (subdivIndex % 2) * 200;
+            
+            newNodes.push({
+              id: subdivNodeId,
+              type: 'default',
+              position: { x: subdivX, y: subdivY },
+              data: { 
+                label: (
+                  <div 
+                    style={{ 
+                      padding: '6px 12px', 
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                    onClick={() => onPageJump(subdivision.page_start)}
+                  >
+                    📑 {subdivision.title || `细分 ${subdivIndex + 1}`}
+                    <div style={{ fontSize: '9px', color: '#666', marginTop: '2px' }}>
+                      p.{subdivision.page_start}
+                      {subdivision.page_end !== subdivision.page_start && `-${subdivision.page_end}`}
+                    </div>
+                  </div>
+                )
+              },
+              style: {
+                background: '#e6f3ff',
+                border: '2px solid #0078d4',
+                borderRadius: '4px',
+                fontSize: '10px',
+                fontFamily: 'MS Sans Serif, sans-serif'
+              }
+            });
+            
+            // 连接到分段节点
+            newEdges.push({
+              id: `edge-${sectionNodeId}-${subdivNodeId}`,
+              source: sectionNodeId,
+              target: subdivNodeId,
+              type: 'smoothstep',
+              animated: false,
+              style: { stroke: '#0078d4', strokeWidth: 1.5 }
+            });
+          });
+        }
+      }
+    });
+    
+    setNodes(newNodes);
+    setEdges(newEdges);
+  }, [outline, subdivisions, pdfFilename, onPageJump, setNodes, setEdges]);
+  
+  return (
+    <div style={{ 
+      width: '100%', 
+      height: '100%', 
+      backgroundColor: '#f0f0f0',
+      border: '2px inset #c0c0c0'
+    }}>
+      {/* 控制面板 */}
+      <div style={{
+        padding: '8px',
+        backgroundColor: '#c0c0c0',
+        borderBottom: '2px outset #c0c0c0',
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'center',
+        fontSize: '10px',
+        fontFamily: 'MS Sans Serif, sans-serif'
+      }}>
+        <span style={{ fontWeight: 'bold' }}>显示模式:</span>
+        <button
+          onClick={() => setMindMapMode('compact')}
+          style={{
+            padding: '2px 8px',
+            backgroundColor: '#c0c0c0',
+            border: mindMapMode === 'compact' ? '2px inset #c0c0c0' : '2px outset #c0c0c0',
+            cursor: 'pointer',
+            fontSize: '10px',
+            fontFamily: 'MS Sans Serif, sans-serif'
+          }}
+        >
+          简洁
+        </button>
+        <button
+          onClick={() => setMindMapMode('detailed')}
+          style={{
+            padding: '2px 8px',
+            backgroundColor: '#c0c0c0',
+            border: mindMapMode === 'detailed' ? '2px inset #c0c0c0' : '2px outset #c0c0c0',
+            cursor: 'pointer',
+            fontSize: '10px',
+            fontFamily: 'MS Sans Serif, sans-serif'
+          }}
+        >
+          详细
+        </button>
+      </div>
+      
+      {/* 思维导图容器 */}
+      <div style={{ width: '100%', height: 'calc(100% - 40px)' }}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          fitView
+          attributionPosition="bottom-right"
+        >
+          <MiniMap 
+            nodeColor={(node) => {
+              if (node.style?.background) return node.style.background;
+              return '#fff';
+            }}
+            style={{
+              backgroundColor: '#f0f0f0',
+              border: '2px inset #c0c0c0'
+            }}
+          />
+          <Controls 
+            style={{
+              border: '2px outset #c0c0c0',
+              backgroundColor: '#c0c0c0'
+            }}
+          />
+          <Background color="#c0c0c0" gap={16} />
+        </ReactFlow>
+      </div>
+    </div>
+  );
+}
 
 // PDF分页组件
 function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter, setConfirmDialog }) {
@@ -77,6 +312,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [stage2Completed, setStage2Completed] = useState(false); // 第二阶段是否已完成
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
+  
+  // 思维导图状态
+  const [mindMapExpanded, setMindMapExpanded] = useState(false); // 思维导图是否展开
+  const [mindMapMode, setMindMapMode] = useState('compact'); // 'compact' | 'detailed'
+  const [mindMapView, setMindMapView] = useState('outline'); // 'outline' | 'mindmap'
   
   // 注释设置状态
   const [annotationSettings, setAnnotationSettings] = useState(() => {
@@ -896,19 +1136,39 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       ? '正在细分分段...' 
                       : '文档大纲')}
               </span>
-              <button
-                onClick={() => setShowOutlinePanel(false)}
-                style={{
-                  backgroundColor: '#c0c0c0',
-                  border: '1px outset #c0c0c0',
-                  cursor: 'pointer',
-                  fontSize: '10px',
-                  padding: '0 4px',
-                  fontFamily: 'MS Sans Serif, sans-serif'
-                }}
-              >
-                ✕
-              </button>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                {/* 视图切换按钮 - 仅在有大纲数据时显示 */}
+                {batchOutline && outlineView === 'list' && (
+                  <button
+                    onClick={() => setMindMapView(mindMapView === 'outline' ? 'mindmap' : 'outline')}
+                    style={{
+                      backgroundColor: '#c0c0c0',
+                      border: mindMapView === 'mindmap' ? '2px inset #c0c0c0' : '2px outset #c0c0c0',
+                      cursor: 'pointer',
+                      fontSize: '10px',
+                      padding: '2px 8px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                    title={mindMapView === 'outline' ? '切换到思维导图' : '切换到列表'}
+                  >
+                    {mindMapView === 'outline' ? '🗺️' : '📋'}
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowOutlinePanel(false)}
+                  style={{
+                    backgroundColor: '#c0c0c0',
+                    border: '1px outset #c0c0c0',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    padding: '0 4px',
+                    fontFamily: 'MS Sans Serif, sans-serif'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* 大纲内容区域 */}
@@ -1347,8 +1607,20 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 </div>
               )}
 
+              {/* 思维导图视图 */}
+              {outlineView === 'list' && mindMapView === 'mindmap' && batchOutline && (
+                <MindMapViewer 
+                  outline={batchOutline}
+                  subdivisions={batchSubdivisions}
+                  pdfFilename={pdfUrl ? pdfUrl.split('/').pop() : '未命名文档'}
+                  onPageJump={(page) => setCurrentPage(page)}
+                  mindMapMode={mindMapMode}
+                  setMindMapMode={setMindMapMode}
+                />
+              )}
+
               {/* 大纲列表视图 */}
-              {outlineView === 'list' && (
+              {outlineView === 'list' && mindMapView === 'outline' && (
                 <>
                   {/* 第二阶段进度条 - 放在最上面 */}
                   {(isStage2 || stage2Completed) && batchProgress.total > 0 && (
