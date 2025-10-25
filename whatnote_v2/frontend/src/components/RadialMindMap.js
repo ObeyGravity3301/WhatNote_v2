@@ -72,49 +72,74 @@ const RadialMindMap = ({
     return root;
   }, [pdfFilename, outline, subdivisions]);
 
-  // 2. 计算径向布局
+  // 2. 计算径向布局（从外向内）
   const calculateRadialLayout = useCallback((tree, centerX, centerY, baseRadius) => {
     if (!tree) return null;
 
-    const levelRadius = [0, baseRadius, baseRadius * 1.8, baseRadius * 2.6];
+    const levelRadius = [0, baseRadius * 2.6, baseRadius * 1.8, baseRadius];
     
-    const assignPositions = (node, parentAngle, angleSpan, depth = 0) => {
-      const radius = levelRadius[depth] || baseRadius * (depth + 1);
+    // 第一步：收集所有叶子节点（最外层）
+    const collectLeaves = (node) => {
+      if (!node.children || node.children.length === 0) {
+        return [node];
+      }
+      return node.children.flatMap(collectLeaves);
+    };
+    
+    const leaves = collectLeaves(tree);
+    const totalLeaves = leaves.length;
+    
+    // 第二步：为叶子节点分配角度（均匀分布）
+    leaves.forEach((leaf, idx) => {
+      const angle = (idx / totalLeaves) * 2 * Math.PI - Math.PI / 2;
+      leaf.angle = angle;
+      leaf.leafIndex = idx;
+    });
+    
+    // 第三步：从外向内计算位置
+    const assignPositionsBottomUp = (node, depth = 0) => {
+      const radius = levelRadius[depth] || baseRadius * (4 - depth);
       
       if (depth === 0) {
         // 根节点在中心
         node.x = centerX;
         node.y = centerY;
         node.angle = 0;
+      } else if (!node.children || node.children.length === 0) {
+        // 叶子节点：使用预分配的角度
+        node.x = centerX + radius * Math.cos(node.angle);
+        node.y = centerY + radius * Math.sin(node.angle);
       } else {
-        // 计算当前节点的角度
-        const siblingCount = node.parent?.children.length || 1;
-        const startAngle = parentAngle - angleSpan / 2;
-        const step = angleSpan / siblingCount;
-        const angle = startAngle + step * (node.indexInParent + 0.5);
-        
-        node.angle = angle;
-        node.x = centerX + radius * Math.cos(angle);
-        node.y = centerY + radius * Math.sin(angle);
-      }
-      
-      // 递归处理子节点
-      if (node.children && node.children.length > 0) {
-        const childAngleSpan = angleSpan / Math.max(node.children.length, 1);
+        // 中间节点：基于子节点的平均角度
         node.children.forEach((child, idx) => {
           child.parent = node;
           child.indexInParent = idx;
-          const childStartAngle = node.angle - angleSpan / 2;
-          const childStep = angleSpan / node.children.length;
-          const childCenterAngle = childStartAngle + childStep * (idx + 0.5);
-          assignPositions(child, childCenterAngle, childStep, depth + 1);
+          assignPositionsBottomUp(child, depth + 1);
         });
+        
+        // 计算子节点的平均角度
+        const childAngles = node.children.map(c => c.angle);
+        const avgAngle = childAngles.reduce((sum, a) => sum + a, 0) / childAngles.length;
+        
+        node.angle = avgAngle;
+        node.x = centerX + radius * Math.cos(avgAngle);
+        node.y = centerY + radius * Math.sin(avgAngle);
       }
       
       return node;
     };
     
-    return assignPositions(tree, -Math.PI / 2, 2 * Math.PI, 0);
+    // 先标记树的深度
+    const markDepth = (node, depth = 0) => {
+      node.depth = depth;
+      if (node.children) {
+        node.children.forEach(child => markDepth(child, depth + 1));
+      }
+    };
+    
+    markDepth(tree);
+    
+    return assignPositionsBottomUp(tree, 0);
   }, []);
 
   // 3. 监听容器尺寸变化
@@ -409,9 +434,26 @@ const RadialMindMap = ({
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // 计算鼠标在画布坐标系中的位置（缩放前）
+    const worldX = (mouseX - offset.x) / scale;
+    const worldY = (mouseY - offset.y) / scale;
+    
+    // 缩放因子
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setScale(prev => Math.max(0.3, Math.min(3, prev * delta)));
-  }, []);
+    const newScale = Math.max(0.3, Math.min(3, scale * delta));
+    
+    // 计算新的偏移量，使鼠标位置保持不变
+    const newOffsetX = mouseX - worldX * newScale;
+    const newOffsetY = mouseY - worldY * newScale;
+    
+    setScale(newScale);
+    setOffset({ x: newOffsetX, y: newOffsetY });
+  }, [scale, offset]);
 
   return (
     <div 
