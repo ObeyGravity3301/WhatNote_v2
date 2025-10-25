@@ -72,74 +72,49 @@ const RadialMindMap = ({
     return root;
   }, [pdfFilename, outline, subdivisions]);
 
-  // 2. 计算径向布局（从外向内）
+  // 2. 计算径向布局（改进版）
   const calculateRadialLayout = useCallback((tree, centerX, centerY, baseRadius) => {
     if (!tree) return null;
 
-    const levelRadius = [0, baseRadius * 2.6, baseRadius * 1.8, baseRadius];
+    const levelRadius = [0, baseRadius, baseRadius * 1.8, baseRadius * 2.6];
     
-    // 第一步：收集所有叶子节点（最外层）
-    const collectLeaves = (node) => {
-      if (!node.children || node.children.length === 0) {
-        return [node];
-      }
-      return node.children.flatMap(collectLeaves);
-    };
-    
-    const leaves = collectLeaves(tree);
-    const totalLeaves = leaves.length;
-    
-    // 第二步：为叶子节点分配角度（均匀分布）
-    leaves.forEach((leaf, idx) => {
-      const angle = (idx / totalLeaves) * 2 * Math.PI - Math.PI / 2;
-      leaf.angle = angle;
-      leaf.leafIndex = idx;
-    });
-    
-    // 第三步：从外向内计算位置
-    const assignPositionsBottomUp = (node, depth = 0) => {
-      const radius = levelRadius[depth] || baseRadius * (4 - depth);
+    // 递归计算位置
+    const assignPositions = (node, depth = 0, startAngle = 0, angleSpan = 2 * Math.PI) => {
+      const radius = levelRadius[depth] || baseRadius * (depth + 1);
       
       if (depth === 0) {
         // 根节点在中心
         node.x = centerX;
         node.y = centerY;
         node.angle = 0;
-      } else if (!node.children || node.children.length === 0) {
-        // 叶子节点：使用预分配的角度
-        node.x = centerX + radius * Math.cos(node.angle);
-        node.y = centerY + radius * Math.sin(node.angle);
       } else {
-        // 中间节点：基于子节点的平均角度
+        // 计算当前节点的角度
+        const siblingCount = node.parent?.children.length || 1;
+        const step = angleSpan / siblingCount;
+        const angle = startAngle + step * (node.indexInParent + 0.5);
+        
+        node.angle = angle;
+        node.x = centerX + radius * Math.cos(angle);
+        node.y = centerY + radius * Math.sin(angle);
+      }
+      
+      // 递归处理子节点
+      if (node.children && node.children.length > 0) {
+        const childAngleSpan = angleSpan / Math.max(node.children.length, 1);
         node.children.forEach((child, idx) => {
           child.parent = node;
           child.indexInParent = idx;
-          assignPositionsBottomUp(child, depth + 1);
+          const childStartAngle = node.angle - angleSpan / 2;
+          const childStep = angleSpan / node.children.length;
+          const childCenterAngle = childStartAngle + childStep * (idx + 0.5);
+          assignPositions(child, depth + 1, childCenterAngle, childStep);
         });
-        
-        // 计算子节点的平均角度
-        const childAngles = node.children.map(c => c.angle);
-        const avgAngle = childAngles.reduce((sum, a) => sum + a, 0) / childAngles.length;
-        
-        node.angle = avgAngle;
-        node.x = centerX + radius * Math.cos(avgAngle);
-        node.y = centerY + radius * Math.sin(avgAngle);
       }
       
       return node;
     };
     
-    // 先标记树的深度
-    const markDepth = (node, depth = 0) => {
-      node.depth = depth;
-      if (node.children) {
-        node.children.forEach(child => markDepth(child, depth + 1));
-      }
-    };
-    
-    markDepth(tree);
-    
-    return assignPositionsBottomUp(tree, 0);
+    return assignPositions(tree, 0, -Math.PI / 2, 2 * Math.PI);
   }, []);
 
   // 3. 监听容器尺寸变化
@@ -167,13 +142,17 @@ const RadialMindMap = ({
   // 4. 初始化树结构
   useEffect(() => {
     const treeData = buildTree();
-    if (treeData) {
-      const positioned = calculateRadialLayout(
-        treeData,
-        dimensions.width / 2,
-        dimensions.height / 2,
-        Math.min(dimensions.width, dimensions.height) / 8
-      );
+    console.log('构建的树数据:', treeData);
+    
+    if (treeData && dimensions) {
+      const centerX = dimensions.width / 2;
+      const centerY = dimensions.height / 2;
+      const baseRadius = Math.min(dimensions.width, dimensions.height) / 8;
+      
+      console.log('布局参数:', { centerX, centerY, baseRadius, dimensions });
+      
+      const positioned = calculateRadialLayout(treeData, centerX, centerY, baseRadius);
+      console.log('布局后的树:', positioned);
       setTree(positioned);
     }
   }, [buildTree, calculateRadialLayout, dimensions]);
