@@ -72,13 +72,10 @@ const RadialMindMap = ({
     return root;
   }, [pdfFilename, outline, subdivisions]);
 
-  // 2. 计算径向布局（改进版：每层均匀分布）
+  // 2. 计算径向布局（改进版：每层均匀分布 + 自适应半径）
   const calculateRadialLayout = useCallback((tree, centerX, centerY, baseRadius) => {
     if (!tree) return null;
 
-    // 增大环间距，避免节点重叠
-    const levelRadius = [0, baseRadius * 1.5, baseRadius * 3.5, baseRadius * 5.5];
-    
     // Step 1: 收集每一层的所有节点
     const levels = [];
     const collectByLevel = (node, depth = 0) => {
@@ -91,6 +88,53 @@ const RadialMindMap = ({
     collectByLevel(tree);
     
     console.log('各层节点数:', levels.map(l => l.length));
+    
+    // Step 1.5: 动态计算每层的最佳半径（自适应算法）
+    const levelRadius = [0]; // Level 0 (根节点) 固定在中心
+    
+    // 估算各层节点的平均尺寸（像素）
+    const nodeSizes = [
+      { width: 200, height: 40 },  // Level 0: 文件名（较大）
+      { width: 150, height: 35 },  // Level 1: 分段
+      { width: 120, height: 30 },  // Level 2: 细分
+      { width: 60, height: 25 }    // Level 3: 页码（较小）
+    ];
+    
+    let currentRadius = 0;
+    
+    for (let depth = 1; depth < levels.length; depth++) {
+      const nodeCount = levels[depth].length;
+      const nodeSize = nodeSizes[depth] || { width: 80, height: 25 };
+      
+      // 计算该层节点均匀分布所需的最小半径
+      // 公式：周长 = 2πr，需要容纳 nodeCount 个节点，每个节点占用 nodeWidth + 间距
+      const spacing = 20; // 节点之间的最小间距（像素）
+      const requiredCircumference = nodeCount * (nodeSize.width + spacing);
+      const minRadiusForThisLevel = requiredCircumference / (2 * Math.PI);
+      
+      // 与上一层的最小间距（避免层与层之间节点重叠）
+      const minGapBetweenLevels = nodeSize.height + 40; // 节点高度 + 额外间距
+      
+      // 取两者中的较大值
+      const calculatedRadius = Math.max(
+        minRadiusForThisLevel,
+        currentRadius + minGapBetweenLevels
+      );
+      
+      levelRadius.push(calculatedRadius);
+      currentRadius = calculatedRadius;
+      
+      console.log(`Level ${depth} 自适应计算:`, {
+        节点数: nodeCount,
+        节点宽度: nodeSize.width,
+        所需周长: Math.round(requiredCircumference),
+        周长推算半径: Math.round(minRadiusForThisLevel),
+        层间距推算: Math.round(currentRadius + minGapBetweenLevels),
+        最终采用半径: Math.round(calculatedRadius)
+      });
+    }
+    
+    console.log('✅ 自适应层级半径:', levelRadius.map(r => Math.round(r)));
     
     // Step 2: 从外层向内层分配角度
     // 最外层（叶子节点层）均匀分布
