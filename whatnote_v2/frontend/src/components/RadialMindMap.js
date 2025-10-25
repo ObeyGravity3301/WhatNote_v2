@@ -76,7 +76,8 @@ const RadialMindMap = ({
   const calculateRadialLayout = useCallback((tree, centerX, centerY, baseRadius) => {
     if (!tree) return null;
 
-    const levelRadius = [0, baseRadius, baseRadius * 1.8, baseRadius * 2.6];
+    // 增大环间距，避免节点重叠
+    const levelRadius = [0, baseRadius * 1.5, baseRadius * 3.5, baseRadius * 5.5];
     
     // Step 1: 收集每一层的所有节点
     const levels = [];
@@ -168,7 +169,8 @@ const RadialMindMap = ({
     if (treeData && dimensions) {
       const centerX = dimensions.width / 2;
       const centerY = dimensions.height / 2;
-      const baseRadius = Math.min(dimensions.width, dimensions.height) / 8;
+      // 减小基础半径，因为环间距增大了
+      const baseRadius = Math.min(dimensions.width, dimensions.height) / 12;
       
       console.log('布局参数:', { centerX, centerY, baseRadius, dimensions });
       
