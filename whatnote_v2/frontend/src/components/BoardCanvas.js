@@ -486,9 +486,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
 
   // 滚轮缩放（以鼠标位置为中心）
   const handleWheel = useCallback((e) => {
+    console.log('🖱️ handleWheel被调用');
     e.preventDefault();
     
-    if (!containerRef.current) return;
+    if (!containerRef.current) {
+      console.log('❌ containerRef.current为空');
+      return;
+    }
     
     const rect = containerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -532,11 +536,16 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   // 注册wheel事件（非passive，允许preventDefault）
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) {
+      console.log('❌ containerRef.current 为空，无法注册wheel事件');
+      return;
+    }
     
+    console.log('✅ 注册wheel事件到container:', container);
     container.addEventListener('wheel', handleWheel, { passive: false });
     
     return () => {
+      console.log('🧹 清理wheel事件监听器');
       container.removeEventListener('wheel', handleWheel);
     };
   }, [handleWheel]);
