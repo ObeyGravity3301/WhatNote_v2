@@ -19,8 +19,9 @@ const RadialMindMap = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [maxDisplayDepth, setMaxDisplayDepth] = useState(3); // 最大显示层级 (0=文件, 1=分段, 2=细分, 3=页码)
 
-  // 1. 构建树结构
+  // 1. 构建树结构（根据maxDisplayDepth裁剪）
   const buildTree = useCallback(() => {
     if (!outline || !subdivisions) return null;
 
@@ -31,46 +32,54 @@ const RadialMindMap = ({
       children: []
     };
 
-    outline.forEach((section, sIdx) => {
-      const sectionNode = {
-        id: `s-${sIdx}`,
-        label: section.title || section.section_title || `Section ${sIdx + 1}`,
-        level: 1,
-        pageRange: [section.page_start, section.page_end],
-        children: []
-      };
+    // Level 1: 分段
+    if (maxDisplayDepth >= 1) {
+      outline.forEach((section, sIdx) => {
+        const sectionNode = {
+          id: `s-${sIdx}`,
+          label: section.title || section.section_title || `Section ${sIdx + 1}`,
+          level: 1,
+          pageRange: [section.page_start, section.page_end],
+          children: []
+        };
 
-      const subdivision = subdivisions[sIdx];
-      if (subdivision?.subdivisions && Array.isArray(subdivision.subdivisions)) {
-        subdivision.subdivisions.forEach((sub, subIdx) => {
-          const subNode = {
-            id: `s-${sIdx}-${subIdx}`,
-            label: sub.title || `Subsection ${subIdx + 1}`,
-            level: 2,
-            pageRange: [sub.page_start, sub.page_end],
-            children: []
-          };
+        // Level 2: 细分
+        if (maxDisplayDepth >= 2) {
+          const subdivision = subdivisions[sIdx];
+          if (subdivision?.subdivisions && Array.isArray(subdivision.subdivisions)) {
+            subdivision.subdivisions.forEach((sub, subIdx) => {
+              const subNode = {
+                id: `s-${sIdx}-${subIdx}`,
+                label: sub.title || `Subsection ${subIdx + 1}`,
+                level: 2,
+                pageRange: [sub.page_start, sub.page_end],
+                children: []
+              };
 
-          // Level 3: 页码节点
-          for (let p = sub.page_start; p <= sub.page_end; p++) {
-            subNode.children.push({
-              id: `s-${sIdx}-${subIdx}-p${p}`,
-              label: `${p}`,
-              level: 3,
-              page: p,
-              children: []
+              // Level 3: 页码节点
+              if (maxDisplayDepth >= 3) {
+                for (let p = sub.page_start; p <= sub.page_end; p++) {
+                  subNode.children.push({
+                    id: `s-${sIdx}-${subIdx}-p${p}`,
+                    label: `${p}`,
+                    level: 3,
+                    page: p,
+                    children: []
+                  });
+                }
+              }
+
+              sectionNode.children.push(subNode);
             });
           }
+        }
 
-          sectionNode.children.push(subNode);
-        });
-      }
-
-      root.children.push(sectionNode);
-    });
+        root.children.push(sectionNode);
+      });
+    }
 
     return root;
-  }, [pdfFilename, outline, subdivisions]);
+  }, [pdfFilename, outline, subdivisions, maxDisplayDepth]);
 
   // 2. 计算径向布局（自适应防重叠算法）
   const calculateRadialLayout = useCallback((tree, centerX, centerY, baseRadius) => {
@@ -543,57 +552,105 @@ const RadialMindMap = ({
         top: 8,
         right: 8,
         display: 'flex',
+        flexDirection: 'column',
         gap: 4,
         zIndex: 10
       }}>
-        <button
-          onClick={() => setScale(s => Math.min(s * 1.2, 3))}
-          style={{
-            padding: '4px 8px',
+        {/* 缩放控制 */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button
+            onClick={() => setScale(s => Math.min(s * 1.2, 3))}
+            style={{
+              padding: '4px 8px',
+              fontSize: '11px',
+              backgroundColor: '#c0c0c0',
+              border: '2px outset #ffffff',
+              cursor: 'pointer',
+              fontFamily: 'MS Sans Serif, sans-serif'
+            }}
+            onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
+            onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
+          >
+            放大 +
+          </button>
+          <button
+            onClick={() => setScale(s => Math.max(s * 0.8, 0.3))}
+            style={{
+              padding: '4px 8px',
+              fontSize: '11px',
+              backgroundColor: '#c0c0c0',
+              border: '2px outset #ffffff',
+              cursor: 'pointer',
+              fontFamily: 'MS Sans Serif, sans-serif'
+            }}
+            onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
+            onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
+          >
+            缩小 -
+          </button>
+          <button
+            onClick={() => {
+              setScale(1);
+              setOffset({ x: 0, y: 0 });
+            }}
+            style={{
+              padding: '4px 8px',
+              fontSize: '11px',
+              backgroundColor: '#c0c0c0',
+              border: '2px outset #ffffff',
+              cursor: 'pointer',
+              fontFamily: 'MS Sans Serif, sans-serif'
+            }}
+            onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
+            onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
+          >
+            重置
+          </button>
+        </div>
+
+        {/* 层级控制 */}
+        <div style={{
+          backgroundColor: '#c0c0c0',
+          border: '2px outset #ffffff',
+          padding: '6px 8px'
+        }}>
+          <div style={{
             fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #ffffff',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif'
-          }}
-          onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
-          onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
-        >
-          放大 +
-        </button>
-        <button
-          onClick={() => setScale(s => Math.max(s * 0.8, 0.3))}
-          style={{
-            padding: '4px 8px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #ffffff',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif'
-          }}
-          onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
-          onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
-        >
-          缩小 -
-        </button>
-        <button
-          onClick={() => {
-            setScale(1);
-            setOffset({ x: 0, y: 0 });
-          }}
-          style={{
-            padding: '4px 8px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #ffffff',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif'
-          }}
-          onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
-          onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
-        >
-          重置
-        </button>
+            marginBottom: 4,
+            fontWeight: 'bold',
+            color: '#000080'
+          }}>
+            显示层级：
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {[
+              { depth: 1, label: '🔵 文件 + 分段' },
+              { depth: 2, label: '🔵🟢 + 细分' },
+              { depth: 3, label: '🔵🟢🟣 + 页码' }
+            ].map(({ depth, label }) => (
+              <button
+                key={depth}
+                onClick={() => {
+                  setMaxDisplayDepth(depth);
+                  setScale(1);
+                  setOffset({ x: 0, y: 0 });
+                }}
+                style={{
+                  padding: '3px 6px',
+                  fontSize: '10px',
+                  backgroundColor: maxDisplayDepth === depth ? '#000080' : '#c0c0c0',
+                  color: maxDisplayDepth === depth ? '#ffffff' : '#000000',
+                  border: maxDisplayDepth === depth ? '2px inset #ffffff' : '2px outset #ffffff',
+                  cursor: 'pointer',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  textAlign: 'left'
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* 提示文字 */}
