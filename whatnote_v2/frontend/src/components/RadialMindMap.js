@@ -20,6 +20,8 @@ const RadialMindMap = ({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [maxDisplayDepth, setMaxDisplayDepth] = useState(3); // 最大显示层级 (0=文件, 1=分段, 2=细分, 3=页码)
+  const [manualRadiusMultipliers, setManualRadiusMultipliers] = useState(null); // 手动调整的半径倍数 [level1, level2, level3]
+  const [autoRadiusMultipliers, setAutoRadiusMultipliers] = useState([1.5, 3.5, 5.5]); // 自动计算的半径倍数（作为参考）
 
   // 1. 构建树结构（根据maxDisplayDepth裁剪）
   const buildTree = useCallback(() => {
@@ -127,49 +129,70 @@ const RadialMindMap = ({
     const maxDepth = levels.length - 1;
     const levelRadius = [];
     
-    // 先计算最外层（叶子）的半径
-    const leafCount = levels[maxDepth]?.length || 0;
-    const leafMinRadius = calculateMinRadius(leafCount, maxDepth);
-    levelRadius[maxDepth] = Math.max(leafMinRadius, baseRadius * 5);
-    
-    console.log(`第${maxDepth}层（页码）: ${leafCount}个节点, 最小半径=${Math.round(leafMinRadius)}px, 实际半径=${Math.round(levelRadius[maxDepth])}px`);
-    
-    // 从外向内依次计算中间层
-    for (let depth = maxDepth - 1; depth >= 1; depth--) {
-      const nodeCount = levels[depth]?.length || 0;
-      const minRadius = calculateMinRadius(nodeCount, depth);
-      
-      // 层间距：固定距离
-      const layerGap = baseRadius * 2;
-      
-      // 当前层的上限：必须比外层小至少一个层间距
-      const maxAllowed = levelRadius[depth + 1] - layerGap;
-      
-      // 如果该层的最小半径已经超过上限，说明外层半径不够大
-      if (minRadius > maxAllowed) {
-        // 向外扩展：重新计算外层及更外层的半径
-        console.warn(`⚠️ 第${depth}层需要半径${Math.round(minRadius)}px，但外层限制为${Math.round(maxAllowed)}px，需要向外扩展`);
-        
-        // 从当前层开始向外重新计算
-        let requiredRadius = minRadius;
-        for (let d = depth; d <= maxDepth; d++) {
-          levelRadius[d] = requiredRadius;
-          requiredRadius += layerGap; // 每向外一层，增加一个层间距
-        }
-        
-        levelRadius[depth] = minRadius;
-        console.log(`  → 重新调整后，第${depth}层实际半径=${Math.round(levelRadius[depth])}px`);
-      } else {
-        // 正常情况：取最小半径和上限之间的较大值
-        levelRadius[depth] = Math.max(minRadius, maxAllowed - layerGap * 0.5);
-        console.log(`第${depth}层: ${nodeCount}个节点, 最小半径=${Math.round(minRadius)}px, 实际半径=${Math.round(levelRadius[depth])}px`);
+    // 如果有手动调整的半径倍数，直接使用
+    if (manualRadiusMultipliers && manualRadiusMultipliers.length > 0) {
+      console.log('🎛️ 使用手动调整的半径倍数:', manualRadiusMultipliers);
+      levelRadius[0] = 0; // 根节点
+      for (let depth = 1; depth <= maxDepth; depth++) {
+        const multiplier = manualRadiusMultipliers[depth - 1] || 1;
+        levelRadius[depth] = baseRadius * multiplier;
       }
+      console.log('✅ 手动模式层级半径:', levelRadius.map(r => Math.round(r)));
+    } else {
+      // 自动模式：计算最优半径
+      console.log('🤖 自动计算最优半径');
+      
+      // 先计算最外层（叶子）的半径
+      const leafCount = levels[maxDepth]?.length || 0;
+      const leafMinRadius = calculateMinRadius(leafCount, maxDepth);
+      levelRadius[maxDepth] = Math.max(leafMinRadius, baseRadius * 5);
+      
+      console.log(`第${maxDepth}层: ${leafCount}个节点, 最小半径=${Math.round(leafMinRadius)}px, 实际半径=${Math.round(levelRadius[maxDepth])}px`);
+      
+      // 从外向内依次计算中间层
+      for (let depth = maxDepth - 1; depth >= 1; depth--) {
+        const nodeCount = levels[depth]?.length || 0;
+        const minRadius = calculateMinRadius(nodeCount, depth);
+        
+        // 层间距：固定距离
+        const layerGap = baseRadius * 2;
+        
+        // 当前层的上限：必须比外层小至少一个层间距
+        const maxAllowed = levelRadius[depth + 1] - layerGap;
+        
+        // 如果该层的最小半径已经超过上限，说明外层半径不够大
+        if (minRadius > maxAllowed) {
+          // 向外扩展：重新计算外层及更外层的半径
+          console.warn(`⚠️ 第${depth}层需要半径${Math.round(minRadius)}px，但外层限制为${Math.round(maxAllowed)}px，需要向外扩展`);
+          
+          // 从当前层开始向外重新计算
+          let requiredRadius = minRadius;
+          for (let d = depth; d <= maxDepth; d++) {
+            levelRadius[d] = requiredRadius;
+            requiredRadius += layerGap; // 每向外一层，增加一个层间距
+          }
+          
+          levelRadius[depth] = minRadius;
+          console.log(`  → 重新调整后，第${depth}层实际半径=${Math.round(levelRadius[depth])}px`);
+        } else {
+          // 正常情况：取最小半径和上限之间的较大值
+          levelRadius[depth] = Math.max(minRadius, maxAllowed - layerGap * 0.5);
+          console.log(`第${depth}层: ${nodeCount}个节点, 最小半径=${Math.round(minRadius)}px, 实际半径=${Math.round(levelRadius[depth])}px`);
+        }
+      }
+      
+      // Level 0 固定在中心
+      levelRadius[0] = 0;
+      
+      console.log('✅ 自动模式层级半径:', levelRadius.map(r => Math.round(r)));
+      
+      // 保存自动计算的倍数供参考
+      const calculatedMultipliers = [];
+      for (let depth = 1; depth <= maxDepth; depth++) {
+        calculatedMultipliers.push(levelRadius[depth] / baseRadius);
+      }
+      setAutoRadiusMultipliers(calculatedMultipliers);
     }
-    
-    // Level 0 固定在中心
-    levelRadius[0] = 0;
-    
-    console.log('✅ 最终层级半径:', levelRadius.map(r => Math.round(r)));
     
     // Step 4: 最外层均匀分布
     const leafNodes = levels[maxDepth];
@@ -213,7 +236,7 @@ const RadialMindMap = ({
     }
     
     return tree;
-  }, []);
+  }, [manualRadiusMultipliers, setAutoRadiusMultipliers]);
 
   // 3. 监听容器尺寸变化
   useEffect(() => {
@@ -651,6 +674,114 @@ const RadialMindMap = ({
               </button>
             ))}
           </div>
+        </div>
+
+        {/* 手动半径调节面板 */}
+        <div style={{
+          backgroundColor: '#c0c0c0',
+          border: '2px outset #ffffff',
+          padding: '6px 8px',
+          maxWidth: '180px'
+        }}>
+          <div style={{
+            fontSize: '11px',
+            marginBottom: 4,
+            fontWeight: 'bold',
+            color: '#000080'
+          }}>
+            ⚙️ 半径调节：
+          </div>
+          
+          {/* 模式切换 */}
+          <div style={{ display: 'flex', gap: 2, marginBottom: 6 }}>
+            <button
+              onClick={() => setManualRadiusMultipliers(null)}
+              style={{
+                flex: 1,
+                padding: '2px 4px',
+                fontSize: '9px',
+                backgroundColor: !manualRadiusMultipliers ? '#000080' : '#c0c0c0',
+                color: !manualRadiusMultipliers ? '#ffffff' : '#000000',
+                border: !manualRadiusMultipliers ? '1px inset #ffffff' : '1px outset #ffffff',
+                cursor: 'pointer'
+              }}
+            >
+              自动
+            </button>
+            <button
+              onClick={() => {
+                if (!manualRadiusMultipliers) {
+                  setManualRadiusMultipliers([...autoRadiusMultipliers]);
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: '2px 4px',
+                fontSize: '9px',
+                backgroundColor: manualRadiusMultipliers ? '#000080' : '#c0c0c0',
+                color: manualRadiusMultipliers ? '#ffffff' : '#000000',
+                border: manualRadiusMultipliers ? '1px inset #ffffff' : '1px outset #ffffff',
+                cursor: 'pointer'
+              }}
+            >
+              手动
+            </button>
+          </div>
+
+          {/* 手动调节滑块 */}
+          {manualRadiusMultipliers && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {['Level 1', 'Level 2', 'Level 3'].map((label, idx) => {
+                if (idx >= maxDisplayDepth) return null;
+                const value = manualRadiusMultipliers[idx] || 1;
+                return (
+                  <div key={idx} style={{ fontSize: '9px' }}>
+                    <div style={{ marginBottom: 2, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{label}:</span>
+                      <span style={{ color: '#000080', fontWeight: 'bold' }}>{value.toFixed(1)}r</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      step="0.5"
+                      value={value}
+                      onChange={(e) => {
+                        const newMultipliers = [...manualRadiusMultipliers];
+                        newMultipliers[idx] = parseFloat(e.target.value);
+                        setManualRadiusMultipliers(newMultipliers);
+                      }}
+                      style={{ width: '100%', cursor: 'pointer' }}
+                    />
+                  </div>
+                );
+              })}
+              
+              {/* 重置按钮 */}
+              <button
+                onClick={() => setManualRadiusMultipliers([...autoRadiusMultipliers])}
+                style={{
+                  padding: '3px 6px',
+                  fontSize: '10px',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px outset #ffffff',
+                  cursor: 'pointer',
+                  marginTop: 2
+                }}
+                onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
+                onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
+              >
+                🔄 重置为自动值
+              </button>
+            </div>
+          )}
+          
+          {/* 自动模式提示 */}
+          {!manualRadiusMultipliers && (
+            <div style={{ fontSize: '9px', color: '#606060', marginTop: 4 }}>
+              当前使用自动计算的最优半径
+            </div>
+          )}
         </div>
       </div>
 
