@@ -114,7 +114,7 @@ const RadialMindMap = ({
       return minRadius;
     };
     
-    // Step 3: 从外向内计算实际层级半径
+    // Step 3: 从外向内计算实际层级半径（确保单调递减）
     const maxDepth = levels.length - 1;
     const levelRadius = [];
     
@@ -133,11 +133,28 @@ const RadialMindMap = ({
       // 层间距：固定距离
       const layerGap = baseRadius * 2;
       
-      // 实际半径：不小于最小半径，且比外层小一个层间距
+      // 当前层的上限：必须比外层小至少一个层间距
       const maxAllowed = levelRadius[depth + 1] - layerGap;
-      levelRadius[depth] = Math.max(minRadius, Math.min(maxAllowed, baseRadius * (3 + depth * 1.5)));
       
-      console.log(`第${depth}层: ${nodeCount}个节点, 最小半径=${Math.round(minRadius)}px, 实际半径=${Math.round(levelRadius[depth])}px`);
+      // 如果该层的最小半径已经超过上限，说明外层半径不够大
+      if (minRadius > maxAllowed) {
+        // 向外扩展：重新计算外层及更外层的半径
+        console.warn(`⚠️ 第${depth}层需要半径${Math.round(minRadius)}px，但外层限制为${Math.round(maxAllowed)}px，需要向外扩展`);
+        
+        // 从当前层开始向外重新计算
+        let requiredRadius = minRadius;
+        for (let d = depth; d <= maxDepth; d++) {
+          levelRadius[d] = requiredRadius;
+          requiredRadius += layerGap; // 每向外一层，增加一个层间距
+        }
+        
+        levelRadius[depth] = minRadius;
+        console.log(`  → 重新调整后，第${depth}层实际半径=${Math.round(levelRadius[depth])}px`);
+      } else {
+        // 正常情况：取最小半径和上限之间的较大值
+        levelRadius[depth] = Math.max(minRadius, maxAllowed - layerGap * 0.5);
+        console.log(`第${depth}层: ${nodeCount}个节点, 最小半径=${Math.round(minRadius)}px, 实际半径=${Math.round(levelRadius[depth])}px`);
+      }
     }
     
     // Level 0 固定在中心
