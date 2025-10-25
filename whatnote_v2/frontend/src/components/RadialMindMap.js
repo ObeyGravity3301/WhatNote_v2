@@ -8,17 +8,17 @@ const RadialMindMap = ({
   pdfFilename, 
   outline, 
   subdivisions, 
-  onPageClick,
-  width = 800,
-  height = 800
+  onPageClick
 }) => {
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
   const [tree, setTree] = useState(null);
   const [scale, setScale] = useState(1);
   const [hoveredNode, setHoveredNode] = useState(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   // 1. 构建树结构
   const buildTree = useCallback(() => {
@@ -117,21 +117,43 @@ const RadialMindMap = ({
     return assignPositions(tree, -Math.PI / 2, 2 * Math.PI, 0);
   }, []);
 
-  // 3. 初始化树结构
+  // 3. 监听容器尺寸变化
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const updateDimensions = () => {
+      const rect = containerRef.current.getBoundingClientRect();
+      setDimensions({
+        width: rect.width,
+        height: rect.height
+      });
+    };
+
+    updateDimensions();
+
+    const resizeObserver = new ResizeObserver(updateDimensions);
+    resizeObserver.observe(containerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  // 4. 初始化树结构
   useEffect(() => {
     const treeData = buildTree();
     if (treeData) {
       const positioned = calculateRadialLayout(
         treeData,
-        width / 2,
-        height / 2,
-        80
+        dimensions.width / 2,
+        dimensions.height / 2,
+        Math.min(dimensions.width, dimensions.height) / 8
       );
       setTree(positioned);
     }
-  }, [buildTree, calculateRadialLayout, width, height]);
+  }, [buildTree, calculateRadialLayout, dimensions]);
 
-  // 4. 绘制函数
+  // 5. 绘制函数
   const drawTree = useCallback(() => {
     if (!tree || !canvasRef.current) return;
 
@@ -140,12 +162,12 @@ const RadialMindMap = ({
     const dpr = window.devicePixelRatio || 1;
 
     // 设置Canvas分辨率
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
+    canvas.width = dimensions.width * dpr;
+    canvas.height = dimensions.height * dpr;
     ctx.scale(dpr, dpr);
 
     // 清空画布
-    ctx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, dimensions.width, dimensions.height);
 
     // 应用变换
     ctx.save();
@@ -290,9 +312,9 @@ const RadialMindMap = ({
     drawNodes(tree);
 
     ctx.restore();
-  }, [tree, scale, hoveredNode, offset, width, height]);
+  }, [tree, scale, hoveredNode, offset, dimensions]);
 
-  // 5. 渲染
+  // 6. 渲染
   useEffect(() => {
     drawTree();
   }, [drawTree]);
@@ -342,29 +364,29 @@ const RadialMindMap = ({
     setHoveredNode(node);
     
     if (canvasRef.current) {
-      canvasRef.current.style.cursor = node ? 'pointer' : 'grab';
+      canvasRef.current.style.cursor = node ? 'pointer' : 'default';
     }
   }, [tree, findNodeAtPosition, isDragging, dragStart, offset]);
 
   const handleMouseDown = useCallback((e) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    const node = findNodeAtPosition(tree, x, y);
-    if (!node) {
+    // 只响应中键（滚轮按下）
+    if (e.button === 1) {
+      e.preventDefault();
       setIsDragging(true);
       setDragStart({ x: e.clientX, y: e.clientY });
       if (canvasRef.current) {
         canvasRef.current.style.cursor = 'grabbing';
       }
     }
-  }, [tree, findNodeAtPosition]);
+  }, []);
 
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-    if (canvasRef.current) {
-      canvasRef.current.style.cursor = hoveredNode ? 'pointer' : 'grab';
+  const handleMouseUp = useCallback((e) => {
+    // 只处理中键释放
+    if (e.button === 1) {
+      setIsDragging(false);
+      if (canvasRef.current) {
+        canvasRef.current.style.cursor = hoveredNode ? 'pointer' : 'default';
+      }
     }
   }, [hoveredNode]);
 
@@ -392,15 +414,18 @@ const RadialMindMap = ({
   }, []);
 
   return (
-    <div style={{
-      width: '100%',
-      height: '100%',
-      backgroundColor: '#c0c0c0',
-      border: '2px inset #ffffff',
-      position: 'relative',
-      overflow: 'hidden',
-      fontFamily: 'MS Sans Serif, sans-serif'
-    }}>
+    <div 
+      ref={containerRef}
+      style={{
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#c0c0c0',
+        border: '2px inset #ffffff',
+        position: 'relative',
+        overflow: 'hidden',
+        fontFamily: 'MS Sans Serif, sans-serif'
+      }}
+    >
       {/* 控制面板 */}
       <div style={{
         position: 'absolute',

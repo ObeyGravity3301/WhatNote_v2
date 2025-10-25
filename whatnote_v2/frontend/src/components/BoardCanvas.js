@@ -869,14 +869,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         {/* 大纲侧栏 */}
         {showOutlinePanel && (
           <div style={{
-            width: '320px',
+            width: outlineView === 'mindmap' ? '60%' : '320px',
             backgroundColor: '#f0f0f0',
             borderLeft: '2px inset #c0c0c0',
             borderRight: '2px inset #c0c0c0',
             display: 'flex',
             flexDirection: 'column',
             flexShrink: 0,
-            overflow: 'hidden'
+            overflow: 'hidden',
+            transition: 'width 0.3s ease'
           }}>
             {/* 大纲侧栏工具栏 */}
             <div style={{
@@ -2359,13 +2360,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     💡 <strong>操作提示：</strong>
                     <div style={{ marginTop: '4px', paddingLeft: '16px' }}>
                       • 点击节点跳转到对应页面<br/>
-                      • 滚轮缩放，拖拽移动画布<br/>
-                      • 蓝色=文件，绿色=分段，紫色=细分，圆形=页码
+                      • 滚轮缩放，中键拖拽移动画布<br/>
+                      • 🔵文件 🟢分段 🟣细分 ⚪页码
                     </div>
                   </div>
                   
                   {/* 思维导图组件 */}
-                  <div style={{ flex: 1, minHeight: 0 }}>
+                  <div style={{ flex: 1, minHeight: 0, width: '100%', height: '100%' }}>
                     <RadialMindMap
                       pdfFilename={pdfUrl ? pdfUrl.split('/').pop() : 'Document'}
                       outline={batchOutline.outline}
@@ -2376,8 +2377,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         // 可选：关闭思维导图，回到列表视图
                         // setOutlineView('list');
                       }}
-                      width={320}
-                      height={600}
                     />
                   </div>
                 </div>
