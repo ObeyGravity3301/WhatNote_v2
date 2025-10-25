@@ -63,18 +63,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     panYRef.current = panY;
   }, [scale, panX, panY]);
   
-  // 注册wheel事件（非passive，允许preventDefault）
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, [handleWheel]);
-  
   // 注释功能状态
   const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
   const [annotationMode, setAnnotationMode] = useState('preview'); // 'preview' 或 'edit'
@@ -540,6 +528,18 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     setPanX(newPanX);
     setPanY(newPanY);
   }, []);
+  
+  // 注册wheel事件（非passive，允许preventDefault）
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleWheel]);
 
   // 拖拽处理
   const handleMouseDown = (e) => {
