@@ -518,6 +518,16 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     const newPanX = mouseXInContainer - (mouseXInContainer - panX) * scaleRatio;
     const newPanY = mouseYInContainer - (mouseYInContainer - panY) * scaleRatio;
     
+    console.log('🔍 缩放调试:', {
+      鼠标位置: { x: mouseXInContainer, y: mouseYInContainer },
+      旧缩放: oldScale,
+      新缩放: newScale,
+      缩放比例: scaleRatio,
+      旧平移: { x: panX, y: panY },
+      新平移: { x: newPanX, y: newPanY },
+      平移变化: { x: newPanX - panX, y: newPanY - panY }
+    });
+    
     // 批量更新状态
     setScale(newScale);
     setPanX(newPanX);
