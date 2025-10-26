@@ -8395,43 +8395,58 @@ function BoardCanvas({
                   fontSize: '11px',
                   lineHeight: '1.6'
                 }}>
-                  <div style={{ marginBottom: '12px', fontWeight: 'bold' }}>
-                    新生成的大纲与现有大纲不同：
-                  </div>
-                  
-                  <div style={{
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #808080',
-                    padding: '8px',
-                    marginBottom: '12px'
-                  }}>
-                    <div style={{ marginBottom: '4px' }}>
-                      📊 <strong>原大纲：</strong>{confirmDialog.message.oldSections} 个分段
-                    </div>
-                    <div style={{ marginBottom: '4px' }}>
-                      📊 <strong>新大纲：</strong>{confirmDialog.message.newSections} 个分段
-                    </div>
-                    <div>
-                      ✓ <strong>已完成细分：</strong>{confirmDialog.message.completedSubdivisions} 个分段
-                    </div>
-                  </div>
+                  {/* 检查message是对象还是字符串 */}
+                  {typeof confirmDialog.message === 'object' ? (
+                    // 大纲更新确认
+                    <>
+                      <div style={{ marginBottom: '12px', fontWeight: 'bold' }}>
+                        新生成的大纲与现有大纲不同：
+                      </div>
+                      
+                      <div style={{
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #808080',
+                        padding: '8px',
+                        marginBottom: '12px'
+                      }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          📊 <strong>原大纲：</strong>{confirmDialog.message.oldSections} 个分段
+                        </div>
+                        <div style={{ marginBottom: '4px' }}>
+                          📊 <strong>新大纲：</strong>{confirmDialog.message.newSections} 个分段
+                        </div>
+                        <div>
+                          ✓ <strong>已完成细分：</strong>{confirmDialog.message.completedSubdivisions} 个分段
+                        </div>
+                      </div>
 
-                  <div style={{ 
-                    backgroundColor: '#ffffcc',
-                    border: '1px solid #e0e000',
-                    padding: '8px',
-                    marginBottom: '12px'
-                  }}>
-                    ⚠️ 如果使用新大纲，现有的细分数据将被清空，需要重新执行第二阶段。
-                  </div>
+                      <div style={{ 
+                        backgroundColor: '#ffffcc',
+                        border: '1px solid #e0e000',
+                        padding: '8px',
+                        marginBottom: '12px'
+                      }}>
+                        ⚠️ 如果使用新大纲，现有的细分数据将被清空，需要重新执行第二阶段。
+                      </div>
 
-                  <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-                    是否使用新大纲？
-                  </div>
-                  <div style={{ paddingLeft: '12px', fontSize: '10px', color: '#000080' }}>
-                    <div>• 点击"使用新大纲"：清空细分数据，使用新大纲</div>
-                    <div>• 点击"保留原大纲"：放弃新大纲，保留现有数据</div>
-                  </div>
+                      <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                        是否使用新大纲？
+                      </div>
+                      <div style={{ paddingLeft: '12px', fontSize: '10px', color: '#000080' }}>
+                        <div>• 点击"使用新大纲"：清空细分数据，使用新大纲</div>
+                        <div>• 点击"保留原大纲"：放弃新大纲，保留现有数据</div>
+                      </div>
+                    </>
+                  ) : (
+                    // 通用确认（字符串消息）
+                    <div style={{ 
+                      whiteSpace: 'pre-line',
+                      fontSize: '12px',
+                      lineHeight: '1.8'
+                    }}>
+                      {confirmDialog.message}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -8447,7 +8462,8 @@ function BoardCanvas({
                     minWidth: '100px',
                     padding: '6px 20px',
                     fontSize: '11px',
-                    backgroundColor: '#c0c0c0',
+                    backgroundColor: typeof confirmDialog.message === 'object' ? '#c0c0c0' : '#0078d4',
+                    color: typeof confirmDialog.message === 'object' ? '#000000' : '#ffffff',
                     border: '2px outset #ffffff',
                     cursor: 'pointer',
                     fontFamily: 'MS Sans Serif, sans-serif',
@@ -8456,7 +8472,7 @@ function BoardCanvas({
                   onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
                   onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
                 >
-                  使用新大纲
+                  {typeof confirmDialog.message === 'object' ? '使用新大纲' : '确认'}
                 </button>
                 <button
                   onClick={confirmDialog.onCancel}
@@ -8473,7 +8489,7 @@ function BoardCanvas({
                   onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
                   onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
                 >
-                  保留原大纲
+                  {typeof confirmDialog.message === 'object' ? '保留原大纲' : '取消'}
                 </button>
               </div>
             </div>
