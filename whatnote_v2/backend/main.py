@@ -2698,6 +2698,164 @@ async def get_subdivision_data(board_id: str, window_id: str):
         error(f"加载细分数据失败: {e}")
         raise HTTPException(status_code=500, detail=f"加载细分数据失败: {str(e)}")
 
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/semantic-search")
+async def semantic_search_annotations(
+    board_id: str,
+    window_id: str,
+    request: Request
+):
+    """基于LLM的语义搜索"""
+    try:
+        body = await request.json()
+        query = body.get('query', '')
+        pdf_url = body.get('pdf_url', '')
+        
+        if not query.strip():
+            raise HTTPException(status_code=400, detail="搜索查询不能为空")
+        
+        # 获取PDF文件名
+        pdf_filename = pdf_url.split('/')[-1] if pdf_url else None
+        if not pdf_filename:
+            raise HTTPException(status_code=400, detail="无效的PDF URL")
+        
+        # 读取大纲和细分数据
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        subdivision_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
+        
+        if not outline_file.exists() or not subdivision_file.exists():
+            raise HTTPException(status_code=404, detail="大纲或细分数据不存在，请先生成大纲")
+        
+        with open(outline_file, 'r', encoding='utf-8') as f:
+            outline_data = json.load(f)
+        
+        with open(subdivision_file, 'r', encoding='utf-8') as f:
+            subdivision_data = json.load(f)
+        
+        # 构建合并的大纲结构（大纲 + 细分）
+        merged_outline = []
+        for i, section in enumerate(outline_data.get('outline', [])):
+            section_item = {
+                "section_number": section.get('section_number', i + 1),
+                "section_title": section.get('section_title', ''),
+                "section_pages": [section.get('page_start'), section.get('page_end')],
+                "subdivisions": []
+            }
+            
+            # 添加对应的细分数据
+            if i < len(subdivision_data.get('subdivisions', [])):
+                subdivisions = subdivision_data['subdivisions'][i]
+                if subdivisions:
+                    for subdiv in subdivisions.get('subdivisions', []):
+                        subdiv_item = {
+                            "subdivision_title": subdiv.get('title', ''),
+                            "subdivision_description": subdiv.get('description', ''),
+                            "subdivision_pages": [subdiv.get('page_start'), subdiv.get('page_end')],
+                            "parts": []
+                        }
+                        
+                        # 添加部分（如果有）
+                        for part in subdiv.get('parts', []):
+                            part_item = {
+                                "part_name": part.get('name', ''),
+                                "part_pages": part.get('pages', [])
+                            }
+                            subdiv_item['parts'].append(part_item)
+                        
+                        section_item['subdivisions'].append(subdiv_item)
+            
+            merged_outline.append(section_item)
+        
+        # 保存合并后的大纲结构到文件（用于缓存）
+        merged_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline_with_subdivisions-{window_id}.json"
+        with open(merged_file, 'w', encoding='utf-8') as f:
+            json.dump(merged_outline, f, ensure_ascii=False, indent=2)
+        
+        # 构建LLM提示词
+        prompt = f"""你是一个文档导航助手。用户想在PDF文档中查找特定内容。
+
+文档结构：
+{json.dumps(merged_outline, ensure_ascii=False, indent=2)}
+
+用户查询：{query}
+
+请分析用户需求，返回最相关的部分（parts）或细分（subdivisions）。
+返回JSON格式：
+{{
+  "results": [
+    {{
+      "part_name": "部分名称",
+      "subdivision_title": "细分标题",
+      "section_title": "分段标题",
+      "pages": [起始页, 结束页],
+      "relevance": "相关性说明"
+    }}
+  ]
+}}
+
+注意：
+1. 优先返回最相关的parts，如果没有parts则返回subdivisions
+2. 按相关性从高到低排序
+3. 最多返回5个结果
+4. pages必须是数组格式，包含起止页码
+"""
+
+        # 调用LLM API
+        api_config = await api_config_manager.load_config()
+        current_provider = api_config.get('current_provider', 'openai')
+        provider_config = api_config.get('providers', {}).get(current_provider, {})
+        
+        if not provider_config.get('api_key'):
+            raise HTTPException(status_code=400, detail="LLM API未配置")
+        
+        # 使用LLM服务进行搜索
+        llm_service = LLMService(provider_config)
+        
+        messages = [
+            {"role": "system", "content": "你是一个专业的文档导航助手，擅长理解用户的语义需求并找到文档中最相关的内容。"},
+            {"role": "user", "content": prompt}
+        ]
+        
+        # 调用LLM（非流式）
+        response_text = ""
+        async for chunk in llm_service.chat_stream(messages):
+            response_text += chunk
+        
+        # 解析LLM返回的JSON
+        try:
+            # 尝试提取JSON（可能包含在markdown代码块中）
+            if "```json" in response_text:
+                json_start = response_text.find("```json") + 7
+                json_end = response_text.find("```", json_start)
+                json_text = response_text[json_start:json_end].strip()
+            elif "```" in response_text:
+                json_start = response_text.find("```") + 3
+                json_end = response_text.find("```", json_start)
+                json_text = response_text[json_start:json_end].strip()
+            else:
+                json_text = response_text.strip()
+            
+            result_data = json.loads(json_text)
+            results = result_data.get('results', [])
+            
+        except json.JSONDecodeError as e:
+            error(f"LLM返回的JSON解析失败: {e}\n原始响应: {response_text}")
+            # 返回空结果而不是报错
+            results = []
+        
+        return {
+            "success": True,
+            "query": query,
+            "results": results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"语义搜索失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"语义搜索失败: {str(e)}")
+
 @app.get("/api/media/serve")
 async def serve_media_file(path: str):
     """全新的媒体文件服务API - 避免路由冲突"""

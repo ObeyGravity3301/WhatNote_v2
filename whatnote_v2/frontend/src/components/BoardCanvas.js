@@ -100,6 +100,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     };
   });
   
+  // 搜索功能状态
+  const [showSearchPanel, setShowSearchPanel] = useState(false); // 显示搜索面板
+  const [searchQuery, setSearchQuery] = useState(''); // 搜索查询
+  const [searchResults, setSearchResults] = useState(null); // 搜索结果
+  const [isSearching, setIsSearching] = useState(false); // 是否正在搜索
+  
   // 预设的注释风格
   const annotationStyles = {
     detailed: {
@@ -581,6 +587,83 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     setCurrentPage(page);
   };
 
+  // 语义搜索处理函数
+  const handleSearch = async () => {
+    if (!searchQuery.trim() || !batchOutline || !batchSubdivisions) {
+      return;
+    }
+
+    setIsSearching(true);
+    
+    try {
+      const response = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/semantic-search`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: searchQuery,
+            pdf_url: pdfUrl
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('搜索失败');
+      }
+
+      const data = await response.json();
+      
+      // 保存搜索结果
+      setSearchResults({
+        query: searchQuery,
+        results: data.results || []
+      });
+
+      // 添加消息到消息中心
+      if (data.results && data.results.length > 0) {
+        const resultsText = data.results.map((r, i) => 
+          `${i + 1}. ${r.part_name || r.subdivision_title} (第${r.pages.join(', ')}页)`
+        ).join('\n');
+        
+        addMessage(
+          `🔍 语义搜索结果`,
+          `查询: "${searchQuery}"\n\n找到 ${data.results.length} 个相关位置:\n${resultsText}`,
+          'info',
+          boardId,
+          windowId,
+          pdfUrl ? pdfUrl.split('/').pop() : 'PDF文档'
+        );
+        
+        openMessageCenter();
+      } else {
+        addMessage(
+          `🔍 语义搜索结果`,
+          `查询: "${searchQuery}"\n\n未找到相关内容`,
+          'warning',
+          boardId,
+          windowId,
+          pdfUrl ? pdfUrl.split('/').pop() : 'PDF文档'
+        );
+      }
+
+    } catch (error) {
+      console.error('搜索失败:', error);
+      addMessage(
+        `⚠ 搜索失败`,
+        `查询: "${searchQuery}"\n\n错误: ${error.message}`,
+        'error',
+        boardId,
+        windowId,
+        pdfUrl ? pdfUrl.split('/').pop() : 'PDF文档'
+      );
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div style={{ 
@@ -843,6 +926,34 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           📝 注释
         </button>
 
+        {/* 搜索按钮 - 仅在有大纲和细分数据时显示 */}
+        {batchOutline && batchSubdivisions && (
+          <button
+            onClick={() => {
+              setShowSearchPanel(!showSearchPanel);
+              console.log('搜索面板切换:', !showSearchPanel);
+            }}
+            style={{
+              padding: '1px 8px',
+              fontSize: '11px',
+              backgroundColor: showSearchPanel ? '#a0a0a0' : '#c0c0c0',
+              border: '2px outset #c0c0c0',
+              borderRadius: '0px',
+              cursor: 'pointer',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              height: '20px',
+              minWidth: '50px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: '8px'
+            }}
+            title={showSearchPanel ? "隐藏搜索" : "语义搜索"}
+          >
+            🔍 搜索
+          </button>
+        )}
+
         {/* 关闭分页模式按钮 */}
         <button
           onClick={onClose}
@@ -864,6 +975,141 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           关闭分页
         </button>
       </div>
+
+      {/* 搜索面板 */}
+      {showSearchPanel && (
+        <div style={{
+          backgroundColor: '#f0f0f0',
+          borderBottom: '2px inset #c0c0c0',
+          padding: '8px',
+          flexShrink: 0
+        }}>
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            alignItems: 'center',
+            marginBottom: searchResults ? '8px' : '0'
+          }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && !isSearching) {
+                  handleSearch();
+                }
+              }}
+              placeholder="描述你想找的内容..."
+              style={{
+                flex: 1,
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                border: '2px inset #c0c0c0',
+                backgroundColor: '#ffffff'
+              }}
+              disabled={isSearching}
+            />
+            <button
+              onClick={handleSearch}
+              disabled={isSearching || !searchQuery.trim()}
+              style={{
+                padding: '4px 12px',
+                fontSize: '11px',
+                backgroundColor: isSearching ? '#808080' : '#0078d4',
+                color: '#ffffff',
+                border: '2px outset #0078d4',
+                borderRadius: '0px',
+                cursor: isSearching || !searchQuery.trim() ? 'not-allowed' : 'pointer',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                fontWeight: 'bold',
+                minWidth: '60px'
+              }}
+            >
+              {isSearching ? '搜索中...' : '搜索'}
+            </button>
+          </div>
+          
+          {/* 搜索结果显示 */}
+          {searchResults && (
+            <div style={{
+              backgroundColor: '#ffffff',
+              border: '2px inset #c0c0c0',
+              padding: '8px',
+              maxHeight: '200px',
+              overflowY: 'auto'
+            }}>
+              <div style={{
+                fontSize: '11px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                marginBottom: '8px',
+                fontWeight: 'bold',
+                color: '#000080'
+              }}>
+                搜索: "{searchResults.query}"
+              </div>
+              
+              {searchResults.results && searchResults.results.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {searchResults.results.map((result, index) => (
+                    <div
+                      key={index}
+                      onClick={() => {
+                        // 跳转到第一个页码
+                        if (result.pages && result.pages.length > 0) {
+                          setCurrentPage(result.pages[0]);
+                        }
+                      }}
+                      style={{
+                        padding: '6px',
+                        backgroundColor: '#e0e0ff',
+                        border: '1px solid #0000ff',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c0c0ff'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#e0e0ff'}
+                    >
+                      <div style={{
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        marginBottom: '4px',
+                        color: '#000080'
+                      }}>
+                        {result.part_name || result.subdivision_title}
+                      </div>
+                      <div style={{
+                        fontSize: '10px',
+                        color: '#666',
+                        marginBottom: '2px'
+                      }}>
+                        📄 第 {result.pages.join(', ')} 页
+                      </div>
+                      {result.section_title && (
+                        <div style={{
+                          fontSize: '10px',
+                          color: '#666'
+                        }}>
+                          📂 {result.section_title}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{
+                  fontSize: '11px',
+                  color: '#666',
+                  textAlign: 'center',
+                  padding: '12px'
+                }}>
+                  未找到相关内容
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* PDF页面内容和注释侧栏 */}
       <div style={{ 
