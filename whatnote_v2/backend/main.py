@@ -2804,7 +2804,7 @@ async def semantic_search_annotations(
         current_provider = api_config.get('current_provider', 'openai')
         provider_config = api_config.get('providers', {}).get(current_provider, {})
         
-        if not provider_config.get('api_key'):
+        if not provider_config.get('apiKey'):
             raise HTTPException(status_code=400, detail="LLM API未配置")
         
         info(f"语义搜索 - 用户查询: {query}")
