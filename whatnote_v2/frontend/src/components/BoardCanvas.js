@@ -48,11 +48,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [isZooming, setIsZooming] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
-  const zoomTimeoutRef = useRef(null);
   
   // 注释功能状态
   const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
@@ -475,63 +473,43 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     }
   };
 
-  // 滚轮缩放（以鼠标位置为中心）- 完全重写版本
+  // 滚轮缩放
   const handleWheel = (e) => {
     e.preventDefault();
     
-    if (!containerRef.current) return;
+    // 获取容器信息
+    const container = containerRef.current;
+    if (!container) return;
     
-    // 标记正在缩放（禁用transition）
-    setIsZooming(true);
+    const rect = container.getBoundingClientRect();
     
-    // 清除之前的timeout
-    if (zoomTimeoutRef.current) {
-      clearTimeout(zoomTimeoutRef.current);
-    }
+    // 鼠标相对于容器的位置
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
     
-    // 获取容器的位置信息
-    const containerRect = containerRef.current.getBoundingClientRect();
-    
-    // 获取鼠标在容器坐标系中的位置（相对于容器左上角）
-    const mouseXInContainer = e.clientX - containerRect.left;
-    const mouseYInContainer = e.clientY - containerRect.top;
-    
-    // 计算容器中心点
-    const containerCenterX = containerRect.width / 2;
-    const containerCenterY = containerRect.height / 2;
-    
-    // 计算鼠标相对于容器中心的偏移
-    const mouseOffsetFromCenterX = mouseXInContainer - containerCenterX;
-    const mouseOffsetFromCenterY = mouseYInContainer - containerCenterY;
-    
-    // 计算新的缩放值
+    // 计算缩放变化
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    const oldScale = scale;
-    const newScale = Math.max(0.5, Math.min(3.0, oldScale + delta));
+    const newScale = Math.max(0.5, Math.min(3.0, scale + delta));
     
-    // 如果缩放值没有变化，直接返回
-    if (newScale === oldScale) {
-      setIsZooming(false);
-      return;
-    }
+    // 如果缩放值没有变化（到达边界），直接返回
+    if (newScale === scale) return;
     
     // 计算缩放比例
-    const scaleRatio = newScale / oldScale;
+    const scaleRatio = newScale / scale;
     
-    // 计算新的平移量
-    // 思路：鼠标相对于中心的偏移也要按缩放比例调整
-    const newPanX = panX + mouseOffsetFromCenterX * (1 - scaleRatio);
-    const newPanY = panY + mouseOffsetFromCenterY * (1 - scaleRatio);
+    // 鼠标在内容上的位置（相对于容器中心）
+    const contentMouseX = mouseX - rect.width / 2;
+    const contentMouseY = mouseY - rect.height / 2;
     
-    // 批量更新状态
+    // 计算新的平移值，使鼠标位置保持不变
+    // 公式：newPan = mousePos - (mousePos - oldPan) * scaleRatio
+    const newPanX = contentMouseX - (contentMouseX - panX) * scaleRatio;
+    const newPanY = contentMouseY - (contentMouseY - panY) * scaleRatio;
+    
+    // 更新状态
     setScale(newScale);
     setPanX(newPanX);
     setPanY(newPanY);
-    
-    // 100ms后取消缩放标记（恢复transition）
-    zoomTimeoutRef.current = setTimeout(() => {
-      setIsZooming(false);
-    }, 100);
   };
 
   // 拖拽处理
@@ -889,7 +867,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         <div style={{ 
           position: 'relative',
           transform: `translate(${panX}px, ${panY}px)`,
-          transition: (isDragging || isZooming) ? 'none' : 'transform 0.1s ease-out'
+          transition: isDragging ? 'none' : 'transform 0.1s ease-out'
         }}>
           <canvas
             ref={canvasRef}

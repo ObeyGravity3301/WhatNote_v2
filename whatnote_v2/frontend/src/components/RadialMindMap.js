@@ -243,9 +243,6 @@ const RadialMindMap = ({
     if (!containerRef.current) return;
 
     const updateDimensions = () => {
-      // 添加空值检查，防止组件卸载后ResizeObserver仍触发
-      if (!containerRef.current) return;
-      
       const rect = containerRef.current.getBoundingClientRect();
       setDimensions({
         width: rect.width,
