@@ -2800,7 +2800,7 @@ async def semantic_search_annotations(
 """
 
         # 调用LLM API
-        api_config = await api_config_manager.load_config()
+        api_config = api_config_manager.get_config()
         current_provider = api_config.get('current_provider', 'openai')
         provider_config = api_config.get('providers', {}).get(current_provider, {})
         
