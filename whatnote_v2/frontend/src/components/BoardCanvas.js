@@ -475,7 +475,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     }
   };
 
-  // 滚轮缩放（以鼠标位置为中心）
+  // 滚轮缩放（以鼠标位置为中心）- 完全重写版本
   const handleWheel = (e) => {
     e.preventDefault();
     
@@ -490,24 +490,40 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     }
     
     // 获取容器的位置信息
-    const rect = containerRef.current.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
     
-    // 计算鼠标在容器中的位置
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    // 获取鼠标在容器坐标系中的位置（相对于容器左上角）
+    const mouseXInContainer = e.clientX - containerRect.left;
+    const mouseYInContainer = e.clientY - containerRect.top;
+    
+    // 计算容器中心点
+    const containerCenterX = containerRect.width / 2;
+    const containerCenterY = containerRect.height / 2;
+    
+    // 计算鼠标相对于容器中心的偏移
+    const mouseOffsetFromCenterX = mouseXInContainer - containerCenterX;
+    const mouseOffsetFromCenterY = mouseYInContainer - containerCenterY;
     
     // 计算新的缩放值
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    const newScale = Math.max(0.5, Math.min(3.0, scale + delta));
+    const oldScale = scale;
+    const newScale = Math.max(0.5, Math.min(3.0, oldScale + delta));
+    
+    // 如果缩放值没有变化，直接返回
+    if (newScale === oldScale) {
+      setIsZooming(false);
+      return;
+    }
     
     // 计算缩放比例
-    const scaleRatio = newScale / scale;
+    const scaleRatio = newScale / oldScale;
     
-    // 调整平移量，使鼠标位置保持不变
-    // 公式：新的平移 = (旧的平移 - 鼠标位置) * 缩放比例 + 鼠标位置
-    const newPanX = (panX - mouseX) * scaleRatio + mouseX;
-    const newPanY = (panY - mouseY) * scaleRatio + mouseY;
+    // 计算新的平移量
+    // 思路：鼠标相对于中心的偏移也要按缩放比例调整
+    const newPanX = panX + mouseOffsetFromCenterX * (1 - scaleRatio);
+    const newPanY = panY + mouseOffsetFromCenterY * (1 - scaleRatio);
     
+    // 批量更新状态
     setScale(newScale);
     setPanX(newPanX);
     setPanY(newPanY);
