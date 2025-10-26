@@ -2584,9 +2584,22 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             return;
                           }
 
-                          const confirmStart = window.confirm(
-                            `即将并行生成所有 ${batchOutline.outline.length} 个分段的注释，这可能需要较长时间。确认开始？`
-                          );
+                          // 使用自定义确认对话框
+                          const confirmStart = await new Promise((resolve) => {
+                            setConfirmDialog({
+                              show: true,
+                              title: '确认批量生成',
+                              message: `即将并行生成所有 ${batchOutline.outline.length} 个分段的注释，这可能需要较长时间。\n\n确认开始？`,
+                              onConfirm: () => {
+                                setConfirmDialog({ show: false });
+                                resolve(true);
+                              },
+                              onCancel: () => {
+                                setConfirmDialog({ show: false });
+                                resolve(false);
+                              }
+                            });
+                          });
                           
                           if (!confirmStart) return;
 
