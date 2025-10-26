@@ -44,13 +44,24 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const canvasRef = useRef(null);
   
   // 缩放和拖拽状态
-  const [scale, setScale] = useState(1.5);
+  const [scale, setScale] = useState(1.5); // 显示缩放（即时）
+  const [renderScale, setRenderScale] = useState(1.5); // 渲染缩放（延迟）
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
+  const renderTimeoutRef = useRef(null);
+  
+  // 清理timeout
+  useEffect(() => {
+    return () => {
+      if (renderTimeoutRef.current) {
+        clearTimeout(renderTimeoutRef.current);
+      }
+    };
+  }, []);
   
   // 注释功能状态
   const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
@@ -249,8 +260,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
 
-        // 使用动态缩放比例
-        const viewport = page.getViewport({ scale });
+        // 使用延迟的渲染缩放比例
+        const viewport = page.getViewport({ scale: renderScale });
         
         console.log('PDF视口信息:', {
           scale: scale,
@@ -381,19 +392,24 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     };
 
     renderPage();
-  }, [pdfDocument, currentPage, scale]);
+  }, [pdfDocument, currentPage, renderScale]);
 
   // 缩放函数
   const handleZoomIn = () => {
-    setScale(prev => Math.min(prev + 0.2, 3.0));
+    const newScale = Math.min(scale + 0.2, 3.0);
+    setScale(newScale);
+    setRenderScale(newScale);
   };
 
   const handleZoomOut = () => {
-    setScale(prev => Math.max(prev - 0.2, 0.5));
+    const newScale = Math.max(scale - 0.2, 0.5);
+    setScale(newScale);
+    setRenderScale(newScale);
   };
 
   const handleZoomReset = () => {
     setScale(1.5);
+    setRenderScale(1.5);
     setPanX(0);
     setPanY(0);
   };
@@ -506,10 +522,20 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     const newPanX = contentMouseX - (contentMouseX - panX) * scaleRatio;
     const newPanY = contentMouseY - (contentMouseY - panY) * scaleRatio;
     
-    // 更新状态
+    // 立即更新显示缩放（用于CSS transform）
     setScale(newScale);
     setPanX(newPanX);
     setPanY(newPanY);
+    
+    // 清除之前的渲染延迟
+    if (renderTimeoutRef.current) {
+      clearTimeout(renderTimeoutRef.current);
+    }
+    
+    // 延迟300ms更新渲染缩放（触发实际的PDF重新渲染）
+    renderTimeoutRef.current = setTimeout(() => {
+      setRenderScale(newScale);
+    }, 300);
   };
 
   // 拖拽处理
@@ -866,8 +892,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         >
         <div style={{ 
           position: 'relative',
-          transform: `translate(${panX}px, ${panY}px)`,
-          transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+          transform: `translate(${panX}px, ${panY}px) scale(${scale / renderScale})`,
+          transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+          transformOrigin: 'center center'
         }}>
           <canvas
             ref={canvasRef}
