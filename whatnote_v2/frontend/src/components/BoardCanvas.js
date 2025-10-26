@@ -1532,8 +1532,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 </div>
               )}
 
-              {/* 批量生成所有注释按钮/进度条 - 仅在第二阶段完成后显示 */}
-              {stage2Completed && batchOutline && batchSubdivisions && (
+              {/* 批量生成所有注释按钮/进度条 - 已移到分段列表下方 */}
+              {false && stage2Completed && batchOutline && batchSubdivisions && (
                 <div style={{
                   marginBottom: '12px',
                   padding: '8px',
@@ -2179,16 +2179,19 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       </div>
                     );
                   })}
+                </div>
+              )}
 
-                  {/* 第二阶段启动按键 */}
-                  {!isBatchGenerating && !batchSubdivisions && (
-                    <div style={{
-                      marginTop: '12px',
-                      padding: '8px',
-                      display: 'flex',
-                      justifyContent: 'flex-end'
-                    }}>
-                      <button
+              {/* 第二阶段启动按键 - 移到分段列表下方 */}
+              {batchOutline && !isBatchGenerating && !batchSubdivisions && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '8px',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  borderTop: '1px solid #d0d0d0'
+                }}>
+                  <button
                         onClick={async () => {
                           console.log('开始第二阶段：细分分段');
                           setIsBatchGenerating(true);
@@ -2284,8 +2287,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       >
                         {batchSubdivisions ? '重新细分' : '开始第二阶段'}
                       </button>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -2394,6 +2395,394 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   >
                     重新细分
                   </button>
+                </div>
+              )}
+
+              {/* 批量生成所有注释按钮/进度条 - 移到分段列表下方 */}
+              {stage2Completed && batchOutline && batchSubdivisions && outlineView === 'list' && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '8px',
+                  backgroundColor: '#ffffff',
+                  border: '2px inset #c0c0c0',
+                  borderTop: '2px solid #808080'
+                }}>
+                  {/* 阶段3：生成注释进度条 */}
+                  {stage3Progress.isGenerating ? (
+                    <div style={{
+                      padding: '8px',
+                      backgroundColor: '#c0c0c0',
+                      border: '2px inset #c0c0c0',
+                      borderRadius: '0px'
+                    }}>
+                      <div style={{
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        marginBottom: '6px',
+                        color: '#000000',
+                        textAlign: 'center'
+                      }}>
+                        正在生成注释... {stage3Progress.completedAnnotations}/{stage3Progress.totalAnnotations}
+                      </div>
+                      {stage3Progress.overlappingPages > 0 && (
+                        <div style={{
+                          fontSize: '10px',
+                          marginBottom: '6px',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          color: '#000000',
+                          textAlign: 'center'
+                        }}>
+                          (共{stage3Progress.actualPages}页，{stage3Progress.overlappingPages}个重叠页)
+                        </div>
+                      )}
+                      
+                      {/* Windows 98风格量子化方格进度条 */}
+                      <div style={{
+                        width: '100%',
+                        height: '30px',
+                        backgroundColor: '#c0c0c0',
+                        border: '2px inset #c0c0c0',
+                        borderRadius: '0px',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '1px'
+                      }}>
+                        {/* 进度条背景 */}
+                        <div style={{
+                          width: '100%',
+                          height: '27px',
+                          backgroundColor: '#f0f0f0',
+                          border: '1px inset #c0c0c0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-start',
+                          padding: '2px'
+                        }}>
+                          {/* 量子化方格进度条 */}
+                          <div style={{
+                            display: 'flex',
+                            width: '100%',
+                            gap: '2px',
+                            alignItems: 'center'
+                          }}>
+                            {Array.from({ length: 25 }, (_, index) => {
+                              const progressPercentage = stage3Progress.totalAnnotations > 0 
+                                ? (stage3Progress.completedAnnotations / stage3Progress.totalAnnotations) * 100 
+                                : 0;
+                              const isActive = (index + 1) * 4 <= progressPercentage;
+                              
+                              return (
+                                <div
+                                  key={index}
+                                  style={{
+                                    flex: 1,
+                                    height: '21px',
+                                    backgroundColor: isActive ? '#000080' : 'transparent',
+                                    border: '1px solid transparent',
+                                    borderRadius: '0px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    position: 'relative',
+                                    boxSizing: 'border-box'
+                                  }}
+                                >
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : stage4Progress.isGenerating ? (
+                    /* 阶段4：融合注释进度条 */
+                    <div style={{
+                      padding: '8px',
+                      backgroundColor: '#c0c0c0',
+                      border: '2px inset #c0c0c0',
+                      borderRadius: '0px'
+                    }}>
+                      <div style={{
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        marginBottom: '6px',
+                        color: '#000000',
+                        textAlign: 'center'
+                      }}>
+                        正在融合重叠页... {stage4Progress.completed}/{stage4Progress.total}
+                      </div>
+                      
+                      {/* Windows 98风格量子化方格进度条 */}
+                      <div style={{
+                        width: '100%',
+                        height: '30px',
+                        backgroundColor: '#c0c0c0',
+                        border: '2px inset #c0c0c0',
+                        borderRadius: '0px',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '1px'
+                      }}>
+                        {/* 进度条背景 */}
+                        <div style={{
+                          width: '100%',
+                          height: '27px',
+                          backgroundColor: '#f0f0f0',
+                          border: '1px inset #c0c0c0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-start',
+                          padding: '2px'
+                        }}>
+                          {/* 量子化方格进度条 */}
+                          <div style={{
+                            display: 'flex',
+                            width: '100%',
+                            gap: '2px',
+                            alignItems: 'center'
+                          }}>
+                            {Array.from({ length: 25 }, (_, index) => {
+                              const progressPercentage = stage4Progress.total > 0 
+                                ? (stage4Progress.completed / stage4Progress.total) * 100 
+                                : 0;
+                              const isActive = (index + 1) * 4 <= progressPercentage;
+                              
+                              return (
+                                <div
+                                  key={index}
+                                  style={{
+                                    flex: 1,
+                                    height: '21px',
+                                    backgroundColor: isActive ? '#008000' : 'transparent',
+                                    border: '1px solid transparent',
+                                    borderRadius: '0px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    position: 'relative',
+                                    boxSizing: 'border-box'
+                                  }}
+                                >
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* 按钮：批量生成所有注释 */
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <button
+                        onClick={async () => {
+                          if (!batchOutline || !batchOutline.outline || !batchSubdivisions || !batchSubdivisions.subdivisions) {
+                            addMessageWithSource('⚠ 数据不完整', '大纲或细分数据不完整', 'warning');
+                            return;
+                          }
+
+                          const confirmStart = window.confirm(
+                            `即将并行生成所有 ${batchOutline.outline.length} 个分段的注释，这可能需要较长时间。确认开始？`
+                          );
+                          
+                          if (!confirmStart) return;
+
+                          console.log('开始批量生成所有分段的注释');
+
+                          // 计算总注释数和重叠信息
+                          const totalAnnotations = batchOutline.outline.reduce((sum, section) => {
+                            return sum + (section.page_end - section.page_start + 1);
+                          }, 0);
+                          const overlappingPages = batchOutline.page_analysis?.statistics?.overlapping_pages_count || 0;
+                          const actualPages = batchOutline.outline[batchOutline.outline.length - 1]?.page_end || 0;
+
+                          // 初始化阶段3进度
+                          setStage3Progress({
+                            completedAnnotations: 0,
+                            totalAnnotations,
+                            actualPages,
+                            overlappingPages,
+                            isGenerating: true
+                          });
+
+                          // 为每个分段创建生成任务（并行执行）
+                          const generatePromises = batchOutline.outline.map(async (section, sectionIndex) => {
+                            const subdivision = batchSubdivisions.subdivisions[sectionIndex];
+                            if (!subdivision) {
+                              console.warn(`分段${sectionIndex}没有细分数据，跳过`);
+                              return null;
+                            }
+
+                            const totalPages = section.page_end - section.page_start + 1;
+                            console.log(`开始生成分段${sectionIndex}: ${section.title} (${totalPages}页)`);
+
+                            try {
+                              let promptTemplate = '';
+                              if (annotationSettings.style === 'custom') {
+                                promptTemplate = annotationSettings.customPrompt;
+                              } else if (annotationStyles[annotationSettings.style]) {
+                                promptTemplate = annotationStyles[annotationSettings.style].prompt;
+                              }
+
+                              const response = await fetch(
+                                `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/generate-section`,
+                                {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    section_index: sectionIndex,
+                                    section_data: section,
+                                    subdivision_data: subdivision,
+                                    annotation_style: annotationSettings.style,
+                                    promptTemplate: promptTemplate
+                                  })
+                                }
+                              );
+
+                              if (!response.ok) throw new Error(`生成分段${sectionIndex}注释失败`);
+
+                              const reader = response.body.getReader();
+                              const decoder = new TextDecoder();
+                              let buffer = '';
+
+                              while (true) {
+                                const {done, value} = await reader.read();
+                                if (done) break;
+
+                                buffer += decoder.decode(value, {stream: true});
+                                const lines = buffer.split('\n\n');
+                                buffer = lines.pop() || '';
+
+                                for (const line of lines) {
+                                  if (line.startsWith('data: ')) {
+                                    const data = JSON.parse(line.slice(6));
+
+                                    if (data.type === 'page_done') {
+                                      if (data.annotation && currentPage === data.page) {
+                                        setAnnotations(prev => ({...prev, [data.page]: data.annotation}));
+                                      }
+                                    } else if (data.type === 'notification_added') {
+                                      const refreshEvent = new CustomEvent('refreshChatConversation', {
+                                        detail: { conversationId: data.conversation_id }
+                                      });
+                                      window.dispatchEvent(refreshEvent);
+                                    } else if (data.type === 'complete') {
+                                      const sectionPageCount = section.page_end - section.page_start + 1;
+                                      setStage3Progress(prev => ({
+                                        ...prev,
+                                        completedAnnotations: prev.completedAnnotations + sectionPageCount
+                                      }));
+                                    } else if (data.type === 'error') {
+                                      throw new Error(data.error);
+                                    }
+                                  }
+                                }
+                              }
+
+                              return { success: true, sectionIndex };
+                            } catch (error) {
+                              console.error(`分段${sectionIndex}生成失败:`, error);
+                              return { success: false, sectionIndex, error: error.message };
+                            }
+                          });
+
+                          const results = await Promise.all(generatePromises);
+                          const successCount = results.filter(r => r && r.success).length;
+                          const failCount = results.filter(r => r && !r.success).length;
+
+                          setStage3Progress(prev => ({...prev, isGenerating: false}));
+
+                          // 阶段4：融合重叠页
+                          const overlappingPagesCount = batchOutline.page_analysis?.statistics?.overlapping_pages_count || 0;
+                          
+                          if (overlappingPagesCount > 0) {
+                            setStage4Progress({completed: 0, total: overlappingPagesCount, isGenerating: true});
+                            
+                            try {
+                              const mergeResponse = await fetch(
+                                `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/merge-overlapping`,
+                                {method: 'POST', headers: { 'Content-Type': 'application/json' }}
+                              );
+                              
+                              if (!mergeResponse.ok) throw new Error('融合重叠页失败');
+                              
+                              const mergeReader = mergeResponse.body.getReader();
+                              const mergeDecoder = new TextDecoder();
+                              let mergeBuffer = '';
+                              
+                              while (true) {
+                                const {done, value} = await mergeReader.read();
+                                if (done) break;
+                                
+                                mergeBuffer += mergeDecoder.decode(value, {stream: true});
+                                const lines = mergeBuffer.split('\n\n');
+                                mergeBuffer = lines.pop() || '';
+                                
+                                for (const line of lines) {
+                                  if (line.startsWith('data: ')) {
+                                    const data = JSON.parse(line.slice(6));
+                                    
+                                    if (data.type === 'merge_done' || data.type === 'merge_skip') {
+                                      setStage4Progress({completed: data.completed, total: data.total, isGenerating: true});
+                                    } else if (data.type === 'complete') {
+                                      setStage4Progress(prev => ({...prev, isGenerating: false}));
+                                    }
+                                  }
+                                }
+                              }
+                              
+                              setTimeout(() => {
+                                addMessageWithSource('✓ 批量注释生成完成',
+                                  `阶段3: 生成注释 ✓\n成功: ${successCount} 失败: ${failCount}\n\n阶段4: 融合重叠页 ✓\n已融合: ${overlappingPagesCount}`,
+                                  'success');
+                                openMessageCenter();
+                              }, 300);
+                            } catch (mergeError) {
+                              setStage4Progress(prev => ({ ...prev, isGenerating: false }));
+                              setTimeout(() => {
+                                addMessageWithSource('⚠ 注释生成完成，但融合失败',
+                                  `阶段3: ✓ ${successCount}成功 ${failCount}失败\n阶段4: ✗ ${mergeError.message}`,
+                                  'warning');
+                                openMessageCenter();
+                              }, 300);
+                            }
+                          } else {
+                            setTimeout(() => {
+                              addMessageWithSource('✓ 批量生成完成',
+                                `成功: ${successCount} 失败: ${failCount}\n无重叠页，无需融合`,
+                                'success');
+                              openMessageCenter();
+                            }, 300);
+                          }
+                        }}
+                        style={{
+                          padding: '8px 24px',
+                          fontSize: '13px',
+                          backgroundColor: '#008000',
+                          color: '#ffffff',
+                          border: '2px outset #008000',
+                          borderRadius: '0px',
+                          cursor: 'pointer',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          fontWeight: 'bold',
+                          boxShadow: '2px 2px 4px rgba(0,0,0,0.3)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.backgroundColor = '#006000';
+                          e.target.style.border = '2px inset #006000';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.backgroundColor = '#008000';
+                          e.target.style.border = '2px outset #008000';
+                        }}
+                      >
+                        🚀 批量生成所有分段注释
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
                 </>
