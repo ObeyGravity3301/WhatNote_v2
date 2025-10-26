@@ -496,14 +496,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     const mouseXInContainer = e.clientX - containerRect.left;
     const mouseYInContainer = e.clientY - containerRect.top;
     
-    // 计算容器中心点
-    const containerCenterX = containerRect.width / 2;
-    const containerCenterY = containerRect.height / 2;
-    
-    // 计算鼠标相对于容器中心的偏移
-    const mouseOffsetFromCenterX = mouseXInContainer - containerCenterX;
-    const mouseOffsetFromCenterY = mouseYInContainer - containerCenterY;
-    
     // 计算新的缩放值
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     const oldScale = scale;
@@ -519,9 +511,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     const scaleRatio = newScale / oldScale;
     
     // 计算新的平移量
-    // 思路：鼠标相对于中心的偏移也要按缩放比例调整
-    const newPanX = panX + mouseOffsetFromCenterX * (1 - scaleRatio);
-    const newPanY = panY + mouseOffsetFromCenterY * (1 - scaleRatio);
+    // 核心公式：鼠标位置的世界坐标保持不变
+    // 鼠标的世界坐标 = (鼠标屏幕位置 - pan) / scale
+    // 缩放后：(鼠标屏幕位置 - newPan) / newScale = (鼠标屏幕位置 - pan) / scale
+    // 解得：newPan = 鼠标屏幕位置 - (鼠标屏幕位置 - pan) * (newScale / scale)
+    const newPanX = mouseXInContainer - (mouseXInContainer - panX) * scaleRatio;
+    const newPanY = mouseYInContainer - (mouseYInContainer - panY) * scaleRatio;
     
     // 批量更新状态
     setScale(newScale);
