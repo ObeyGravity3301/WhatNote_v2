@@ -549,8 +549,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
       console.log('🧹 清理wheel事件监听器');
       container.removeEventListener('wheel', handleWheelEvent);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 只在组件挂载时注册一次
+  }, []); // 只在组件挂载时注册一次，handleWheelEvent直接使用ref
 
   // 拖拽处理
   const handleMouseDown = (e) => {
