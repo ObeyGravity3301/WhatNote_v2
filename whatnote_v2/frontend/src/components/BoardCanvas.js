@@ -486,17 +486,17 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
-    // 计算鼠标在内容坐标系中的位置（缩放前）
-    const contentX = (mouseX - panX) / scale;
-    const contentY = (mouseY - panY) / scale;
-    
     // 计算新的缩放值
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     const newScale = Math.max(0.5, Math.min(3.0, scale + delta));
     
-    // 计算新的平移量，使鼠标位置保持不变
-    const newPanX = mouseX - contentX * newScale;
-    const newPanY = mouseY - contentY * newScale;
+    // 计算缩放比例
+    const scaleRatio = newScale / scale;
+    
+    // 调整平移量，使鼠标位置保持不变
+    // 公式：新的平移 = (旧的平移 - 鼠标位置) * 缩放比例 + 鼠标位置
+    const newPanX = (panX - mouseX) * scaleRatio + mouseX;
+    const newPanY = (panY - mouseY) * scaleRatio + mouseY;
     
     setScale(newScale);
     setPanX(newPanX);
