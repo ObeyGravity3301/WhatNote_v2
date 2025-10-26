@@ -2591,11 +2591,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                               title: '确认批量生成',
                               message: `即将并行生成所有 ${batchOutline.outline.length} 个分段的注释，这可能需要较长时间。\n\n确认开始？`,
                               onConfirm: () => {
-                                setConfirmDialog({ show: false });
+                                setConfirmDialog(null);
                                 resolve(true);
                               },
                               onCancel: () => {
-                                setConfirmDialog({ show: false });
+                                setConfirmDialog(null);
                                 resolve(false);
                               }
                             });
