@@ -53,6 +53,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
   const zoomTimeoutRef = useRef(null);
+  const wheelContainerRef = useRef(null);
   
   // 注释功能状态
   const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
@@ -562,6 +563,19 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     setIsDragging(false);
   };
 
+  // 使用useEffect添加wheel事件监听器（设置passive: false）
+  useEffect(() => {
+    const container = wheelContainerRef.current;
+    if (!container) return;
+
+    // 添加非passive的wheel监听器
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleWheel]);
+
   // 上一页
   const goToPreviousPage = () => {
     if (currentPage > 1) {
@@ -873,9 +887,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         overflow: 'hidden'
       }}>
         {/* PDF页面内容 */}
-        <div 
-          ref={containerRef}
-          style={{ 
+        <div
+          ref={(el) => {
+            containerRef.current = el;
+            wheelContainerRef.current = el;
+          }}
+          style={{
             flex: showAnnotationPanel ? '1' : '1',
             overflow: 'hidden',
             display: 'flex',
@@ -885,7 +902,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             cursor: isDragging ? 'grabbing' : 'grab',
             position: 'relative'
           }}
-          onWheel={handleWheel}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
