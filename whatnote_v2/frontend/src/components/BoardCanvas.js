@@ -611,10 +611,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
       );
 
       if (!response.ok) {
-        throw new Error('搜索失败');
+        const errorText = await response.text();
+        console.error('搜索API返回错误:', errorText);
+        throw new Error(`搜索失败: ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('搜索API返回数据:', data);
       
       // 保存搜索结果
       setSearchResults({

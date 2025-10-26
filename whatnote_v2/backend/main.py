@@ -2807,18 +2807,25 @@ async def semantic_search_annotations(
         if not provider_config.get('api_key'):
             raise HTTPException(status_code=400, detail="LLM API未配置")
         
-        # 使用LLM服务进行搜索
-        llm_service = LLMService(provider_config)
+        info(f"语义搜索 - 用户查询: {query}")
+        info(f"使用LLM服务商: {current_provider}")
+        
+        # 使用全局的LLM服务（已经初始化好的）
+        # 注意：不要创建新实例，使用已有的全局实例
         
         messages = [
             {"role": "system", "content": "你是一个专业的文档导航助手，擅长理解用户的语义需求并找到文档中最相关的内容。"},
             {"role": "user", "content": prompt}
         ]
         
-        # 调用LLM（非流式）
+        # 调用LLM（非流式，收集完整响应）
+        info("开始调用LLM进行语义搜索...")
         response_text = ""
-        async for chunk in llm_service.chat_stream(messages):
-            response_text += chunk
+        async for chunk in llm_service.chat_completion(messages, stream=True):
+            if chunk:
+                response_text += chunk
+        
+        info(f"LLM返回的原始响应长度: {len(response_text)}")
         
         # 解析LLM返回的JSON
         try:
