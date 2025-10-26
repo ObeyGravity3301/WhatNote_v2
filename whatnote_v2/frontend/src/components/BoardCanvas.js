@@ -48,9 +48,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isZooming, setIsZooming] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
+  const zoomTimeoutRef = useRef(null);
   
   // 注释功能状态
   const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
@@ -479,6 +481,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     
     if (!containerRef.current) return;
     
+    // 标记正在缩放（禁用transition）
+    setIsZooming(true);
+    
+    // 清除之前的timeout
+    if (zoomTimeoutRef.current) {
+      clearTimeout(zoomTimeoutRef.current);
+    }
+    
     // 获取容器的位置信息
     const rect = containerRef.current.getBoundingClientRect();
     
@@ -501,6 +511,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     setScale(newScale);
     setPanX(newPanX);
     setPanY(newPanY);
+    
+    // 100ms后取消缩放标记（恢复transition）
+    zoomTimeoutRef.current = setTimeout(() => {
+      setIsZooming(false);
+    }, 100);
   };
 
   // 拖拽处理
@@ -858,7 +873,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         <div style={{ 
           position: 'relative',
           transform: `translate(${panX}px, ${panY}px)`,
-          transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+          transition: (isDragging || isZooming) ? 'none' : 'transform 0.1s ease-out'
         }}>
           <canvas
             ref={canvasRef}
