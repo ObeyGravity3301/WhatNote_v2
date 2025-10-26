@@ -53,7 +53,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
   const zoomTimeoutRef = useRef(null);
-  const wheelContainerRef = useRef(null);
   
   // 注释功能状态
   const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
@@ -497,6 +496,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     const mouseXInContainer = e.clientX - containerRect.left;
     const mouseYInContainer = e.clientY - containerRect.top;
     
+    // 计算容器中心点
+    const containerCenterX = containerRect.width / 2;
+    const containerCenterY = containerRect.height / 2;
+    
+    // 计算鼠标相对于容器中心的偏移
+    const mouseOffsetFromCenterX = mouseXInContainer - containerCenterX;
+    const mouseOffsetFromCenterY = mouseYInContainer - containerCenterY;
+    
     // 计算新的缩放值
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     const oldScale = scale;
@@ -512,22 +519,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     const scaleRatio = newScale / oldScale;
     
     // 计算新的平移量
-    // 核心公式：鼠标位置的世界坐标保持不变
-    // 鼠标的世界坐标 = (鼠标屏幕位置 - pan) / scale
-    // 缩放后：(鼠标屏幕位置 - newPan) / newScale = (鼠标屏幕位置 - pan) / scale
-    // 解得：newPan = 鼠标屏幕位置 - (鼠标屏幕位置 - pan) * (newScale / scale)
-    const newPanX = mouseXInContainer - (mouseXInContainer - panX) * scaleRatio;
-    const newPanY = mouseYInContainer - (mouseYInContainer - panY) * scaleRatio;
-    
-    console.log('🔍 缩放调试:', {
-      鼠标位置: { x: mouseXInContainer, y: mouseYInContainer },
-      旧缩放: oldScale,
-      新缩放: newScale,
-      缩放比例: scaleRatio,
-      旧平移: { x: panX, y: panY },
-      新平移: { x: newPanX, y: newPanY },
-      平移变化: { x: newPanX - panX, y: newPanY - panY }
-    });
+    // 思路：鼠标相对于中心的偏移也要按缩放比例调整
+    const newPanX = panX + mouseOffsetFromCenterX * (1 - scaleRatio);
+    const newPanY = panY + mouseOffsetFromCenterY * (1 - scaleRatio);
     
     // 批量更新状态
     setScale(newScale);
@@ -562,19 +556,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const handleMouseUp = () => {
     setIsDragging(false);
   };
-
-  // 使用useEffect添加wheel事件监听器（设置passive: false）
-  useEffect(() => {
-    const container = wheelContainerRef.current;
-    if (!container) return;
-
-    // 添加非passive的wheel监听器
-    container.addEventListener('wheel', handleWheel, { passive: false });
-
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, [handleWheel]);
 
   // 上一页
   const goToPreviousPage = () => {
@@ -887,12 +868,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         overflow: 'hidden'
       }}>
         {/* PDF页面内容 */}
-        <div
-          ref={(el) => {
-            containerRef.current = el;
-            wheelContainerRef.current = el;
-          }}
-          style={{
+        <div 
+          ref={containerRef}
+          style={{ 
             flex: showAnnotationPanel ? '1' : '1',
             overflow: 'hidden',
             display: 'flex',
@@ -902,6 +880,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             cursor: isDragging ? 'grabbing' : 'grab',
             position: 'relative'
           }}
+          onWheel={handleWheel}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
