@@ -52,17 +52,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
   
-  // 使用ref存储最新的scale和pan值，避免闭包问题
-  const scaleRef = useRef(scale);
-  const panXRef = useRef(panX);
-  const panYRef = useRef(panY);
-  
-  useEffect(() => {
-    scaleRef.current = scale;
-    panXRef.current = panX;
-    panYRef.current = panY;
-  }, [scale, panX, panY]);
-  
   // 注释功能状态
   const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
   const [annotationMode, setAnnotationMode] = useState('preview'); // 'preview' 或 'edit'
@@ -484,72 +473,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     }
   };
 
-  // 滚轮缩放（以鼠标位置为中心）
-  const handleWheelEvent = (e) => {
-    console.log('🖱️ handleWheel被调用', e.type);
+  // 滚轮缩放
+  const handleWheel = (e) => {
     e.preventDefault();
-    
-    if (!containerRef.current) {
-      console.log('❌ containerRef.current为空');
-      return;
-    }
-    
-    const rect = containerRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    
-    // 使用ref获取当前最新值
-    const currentScale = scaleRef.current;
-    const currentPanX = panXRef.current;
-    const currentPanY = panYRef.current;
-    
-    // 计算缩放增量
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    const newScale = Math.max(0.5, Math.min(3.0, currentScale + delta));
-    
-    // 计算鼠标在内容坐标系中的位置（缩放前）
-    const contentX = (mouseX - currentPanX) / currentScale;
-    const contentY = (mouseY - currentPanY) / currentScale;
-    
-    // 计算新的偏移量，使鼠标位置保持不变
-    const newPanX = mouseX - contentX * newScale;
-    const newPanY = mouseY - contentY * newScale;
-    
-    console.log('PDF缩放调试:', {
-      鼠标位置: { x: Math.round(mouseX), y: Math.round(mouseY) },
-      旧状态: { scale: currentScale.toFixed(2), panX: Math.round(currentPanX), panY: Math.round(currentPanY) },
-      内容坐标: { x: Math.round(contentX), y: Math.round(contentY) },
-      新状态: { scale: newScale.toFixed(2), panX: Math.round(newPanX), panY: Math.round(newPanY) },
-      验证: {
-        缩放后X: Math.round((mouseX - newPanX) / newScale),
-        缩放后Y: Math.round((mouseY - newPanY) / newScale),
-        是否匹配: Math.abs(contentX - (mouseX - newPanX) / newScale) < 1
-      }
-    });
-    
-    // 一次性更新所有状态
-    setScale(newScale);
-    setPanX(newPanX);
-    setPanY(newPanY);
+    setScale(prev => Math.max(0.5, Math.min(3.0, prev + delta)));
   };
-  
-  // 注册wheel事件（非passive，允许preventDefault）
-  useEffect(() => {
-    console.log('🔧 useEffect执行 - 尝试注册wheel事件');
-    const container = containerRef.current;
-    if (!container) {
-      console.log('❌ containerRef.current 为空，无法注册wheel事件');
-      return;
-    }
-    
-    console.log('✅ 注册wheel事件到container:', container);
-    container.addEventListener('wheel', handleWheelEvent, { passive: false });
-    
-    return () => {
-      console.log('🧹 清理wheel事件监听器');
-      container.removeEventListener('wheel', handleWheelEvent);
-    };
-  }, []); // 只在组件挂载时注册一次，handleWheelEvent直接使用ref
 
   // 拖拽处理
   const handleMouseDown = (e) => {
@@ -897,6 +826,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             cursor: isDragging ? 'grabbing' : 'grab',
             position: 'relative'
           }}
+          onWheel={handleWheel}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
