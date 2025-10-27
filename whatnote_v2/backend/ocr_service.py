@@ -84,13 +84,18 @@ def ocr_page_image(pdf_path, page_number):
         # 新版PaddleOCR使用predict方法，输入numpy数组
         try:
             result = ocr.predict(img_array)
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError) as e1:
+            info(f"predict方法失败: {e1}，尝试ocr方法")
             # 如果predict方法不支持，尝试传统的ocr方法
             try:
                 result = ocr.ocr(img_array)
-            except:
+            except Exception as e2:
+                info(f"ocr(numpy)方法失败: {e2}，尝试ocr(字节)")
                 # 最后尝试使用字节数据
                 result = ocr.ocr(img_data)
+        
+        info(f"🔍 OCR返回结果类型: {type(result)}")
+        info(f"🔍 OCR返回内容: {str(result)[:500]}")  # 只打印前500字符
         
         # 提取文字和置信度
         text_lines = []
@@ -134,7 +139,9 @@ def ocr_page_image(pdf_path, page_number):
         }
         
     except Exception as e:
+        import traceback
         error(f"❌ OCR第{page_number}页失败: {e}")
+        error(f"详细错误信息: {traceback.format_exc()}")
         raise
 
 
