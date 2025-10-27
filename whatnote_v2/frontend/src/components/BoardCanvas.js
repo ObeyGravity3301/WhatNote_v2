@@ -140,6 +140,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [searchResults, setSearchResults] = useState(null); // 搜索结果
   const [isSearching, setIsSearching] = useState(false); // 是否正在搜索
   
+  // OCR功能状态
+  const [showOCRManager, setShowOCRManager] = useState(false); // 显示OCR管理面板
+  const [pageTextData, setPageTextData] = useState({}); // 所有页面的文字数据
+  const [selectedPages, setSelectedPages] = useState(new Set()); // 用户选择的页面
+  const [ocrProgress, setOCRProgress] = useState(null); // OCR进度
+  const [showPageDetail, setShowPageDetail] = useState(null); // 展开的页面详情
+  
   // 预设的注释风格
   const annotationStyles = {
     detailed: {
@@ -961,6 +968,44 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           title={showAnnotationPanel ? "隐藏注释" : "显示注释"}
         >
           注释
+        </button>
+
+        {/* OCR按钮 */}
+        <button
+          onClick={async () => {
+            console.log('🔍 OCR按钮点击');
+            try {
+              // 获取所有页面的文字数据
+              const response = await fetch(
+                `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/all-pages-text`
+              );
+              const data = await response.json();
+              
+              setPageTextData(data.pages);
+              setShowOCRManager(true);
+              console.log('✅ OCR管理面板打开，总页数:', data.total_pages);
+            } catch (error) {
+              console.error('❌ 加载页面数据失败:', error);
+            }
+          }}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: showOCRManager ? '#a0a0a0' : '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '50px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: '8px'
+          }}
+          title="OCR页面管理"
+        >
+          🔍 OCR
         </button>
 
         {/* 搜索按钮 - 仅在有大纲和细分数据时显示 */}
