@@ -3287,17 +3287,30 @@ async def get_all_pages_text(board_id: str, window_id: str):
     import fitz
     
     try:
-        # 加载窗口信息
-        window_file = DATA_DIR / f"courses/{board_id}/windows/{window_id}.json"
-        if not window_file.exists():
-            raise HTTPException(status_code=404, detail="窗口不存在")
+        info(f"🔍 OCR API调用: board_id={board_id}, window_id={window_id}")
         
-        with open(window_file, 'r', encoding='utf-8') as f:
-            window_data = json.load(f)
+        # 通过content_manager获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        info(f"📋 获取到{len(windows)}个窗口")
+        
+        window_data = next((w for w in windows if w['id'] == window_id), None)
+        
+        if not window_data:
+            error(f"❌ 窗口不存在: {window_id}")
+            raise HTTPException(status_code=404, detail=f"窗口不存在: {window_id}")
+        
+        info(f"✅ 找到窗口: {window_data.get('title', 'Untitled')}")
         
         pdf_path = window_data.get('content')
-        if not pdf_path or not os.path.exists(pdf_path):
-            raise HTTPException(status_code=404, detail="PDF文件不存在")
+        if not pdf_path:
+            error(f"❌ 窗口没有关联的PDF文件")
+            raise HTTPException(status_code=404, detail="窗口没有关联的PDF文件")
+        
+        info(f"📄 PDF路径: {pdf_path}")
+        
+        if not os.path.exists(pdf_path):
+            error(f"❌ PDF文件不存在: {pdf_path}")
+            raise HTTPException(status_code=404, detail=f"PDF文件不存在: {pdf_path}")
         
         # 构建pages目录路径
         pdf_filename = os.path.splitext(os.path.basename(pdf_path))[0]
@@ -3385,14 +3398,13 @@ async def ocr_batch_pages(board_id: str, window_id: str, pages: str):
         try:
             page_numbers = [int(p.strip()) for p in pages.split(',')]
             
-            # 加载窗口信息
-            window_file = DATA_DIR / f"courses/{board_id}/windows/{window_id}.json"
-            if not window_file.exists():
+            # 通过content_manager获取窗口信息
+            windows = content_manager.get_board_windows(board_id)
+            window_data = next((w for w in windows if w['id'] == window_id), None)
+            
+            if not window_data:
                 yield f"data: {json.dumps({'type': 'error', 'message': '窗口不存在'})}\n\n"
                 return
-            
-            with open(window_file, 'r', encoding='utf-8') as f:
-                window_data = json.load(f)
             
             pdf_path = window_data.get('content')
             if not pdf_path or not os.path.exists(pdf_path):
@@ -3452,17 +3464,16 @@ async def select_text_source(
     用户选择使用哪个文字来源
     """
     try:
-        # 加载窗口信息
-        window_file = DATA_DIR / f"courses/{board_id}/windows/{window_id}.json"
-        if not window_file.exists():
-            raise HTTPException(status_code=404, detail="窗口不存在")
+        # 通过content_manager获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        window_data = next((w for w in windows if w['id'] == window_id), None)
         
-        with open(window_file, 'r', encoding='utf-8') as f:
-            window_data = json.load(f)
+        if not window_data:
+            raise HTTPException(status_code=404, detail=f"窗口不存在: {window_id}")
         
         pdf_path = window_data.get('content')
         if not pdf_path or not os.path.exists(pdf_path):
-            raise HTTPException(status_code=404, detail="PDF文件不存在")
+            raise HTTPException(status_code=404, detail=f"PDF文件不存在: {pdf_path}")
         
         # 构建pages目录路径
         files_dir = os.path.dirname(pdf_path)
