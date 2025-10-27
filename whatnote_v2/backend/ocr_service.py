@@ -95,29 +95,67 @@ def ocr_page_image(pdf_path, page_number):
                 result = ocr.ocr(img_data)
         
         info(f"🔍 OCR返回结果类型: {type(result)}")
-        info(f"🔍 OCR返回内容: {str(result)[:500]}")  # 只打印前500字符
+        
+        # 详细分析返回结果结构
+        if isinstance(result, list) and len(result) > 0:
+            info(f"🔍 结果列表长度: {len(result)}")
+            info(f"🔍 第一项类型: {type(result[0])}")
+            if isinstance(result[0], dict):
+                info(f"🔍 第一项的键: {list(result[0].keys())}")
+                # 打印每个顶层键的值类型
+                for key in list(result[0].keys())[:10]:  # 只看前10个键
+                    val = result[0][key]
+                    if isinstance(val, dict):
+                        info(f"🔍   {key} (dict): {list(val.keys())[:5]}")
+                    elif isinstance(val, list):
+                        info(f"🔍   {key} (list): 长度={len(val)}")
+                    else:
+                        info(f"🔍   {key}: {type(val).__name__}")
         
         # 提取文字和置信度
         text_lines = []
         confidences = []
         
-        # 处理新版PaddleOCR返回格式
-        if isinstance(result, dict):
-            # 新版API返回字典格式
+        # 处理PaddleX/PaddleOCR返回格式
+        if isinstance(result, list) and len(result) > 0:
+            first_item = result[0]
+            
+            # PaddleX格式：返回字典列表
+            if isinstance(first_item, dict):
+                info("🔍 检测到PaddleX格式")
+                # 尝试从text_rec_res提取
+                if 'text_rec_res' in first_item:
+                    rec_res = first_item['text_rec_res']
+                    if 'texts' in rec_res:
+                        text_lines = rec_res['texts']
+                        confidences = rec_res.get('scores', [1.0] * len(text_lines))
+                    elif 'text' in rec_res:
+                        text_lines = [rec_res['text']]
+                        confidences = [rec_res.get('score', 1.0)]
+                # 尝试从rec_text提取
+                elif 'rec_text' in first_item:
+                    text_lines = first_item.get('rec_text', [])
+                    confidences = first_item.get('rec_score', [1.0] * len(text_lines))
+                    
+            # 传统PaddleOCR格式：返回嵌套列表
+            elif isinstance(first_item, (list, tuple)):
+                info("🔍 检测到传统PaddleOCR格式")
+                for line in first_item:
+                    if line and len(line) >= 2:
+                        text = line[1][0] if isinstance(line[1], (list, tuple)) else str(line[1])
+                        confidence = line[1][1] if isinstance(line[1], (list, tuple)) and len(line[1]) > 1 else 1.0
+                        text_lines.append(text)
+                        confidences.append(confidence)
+        
+        elif isinstance(result, dict):
+            # 直接返回字典格式
+            info("🔍 检测到字典格式")
             if 'rec_text' in result:
                 text_lines = result.get('rec_text', [])
                 confidences = result.get('rec_score', [1.0] * len(text_lines))
-            elif 'dt_polys' in result and 'rec_text' in result:
-                text_lines = result.get('rec_text', [])
-                confidences = result.get('rec_score', [1.0] * len(text_lines))
-        elif result and isinstance(result, list) and len(result) > 0:
-            # 传统API返回列表格式
-            for line in result[0] if isinstance(result[0], list) else result:
-                if line and len(line) >= 2:
-                    text = line[1][0] if isinstance(line[1], (list, tuple)) else str(line[1])
-                    confidence = line[1][1] if isinstance(line[1], (list, tuple)) and len(line[1]) > 1 else 1.0
-                    text_lines.append(text)
-                    confidences.append(confidence)
+            elif 'texts' in result:
+                text_lines = result.get('texts', [])
+                confidences = result.get('scores', [1.0] * len(text_lines))
         
         full_text = '\n'.join(text_lines)
         avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
