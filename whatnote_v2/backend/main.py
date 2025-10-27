@@ -3265,6 +3265,229 @@ async def get_conversation_context(board_id: str, conversation_id: str, limit: i
         error(f"获取对话上下文失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ============================================================================
+# OCR相关API
+# ============================================================================
+
+from pydantic import BaseModel
+
+class TextSourceSelection(BaseModel):
+    """文字来源选择请求"""
+    page_number: int
+    source: str  # 'extracted' 或 'ocr'
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/all-pages-text")
+async def get_all_pages_text(board_id: str, window_id: str):
+    """
+    获取所有页面的文字数据（提取+OCR+当前使用）
+    """
+    from ocr_service import extract_text_from_page
+    import fitz
+    
+    try:
+        # 加载窗口信息
+        window_file = DATA_DIR / f"courses/{board_id}/windows/{window_id}.json"
+        if not window_file.exists():
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        with open(window_file, 'r', encoding='utf-8') as f:
+            window_data = json.load(f)
+        
+        pdf_path = window_data.get('content')
+        if not pdf_path or not os.path.exists(pdf_path):
+            raise HTTPException(status_code=404, detail="PDF文件不存在")
+        
+        # 构建pages目录路径
+        pdf_filename = os.path.splitext(os.path.basename(pdf_path))[0]
+        files_dir = os.path.dirname(pdf_path)
+        pages_dir = os.path.join(files_dir, 'pages')
+        
+        # 确保pages目录存在
+        os.makedirs(pages_dir, exist_ok=True)
+        
+        # 获取PDF总页数
+        doc = fitz.open(pdf_path)
+        total_pages = len(doc)
+        doc.close()
+        
+        # 如果还没有提取过文字，先提取所有页面
+        first_page_file = os.path.join(pages_dir, 'page_1_extracted.json')
+        if not os.path.exists(first_page_file):
+            info(f"首次访问，开始提取所有页面文字...")
+            for page_num in range(1, total_pages + 1):
+                extracted = extract_text_from_page(pdf_path, page_num)
+                extracted_file = os.path.join(pages_dir, f'page_{page_num}_extracted.json')
+                with open(extracted_file, 'w', encoding='utf-8') as f:
+                    json.dump(extracted, f, ensure_ascii=False, indent=2)
+            info(f"✅ 提取完成: {total_pages}页")
+        
+        # 加载所有页面数据
+        pages_data = {}
+        
+        for page_num in range(1, total_pages + 1):
+            extracted_file = os.path.join(pages_dir, f'page_{page_num}_extracted.json')
+            ocr_file = os.path.join(pages_dir, f'page_{page_num}_ocr.json')
+            active_file = os.path.join(pages_dir, f'page_{page_num}_active.txt')
+            
+            # 加载提取结果
+            extracted = {}
+            if os.path.exists(extracted_file):
+                with open(extracted_file, 'r', encoding='utf-8') as f:
+                    extracted = json.load(f)
+            
+            # 加载OCR结果
+            ocr = None
+            if os.path.exists(ocr_file):
+                with open(ocr_file, 'r', encoding='utf-8') as f:
+                    ocr = json.load(f)
+            
+            # 加载当前使用的版本
+            active = 'extracted'
+            if os.path.exists(active_file):
+                with open(active_file, 'r', encoding='utf-8') as f:
+                    active = f.read().strip()
+            elif ocr:
+                active = 'ocr'  # 如果有OCR结果且没有指定，默认使用OCR
+            
+            pages_data[page_num] = {
+                'extracted': extracted,
+                'ocr': ocr,
+                'active': active
+            }
+        
+        return {
+            'total_pages': total_pages,
+            'pages': pages_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取页面文字数据失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取页面文字数据失败: {str(e)}")
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/ocr-batch")
+async def ocr_batch_pages(board_id: str, window_id: str, pages: str):
+    """
+    批量OCR指定页面（SSE流式返回）
+    
+    Args:
+        pages: 逗号分隔的页码字符串，例如 "1,3,5,10"
+    """
+    from ocr_service import ocr_page_image
+    
+    async def generate():
+        try:
+            page_numbers = [int(p.strip()) for p in pages.split(',')]
+            
+            # 加载窗口信息
+            window_file = DATA_DIR / f"courses/{board_id}/windows/{window_id}.json"
+            if not window_file.exists():
+                yield f"data: {json.dumps({'type': 'error', 'message': '窗口不存在'})}\n\n"
+                return
+            
+            with open(window_file, 'r', encoding='utf-8') as f:
+                window_data = json.load(f)
+            
+            pdf_path = window_data.get('content')
+            if not pdf_path or not os.path.exists(pdf_path):
+                yield f"data: {json.dumps({'type': 'error', 'message': 'PDF文件不存在'})}\n\n"
+                return
+            
+            # 构建pages目录路径
+            files_dir = os.path.dirname(pdf_path)
+            pages_dir = os.path.join(files_dir, 'pages')
+            os.makedirs(pages_dir, exist_ok=True)
+            
+            # 逐页OCR
+            for i, page_num in enumerate(page_numbers):
+                try:
+                    # 发送进度
+                    yield f"data: {json.dumps({'type': 'progress', 'completed': i, 'total': len(page_numbers), 'current_page': page_num})}\n\n"
+                    
+                    # 执行OCR
+                    result = ocr_page_image(pdf_path, page_num)
+                    
+                    # 保存OCR结果
+                    ocr_file = os.path.join(pages_dir, f'page_{page_num}_ocr.json')
+                    with open(ocr_file, 'w', encoding='utf-8') as f:
+                        json.dump(result, f, ensure_ascii=False, indent=2)
+                    
+                    # 设置为使用OCR结果
+                    active_file = os.path.join(pages_dir, f'page_{page_num}_active.txt')
+                    with open(active_file, 'w', encoding='utf-8') as f:
+                        f.write('ocr')
+                    
+                    # 发送完成信号
+                    yield f"data: {json.dumps({'type': 'page_done', 'page': page_num, 'result': result})}\n\n"
+                    
+                except Exception as e:
+                    error(f"OCR第{page_num}页失败: {e}")
+                    yield f"data: {json.dumps({'type': 'error', 'page': page_num, 'message': str(e)})}\n\n"
+            
+            # 全部完成
+            yield f"data: {json.dumps({'type': 'complete', 'total': len(page_numbers)})}\n\n"
+            
+        except Exception as e:
+            error(f"批量OCR失败: {e}")
+            import traceback
+            traceback.print_exc()
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/select-text-source")
+async def select_text_source(
+    board_id: str,
+    window_id: str,
+    selection: TextSourceSelection
+):
+    """
+    用户选择使用哪个文字来源
+    """
+    try:
+        # 加载窗口信息
+        window_file = DATA_DIR / f"courses/{board_id}/windows/{window_id}.json"
+        if not window_file.exists():
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        with open(window_file, 'r', encoding='utf-8') as f:
+            window_data = json.load(f)
+        
+        pdf_path = window_data.get('content')
+        if not pdf_path or not os.path.exists(pdf_path):
+            raise HTTPException(status_code=404, detail="PDF文件不存在")
+        
+        # 构建pages目录路径
+        files_dir = os.path.dirname(pdf_path)
+        pages_dir = os.path.join(files_dir, 'pages')
+        
+        # 保存选择
+        active_file = os.path.join(pages_dir, f'page_{selection.page_number}_active.txt')
+        with open(active_file, 'w', encoding='utf-8') as f:
+            f.write(selection.source)
+        
+        info(f"✅ 第{selection.page_number}页文字来源切换为: {selection.source}")
+        
+        return {
+            'success': True,
+            'page_number': selection.page_number,
+            'active_source': selection.source
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"切换文字来源失败: {e}")
+        raise HTTPException(status_code=500, detail=f"切换文字来源失败: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     info("启动WhatNote V2后端服务...")

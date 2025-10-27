@@ -666,7 +666,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         ).join('\n');
         
         addMessage(
-          `🔍 语义搜索结果`,
+          ` 语义搜索结果`,
           `查询: "${searchQuery}"\n\n找到 ${data.results.length} 个相关位置:\n${resultsText}`,
           'info',
           boardId,
@@ -677,7 +677,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         openMessageCenter();
       } else {
         addMessage(
-          `🔍 语义搜索结果`,
+          ` 语义搜索结果`,
           `查询: "${searchQuery}"\n\n未找到相关内容`,
           'warning',
           boardId,
@@ -960,7 +960,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           }}
           title={showAnnotationPanel ? "隐藏注释" : "显示注释"}
         >
-          📝 注释
+          注释
         </button>
 
         {/* 搜索按钮 - 仅在有大纲和细分数据时显示 */}
@@ -987,7 +987,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             }}
             title={showSearchPanel ? "隐藏搜索" : "语义搜索"}
           >
-            🔍 搜索
+            搜索
           </button>
         )}
 
@@ -3075,7 +3075,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           e.target.style.border = '2px outset #008000';
                         }}
                       >
-                        🚀 批量生成所有分段注释
+                        批量生成所有分段注释
                       </button>
                     </div>
                   )}
@@ -3606,7 +3606,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        📚 生成大纲
+                        生成大纲
                       </button>
                       
                       <button
@@ -4047,7 +4047,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        📝 逐页注释
+                        逐页注释
                       </button>
                       
                       <button
@@ -4069,7 +4069,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        ⚙️ 注释设置
+                        注释设置
                       </button>
                     </div>
                   )}
@@ -4097,7 +4097,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   }}
                   title={annotationMode === 'preview' ? "切换到编辑模式" : "切换到预览模式"}
                 >
-                  {annotationMode === 'preview' ? '✏️' : '👁️'}
+                  {annotationMode === 'preview' ? 'Edit' : 'View'}
                 </button>
               </div>
             </div>
