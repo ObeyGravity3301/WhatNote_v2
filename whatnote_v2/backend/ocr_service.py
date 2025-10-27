@@ -72,22 +72,45 @@ def ocr_page_image(pdf_path, page_number):
         mat = fitz.Matrix(zoom, zoom)
         pix = page.get_pixmap(matrix=mat)
         
-        # 转换为字节数据
+        # 转换为numpy数组（PaddleOCR需要numpy.ndarray格式）
         img_data = pix.tobytes("png")
+        image = Image.open(io.BytesIO(img_data))
+        import numpy as np
+        img_array = np.array(image)
         
         # 执行OCR
         ocr = get_ocr_instance()
-        result = ocr.ocr(img_data, cls=True)
+        
+        # 新版PaddleOCR使用predict方法，输入numpy数组
+        try:
+            result = ocr.predict(img_array)
+        except (AttributeError, TypeError):
+            # 如果predict方法不支持，尝试传统的ocr方法
+            try:
+                result = ocr.ocr(img_array)
+            except:
+                # 最后尝试使用字节数据
+                result = ocr.ocr(img_data)
         
         # 提取文字和置信度
         text_lines = []
         confidences = []
         
-        if result and result[0]:
-            for line in result[0]:
+        # 处理新版PaddleOCR返回格式
+        if isinstance(result, dict):
+            # 新版API返回字典格式
+            if 'rec_text' in result:
+                text_lines = result.get('rec_text', [])
+                confidences = result.get('rec_score', [1.0] * len(text_lines))
+            elif 'dt_polys' in result and 'rec_text' in result:
+                text_lines = result.get('rec_text', [])
+                confidences = result.get('rec_score', [1.0] * len(text_lines))
+        elif result and isinstance(result, list) and len(result) > 0:
+            # 传统API返回列表格式
+            for line in result[0] if isinstance(result[0], list) else result:
                 if line and len(line) >= 2:
-                    text = line[1][0]  # 识别的文字
-                    confidence = line[1][1]  # 置信度
+                    text = line[1][0] if isinstance(line[1], (list, tuple)) else str(line[1])
+                    confidence = line[1][1] if isinstance(line[1], (list, tuple)) and len(line[1]) > 1 else 1.0
                     text_lines.append(text)
                     confidences.append(confidence)
         
