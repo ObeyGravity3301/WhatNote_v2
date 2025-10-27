@@ -4918,6 +4918,302 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           </div>
         )}
       </div>
+
+      {/* OCR管理面板 */}
+      {showOCRManager && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            width: '80%',
+            maxWidth: '1000px',
+            height: '80%',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '4px 4px 10px rgba(0, 0, 0, 0.5)'
+          }}>
+            {/* 标题栏 */}
+            <div style={{
+              padding: '2px 4px',
+              backgroundColor: '#000080',
+              color: '#ffffff',
+              fontSize: '11px',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              fontWeight: 'bold',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span>📄 页面OCR管理</span>
+              <button
+                onClick={() => setShowOCRManager(false)}
+                style={{
+                  width: '16px',
+                  height: '14px',
+                  padding: 0,
+                  backgroundColor: '#c0c0c0',
+                  border: '1px outset #c0c0c0',
+                  fontSize: '9px',
+                  cursor: 'pointer',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  fontWeight: 'bold'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 工具栏 */}
+            <div style={{
+              padding: '4px',
+              borderBottom: '2px groove #c0c0c0',
+              display: 'flex',
+              gap: '4px',
+              alignItems: 'center',
+              flexWrap: 'wrap'
+            }}>
+              <button
+                onClick={() => {
+                  const allPages = Object.keys(pageTextData).map(Number);
+                  setSelectedPages(new Set(allPages));
+                }}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: '11px',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px outset #c0c0c0',
+                  cursor: 'pointer',
+                  fontFamily: 'MS Sans Serif, sans-serif'
+                }}
+              >
+                全选
+              </button>
+
+              <button
+                onClick={() => setSelectedPages(new Set())}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: '11px',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px outset #c0c0c0',
+                  cursor: 'pointer',
+                  fontFamily: 'MS Sans Serif, sans-serif'
+                }}
+              >
+                取消全选
+              </button>
+
+              <button
+                onClick={() => {
+                  const allPages = Object.keys(pageTextData).map(Number);
+                  const newSelection = new Set(
+                    allPages.filter(p => !selectedPages.has(p))
+                  );
+                  setSelectedPages(newSelection);
+                }}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: '11px',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px outset #c0c0c0',
+                  cursor: 'pointer',
+                  fontFamily: 'MS Sans Serif, sans-serif'
+                }}
+              >
+                反选
+              </button>
+
+              <div style={{
+                marginLeft: 'auto',
+                fontSize: '11px',
+                fontFamily: 'MS Sans Serif, sans-serif'
+              }}>
+                已选择: {selectedPages.size} 页
+              </div>
+            </div>
+
+            {/* 页面网格 */}
+            <div style={{
+              flex: 1,
+              overflow: 'auto',
+              padding: '8px',
+              backgroundColor: '#ffffff'
+            }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: '8px'
+              }}>
+                {Object.entries(pageTextData).sort((a, b) => Number(a[0]) - Number(b[0])).map(([pageNum, data]) => (
+                  <div
+                    key={pageNum}
+                    onClick={() => {
+                      const pageNumber = Number(pageNum);
+                      const newSelection = new Set(selectedPages);
+                      if (newSelection.has(pageNumber)) {
+                        newSelection.delete(pageNumber);
+                      } else {
+                        newSelection.add(pageNumber);
+                      }
+                      setSelectedPages(newSelection);
+                    }}
+                    style={{
+                      padding: '8px',
+                      border: selectedPages.has(Number(pageNum)) ? '2px solid #0078d4' : '2px solid #c0c0c0',
+                      backgroundColor: selectedPages.has(Number(pageNum)) ? '#e6f2ff' : '#ffffff',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontSize: '11px'
+                    }}
+                  >
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                      📄 第 {pageNum} 页
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#666' }}>
+                      提取: {data.extracted?.char_count || 0} 字符
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#666' }}>
+                      OCR: {data.ocr ? `${data.ocr.char_count} 字符` : '未OCR'}
+                    </div>
+                    <div style={{ 
+                      fontSize: '10px', 
+                      marginTop: '4px',
+                      color: data.active === 'ocr' ? '#4caf50' : '#666'
+                    }}>
+                      当前: {data.active === 'ocr' ? 'OCR结果' : '提取结果'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 底部操作栏 */}
+            <div style={{
+              padding: '8px',
+              borderTop: '2px groove #c0c0c0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              {ocrProgress ? (
+                <div style={{ flex: 1, marginRight: '8px' }}>
+                  <div style={{
+                    fontSize: '11px',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    marginBottom: '4px'
+                  }}>
+                    OCR进度: {ocrProgress.completed} / {ocrProgress.total}
+                  </div>
+                  <div style={{
+                    width: '100%',
+                    height: '20px',
+                    border: '2px inset #c0c0c0',
+                    backgroundColor: '#ffffff',
+                    position: 'relative'
+                  }}>
+                    <div style={{
+                      width: `${(ocrProgress.completed / ocrProgress.total) * 100}%`,
+                      height: '100%',
+                      backgroundColor: '#0078d4',
+                      transition: 'width 0.3s ease'
+                    }} />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ flex: 1 }} />
+              )}
+
+              <button
+                onClick={async () => {
+                  if (selectedPages.size === 0) {
+                    alert('请先选择要OCR的页面');
+                    return;
+                  }
+
+                  const pageNumbers = Array.from(selectedPages).sort((a, b) => a - b);
+                  setOCRProgress({ completed: 0, total: pageNumbers.length });
+
+                  try {
+                    const response = await fetch(
+                      `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/ocr-batch?pages=${pageNumbers.join(',')}`,
+                      { method: 'GET' }
+                    );
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+
+                    while (true) {
+                      const { done, value } = await reader.read();
+                      if (done) break;
+
+                      buffer += decoder.decode(value, { stream: true });
+                      const lines = buffer.split('\n\n');
+                      buffer = lines.pop() || '';
+
+                      for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                          const data = JSON.parse(line.slice(6));
+
+                          if (data.type === 'progress') {
+                            setOCRProgress({
+                              completed: data.completed,
+                              total: data.total
+                            });
+                          } else if (data.type === 'page_done') {
+                            // 更新页面数据
+                            setPageTextData(prev => ({
+                              ...prev,
+                              [data.page_number]: {
+                                ...prev[data.page_number],
+                                ocr: data.ocr_result,
+                                active: 'ocr'
+                              }
+                            }));
+                          } else if (data.type === 'complete') {
+                            addMessage(`✅ OCR完成！成功识别 ${data.total_processed} 页`, 'success');
+                            setOCRProgress(null);
+                          } else if (data.type === 'error') {
+                            addMessage(`❌ OCR失败: ${data.message}`, 'error');
+                            setOCRProgress(null);
+                          }
+                        }
+                      }
+                    }
+                  } catch (error) {
+                    console.error('❌ OCR失败:', error);
+                    addMessage(`❌ OCR失败: ${error.message}`, 'error');
+                    setOCRProgress(null);
+                  }
+                }}
+                disabled={selectedPages.size === 0 || ocrProgress !== null}
+                style={{
+                  padding: '4px 16px',
+                  fontSize: '11px',
+                  backgroundColor: selectedPages.size === 0 || ocrProgress !== null ? '#a0a0a0' : '#c0c0c0',
+                  border: '2px outset #c0c0c0',
+                  cursor: selectedPages.size === 0 || ocrProgress !== null ? 'not-allowed' : 'pointer',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  fontWeight: 'bold'
+                }}
+              >
+                {ocrProgress ? '处理中...' : '批量OCR所选页面'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
