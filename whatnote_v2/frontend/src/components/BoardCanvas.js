@@ -63,6 +63,40 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     };
   }, []);
   
+  // 快捷键：左右方向键翻页
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // 检查是否在输入状态
+      const isInputFocused = 
+        document.activeElement.tagName === 'INPUT' ||
+        document.activeElement.tagName === 'TEXTAREA' ||
+        document.activeElement.isContentEditable;
+      
+      if (isInputFocused) {
+        return; // 输入状态下不触发快捷键
+      }
+      
+      // 左方向键：上一页
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goToPreviousPage();
+      }
+      // 右方向键：下一页
+      else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        goToNextPage();
+      }
+    };
+    
+    // 添加键盘事件监听
+    window.addEventListener('keydown', handleKeyDown);
+    
+    // 清理监听器
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentPage, totalPages]); // 依赖currentPage和totalPages以便闭包能访问最新值
+  
   // 注释功能状态
   const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
   const [annotationMode, setAnnotationMode] = useState('preview'); // 'preview' 或 'edit'
@@ -6307,6 +6341,65 @@ function BoardCanvas({
       };
     });
   };
+  
+  // 快捷键：上下方向键切换窗口
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // 检查是否在输入状态
+      const isInputFocused = 
+        document.activeElement.tagName === 'INPUT' ||
+        document.activeElement.tagName === 'TEXTAREA' ||
+        document.activeElement.isContentEditable;
+      
+      if (isInputFocused) {
+        return; // 输入状态下不触发快捷键
+      }
+      
+      // 只处理上下方向键
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
+        return;
+      }
+      
+      // 获取所有可见且未最小化的窗口（按创建顺序）
+      const visibleWindows = windows.filter(w => 
+        !minimizedWindows.has(w.id) && 
+        !hiddenWindows.has(w.id)
+      );
+      
+      if (visibleWindows.length === 0) {
+        return; // 没有可见窗口
+      }
+      
+      // 找到当前焦点窗口的索引
+      const currentIndex = visibleWindows.findIndex(w => w.id === focusedWindowId);
+      
+      let nextIndex;
+      if (e.key === 'ArrowDown') {
+        // 下方向键：切换到下一个窗口（循环）
+        e.preventDefault();
+        nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % visibleWindows.length;
+      } else if (e.key === 'ArrowUp') {
+        // 上方向键：切换到上一个窗口（循环）
+        e.preventDefault();
+        nextIndex = currentIndex === -1 ? visibleWindows.length - 1 : (currentIndex - 1 + visibleWindows.length) % visibleWindows.length;
+      }
+      
+      // 切换到目标窗口
+      const targetWindow = visibleWindows[nextIndex];
+      if (targetWindow) {
+        handleWindowFocusLocal(targetWindow.id);
+        console.log(`⌨️ 快捷键切换窗口: ${targetWindow.title || targetWindow.id}`);
+      }
+    };
+    
+    // 添加键盘事件监听
+    window.addEventListener('keydown', handleKeyDown);
+    
+    // 清理监听器
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [windows, minimizedWindows, hiddenWindows, focusedWindowId]); // 依赖所有相关状态
 
   // 获取窗口的z-index
   const getWindowZIndex = (windowId) => {
