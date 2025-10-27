@@ -140,6 +140,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [searchResults, setSearchResults] = useState(null); // 搜索结果
   const [isSearching, setIsSearching] = useState(false); // 是否正在搜索
   
+  // 页面提取功能状态
+  const [showPageExtractPanel, setShowPageExtractPanel] = useState(false); // 显示页面提取面板
+  const [pagesInfo, setPagesInfo] = useState([]); // 所有页面信息
+  const [selectedPages, setSelectedPages] = useState(new Set()); // 选中的页面
+  const [isExtracting, setIsExtracting] = useState(false); // 是否正在提取
+  const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 }); // 提取进度
+  const [extractedContents, setExtractedContents] = useState({}); // 提取的内容 {pageNum: {text, description}}
+  
   // 预设的注释风格
   const annotationStyles = {
     detailed: {
@@ -991,6 +999,47 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           </button>
         )}
 
+        {/* 提取页面内容按钮 */}
+        <button
+          onClick={async () => {
+            if (!showPageExtractPanel) {
+              // 打开面板时，先加载页面信息
+              try {
+                const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/info`);
+                if (response.ok) {
+                  const data = await response.json();
+                  console.log('页面信息加载成功:', data);
+                  setPagesInfo(data.pages || []);
+                } else {
+                  console.error('加载页面信息失败:', response.status);
+                }
+              } catch (error) {
+                console.error('加载页面信息失败:', error);
+              }
+            }
+            setShowPageExtractPanel(!showPageExtractPanel);
+            console.log('页面提取面板切换:', !showPageExtractPanel);
+          }}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: showPageExtractPanel ? '#a0a0a0' : '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '50px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: '8px'
+          }}
+          title={showPageExtractPanel ? "隐藏提取面板" : "提取页面内容"}
+        >
+          📸 提取
+        </button>
+
         {/* 关闭分页模式按钮 */}
         <button
           onClick={onClose}
@@ -1145,6 +1194,370 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 页面提取面板 */}
+      {showPageExtractPanel && (
+        <div style={{
+          backgroundColor: '#f0f0f0',
+          borderBottom: '2px inset #c0c0c0',
+          padding: '8px',
+          flexShrink: 0,
+          maxHeight: '500px',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {/* 顶部工具栏 */}
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            alignItems: 'center',
+            marginBottom: '8px',
+            paddingBottom: '8px',
+            borderBottom: '1px solid #c0c0c0'
+          }}>
+            <div style={{
+              fontSize: '12px',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              fontWeight: 'bold',
+              color: '#000080'
+            }}>
+              📸 选择要提取的页面
+            </div>
+            
+            <div style={{ flex: 1 }}></div>
+            
+            <button
+              onClick={() => {
+                // 全选
+                const allPages = new Set(pagesInfo.map(p => p.page));
+                setSelectedPages(allPages);
+              }}
+              style={{
+                padding: '2px 8px',
+                fontSize: '11px',
+                backgroundColor: '#c0c0c0',
+                border: '2px outset #c0c0c0',
+                cursor: 'pointer',
+                fontFamily: 'MS Sans Serif, sans-serif'
+              }}
+            >
+              全选
+            </button>
+            
+            <button
+              onClick={() => {
+                // 反选
+                const newSelected = new Set();
+                pagesInfo.forEach(p => {
+                  if (!selectedPages.has(p.page)) {
+                    newSelected.add(p.page);
+                  }
+                });
+                setSelectedPages(newSelected);
+              }}
+              style={{
+                padding: '2px 8px',
+                fontSize: '11px',
+                backgroundColor: '#c0c0c0',
+                border: '2px outset #c0c0c0',
+                cursor: 'pointer',
+                fontFamily: 'MS Sans Serif, sans-serif'
+              }}
+            >
+              反选
+            </button>
+            
+            <button
+              onClick={() => {
+                // 仅选择未提取的页面
+                const unextracted = new Set();
+                pagesInfo.forEach(p => {
+                  if (!p.extracted) {
+                    unextracted.add(p.page);
+                  }
+                });
+                setSelectedPages(unextracted);
+              }}
+              style={{
+                padding: '2px 8px',
+                fontSize: '11px',
+                backgroundColor: '#c0c0c0',
+                border: '2px outset #c0c0c0',
+                cursor: 'pointer',
+                fontFamily: 'MS Sans Serif, sans-serif'
+              }}
+            >
+              未提取
+            </button>
+            
+            <button
+              onClick={() => setSelectedPages(new Set())}
+              style={{
+                padding: '2px 8px',
+                fontSize: '11px',
+                backgroundColor: '#c0c0c0',
+                border: '2px outset #c0c0c0',
+                cursor: 'pointer',
+                fontFamily: 'MS Sans Serif, sans-serif'
+              }}
+            >
+              清空
+            </button>
+          </div>
+          
+          {/* 页面网格 */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            backgroundColor: '#ffffff',
+            border: '2px inset #c0c0c0',
+            padding: '8px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+            gap: '12px',
+            alignContent: 'start'
+          }}>
+            {pagesInfo.map((pageInfo) => (
+              <div
+                key={pageInfo.page}
+                onClick={() => {
+                  const newSelected = new Set(selectedPages);
+                  if (newSelected.has(pageInfo.page)) {
+                    newSelected.delete(pageInfo.page);
+                  } else {
+                    newSelected.add(pageInfo.page);
+                  }
+                  setSelectedPages(newSelected);
+                }}
+                style={{
+                  width: '100%',
+                  aspectRatio: '0.7',
+                  backgroundColor: selectedPages.has(pageInfo.page) ? '#e0e0ff' : '#f0f0f0',
+                  border: selectedPages.has(pageInfo.page) ? '3px solid #0000ff' : '2px solid #808080',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (!selectedPages.has(pageInfo.page)) {
+                    e.currentTarget.style.backgroundColor = '#e8e8e8';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!selectedPages.has(pageInfo.page)) {
+                    e.currentTarget.style.backgroundColor = '#f0f0f0';
+                  }
+                }}
+              >
+                {/* 选中标记 */}
+                {selectedPages.has(pageInfo.page) && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '4px',
+                    right: '4px',
+                    backgroundColor: '#0000ff',
+                    color: '#ffffff',
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: 'bold'
+                  }}>
+                    ✓
+                  </div>
+                )}
+                
+                {/* 已提取标记 */}
+                {pageInfo.extracted && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '4px',
+                    left: '4px',
+                    backgroundColor: '#008000',
+                    color: '#ffffff',
+                    padding: '2px 6px',
+                    borderRadius: '3px',
+                    fontSize: '9px',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    fontWeight: 'bold'
+                  }}>
+                    已提取
+                  </div>
+                )}
+                
+                {/* 页码 */}
+                <div style={{
+                  fontSize: '32px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  fontWeight: 'bold',
+                  color: '#000080'
+                }}>
+                  {pageInfo.page}
+                </div>
+                
+                {/* 字数信息 */}
+                <div style={{
+                  fontSize: '10px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  color: '#666',
+                  marginTop: '4px'
+                }}>
+                  {pageInfo.char_count || 0} 字
+                </div>
+                
+                {/* 原始文字可用标记 */}
+                {!pageInfo.extracted && pageInfo.original_text_available && (
+                  <div style={{
+                    fontSize: '9px',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    color: '#008000',
+                    marginTop: '2px'
+                  }}>
+                    有文字
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          
+          {/* 底部状态栏 */}
+          <div style={{
+            marginTop: '8px',
+            padding: '8px',
+            backgroundColor: '#e0e0e0',
+            border: '1px solid #808080',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            fontSize: '11px',
+            fontFamily: 'MS Sans Serif, sans-serif'
+          }}>
+            <div>
+              已选择: <strong>{selectedPages.size}</strong> 页
+            </div>
+            <div>
+              预计消耗: ~<strong>{(selectedPages.size * 0.03).toFixed(2)}</strong> 元
+            </div>
+            
+            <div style={{ flex: 1 }}></div>
+            
+            {isExtracting && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <div>提取中: {extractionProgress.current}/{extractionProgress.total}</div>
+                <div style={{
+                  width: '150px',
+                  height: '16px',
+                  backgroundColor: '#ffffff',
+                  border: '2px inset #808080'
+                }}>
+                  <div style={{
+                    width: `${(extractionProgress.current / extractionProgress.total) * 100}%`,
+                    height: '100%',
+                    backgroundColor: '#0000ff',
+                    transition: 'width 0.3s'
+                  }}></div>
+                </div>
+              </div>
+            )}
+            
+            <button
+              onClick={async () => {
+                if (selectedPages.size === 0) {
+                  alert('请先选择要提取的页面');
+                  return;
+                }
+                
+                setIsExtracting(true);
+                setExtractionProgress({ current: 0, total: selectedPages.size });
+                
+                try {
+                  const response = await fetch(
+                    `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/extract`,
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        pages: Array.from(selectedPages),
+                        dpi: 300
+                      })
+                    }
+                  );
+                  
+                  const reader = response.body.getReader();
+                  const decoder = new TextDecoder();
+                  
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                      if (line.startsWith('data: ')) {
+                        const data = JSON.parse(line.substring(6));
+                        
+                        if (data.type === 'progress') {
+                          setExtractionProgress({ current: data.current, total: data.total });
+                        } else if (data.type === 'page_complete') {
+                          console.log(`页面 ${data.page} 提取完成`);
+                          // 更新页面信息
+                          setPagesInfo(prev => prev.map(p =>
+                            p.page === data.page ? { ...p, extracted: true } : p
+                          ));
+                        } else if (data.type === 'complete') {
+                          console.log('全部提取完成');
+                          addMessageWithSource(
+                            '✅ 页面提取完成',
+                            `成功提取 ${data.total} 个页面的内容`,
+                            'success'
+                          );
+                        } else if (data.type === 'error') {
+                          console.error(`页面 ${data.page} 提取失败:`, data.error);
+                        }
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.error('提取失败:', error);
+                  addMessageWithSource(
+                    '❌ 提取失败',
+                    error.message,
+                    'error'
+                  );
+                } finally {
+                  setIsExtracting(false);
+                }
+              }}
+              disabled={isExtracting || selectedPages.size === 0}
+              style={{
+                padding: '4px 16px',
+                fontSize: '11px',
+                backgroundColor: isExtracting || selectedPages.size === 0 ? '#808080' : '#0078d4',
+                color: '#ffffff',
+                border: '2px outset #0078d4',
+                cursor: isExtracting || selectedPages.size === 0 ? 'not-allowed' : 'pointer',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                fontWeight: 'bold'
+              }}
+            >
+              {isExtracting ? '提取中...' : `开始提取 (${selectedPages.size}页)`}
+            </button>
+          </div>
         </div>
       )}
 
