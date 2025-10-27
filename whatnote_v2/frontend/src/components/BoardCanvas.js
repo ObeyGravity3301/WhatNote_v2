@@ -973,7 +973,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         {/* OCR按钮 */}
         <button
           onClick={async () => {
-            console.log('🔍 OCR按钮点击', { boardId, windowId });
+            console.log('🔍 OCR按钮点击', { boardId, windowId, pdfUrl });
+            
+            // 检查必需的参数
+            if (!boardId || !windowId) {
+              alert(`OCR功能需要boardId和windowId\nboardId: ${boardId}\nwindowId: ${windowId}`);
+              console.error('❌ 缺少必需参数:', { boardId, windowId });
+              return;
+            }
             
             try {
               // 获取所有页面的文字数据
@@ -986,7 +993,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               if (!response.ok) {
                 const errorText = await response.text();
                 console.error('❌ API错误响应:', errorText);
-                alert(`加载页面数据失败: ${response.status} - ${errorText}`);
+                alert(`加载页面数据失败:\n状态: ${response.status}\n错误: ${errorText.substring(0, 200)}`);
                 return;
               }
               
@@ -998,7 +1005,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               console.log('✅ OCR管理面板打开，总页数:', data.total_pages);
             } catch (error) {
               console.error('❌ 加载页面数据失败:', error);
-              alert(`加载页面数据失败: ${error.message}`);
+              alert(`加载页面数据失败:\n${error.message}\n\n请检查:\n1. 后端服务是否运行\n2. boardId和windowId是否正确`);
             }
           }}
           style={{
