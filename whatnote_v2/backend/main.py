@@ -3436,7 +3436,7 @@ async def ocr_batch_pages(board_id: str, window_id: str, pages: str):
                         f.write('ocr')
                     
                     # 发送完成信号
-                    yield f"data: {json.dumps({'type': 'page_done', 'page': page_num, 'result': result})}\n\n"
+                    yield f"data: {json.dumps({'type': 'page_done', 'page_number': page_num, 'ocr_result': result})}\n\n"
                     
                 except Exception as e:
                     error(f"OCR第{page_num}页失败: {e}")
