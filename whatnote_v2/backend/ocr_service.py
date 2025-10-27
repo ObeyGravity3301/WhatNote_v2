@@ -26,11 +26,7 @@ def get_ocr_instance():
             _ocr_instance = PaddleOCR(
                 use_angle_cls=True,  # 使用方向分类器（处理旋转文字）
                 lang='ch',  # 中英文混合识别
-                use_gpu=False,  # 使用CPU（如果有GPU可以改为True）
-                show_log=False,  # 不显示详细日志
-                det_db_thresh=0.3,  # 检测阈值
-                det_db_box_thresh=0.5,  # 框阈值
-                rec_batch_num=6  # 识别批次大小
+                use_gpu=False  # 使用CPU（如果有GPU可以改为True）
             )
             info("✅ PaddleOCR初始化完成")
         except Exception as e:
