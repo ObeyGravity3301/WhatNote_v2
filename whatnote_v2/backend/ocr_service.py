@@ -120,22 +120,29 @@ def ocr_page_image(pdf_path, page_number):
         if isinstance(result, list) and len(result) > 0:
             first_item = result[0]
             
-            # PaddleX格式：返回字典列表
-            if isinstance(first_item, dict):
+            # PaddleX格式：OCRResult对象或字典
+            if isinstance(first_item, dict) or hasattr(first_item, '__dict__'):
                 info("🔍 检测到PaddleX格式")
-                # 尝试从text_rec_res提取
-                if 'text_rec_res' in first_item:
-                    rec_res = first_item['text_rec_res']
-                    if 'texts' in rec_res:
-                        text_lines = rec_res['texts']
-                        confidences = rec_res.get('scores', [1.0] * len(text_lines))
-                    elif 'text' in rec_res:
-                        text_lines = [rec_res['text']]
-                        confidences = [rec_res.get('score', 1.0)]
-                # 尝试从rec_text提取
-                elif 'rec_text' in first_item:
-                    text_lines = first_item.get('rec_text', [])
-                    confidences = first_item.get('rec_score', [1.0] * len(text_lines))
+                
+                # 尝试直接访问属性（OCRResult对象）
+                if hasattr(first_item, 'rec_texts'):
+                    text_lines = first_item.rec_texts
+                    confidences = getattr(first_item, 'rec_scores', [1.0] * len(text_lines))
+                    info(f"✅ 从OCRResult对象提取到{len(text_lines)}行文字")
+                # 尝试从字典提取
+                elif isinstance(first_item, dict):
+                    if 'rec_texts' in first_item:
+                        text_lines = first_item['rec_texts']
+                        confidences = first_item.get('rec_scores', [1.0] * len(text_lines))
+                        info(f"✅ 从字典提取到{len(text_lines)}行文字")
+                    elif 'text_rec_res' in first_item:
+                        rec_res = first_item['text_rec_res']
+                        if 'texts' in rec_res:
+                            text_lines = rec_res['texts']
+                            confidences = rec_res.get('scores', [1.0] * len(text_lines))
+                    elif 'rec_text' in first_item:
+                        text_lines = first_item.get('rec_text', [])
+                        confidences = first_item.get('rec_score', [1.0] * len(text_lines))
                     
             # 传统PaddleOCR格式：返回嵌套列表
             elif isinstance(first_item, (list, tuple)):
