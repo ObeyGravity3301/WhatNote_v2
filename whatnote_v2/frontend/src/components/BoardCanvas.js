@@ -140,13 +140,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [searchResults, setSearchResults] = useState(null); // 搜索结果
   const [isSearching, setIsSearching] = useState(false); // 是否正在搜索
   
-  // OCR功能状态
-  const [showOCRManager, setShowOCRManager] = useState(false); // 显示OCR管理面板
-  const [pageTextData, setPageTextData] = useState({}); // 所有页面的文字数据
-  const [selectedPages, setSelectedPages] = useState(new Set()); // 用户选择的页面
-  const [ocrProgress, setOCRProgress] = useState(null); // OCR进度
-  const [showPageDetail, setShowPageDetail] = useState(null); // 展开的页面详情
-  
   // 预设的注释风格
   const annotationStyles = {
     detailed: {
@@ -673,7 +666,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         ).join('\n');
         
         addMessage(
-          ` 语义搜索结果`,
+          `🔍 语义搜索结果`,
           `查询: "${searchQuery}"\n\n找到 ${data.results.length} 个相关位置:\n${resultsText}`,
           'info',
           boardId,
@@ -684,7 +677,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         openMessageCenter();
       } else {
         addMessage(
-          ` 语义搜索结果`,
+          `🔍 语义搜索结果`,
           `查询: "${searchQuery}"\n\n未找到相关内容`,
           'warning',
           boardId,
@@ -967,65 +960,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           }}
           title={showAnnotationPanel ? "隐藏注释" : "显示注释"}
         >
-          注释
-        </button>
-
-        {/* OCR按钮 */}
-        <button
-          onClick={async () => {
-            console.log('🔍 OCR按钮点击', { boardId, windowId, pdfUrl });
-            
-            // 检查必需的参数
-            if (!boardId || !windowId) {
-              alert(`OCR功能需要boardId和windowId\nboardId: ${boardId}\nwindowId: ${windowId}`);
-              console.error('❌ 缺少必需参数:', { boardId, windowId });
-              return;
-            }
-            
-            try {
-              // 获取所有页面的文字数据
-              const url = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/all-pages-text`;
-              console.log('📡 API请求:', url);
-              
-              const response = await fetch(url);
-              console.log('📡 API响应状态:', response.status);
-              
-              if (!response.ok) {
-                const errorText = await response.text();
-                console.error('❌ API错误响应:', errorText);
-                alert(`加载页面数据失败:\n状态: ${response.status}\n错误: ${errorText.substring(0, 200)}`);
-                return;
-              }
-              
-              const data = await response.json();
-              console.log('✅ 获取到页面数据:', data);
-              
-              setPageTextData(data.pages);
-              setShowOCRManager(true);
-              console.log('✅ OCR管理面板打开，总页数:', data.total_pages);
-            } catch (error) {
-              console.error('❌ 加载页面数据失败:', error);
-              alert(`加载页面数据失败:\n${error.message}\n\n请检查:\n1. 后端服务是否运行\n2. boardId和windowId是否正确`);
-            }
-          }}
-          style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: showOCRManager ? '#a0a0a0' : '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '50px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginRight: '8px'
-          }}
-          title="OCR页面管理"
-        >
-          🔍 OCR
+          📝 注释
         </button>
 
         {/* 搜索按钮 - 仅在有大纲和细分数据时显示 */}
@@ -1052,7 +987,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             }}
             title={showSearchPanel ? "隐藏搜索" : "语义搜索"}
           >
-            搜索
+            🔍 搜索
           </button>
         )}
 
@@ -3140,7 +3075,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           e.target.style.border = '2px outset #008000';
                         }}
                       >
-                        批量生成所有分段注释
+                        🚀 批量生成所有分段注释
                       </button>
                     </div>
                   )}
@@ -3671,7 +3606,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        生成大纲
+                        📚 生成大纲
                       </button>
                       
                       <button
@@ -4112,7 +4047,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        逐页注释
+                        📝 逐页注释
                       </button>
                       
                       <button
@@ -4134,7 +4069,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        注释设置
+                        ⚙️ 注释设置
                       </button>
                     </div>
                   )}
@@ -4162,7 +4097,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   }}
                   title={annotationMode === 'preview' ? "切换到编辑模式" : "切换到预览模式"}
                 >
-                  {annotationMode === 'preview' ? 'Edit' : 'View'}
+                  {annotationMode === 'preview' ? '✏️' : '👁️'}
                 </button>
               </div>
             </div>
@@ -4918,480 +4853,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           </div>
         )}
       </div>
-
-      {/* OCR管理面板 */}
-      {showOCRManager && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000
-        }}>
-          <div style={{
-            width: '80%',
-            maxWidth: '1000px',
-            height: '80%',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '4px 4px 10px rgba(0, 0, 0, 0.5)'
-          }}>
-            {/* 标题栏 */}
-            <div style={{
-              padding: '2px 4px',
-              backgroundColor: '#000080',
-              color: '#ffffff',
-              fontSize: '11px',
-              fontFamily: 'MS Sans Serif, sans-serif',
-              fontWeight: 'bold',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span>📄 页面OCR管理</span>
-              <button
-                onClick={() => setShowOCRManager(false)}
-                style={{
-                  width: '16px',
-                  height: '14px',
-                  padding: 0,
-                  backgroundColor: '#c0c0c0',
-                  border: '1px outset #c0c0c0',
-                  fontSize: '9px',
-                  cursor: 'pointer',
-                  fontFamily: 'MS Sans Serif, sans-serif',
-                  fontWeight: 'bold'
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            {/* 工具栏 */}
-            <div style={{
-              padding: '4px',
-              borderBottom: '2px groove #c0c0c0',
-              display: 'flex',
-              gap: '4px',
-              alignItems: 'center',
-              flexWrap: 'wrap'
-            }}>
-              <button
-                onClick={() => {
-                  const allPages = Object.keys(pageTextData).map(Number);
-                  setSelectedPages(new Set(allPages));
-                }}
-                style={{
-                  padding: '2px 8px',
-                  fontSize: '11px',
-                  backgroundColor: '#c0c0c0',
-                  border: '2px outset #c0c0c0',
-                  cursor: 'pointer',
-                  fontFamily: 'MS Sans Serif, sans-serif'
-                }}
-              >
-                全选
-              </button>
-
-              <button
-                onClick={() => setSelectedPages(new Set())}
-                style={{
-                  padding: '2px 8px',
-                  fontSize: '11px',
-                  backgroundColor: '#c0c0c0',
-                  border: '2px outset #c0c0c0',
-                  cursor: 'pointer',
-                  fontFamily: 'MS Sans Serif, sans-serif'
-                }}
-              >
-                取消全选
-              </button>
-
-              <button
-                onClick={() => {
-                  const allPages = Object.keys(pageTextData).map(Number);
-                  const newSelection = new Set(
-                    allPages.filter(p => !selectedPages.has(p))
-                  );
-                  setSelectedPages(newSelection);
-                }}
-                style={{
-                  padding: '2px 8px',
-                  fontSize: '11px',
-                  backgroundColor: '#c0c0c0',
-                  border: '2px outset #c0c0c0',
-                  cursor: 'pointer',
-                  fontFamily: 'MS Sans Serif, sans-serif'
-                }}
-              >
-                反选
-              </button>
-
-              <div style={{
-                marginLeft: 'auto',
-                fontSize: '11px',
-                fontFamily: 'MS Sans Serif, sans-serif'
-              }}>
-                已选择: {selectedPages.size} 页
-              </div>
-            </div>
-
-            {/* 页面网格 */}
-            <div style={{
-              flex: 1,
-              overflow: 'auto',
-              padding: '8px',
-              backgroundColor: '#ffffff'
-            }}>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: '8px'
-              }}>
-                {Object.entries(pageTextData).sort((a, b) => Number(a[0]) - Number(b[0])).map(([pageNum, data]) => (
-                  <div
-                    key={pageNum}
-                    style={{
-                      border: selectedPages.has(Number(pageNum)) ? '2px solid #0078d4' : '2px solid #c0c0c0',
-                      backgroundColor: selectedPages.has(Number(pageNum)) ? '#e6f2ff' : '#ffffff',
-                      fontFamily: 'MS Sans Serif, sans-serif',
-                      fontSize: '11px'
-                    }}
-                  >
-                    {/* 页面卡片头部 - 可点击选择 */}
-                    <div
-                      onClick={() => {
-                        const pageNumber = Number(pageNum);
-                        const newSelection = new Set(selectedPages);
-                        if (newSelection.has(pageNumber)) {
-                          newSelection.delete(pageNumber);
-                        } else {
-                          newSelection.add(pageNumber);
-                        }
-                        setSelectedPages(newSelection);
-                      }}
-                      style={{
-                        padding: '8px',
-                        cursor: 'pointer',
-                        borderBottom: showPageDetail === pageNum ? '1px solid #c0c0c0' : 'none'
-                      }}
-                    >
-                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                        📄 第 {pageNum} 页
-                      </div>
-                      <div style={{ fontSize: '10px', color: '#666' }}>
-                        提取: {data.extracted?.char_count || 0} 字符
-                      </div>
-                      <div style={{ fontSize: '10px', color: '#666' }}>
-                        OCR: {data.ocr ? `${data.ocr.char_count} 字符` : '未OCR'}
-                      </div>
-                      <div style={{ 
-                        fontSize: '10px', 
-                        marginTop: '4px',
-                        color: data.active === 'ocr' ? '#4caf50' : '#666'
-                      }}>
-                        当前: {data.active === 'ocr' ? 'OCR结果' : '提取结果'}
-                      </div>
-                    </div>
-
-                    {/* 查看详情按钮 */}
-                    <button
-                      onClick={() => setShowPageDetail(showPageDetail === pageNum ? null : pageNum)}
-                      style={{
-                        width: '100%',
-                        padding: '4px',
-                        fontSize: '10px',
-                        backgroundColor: '#c0c0c0',
-                        border: '2px outset #c0c0c0',
-                        borderTop: '1px solid #808080',
-                        cursor: 'pointer',
-                        fontFamily: 'MS Sans Serif, sans-serif'
-                      }}
-                    >
-                      {showPageDetail === pageNum ? '▲ 收起' : '▼ 查看详情'}
-                    </button>
-
-                    {/* 展开的详情区域 */}
-                    {showPageDetail === pageNum && (
-                      <div style={{
-                        padding: '8px',
-                        borderTop: '2px groove #c0c0c0',
-                        backgroundColor: '#f0f0f0',
-                        maxHeight: '300px',
-                        overflow: 'auto'
-                      }}>
-                        {/* 提取结果 */}
-                        <div style={{ marginBottom: '12px' }}>
-                          <div style={{
-                            fontSize: '10px',
-                            fontWeight: 'bold',
-                            marginBottom: '4px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <span>📝 提取结果 ({data.extracted?.char_count || 0}字符)</span>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const response = await fetch(
-                                    `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/select-text-source`,
-                                    {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        page_number: Number(pageNum),
-                                        source: 'extracted'
-                                      })
-                                    }
-                                  );
-                                  if (response.ok) {
-                                    setPageTextData(prev => ({
-                                      ...prev,
-                                      [pageNum]: { ...prev[pageNum], active: 'extracted' }
-                                    }));
-                                    addMessage(`✅ 第${pageNum}页已切换到提取结果`, 'success');
-                                  }
-                                } catch (error) {
-                                  console.error('切换失败:', error);
-                                }
-                              }}
-                              disabled={data.active === 'extracted'}
-                              style={{
-                                padding: '2px 8px',
-                                fontSize: '9px',
-                                backgroundColor: data.active === 'extracted' ? '#4caf50' : '#c0c0c0',
-                                color: data.active === 'extracted' ? '#fff' : '#000',
-                                border: '1px outset #c0c0c0',
-                                cursor: data.active === 'extracted' ? 'default' : 'pointer',
-                                fontFamily: 'MS Sans Serif, sans-serif'
-                              }}
-                            >
-                              {data.active === 'extracted' ? '✓ 使用中' : '使用此结果'}
-                            </button>
-                          </div>
-                          <div style={{
-                            fontSize: '9px',
-                            padding: '4px',
-                            backgroundColor: '#ffffff',
-                            border: '1px solid #808080',
-                            maxHeight: '80px',
-                            overflow: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            fontFamily: 'Courier New, monospace'
-                          }}>
-                            {data.extracted?.text?.substring(0, 200) || '(无内容)'}
-                            {data.extracted?.text?.length > 200 && '...'}
-                          </div>
-                        </div>
-
-                        {/* OCR结果 */}
-                        <div>
-                          <div style={{
-                            fontSize: '10px',
-                            fontWeight: 'bold',
-                            marginBottom: '4px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}>
-                            <span>🔍 OCR结果 ({data.ocr?.char_count || 0}字符)</span>
-                            {data.ocr && (
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    const response = await fetch(
-                                      `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/select-text-source`,
-                                      {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                          page_number: Number(pageNum),
-                                          source: 'ocr'
-                                        })
-                                      }
-                                    );
-                                    if (response.ok) {
-                                      setPageTextData(prev => ({
-                                        ...prev,
-                                        [pageNum]: { ...prev[pageNum], active: 'ocr' }
-                                      }));
-                                      addMessage(`✅ 第${pageNum}页已切换到OCR结果`, 'success');
-                                    }
-                                  } catch (error) {
-                                    console.error('切换失败:', error);
-                                  }
-                                }}
-                                disabled={data.active === 'ocr'}
-                                style={{
-                                  padding: '2px 8px',
-                                  fontSize: '9px',
-                                  backgroundColor: data.active === 'ocr' ? '#4caf50' : '#c0c0c0',
-                                  color: data.active === 'ocr' ? '#fff' : '#000',
-                                  border: '1px outset #c0c0c0',
-                                  cursor: data.active === 'ocr' ? 'default' : 'pointer',
-                                  fontFamily: 'MS Sans Serif, sans-serif'
-                                }}
-                              >
-                                {data.active === 'ocr' ? '✓ 使用中' : '使用此结果'}
-                              </button>
-                            )}
-                          </div>
-                          <div style={{
-                            fontSize: '9px',
-                            padding: '4px',
-                            backgroundColor: '#ffffff',
-                            border: '1px solid #808080',
-                            maxHeight: '80px',
-                            overflow: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            fontFamily: 'Courier New, monospace'
-                          }}>
-                            {data.ocr ? (
-                              <>
-                                {data.ocr.text?.substring(0, 200) || '(无内容)'}
-                                {data.ocr.text?.length > 200 && '...'}
-                              </>
-                            ) : (
-                              <span style={{ color: '#666' }}>未进行OCR识别</span>
-                            )}
-                          </div>
-                          {data.ocr && (
-                            <div style={{ fontSize: '9px', color: '#666', marginTop: '2px' }}>
-                              置信度: {(data.ocr.confidence * 100).toFixed(1)}% | 耗时: {data.ocr.processing_time}秒
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 底部操作栏 */}
-            <div style={{
-              padding: '8px',
-              borderTop: '2px groove #c0c0c0',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              {ocrProgress ? (
-                <div style={{ flex: 1, marginRight: '8px' }}>
-                  <div style={{
-                    fontSize: '11px',
-                    fontFamily: 'MS Sans Serif, sans-serif',
-                    marginBottom: '4px'
-                  }}>
-                    OCR进度: {ocrProgress.completed} / {ocrProgress.total}
-                  </div>
-                  <div style={{
-                    width: '100%',
-                    height: '20px',
-                    border: '2px inset #c0c0c0',
-                    backgroundColor: '#ffffff',
-                    position: 'relative'
-                  }}>
-                    <div style={{
-                      width: `${(ocrProgress.completed / ocrProgress.total) * 100}%`,
-                      height: '100%',
-                      backgroundColor: '#0078d4',
-                      transition: 'width 0.3s ease'
-                    }} />
-                  </div>
-                </div>
-              ) : (
-                <div style={{ flex: 1 }} />
-              )}
-
-              <button
-                onClick={async () => {
-                  if (selectedPages.size === 0) {
-                    alert('请先选择要OCR的页面');
-                    return;
-                  }
-
-                  const pageNumbers = Array.from(selectedPages).sort((a, b) => a - b);
-                  setOCRProgress({ completed: 0, total: pageNumbers.length });
-
-                  try {
-                    const response = await fetch(
-                      `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/ocr-batch?pages=${pageNumbers.join(',')}`,
-                      { method: 'GET' }
-                    );
-
-                    const reader = response.body.getReader();
-                    const decoder = new TextDecoder();
-                    let buffer = '';
-
-                    while (true) {
-                      const { done, value } = await reader.read();
-                      if (done) break;
-
-                      buffer += decoder.decode(value, { stream: true });
-                      const lines = buffer.split('\n\n');
-                      buffer = lines.pop() || '';
-
-                      for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                          const data = JSON.parse(line.slice(6));
-
-                          if (data.type === 'progress') {
-                            setOCRProgress({
-                              completed: data.completed,
-                              total: data.total
-                            });
-                          } else if (data.type === 'page_done') {
-                            // 更新页面数据
-                            setPageTextData(prev => ({
-                              ...prev,
-                              [data.page_number]: {
-                                ...prev[data.page_number],
-                                ocr: data.ocr_result,
-                                active: 'ocr'
-                              }
-                            }));
-                          } else if (data.type === 'complete') {
-                            addMessage(`✅ OCR完成！成功识别 ${data.total_processed} 页`, 'success');
-                            setOCRProgress(null);
-                          } else if (data.type === 'error') {
-                            addMessage(`❌ OCR失败: ${data.message}`, 'error');
-                            setOCRProgress(null);
-                          }
-                        }
-                      }
-                    }
-                  } catch (error) {
-                    console.error('❌ OCR失败:', error);
-                    addMessage(`❌ OCR失败: ${error.message}`, 'error');
-                    setOCRProgress(null);
-                  }
-                }}
-                disabled={selectedPages.size === 0 || ocrProgress !== null}
-                style={{
-                  padding: '4px 16px',
-                  fontSize: '11px',
-                  backgroundColor: selectedPages.size === 0 || ocrProgress !== null ? '#a0a0a0' : '#c0c0c0',
-                  border: '2px outset #c0c0c0',
-                  cursor: selectedPages.size === 0 || ocrProgress !== null ? 'not-allowed' : 'pointer',
-                  fontFamily: 'MS Sans Serif, sans-serif',
-                  fontWeight: 'bold'
-                }}
-              >
-                {ocrProgress ? '处理中...' : '批量OCR所选页面'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -2863,6 +2863,360 @@ async def semantic_search_annotations(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"语义搜索失败: {str(e)}")
 
+# ============================================
+# PDF页面内容提取API（多模态LLM）
+# ============================================
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/pages/info")
+async def get_pages_extraction_info(board_id: str, window_id: str):
+    """
+    获取所有页面的提取信息
+    返回：每页的字数、是否已提取等信息
+    """
+    try:
+        # 获取窗口信息
+        window_data = content_manager.load_window(board_id, window_id)
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        window_content = window_data.get('content', '')
+        if not window_content:
+            raise HTTPException(status_code=404, detail="窗口内容为空")
+        
+        # 转换为绝对路径
+        pdf_path = Path(window_content)
+        if not pdf_path.is_absolute():
+            board_dir = Path(storage_base_dir) / board_id
+            pdf_path = board_dir / window_content
+        
+        if not pdf_path.exists():
+            raise HTTPException(status_code=404, detail="PDF文件不存在")
+        
+        # 获取PDF总页数
+        import pypdf
+        pdf_reader = pypdf.PdfReader(str(pdf_path))
+        total_pages = len(pdf_reader.pages)
+        
+        # 获取pages目录
+        pages_dir = pdf_path.parent / "pages"
+        
+        # 收集每页的信息
+        pages_info = []
+        for page_num in range(1, total_pages + 1):
+            page_file = pages_dir / f"page-{page_num}.md"
+            
+            if page_file.exists():
+                # 读取文件内容统计字数
+                try:
+                    with open(page_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        # 简单统计：去除空白后的字符数
+                        char_count = len(content.strip())
+                        
+                        # 尝试提取版本信息
+                        version_info = {
+                            'has_text': '文本提取' in content or '## 文本内容' in content,
+                            'has_description': '图片描述' in content or '## 图片描述' in content
+                        }
+                        
+                        pages_info.append({
+                            'page': page_num,
+                            'extracted': True,
+                            'char_count': char_count,
+                            'versions': version_info,
+                            'file_path': str(page_file)
+                        })
+                except Exception as e:
+                    error(f"读取页面文件失败: {e}")
+                    pages_info.append({
+                        'page': page_num,
+                        'extracted': False,
+                        'char_count': 0,
+                        'versions': {'has_text': False, 'has_description': False}
+                    })
+            else:
+                # 尝试提取原始文字统计字数
+                try:
+                    page = pdf_reader.pages[page_num - 1]
+                    text = page.extract_text() or ''
+                    char_count = len(text.strip())
+                    
+                    pages_info.append({
+                        'page': page_num,
+                        'extracted': False,
+                        'char_count': char_count,
+                        'versions': {'has_text': False, 'has_description': False},
+                        'original_text_available': char_count > 50  # 判断是否有足够的原始文字
+                    })
+                except Exception as e:
+                    error(f"提取原始文字失败: {e}")
+                    pages_info.append({
+                        'page': page_num,
+                        'extracted': False,
+                        'char_count': 0,
+                        'versions': {'has_text': False, 'has_description': False},
+                        'original_text_available': False
+                    })
+        
+        return {
+            'success': True,
+            'total_pages': total_pages,
+            'pages': pages_info
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取页面提取信息失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取页面提取信息失败: {str(e)}")
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/pages/extract")
+async def extract_pages_content(
+    board_id: str,
+    window_id: str,
+    request_data: Dict
+):
+    """
+    使用多模态LLM提取指定页面的内容
+    请求体：{ "pages": [1, 2, 3], "dpi": 300 }
+    返回：SSE流式响应
+    """
+    try:
+        pages_to_extract = request_data.get('pages', [])
+        dpi = request_data.get('dpi', 300)
+        
+        if not pages_to_extract:
+            raise HTTPException(status_code=400, detail="未指定要提取的页面")
+        
+        # 获取窗口信息
+        window_data = content_manager.load_window(board_id, window_id)
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        window_content = window_data.get('content', '')
+        if not window_content:
+            raise HTTPException(status_code=404, detail="窗口内容为空")
+        
+        # 转换为绝对路径
+        pdf_path = Path(window_content)
+        if not pdf_path.is_absolute():
+            board_dir = Path(storage_base_dir) / board_id
+            pdf_path = board_dir / window_content
+        
+        if not pdf_path.exists():
+            raise HTTPException(status_code=404, detail="PDF文件不存在")
+        
+        info(f"开始提取页面内容: {pages_to_extract}")
+        
+        # 准备SSE流式响应
+        async def generate_extraction_stream():
+            import fitz  # PyMuPDF
+            
+            # 打开PDF
+            pdf_doc = fitz.open(str(pdf_path))
+            total_to_extract = len(pages_to_extract)
+            
+            for idx, page_num in enumerate(pages_to_extract, 1):
+                try:
+                    info(f"正在提取第 {page_num} 页 ({idx}/{total_to_extract})")
+                    
+                    # 发送进度
+                    yield f"data: {json.dumps({'type': 'progress', 'page': page_num, 'current': idx, 'total': total_to_extract}, ensure_ascii=False)}\n\n"
+                    
+                    # 获取页面
+                    page = pdf_doc.load_page(page_num - 1)  # 0-based index
+                    
+                    # 渲染为图片
+                    mat = fitz.Matrix(dpi / 72, dpi / 72)  # 缩放矩阵
+                    pix = page.get_pixmap(matrix=mat)
+                    
+                    # 转换为PNG字节
+                    img_bytes = pix.tobytes("png")
+                    
+                    # 转换为base64
+                    img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+                    
+                    info(f"页面 {page_num} 渲染完成，图片大小: {len(img_bytes)} bytes")
+                    
+                    # 调用多模态LLM
+                    messages = [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": f"""请分析这张PDF第{page_num}页的图片，提供两个版本的内容：
+
+**版本1：文本提取**
+- 提取图片中的所有文字内容
+- 保持原有的格式和结构
+- 如果有标题、列表、表格等，请用Markdown格式表示
+
+**版本2：图片描述**
+- 描述图片的整体内容和布局
+- 说明关键信息和重点
+- 描述图表、图片等非文字内容
+
+请按以下格式输出：
+
+## 文本提取
+[这里是提取的文字内容]
+
+## 图片描述
+[这里是对图片内容的描述]"""
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{img_base64}"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                    
+                    # 流式调用LLM
+                    accumulated_content = ""
+                    async for chunk in llm_service.chat_completion(messages, stream=True):
+                        accumulated_content += chunk
+                        # 发送LLM响应片段
+                        yield f"data: {json.dumps({'type': 'llm_chunk', 'page': page_num, 'content': chunk}, ensure_ascii=False)}\n\n"
+                    
+                    info(f"页面 {page_num} LLM提取完成，内容长度: {len(accumulated_content)}")
+                    
+                    # 保存结果
+                    pages_dir = pdf_path.parent / "pages"
+                    pages_dir.mkdir(exist_ok=True)
+                    
+                    page_file = pages_dir / f"page-{page_num}.md"
+                    with open(page_file, 'w', encoding='utf-8') as f:
+                        f.write(f"# 第{page_num}页内容\n\n")
+                        f.write(accumulated_content)
+                    
+                    info(f"页面 {page_num} 内容已保存: {page_file}")
+                    
+                    # 发送完成信号
+                    yield f"data: {json.dumps({'type': 'page_complete', 'page': page_num, 'content': accumulated_content}, ensure_ascii=False)}\n\n"
+                    
+                except Exception as e:
+                    error(f"提取页面 {page_num} 失败: {e}")
+                    yield f"data: {json.dumps({'type': 'error', 'page': page_num, 'error': str(e)}, ensure_ascii=False)}\n\n"
+            
+            pdf_doc.close()
+            
+            # 发送总体完成信号
+            yield f"data: {json.dumps({'type': 'complete', 'total': total_to_extract}, ensure_ascii=False)}\n\n"
+        
+        return StreamingResponse(
+            generate_extraction_stream(),
+            media_type='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no'
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"提取页面内容失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"提取页面内容失败: {str(e)}")
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/pages/{page}/content")
+async def get_page_content(board_id: str, window_id: str, page: int):
+    """获取指定页面的提取内容"""
+    try:
+        # 获取窗口信息
+        window_data = content_manager.load_window(board_id, window_id)
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        window_content = window_data.get('content', '')
+        pdf_path = Path(window_content)
+        if not pdf_path.is_absolute():
+            board_dir = Path(storage_base_dir) / board_id
+            pdf_path = board_dir / window_content
+        
+        pages_dir = pdf_path.parent / "pages"
+        page_file = pages_dir / f"page-{page}.md"
+        
+        if not page_file.exists():
+            raise HTTPException(status_code=404, detail="页面内容未提取")
+        
+        with open(page_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 尝试分离两个版本
+        text_version = ""
+        description_version = ""
+        
+        if "## 文本提取" in content and "## 图片描述" in content:
+            parts = content.split("## 图片描述")
+            text_part = parts[0].split("## 文本提取")
+            if len(text_part) > 1:
+                text_version = text_part[1].strip()
+            if len(parts) > 1:
+                description_version = parts[1].strip()
+        else:
+            # 没有明确分版本，全部作为文本版本
+            text_version = content
+        
+        return {
+            'success': True,
+            'page': page,
+            'full_content': content,
+            'text_version': text_version,
+            'description_version': description_version
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取页面内容失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取页面内容失败: {str(e)}")
+
+@app.put("/api/boards/{board_id}/windows/{window_id}/pages/{page}/content")
+async def update_page_content(board_id: str, window_id: str, page: int, request_data: Dict):
+    """更新页面内容（用户选择版本后）"""
+    try:
+        selected_content = request_data.get('content', '')
+        
+        if not selected_content:
+            raise HTTPException(status_code=400, detail="内容不能为空")
+        
+        # 获取窗口信息
+        window_data = content_manager.load_window(board_id, window_id)
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        window_content = window_data.get('content', '')
+        pdf_path = Path(window_content)
+        if not pdf_path.is_absolute():
+            board_dir = Path(storage_base_dir) / board_id
+            pdf_path = board_dir / window_content
+        
+        pages_dir = pdf_path.parent / "pages"
+        pages_dir.mkdir(exist_ok=True)
+        
+        page_file = pages_dir / f"page-{page}.md"
+        with open(page_file, 'w', encoding='utf-8') as f:
+            f.write(f"# 第{page}页内容\n\n")
+            f.write(selected_content)
+        
+        info(f"页面 {page} 内容已更新")
+        
+        return {'success': True, 'message': '内容已更新'}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"更新页面内容失败: {e}")
+        raise HTTPException(status_code=500, detail=f"更新页面内容失败: {str(e)}")
+
 @app.get("/api/media/serve")
 async def serve_media_file(path: str):
     """全新的媒体文件服务API - 避免路由冲突"""
@@ -3264,240 +3618,6 @@ async def get_conversation_context(board_id: str, conversation_id: str, limit: i
     except Exception as e:
         error(f"获取对话上下文失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================================================
-# OCR相关API
-# ============================================================================
-
-from pydantic import BaseModel
-
-class TextSourceSelection(BaseModel):
-    """文字来源选择请求"""
-    page_number: int
-    source: str  # 'extracted' 或 'ocr'
-
-
-@app.get("/api/boards/{board_id}/windows/{window_id}/all-pages-text")
-async def get_all_pages_text(board_id: str, window_id: str):
-    """
-    获取所有页面的文字数据（提取+OCR+当前使用）
-    """
-    from ocr_service import extract_text_from_page
-    import fitz
-    
-    try:
-        info(f"🔍 OCR API调用: board_id={board_id}, window_id={window_id}")
-        
-        # 通过content_manager获取窗口信息
-        windows = content_manager.get_board_windows(board_id)
-        info(f"📋 获取到{len(windows)}个窗口")
-        
-        window_data = next((w for w in windows if w['id'] == window_id), None)
-        
-        if not window_data:
-            error(f"❌ 窗口不存在: {window_id}")
-            raise HTTPException(status_code=404, detail=f"窗口不存在: {window_id}")
-        
-        info(f"✅ 找到窗口: {window_data.get('title', 'Untitled')}")
-        
-        pdf_path = window_data.get('content')
-        if not pdf_path:
-            error(f"❌ 窗口没有关联的PDF文件")
-            raise HTTPException(status_code=404, detail="窗口没有关联的PDF文件")
-        
-        info(f"📄 PDF路径: {pdf_path}")
-        
-        if not os.path.exists(pdf_path):
-            error(f"❌ PDF文件不存在: {pdf_path}")
-            raise HTTPException(status_code=404, detail=f"PDF文件不存在: {pdf_path}")
-        
-        # 构建pages目录路径
-        pdf_filename = os.path.splitext(os.path.basename(pdf_path))[0]
-        files_dir = os.path.dirname(pdf_path)
-        pages_dir = os.path.join(files_dir, 'pages')
-        
-        # 确保pages目录存在
-        os.makedirs(pages_dir, exist_ok=True)
-        
-        # 获取PDF总页数
-        doc = fitz.open(pdf_path)
-        total_pages = len(doc)
-        doc.close()
-        
-        # 如果还没有提取过文字，先提取所有页面
-        first_page_file = os.path.join(pages_dir, 'page_1_extracted.json')
-        if not os.path.exists(first_page_file):
-            info(f"首次访问，开始提取所有页面文字...")
-            for page_num in range(1, total_pages + 1):
-                extracted = extract_text_from_page(pdf_path, page_num)
-                extracted_file = os.path.join(pages_dir, f'page_{page_num}_extracted.json')
-                with open(extracted_file, 'w', encoding='utf-8') as f:
-                    json.dump(extracted, f, ensure_ascii=False, indent=2)
-            info(f"✅ 提取完成: {total_pages}页")
-        
-        # 加载所有页面数据
-        pages_data = {}
-        
-        for page_num in range(1, total_pages + 1):
-            extracted_file = os.path.join(pages_dir, f'page_{page_num}_extracted.json')
-            ocr_file = os.path.join(pages_dir, f'page_{page_num}_ocr.json')
-            active_file = os.path.join(pages_dir, f'page_{page_num}_active.txt')
-            
-            # 加载提取结果
-            extracted = {}
-            if os.path.exists(extracted_file):
-                with open(extracted_file, 'r', encoding='utf-8') as f:
-                    extracted = json.load(f)
-            
-            # 加载OCR结果
-            ocr = None
-            if os.path.exists(ocr_file):
-                with open(ocr_file, 'r', encoding='utf-8') as f:
-                    ocr = json.load(f)
-            
-            # 加载当前使用的版本
-            active = 'extracted'
-            if os.path.exists(active_file):
-                with open(active_file, 'r', encoding='utf-8') as f:
-                    active = f.read().strip()
-            elif ocr:
-                active = 'ocr'  # 如果有OCR结果且没有指定，默认使用OCR
-            
-            pages_data[page_num] = {
-                'extracted': extracted,
-                'ocr': ocr,
-                'active': active
-            }
-        
-        return {
-            'total_pages': total_pages,
-            'pages': pages_data
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        error(f"获取页面文字数据失败: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"获取页面文字数据失败: {str(e)}")
-
-
-@app.get("/api/boards/{board_id}/windows/{window_id}/ocr-batch")
-async def ocr_batch_pages(board_id: str, window_id: str, pages: str):
-    """
-    批量OCR指定页面（SSE流式返回）
-    
-    Args:
-        pages: 逗号分隔的页码字符串，例如 "1,3,5,10"
-    """
-    from ocr_service import ocr_page_image
-    
-    async def generate():
-        try:
-            page_numbers = [int(p.strip()) for p in pages.split(',')]
-            
-            # 通过content_manager获取窗口信息
-            windows = content_manager.get_board_windows(board_id)
-            window_data = next((w for w in windows if w['id'] == window_id), None)
-            
-            if not window_data:
-                yield f"data: {json.dumps({'type': 'error', 'message': '窗口不存在'})}\n\n"
-                return
-            
-            pdf_path = window_data.get('content')
-            if not pdf_path or not os.path.exists(pdf_path):
-                yield f"data: {json.dumps({'type': 'error', 'message': 'PDF文件不存在'})}\n\n"
-                return
-            
-            # 构建pages目录路径
-            files_dir = os.path.dirname(pdf_path)
-            pages_dir = os.path.join(files_dir, 'pages')
-            os.makedirs(pages_dir, exist_ok=True)
-            
-            # 逐页OCR
-            for i, page_num in enumerate(page_numbers):
-                try:
-                    # 发送进度
-                    yield f"data: {json.dumps({'type': 'progress', 'completed': i, 'total': len(page_numbers), 'current_page': page_num})}\n\n"
-                    
-                    # 执行OCR
-                    result = ocr_page_image(pdf_path, page_num)
-                    
-                    # 保存OCR结果
-                    ocr_file = os.path.join(pages_dir, f'page_{page_num}_ocr.json')
-                    with open(ocr_file, 'w', encoding='utf-8') as f:
-                        json.dump(result, f, ensure_ascii=False, indent=2)
-                    
-                    # 设置为使用OCR结果
-                    active_file = os.path.join(pages_dir, f'page_{page_num}_active.txt')
-                    with open(active_file, 'w', encoding='utf-8') as f:
-                        f.write('ocr')
-                    
-                    # 发送完成信号
-                    yield f"data: {json.dumps({'type': 'page_done', 'page_number': page_num, 'ocr_result': result})}\n\n"
-                    
-                except Exception as e:
-                    error(f"OCR第{page_num}页失败: {e}")
-                    yield f"data: {json.dumps({'type': 'error', 'page': page_num, 'message': str(e)})}\n\n"
-            
-            # 全部完成
-            yield f"data: {json.dumps({'type': 'complete', 'total': len(page_numbers)})}\n\n"
-            
-        except Exception as e:
-            error(f"批量OCR失败: {e}")
-            import traceback
-            traceback.print_exc()
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-    
-    return StreamingResponse(generate(), media_type="text/event-stream")
-
-
-@app.post("/api/boards/{board_id}/windows/{window_id}/select-text-source")
-async def select_text_source(
-    board_id: str,
-    window_id: str,
-    selection: TextSourceSelection
-):
-    """
-    用户选择使用哪个文字来源
-    """
-    try:
-        # 通过content_manager获取窗口信息
-        windows = content_manager.get_board_windows(board_id)
-        window_data = next((w for w in windows if w['id'] == window_id), None)
-        
-        if not window_data:
-            raise HTTPException(status_code=404, detail=f"窗口不存在: {window_id}")
-        
-        pdf_path = window_data.get('content')
-        if not pdf_path or not os.path.exists(pdf_path):
-            raise HTTPException(status_code=404, detail=f"PDF文件不存在: {pdf_path}")
-        
-        # 构建pages目录路径
-        files_dir = os.path.dirname(pdf_path)
-        pages_dir = os.path.join(files_dir, 'pages')
-        
-        # 保存选择
-        active_file = os.path.join(pages_dir, f'page_{selection.page_number}_active.txt')
-        with open(active_file, 'w', encoding='utf-8') as f:
-            f.write(selection.source)
-        
-        info(f"✅ 第{selection.page_number}页文字来源切换为: {selection.source}")
-        
-        return {
-            'success': True,
-            'page_number': selection.page_number,
-            'active_source': selection.source
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        error(f"切换文字来源失败: {e}")
-        raise HTTPException(status_code=500, detail=f"切换文字来源失败: {str(e)}")
-
 
 if __name__ == "__main__":
     import uvicorn
