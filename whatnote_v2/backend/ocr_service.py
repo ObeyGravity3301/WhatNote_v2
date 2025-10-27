@@ -23,10 +23,10 @@ def get_ocr_instance():
     if _ocr_instance is None:
         info("🔍 初始化PaddleOCR...")
         try:
+            # 使用最简配置，最大兼容性
             _ocr_instance = PaddleOCR(
-                use_angle_cls=True,  # 使用方向分类器（处理旋转文字）
-                lang='ch',  # 中英文混合识别
-                use_gpu=False  # 使用CPU（如果有GPU可以改为True）
+                use_angle_cls=True,  # 使用方向分类器
+                lang='ch'  # 中英文混合识别
             )
             info("✅ PaddleOCR初始化完成")
         except Exception as e:
