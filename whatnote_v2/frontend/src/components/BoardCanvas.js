@@ -973,19 +973,32 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         {/* OCR按钮 */}
         <button
           onClick={async () => {
-            console.log('🔍 OCR按钮点击');
+            console.log('🔍 OCR按钮点击', { boardId, windowId });
+            
             try {
               // 获取所有页面的文字数据
-              const response = await fetch(
-                `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/all-pages-text`
-              );
+              const url = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/all-pages-text`;
+              console.log('📡 API请求:', url);
+              
+              const response = await fetch(url);
+              console.log('📡 API响应状态:', response.status);
+              
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ API错误响应:', errorText);
+                alert(`加载页面数据失败: ${response.status} - ${errorText}`);
+                return;
+              }
+              
               const data = await response.json();
+              console.log('✅ 获取到页面数据:', data);
               
               setPageTextData(data.pages);
               setShowOCRManager(true);
               console.log('✅ OCR管理面板打开，总页数:', data.total_pages);
             } catch (error) {
               console.error('❌ 加载页面数据失败:', error);
+              alert(`加载页面数据失败: ${error.message}`);
             }
           }}
           style={{
