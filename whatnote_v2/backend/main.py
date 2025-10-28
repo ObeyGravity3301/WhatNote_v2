@@ -467,6 +467,21 @@ async def migrate_json_naming():
         error(f"迁移JSON命名规则失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/boards/{board_id}/migrate-version-configs")
+async def migrate_version_configs(board_id: str):
+    """迁移PDF版本配置到新位置（xxx.pdf.versions.json）"""
+    try:
+        result = content_manager.migrate_version_configs_to_new_location(board_id)
+        if 'error' in result:
+            raise HTTPException(status_code=500, detail=result['error'])
+        info(f"版本配置迁移完成: {board_id}")
+        return {"message": "版本配置迁移完成", "result": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"迁移版本配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/boards/{board_id}/fix-duplicate-windows")
 async def fix_duplicate_windows(board_id: str):
     """修复重复的窗口ID问题"""

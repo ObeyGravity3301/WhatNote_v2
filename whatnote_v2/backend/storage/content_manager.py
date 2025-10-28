@@ -2134,35 +2134,59 @@ class ContentManager:
     
     def get_page_version(self, board_id: str, window_id: str, page: int) -> str:
         """
-        获取指定页面使用的版本
+        获取指定页面使用的版本（兼容新旧两种方式）
         
         Returns:
             'llm' - 使用LLM提取的内容
             'pdf' - 使用PyPDF提取的内容
         """
         try:
+            # 先尝试新方法：从PDF路径读取
+            windows = self.get_board_windows(board_id)
+            for window in windows:
+                if window.get('id') == window_id:
+                    pdf_path = window.get('content', '')
+                    if pdf_path:
+                        pdf_file = Path(pdf_path)
+                        version_file = pdf_file.parent / f"{pdf_file.name}.versions.json"
+                        
+                        # 如果新版本配置文件存在，使用新方法
+                        if version_file.exists():
+                            return self.get_page_version_from_pdf(pdf_path, page)
+                    break
+            
+            # 回退到旧方法：从pages目录读取
             config_path = self.get_page_version_config_path(board_id, window_id)
-            if not config_path or not config_path.exists():
-                return 'pdf'  # 默认使用PyPDF版本
+            if config_path and config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    page_versions = config.get('page_versions', {})
+                    return page_versions.get(str(page), config.get('default_version', 'pdf'))
             
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            
-            # 获取该页面的版本配置
-            page_versions = config.get('page_versions', {})
-            return page_versions.get(str(page), config.get('default_version', 'pdf'))
+            return 'pdf'  # 默认使用PyPDF版本
         except Exception as e:
             print(f"读取页面版本配置失败: {e}")
             return 'pdf'  # 出错时使用PyPDF版本
     
     def save_page_version(self, board_id: str, window_id: str, page: int, version: str) -> bool:
         """
-        保存页面版本配置
+        保存页面版本配置（兼容旧方式）
         
         Args:
             version: 'llm' 或 'pdf'
         """
         try:
+            # 先尝试获取PDF路径，使用新方法
+            windows = self.get_board_windows(board_id)
+            for window in windows:
+                if window.get('id') == window_id:
+                    pdf_path = window.get('content', '')
+                    if pdf_path:
+                        # 使用新方法：基于PDF路径
+                        return self.save_page_version_for_pdf(pdf_path, page, version)
+                    break
+            
+            # 回退到旧方法
             config_path = self.get_page_version_config_path(board_id, window_id)
             if not config_path:
                 return False
@@ -2184,6 +2208,145 @@ class ContentManager:
             return True
         except Exception as e:
             print(f"❌ 保存页面版本配置失败: {e}")
+            return False
+    
+    def get_page_version_from_pdf(self, pdf_path: str, page: int) -> str:
+        """
+        从PDF文件路径直接获取页面版本（新方法，不需要board_id和window_id）
+        
+        Args:
+            pdf_path: PDF文件的绝对路径
+            page: 页码
+            
+        Returns:
+            'llm' - 使用LLM提取的内容
+            'pdf' - 使用PyPDF提取的内容
+        """
+        try:
+            pdf_file = Path(pdf_path)
+            if not pdf_file.exists():
+                return 'pdf'
+            
+            # 版本配置文件：document.pdf.versions.json
+            version_file = pdf_file.parent / f"{pdf_file.name}.versions.json"
+            
+            if version_file.exists():
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    page_versions = config.get('page_versions', {})
+                    return page_versions.get(str(page), config.get('default_version', 'pdf'))
+            
+            return 'pdf'  # 默认PyPDF版本
+        except Exception as e:
+            print(f"❌ 读取PDF版本配置失败: {e}")
+            return 'pdf'
+    
+    def migrate_version_configs_to_new_location(self, board_id: str) -> dict:
+        """
+        迁移旧的版本配置到新位置
+        旧位置：pages/document/page_versions.json
+        新位置：files/pdfs/document.pdf.versions.json
+        
+        Returns:
+            dict: 迁移统计信息
+        """
+        try:
+            info(f"🔄 开始迁移版本配置: {board_id}")
+            
+            windows = self.get_board_windows(board_id)
+            migrated_count = 0
+            skipped_count = 0
+            
+            for window in windows:
+                if window.get('type') != 'pdf':
+                    continue
+                
+                window_id = window.get('id')
+                pdf_path = window.get('content', '')
+                if not pdf_path:
+                    continue
+                
+                pdf_file = Path(pdf_path)
+                if not pdf_file.exists():
+                    continue
+                
+                # 检查新位置是否已存在
+                new_version_file = pdf_file.parent / f"{pdf_file.name}.versions.json"
+                if new_version_file.exists():
+                    info(f"  ⏭️ 跳过 {pdf_file.name}（新配置已存在）")
+                    skipped_count += 1
+                    continue
+                
+                # 查找旧位置的配置
+                old_config_path = self.get_page_version_config_path(board_id, window_id)
+                if not old_config_path or not old_config_path.exists():
+                    continue
+                
+                # 读取旧配置
+                with open(old_config_path, 'r', encoding='utf-8') as f:
+                    old_config = json.load(f)
+                
+                # 保存到新位置
+                with open(new_version_file, 'w', encoding='utf-8') as f:
+                    json.dump(old_config, f, ensure_ascii=False, indent=2)
+                
+                info(f"  ✅ 迁移 {pdf_file.name}（{len(old_config.get('page_versions', {}))} 个页面配置）")
+                migrated_count += 1
+            
+            result = {
+                'board_id': board_id,
+                'migrated': migrated_count,
+                'skipped': skipped_count,
+                'total': migrated_count + skipped_count
+            }
+            
+            info(f"✅ 迁移完成: {migrated_count} 个PDF，跳过 {skipped_count} 个")
+            return result
+            
+        except Exception as e:
+            error(f"❌ 迁移版本配置失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'error': str(e)}
+    
+    def save_page_version_for_pdf(self, pdf_path: str, page: int, version: str) -> bool:
+        """
+        为PDF文件保存页面版本（新方法，不需要board_id和window_id）
+        
+        Args:
+            pdf_path: PDF文件的绝对路径
+            page: 页码
+            version: 'llm' 或 'pdf'
+            
+        Returns:
+            bool: 是否保存成功
+        """
+        try:
+            pdf_file = Path(pdf_path)
+            if not pdf_file.exists():
+                print(f"❌ PDF文件不存在: {pdf_path}")
+                return False
+            
+            # 版本配置文件：document.pdf.versions.json
+            version_file = pdf_file.parent / f"{pdf_file.name}.versions.json"
+            
+            # 读取现有配置
+            config = {'default_version': 'pdf', 'page_versions': {}}
+            if version_file.exists():
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            
+            # 更新页面版本
+            config['page_versions'][str(page)] = version
+            
+            # 保存配置
+            with open(version_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            
+            print(f"💾 [版本配置] {pdf_file.name} 第{page}页 → {version.upper()}")
+            return True
+        except Exception as e:
+            print(f"❌ 保存PDF版本配置失败: {e}")
             return False
     
     def get_pdf_page_contents(self, board_id: str, window_id: str, page: int) -> dict:

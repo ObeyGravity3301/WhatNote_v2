@@ -139,39 +139,45 @@ class LLMService:
                         })
                         info(f"图片处理完成: {file_info.get('name', 'unknown')}")
                 elif file_info.get('type') == 'pdfs':
-                    # PDF文件：使用版本管理系统读取内容
+                    # PDF文件：使用版本管理系统读取内容（新方法：基于PDF路径）
                     info(f"📄 [AI助手] 处理PDF文件: {file_info.get('name', 'unknown')}")
                     
-                    # 尝试使用版本管理系统读取内容
-                    if self.content_manager and file_info.get('board_id') and file_info.get('window_id'):
+                    # 尝试使用版本管理系统读取内容（不再需要board_id和window_id！）
+                    if self.content_manager:
                         try:
-                            info(f"📖 [AI助手] 使用版本管理系统读取PDF内容")
+                            info(f"📖 [AI助手] 使用版本管理系统读取PDF内容（基于路径）")
                             
                             # 获取PDF总页数
                             pdf_reader = pypdf.PdfReader(file_path)
                             total_pages = len(pdf_reader.pages)
                             
+                            # 获取PDF文件名
+                            pdf_file = Path(file_path)
+                            pdf_name = pdf_file.stem
+                            
+                            # 构建pages目录
+                            pages_dir = pdf_file.parent / "pages" / pdf_name
+                            
                             text_content = ""
                             used_versions = []  # 记录使用的版本
                             
-                            # 读取所有页面内容（使用版本管理系统）
+                            # 读取所有页面内容（使用新的版本管理方法）
                             for page_num in range(1, total_pages + 1):
-                                page_data = self.content_manager.get_pdf_page_contents(
-                                    file_info['board_id'],
-                                    file_info['window_id'],
-                                    page_num
-                                )
+                                # 获取该页使用的版本（新方法：直接从PDF路径）
+                                version = self.content_manager.get_page_version_from_pdf(file_path, page_num)
+                                used_versions.append(f"{page_num}:{version.upper()}")
                                 
-                                if page_data and page_data.get('current'):
-                                    # 获取该页使用的版本
-                                    version = self.content_manager.get_page_version(
-                                        file_info['board_id'],
-                                        file_info['window_id'],
-                                        page_num
-                                    )
-                                    used_versions.append(f"{page_num}:{version.upper()}")
-                                    
-                                    text_content += f"--- 第 {page_num} 页 ---\n{page_data['current']}\n\n"
+                                # 根据版本读取对应的文件
+                                if version == 'llm':
+                                    content_file = pages_dir / f"{pdf_name}_page_{page_num:03d}_llm.md"
+                                else:
+                                    content_file = pages_dir / f"{pdf_name}_page_{page_num:03d}.md"
+                                
+                                if content_file.exists():
+                                    with open(content_file, 'r', encoding='utf-8') as f:
+                                        page_content = f.read()
+                                        text_content += f"--- 第 {page_num} 页 ---\n{page_content}\n\n"
+                                        info(f"📄 [文件读取] 第{page_num}页 ({version.upper()}) → {content_file.name}")
                             
                             info(f"✅ [AI助手] 版本管理读取成功: {', '.join(used_versions)}")
                             
@@ -211,8 +217,8 @@ class LLMService:
                                     'text': f"[PDF文件: {file_info.get('name', 'unknown')} - 处理失败: {str(e2)}]"
                                 })
                     else:
-                        # 没有版本管理信息，使用PyPDF直接提取
-                        info(f"⚠️ [AI助手] 无版本管理信息，使用PyPDF直接提取")
+                        # 没有content_manager，使用PyPDF直接提取
+                        info(f"⚠️ [AI助手] 无content_manager，使用PyPDF直接提取")
                         try:
                             pdf_reader = pypdf.PdfReader(file_path)
                             self._extract_pdf_with_pypdf(file_path, file_info, content_array, pdf_reader)
