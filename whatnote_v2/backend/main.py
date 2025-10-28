@@ -3190,6 +3190,29 @@ async def extract_pages_content(
                     
                     info(f"页面 {page_num} LLM提取完成，内容长度: {len(accumulated_content)}")
                     
+                    # 解析文本提取和图片描述
+                    text_content = ""
+                    image_content = ""
+                    
+                    # 尝试按标记分割
+                    if "## 文本提取" in accumulated_content and "## 图片描述" in accumulated_content:
+                        parts = accumulated_content.split("## 图片描述")
+                        if len(parts) == 2:
+                            text_part = parts[0].replace("## 文本提取", "").strip()
+                            image_part = parts[1].strip()
+                            text_content = text_part
+                            image_content = image_part
+                        else:
+                            # 解析失败，使用完整内容
+                            text_content = accumulated_content
+                            image_content = accumulated_content
+                    else:
+                        # 没有找到标记，使用完整内容
+                        text_content = accumulated_content
+                        image_content = accumulated_content
+                    
+                    info(f"页面 {page_num} 解析结果: 文本 {len(text_content)} 字, 图片描述 {len(image_content)} 字")
+                    
                     # 保存结果（使用统一的命名格式：{pdf_name}_page_{page_num:03d}_llm.md）
                     pages_dir = pdf_path.parent / "pages" / pdf_name
                     pages_dir.mkdir(parents=True, exist_ok=True)
@@ -3206,8 +3229,8 @@ async def extract_pages_content(
                     
                     info(f"页面 {page_num} 内容已保存: {page_file}")
                     
-                    # 发送完成信号
-                    yield f"data: {json.dumps({'type': 'page_complete', 'page': page_num, 'content': accumulated_content}, ensure_ascii=False)}\n\n"
+                    # 发送完成信号（包含分离的内容）
+                    yield f"data: {json.dumps({{'type': 'page_complete', 'page': page_num, 'content': accumulated_content, 'textContent': text_content, 'imageContent': image_content}}, ensure_ascii=False)}\n\n"
                     
                 except Exception as e:
                     error(f"提取页面 {page_num} 失败: {e}")

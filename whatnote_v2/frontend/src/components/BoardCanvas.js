@@ -146,6 +146,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [selectedPages, setSelectedPages] = useState(new Set()); // 选中的页面
   const [isExtracting, setIsExtracting] = useState(false); // 是否正在提取
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 }); // 提取进度
+  const [showResultCompare, setShowResultCompare] = useState(null); // { page: number, textContent: string, imageContent: string }
   const [extractedContents, setExtractedContents] = useState({}); // 提取的内容 {pageNum: {text, description}}
   
   // 预设的注释风格
@@ -1456,6 +1457,16 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             total: prev.total 
                           }));
                           
+                          // 保存提取的内容（分离文本和图片描述）
+                          setExtractedContents(prev => ({
+                            ...prev,
+                            [data.page]: {
+                              text: data.textContent || data.content,
+                              image: data.imageContent || data.content,
+                              full: data.content
+                            }
+                          }));
+                          
                           // 更新页面信息
                           setPagesInfo(prev => prev.map(p =>
                             p.page === data.page ? { ...p, extracted: true, char_count: data.content?.length || 0 } : p
@@ -1664,22 +1675,48 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   </div>
                 )}
                 
-                {/* 已提取标记（右下角） */}
+                {/* 已提取标记（右下角） - 点击查看 */}
                 {pageInfo.extracted && (
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '4px',
-                    right: '4px',
-                    backgroundColor: '#008000',
-                    color: '#ffffff',
-                    padding: '2px 6px',
-                    borderRadius: '3px',
-                    fontSize: '9px',
-                    fontFamily: 'MS Sans Serif, sans-serif',
-                    fontWeight: 'bold',
-                    zIndex: 2
-                  }}>
-                    已提取
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation(); // 阻止触发卡片的选择事件
+                      const content = extractedContents[pageInfo.page];
+                      if (content) {
+                        setShowResultCompare({
+                          page: pageInfo.page,
+                          textContent: content.text,
+                          imageContent: content.image,
+                          fullContent: content.full
+                        });
+                      } else {
+                        console.warn(`页面 ${pageInfo.page} 的提取内容未找到`);
+                      }
+                    }}
+                    style={{
+                      position: 'absolute',
+                      bottom: '4px',
+                      right: '4px',
+                      backgroundColor: '#008000',
+                      color: '#ffffff',
+                      padding: '2px 6px',
+                      borderRadius: '3px',
+                      fontSize: '9px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold',
+                      zIndex: 2,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '2px'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#006000';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#008000';
+                    }}
+                  >
+                    已提取 👁
                   </div>
                 )}
                 
@@ -1801,6 +1838,234 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               </div>
             </div>
           )}
+          </div>
+        </div>
+      )}
+
+      {/* 提取结果对比窗口 */}
+      {showResultCompare && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            width: '90%',
+            maxWidth: '1200px',
+            height: '80%',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #ffffff',
+            borderRadius: '0px',
+            display: 'flex',
+            flexDirection: 'column',
+            fontFamily: 'MS Sans Serif, sans-serif'
+          }}>
+            {/* 标题栏 */}
+            <div style={{
+              padding: '3px 5px',
+              background: 'linear-gradient(90deg, #000080, #1084d0)',
+              color: '#ffffff',
+              fontSize: '11px',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <span>📄 第{showResultCompare.page}页提取结果对比</span>
+              <button
+                onClick={() => setShowResultCompare(null)}
+                style={{
+                  width: '16px',
+                  height: '14px',
+                  padding: 0,
+                  backgroundColor: '#c0c0c0',
+                  border: '1px outset #ffffff',
+                  fontSize: '9px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 内容区域 */}
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              padding: '8px',
+              gap: '8px',
+              overflow: 'hidden'
+            }}>
+              {/* 左侧：文本提取 */}
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: '#ffffff',
+                border: '2px inset #808080'
+              }}>
+                <div style={{
+                  padding: '4px 8px',
+                  backgroundColor: '#000080',
+                  color: '#ffffff',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  textAlign: 'center'
+                }}>
+                  文本提取 ({showResultCompare.textContent.length}字)
+                </div>
+                <div style={{
+                  flex: 1,
+                  padding: '8px',
+                  overflow: 'auto',
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  lineHeight: '1.6',
+                  whiteSpace: 'pre-wrap'
+                }}>
+                  {showResultCompare.textContent}
+                </div>
+                <div style={{
+                  padding: '4px',
+                  borderTop: '2px groove #808080',
+                  textAlign: 'center'
+                }}>
+                  <button
+                    onClick={async () => {
+                      // 保存文本提取版本
+                      try {
+                        await fetch(
+                          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${showResultCompare.page}/content`,
+                          {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: showResultCompare.textContent, version: 'text' })
+                          }
+                        );
+                        addMessageWithSource('✅ 保存成功', `第${showResultCompare.page}页使用文本提取版本`, 'success');
+                        setShowResultCompare(null);
+                      } catch (error) {
+                        addMessageWithSource('❌ 保存失败', error.message, 'error');
+                      }
+                    }}
+                    style={{
+                      padding: '4px 16px',
+                      fontSize: '11px',
+                      backgroundColor: '#008000',
+                      color: '#ffffff',
+                      border: '2px outset #008000',
+                      borderRadius: '0px',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    ✓ 使用文本提取
+                  </button>
+                </div>
+              </div>
+
+              {/* 右侧：图片描述 */}
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: '#ffffff',
+                border: '2px inset #808080'
+              }}>
+                <div style={{
+                  padding: '4px 8px',
+                  backgroundColor: '#800080',
+                  color: '#ffffff',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  textAlign: 'center'
+                }}>
+                  图片描述 ({showResultCompare.imageContent.length}字)
+                </div>
+                <div style={{
+                  flex: 1,
+                  padding: '8px',
+                  overflow: 'auto',
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  lineHeight: '1.6',
+                  whiteSpace: 'pre-wrap'
+                }}>
+                  {showResultCompare.imageContent}
+                </div>
+                <div style={{
+                  padding: '4px',
+                  borderTop: '2px groove #808080',
+                  textAlign: 'center'
+                }}>
+                  <button
+                    onClick={async () => {
+                      // 保存图片描述版本
+                      try {
+                        await fetch(
+                          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${showResultCompare.page}/content`,
+                          {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: showResultCompare.imageContent, version: 'image' })
+                          }
+                        );
+                        addMessageWithSource('✅ 保存成功', `第${showResultCompare.page}页使用图片描述版本`, 'success');
+                        setShowResultCompare(null);
+                      } catch (error) {
+                        addMessageWithSource('❌ 保存失败', error.message, 'error');
+                      }
+                    }}
+                    style={{
+                      padding: '4px 16px',
+                      fontSize: '11px',
+                      backgroundColor: '#800080',
+                      color: '#ffffff',
+                      border: '2px outset #800080',
+                      borderRadius: '0px',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    ✓ 使用图片描述
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 底部按钮 */}
+            <div style={{
+              padding: '8px',
+              borderTop: '2px groove #808080',
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '8px'
+            }}>
+              <button
+                onClick={() => setShowResultCompare(null)}
+                style={{
+                  padding: '4px 16px',
+                  fontSize: '11px',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px outset #ffffff',
+                  borderRadius: '0px',
+                  cursor: 'pointer',
+                  fontFamily: 'MS Sans Serif, sans-serif'
+                }}
+              >
+                关闭
+              </button>
+            </div>
           </div>
         </div>
       )}

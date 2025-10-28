@@ -2,8 +2,8 @@
   "type": "image",
   "title": "26394050_p0.jpg",
   "position": {
-    "x": 225,
-    "y": 224
+    "x": 903,
+    "y": 257
   },
   "size": {
     "width": 800,
@@ -11,7 +11,7 @@
   },
   "id": "window_1758716940095",
   "created_at": "2025-09-24T20:29:00.095649",
-  "updated_at": "2025-09-24T20:29:05.977576",
+  "updated_at": "2025-10-28T15:06:45.009591",
   "file_path": "files/26394050_p0.jpg",
-  "content": "files/26394050_p0.jpg"
+  "hidden": false
 }
