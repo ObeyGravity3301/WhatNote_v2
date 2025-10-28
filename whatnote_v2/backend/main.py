@@ -2007,14 +2007,14 @@ async def subdivide_outline_sections(
                         
                         await queue.put({'type': 'section_start', 'section': section_num, 'title': section_title, 'pages': f'{page_start}-{page_end}'})
                         
-                        # 读取该分段所有页面的内容
+                        # 读取该分段所有页面的内容（细分阶段：只读当前页）
                         section_pages_content = []
                         for page_num in range(page_start, page_end + 1):
-                            page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
-                            if page_content.get('current'):
+                            page_content = content_manager.get_single_pdf_page_content(board_id, window_id, page_num)
+                            if page_content:
                                 section_pages_content.append({
                                     'page': page_num,
-                                    'content': page_content['current']
+                                    'content': page_content
                                 })
                         
                         if not section_pages_content:
