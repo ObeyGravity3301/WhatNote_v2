@@ -2877,7 +2877,13 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
         info(f"📋 获取页面提取信息: board_id={board_id}, window_id={window_id}")
         
         # 获取窗口信息
-        window_data = content_manager.load_window(board_id, window_id)
+        windows = content_manager.get_board_windows(board_id)
+        window_data = None
+        for window in windows:
+            if window.get('id') == window_id:
+                window_data = window
+                break
+        
         if not window_data:
             error(f"窗口不存在: {window_id}")
             raise HTTPException(status_code=404, detail="窗口不存在")
@@ -3005,7 +3011,13 @@ async def extract_pages_content(
             raise HTTPException(status_code=400, detail="未指定要提取的页面")
         
         # 获取窗口信息
-        window_data = content_manager.load_window(board_id, window_id)
+        windows = content_manager.get_board_windows(board_id)
+        window_data = None
+        for window in windows:
+            if window.get('id') == window_id:
+                window_data = window
+                break
+        
         if not window_data:
             raise HTTPException(status_code=404, detail="窗口不存在")
         
@@ -3147,7 +3159,13 @@ async def get_page_content(board_id: str, window_id: str, page: int):
     """获取指定页面的提取内容"""
     try:
         # 获取窗口信息
-        window_data = content_manager.load_window(board_id, window_id)
+        windows = content_manager.get_board_windows(board_id)
+        window_data = None
+        for window in windows:
+            if window.get('id') == window_id:
+                window_data = window
+                break
+        
         if not window_data:
             raise HTTPException(status_code=404, detail="窗口不存在")
         
@@ -3208,7 +3226,13 @@ async def update_page_content(board_id: str, window_id: str, page: int, request_
             raise HTTPException(status_code=400, detail="内容不能为空")
         
         # 获取窗口信息
-        window_data = content_manager.load_window(board_id, window_id)
+        windows = content_manager.get_board_windows(board_id)
+        window_data = None
+        for window in windows:
+            if window.get('id') == window_id:
+                window_data = window
+                break
+        
         if not window_data:
             raise HTTPException(status_code=404, detail="窗口不存在")
         
