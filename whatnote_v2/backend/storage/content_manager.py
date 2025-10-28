@@ -2221,6 +2221,8 @@ class ContentManager:
             if not pdf_pages_dir or not pdf_pages_dir.exists():
                 return {}
             
+            print(f"🔍 [注释生成] 正在读取第{page}页内容...")
+            
             result = {}
             
             # 辅助函数：根据版本获取页面文件
@@ -2232,16 +2234,12 @@ class ContentManager:
                     # 优先使用LLM提取的内容
                     llm_file = pdf_pages_dir / f"{pdf_name}_page_{page_num:03d}_llm.md"
                     if llm_file.exists():
-                        print(f"📖 [版本选择] 第{page_num}页 → 使用LLM提取内容")
                         return llm_file
-                    else:
-                        # LLM文件不存在，回退到PyPDF
-                        print(f"⚠️ [版本回退] 第{page_num}页 → LLM文件不存在，回退到PyPDF")
+                    # LLM文件不存在，回退到PyPDF（静默回退）
                 
                 # 使用PyPDF版本
                 pdf_file = pdf_pages_dir / f"{pdf_name}_page_{page_num:03d}.md"
                 if pdf_file.exists():
-                    print(f"📖 [版本选择] 第{page_num}页 → 使用PyPDF提取内容")
                     return pdf_file
                 
                 return None
@@ -2252,18 +2250,27 @@ class ContentManager:
                 if prev_page_file:
                     with open(prev_page_file, 'r', encoding='utf-8') as f:
                         result['previous'] = f.read()
+                    # 日志：记录实际读取的文件
+                    version_type = "LLM" if "_llm.md" in str(prev_page_file) else "PyPDF"
+                    print(f"  📄 读取前一页: 第{page-1}页 [{version_type}]")
             
             # 读取当前页内容（必须存在）
             current_page_file = get_page_file_by_version(page)
             if current_page_file:
                 with open(current_page_file, 'r', encoding='utf-8') as f:
                     result['current'] = f.read()
+                # 日志：记录实际读取的文件
+                version_type = "LLM" if "_llm.md" in str(current_page_file) else "PyPDF"
+                print(f"  📄 读取当前页: 第{page}页 [{version_type}]")
             
             # 读取下一页内容
             next_page_file = get_page_file_by_version(page + 1)
             if next_page_file:
                 with open(next_page_file, 'r', encoding='utf-8') as f:
                     result['next'] = f.read()
+                # 日志：记录实际读取的文件
+                version_type = "LLM" if "_llm.md" in str(next_page_file) else "PyPDF"
+                print(f"  📄 读取下一页: 第{page+1}页 [{version_type}]")
             
             return result
             
