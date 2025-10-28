@@ -976,14 +976,10 @@ function ChatWindow({
   // 优化的文件加载函数
   const loadBoardFiles = useCallback(async () => {
     try {
-      console.log(`正在加载展板文件: ${boardId}`);
       const response = await fetch(`http://localhost:8081/api/boards/${boardId}/files`);
-      console.log(`文件API响应状态: ${response.status}`);
       
       if (response.ok) {
         const data = await response.json();
-        console.log(`加载到的文件数量: ${data.files ? data.files.length : 0}`);
-        console.log(`文件列表:`, data.files);
         setBoardFiles(data.files || []);
       } else {
         console.error('文件API响应失败:', response.status, response.statusText);
@@ -1109,7 +1105,7 @@ function ChatWindow({
       e.preventDefault();
       sendMessage();
     }
-  }, []);
+  }, [sendMessage]);
 
   // 发送消息函数
   const sendMessage = useCallback(async () => {
@@ -1170,9 +1166,6 @@ function ChatWindow({
         files: msg.files
       }));
       
-      console.log('发送给LLM的消息数:', conversationMessages.length);
-      console.log('包含system消息，让LLM了解用户操作');
-      
       // 直接使用传入的userMessage对象
       const currentUserMessage = {
         role: userMessage.role,
@@ -1180,34 +1173,7 @@ function ChatWindow({
         files: userMessage.files
       };
       
-      if (userMessage.files && userMessage.files.length > 0) {
-        console.log('当前消息包含文件:', userMessage.files);
-      } else {
-        console.log('当前消息不包含文件');
-      }
-      
       conversationMessages.push(currentUserMessage);
-      
-      // 调试：打印发送给LLM的消息
-      console.log('=== 发送给LLM的完整消息 ===');
-      console.log('消息总数:', conversationMessages.length);
-      conversationMessages.forEach((msg, index) => {
-        console.log(`--- 消息 ${index} ---`);
-        console.log('角色:', msg.role);
-        console.log('内容:', msg.content);
-        if (msg.files && msg.files.length > 0) {
-          console.log(`文件数量: ${msg.files.length}`);
-          msg.files.forEach((file, fileIndex) => {
-            console.log(`  文件 ${fileIndex}: ${file.name} (${file.type})`);
-            console.log(`    路径: ${file.path}`);
-            console.log(`    URL: ${file.url}`);
-          });
-        } else {
-          console.log('无文件');
-        }
-      });
-      console.log('=== 完整JSON ===');
-      console.log(JSON.stringify(conversationMessages, null, 2));
       
       const response = await fetch('http://localhost:8081/api/llm/chat', {
         method: 'POST',
