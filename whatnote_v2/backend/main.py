@@ -3012,10 +3012,6 @@ async def extract_pages_content(
         
         # 准备SSE流式响应
         async def generate_extraction_stream():
-            import fitz  # PyMuPDF
-            
-            # 打开PDF
-            pdf_doc = fitz.open(str(pdf_path))
             total_to_extract = len(pages_to_extract)
             
             for idx, page_num in enumerate(pages_to_extract, 1):
@@ -3025,15 +3021,15 @@ async def extract_pages_content(
                     # 发送进度
                     yield f"data: {json.dumps({'type': 'progress', 'page': page_num, 'current': idx, 'total': total_to_extract}, ensure_ascii=False)}\n\n"
                     
-                    # 获取页面
-                    page = pdf_doc.load_page(page_num - 1)  # 0-based index
+                    # 使用content_manager渲染PDF页面为图片
+                    image_path = content_manager.render_pdf_page_to_image(board_id, window_id, page_num)
                     
-                    # 渲染为图片
-                    mat = fitz.Matrix(dpi / 72, dpi / 72)  # 缩放矩阵
-                    pix = page.get_pixmap(matrix=mat)
+                    if not image_path:
+                        raise Exception(f"渲染页面 {page_num} 失败")
                     
-                    # 转换为PNG字节
-                    img_bytes = pix.tobytes("png")
+                    # 读取图片文件
+                    with open(image_path, 'rb') as f:
+                        img_bytes = f.read()
                     
                     # 转换为base64
                     img_base64 = base64.b64encode(img_bytes).decode('utf-8')
@@ -3103,8 +3099,6 @@ async def extract_pages_content(
                 except Exception as e:
                     error(f"提取页面 {page_num} 失败: {e}")
                     yield f"data: {json.dumps({'type': 'error', 'page': page_num, 'error': str(e)}, ensure_ascii=False)}\n\n"
-            
-            pdf_doc.close()
             
             # 发送总体完成信号
             yield f"data: {json.dumps({'type': 'complete', 'total': total_to_extract}, ensure_ascii=False)}\n\n"
