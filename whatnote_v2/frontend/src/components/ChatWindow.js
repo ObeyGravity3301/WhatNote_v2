@@ -1100,13 +1100,6 @@ function ChatWindow({
     }
   }, []);
 
-  const handleKeyPress = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }, [sendMessage]);
-
   // 发送消息函数
   const sendMessage = useCallback(async () => {
     if ((!inputText.trim() && selectedFiles.length === 0) || !conversationId || isLoading) return;
@@ -1155,6 +1148,14 @@ function ChatWindow({
       setIsLoading(false);
     }
   }, [inputText, selectedFiles, conversationId, isLoading, boardId]);
+
+  // 键盘事件处理
+  const handleKeyPress = useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }, [sendMessage]);
 
   // 流式AI回复函数
   const generateStreamingAIResponse = useCallback(async (userMessage, aiMessageId) => {
