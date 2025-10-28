@@ -16,8 +16,55 @@ import pypdf
 class LLMService:
     """LLM API调用服务"""
     
-    def __init__(self, api_config_manager):
+    def __init__(self, api_config_manager, content_manager=None):
         self.api_config_manager = api_config_manager
+        self.content_manager = content_manager
+    
+    def _extract_pdf_with_pypdf(self, file_path: str, file_info: Dict, content_array: List, pdf_reader=None) -> None:
+        """使用PyPDF直接提取PDF文本（回退方案）"""
+        try:
+            if pdf_reader is None:
+                pdf_reader = pypdf.PdfReader(file_path)
+            
+            text_content = ""
+            
+            # 提取所有页面的文本
+            for page_num in range(len(pdf_reader.pages)):
+                page = pdf_reader.pages[page_num]
+                page_text = page.extract_text()
+                if page_text.strip():
+                    text_content += f"--- 第 {page_num + 1} 页 ---\n{page_text}\n\n"
+            
+            if text_content.strip():
+                # 清理文本格式
+                text_content = text_content.replace('\n\n\n', '\n\n')
+                text_content = text_content.replace('  ', ' ')
+                
+                # 限制文本长度
+                max_chars = 50000
+                original_length = len(text_content)
+                if original_length > max_chars:
+                    total_pages = len(pdf_reader.pages)
+                    estimated_page = int((max_chars / original_length) * total_pages)
+                    text_content = text_content[:max_chars] + f"\n\n... (内容已截断，完整文档共{total_pages}页，已发送约前{estimated_page}页)"
+                    info(f"PDF文本过长，已截断: 原始{original_length}字符 -> {max_chars}字符")
+                
+                content_array.append({
+                    'type': 'text',
+                    'text': f"[PDF文件内容: {file_info.get('name', 'unknown')} - 共{len(pdf_reader.pages)}页]\n\n{text_content}"
+                })
+                info(f"PDF文本提取成功（PyPDF），总页数: {len(pdf_reader.pages)}, 文本长度: {len(text_content)} 字符")
+            else:
+                content_array.append({
+                    'type': 'text',
+                    'text': f"[PDF文件: {file_info.get('name', 'unknown')} - 无法提取文本内容]"
+                })
+        except Exception as e:
+            info(f"PyPDF提取失败: {e}")
+            content_array.append({
+                'type': 'text',
+                'text': f"[PDF文件: {file_info.get('name', 'unknown')} - 提取失败: {str(e)}]"
+            })
     
     def _process_message_files(self, message: Dict) -> Dict:
         """
@@ -92,56 +139,85 @@ class LLMService:
                         })
                         info(f"图片处理完成: {file_info.get('name', 'unknown')}")
                 elif file_info.get('type') == 'pdfs':
-                    # PDF文件：转换为base64发送给LLM（让LLM直接分析PDF）
-                    info(f"处理PDF文件: {file_info.get('name', 'unknown')} - 大小: {len(file_data)} bytes")
+                    # PDF文件：使用版本管理系统读取内容
+                    info(f"📄 [AI助手] 处理PDF文件: {file_info.get('name', 'unknown')}")
                     
-                    if len(file_data) > 20 * 1024 * 1024:  # 20MB限制
-                        info(f"PDF文件过大，无法发送: {len(file_data)} bytes")
-                        content_array.append({
-                            'type': 'text',
-                            'text': f"[PDF文件: {file_info.get('name', 'unknown')} - 文件过大，无法发送]"
-                        })
-                    else:
-                        # PDF文件：提取文本内容
+                    # 尝试使用版本管理系统读取内容
+                    if self.content_manager and file_info.get('board_id') and file_info.get('window_id'):
                         try:
-                            with open(file_path, 'rb') as pdf_file:
-                                pdf_reader = pypdf.PdfReader(pdf_file)
-                                text_content = ""
+                            info(f"📖 [AI助手] 使用版本管理系统读取PDF内容")
+                            
+                            # 获取PDF总页数
+                            pdf_reader = pypdf.PdfReader(file_path)
+                            total_pages = len(pdf_reader.pages)
+                            
+                            text_content = ""
+                            used_versions = []  # 记录使用的版本
+                            
+                            # 读取所有页面内容（使用版本管理系统）
+                            for page_num in range(1, total_pages + 1):
+                                page_data = self.content_manager.get_pdf_page_contents(
+                                    file_info['board_id'],
+                                    file_info['window_id'],
+                                    page_num
+                                )
                                 
-                                # 提取所有页面的文本
-                                for page_num in range(len(pdf_reader.pages)):
-                                    page = pdf_reader.pages[page_num]
-                                    page_text = page.extract_text()
-                                    if page_text.strip():
-                                        text_content += f"--- 第 {page_num + 1} 页 ---\n{page_text}\n\n"
+                                if page_data and page_data.get('current'):
+                                    # 获取该页使用的版本
+                                    version = self.content_manager.get_page_version(
+                                        file_info['board_id'],
+                                        file_info['window_id'],
+                                        page_num
+                                    )
+                                    used_versions.append(f"{page_num}:{version.upper()}")
+                                    
+                                    text_content += f"--- 第 {page_num} 页 ---\n{page_data['current']}\n\n"
+                            
+                            info(f"✅ [AI助手] 版本管理读取成功: {', '.join(used_versions)}")
+                            
+                            if text_content.strip():
+                                # 清理文本格式
+                                text_content = text_content.replace('\n\n\n', '\n\n')
+                                text_content = text_content.replace('  ', ' ')
                                 
-                                if text_content.strip():
-                                    # 清理文本格式
-                                    text_content = text_content.replace('\n\n\n', '\n\n')
-                                    text_content = text_content.replace('  ', ' ')
-                                    
-                                    # 限制文本长度（提高到50000字符，大约可容纳25-30页）
-                                    max_chars = 50000
-                                    original_length = len(text_content)
-                                    if original_length > max_chars:
-                                        total_pages = len(pdf_reader.pages)
-                                        # 估算截断在第几页
-                                        estimated_page = int((max_chars / original_length) * total_pages)
-                                        text_content = text_content[:max_chars] + f"\n\n... (内容已截断，完整文档共{total_pages}页，已发送约前{estimated_page}页)"
-                                        info(f"PDF文本过长，已截断: 原始{original_length}字符 -> {max_chars}字符，估算发送了前{estimated_page}页")
-                                    
-                                    content_array.append({
-                                        'type': 'text',
-                                        'text': f"[PDF文件内容: {file_info.get('name', 'unknown')} - 共{len(pdf_reader.pages)}页]\n\n{text_content}"
-                                    })
-                                    info(f"PDF文本提取成功，总页数: {len(pdf_reader.pages)}, 文本长度: {len(text_content)} 字符")
-                                else:
-                                    content_array.append({
-                                        'type': 'text',
-                                        'text': f"[PDF文件: {file_info.get('name', 'unknown')} - 无法提取文本内容]"
-                                    })
+                                # 限制文本长度
+                                max_chars = 50000
+                                original_length = len(text_content)
+                                if original_length > max_chars:
+                                    estimated_page = int((max_chars / original_length) * total_pages)
+                                    text_content = text_content[:max_chars] + f"\n\n... (内容已截断，完整文档共{total_pages}页，已发送约前{estimated_page}页)"
+                                    info(f"PDF文本过长，已截断: 原始{original_length}字符 -> {max_chars}字符")
+                                
+                                content_array.append({
+                                    'type': 'text',
+                                    'text': f"[PDF文件内容: {file_info.get('name', 'unknown')} - 共{total_pages}页]\n\n{text_content}"
+                                })
+                                info(f"✅ [AI助手] PDF内容发送成功，总页数: {total_pages}, 文本长度: {len(text_content)} 字符")
+                            else:
+                                # 回退：使用PyPDF直接提取
+                                info(f"⚠️ [AI助手] 版本管理未找到内容，回退到PyPDF直接提取")
+                                self._extract_pdf_with_pypdf(file_path, file_info, content_array, pdf_reader)
+                        
                         except Exception as e:
-                            info(f"PDF处理失败: {e}")
+                            info(f"❌ [AI助手] 版本管理读取失败: {e}，回退到PyPDF")
+                            # 回退：使用PyPDF直接提取
+                            try:
+                                pdf_reader = pypdf.PdfReader(file_path)
+                                self._extract_pdf_with_pypdf(file_path, file_info, content_array, pdf_reader)
+                            except Exception as e2:
+                                info(f"❌ [AI助手] PyPDF提取也失败: {e2}")
+                                content_array.append({
+                                    'type': 'text',
+                                    'text': f"[PDF文件: {file_info.get('name', 'unknown')} - 处理失败: {str(e2)}]"
+                                })
+                    else:
+                        # 没有版本管理信息，使用PyPDF直接提取
+                        info(f"⚠️ [AI助手] 无版本管理信息，使用PyPDF直接提取")
+                        try:
+                            pdf_reader = pypdf.PdfReader(file_path)
+                            self._extract_pdf_with_pypdf(file_path, file_info, content_array, pdf_reader)
+                        except Exception as e:
+                            info(f"❌ [AI助手] PDF处理失败: {e}")
                             content_array.append({
                                 'type': 'text',
                                 'text': f"[PDF文件: {file_info.get('name', 'unknown')} - 处理失败: {str(e)}]"

@@ -194,7 +194,7 @@ file_manager = FileSystemManager(DATA_DIR)
 content_manager = ContentManager(file_manager)
 conversation_manager = ConversationManager(file_manager)
 api_config_manager = APIConfigManager(DATA_DIR)
-llm_service = LLMService(api_config_manager)
+llm_service = LLMService(api_config_manager, content_manager)
 
 # 初始化WebSocket连接管理器
 manager = ConnectionManager()
