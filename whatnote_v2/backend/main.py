@@ -2874,10 +2874,15 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
     返回：每页的字数、是否已提取等信息
     """
     try:
+        info(f"📋 获取页面提取信息: board_id={board_id}, window_id={window_id}")
+        
         # 获取窗口信息
         window_data = content_manager.load_window(board_id, window_id)
         if not window_data:
+            error(f"窗口不存在: {window_id}")
             raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        info(f"窗口数据: type={window_data.get('type')}, title={window_data.get('title')}")
         
         window_content = window_data.get('content', '')
         if not window_content:
@@ -2890,12 +2895,17 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
             pdf_path = board_dir / window_content
         
         if not pdf_path.exists():
+            error(f"PDF文件不存在: {pdf_path}")
             raise HTTPException(status_code=404, detail="PDF文件不存在")
+        
+        info(f"PDF路径: {pdf_path}")
         
         # 获取PDF总页数
         import pypdf
         pdf_reader = pypdf.PdfReader(str(pdf_path))
         total_pages = len(pdf_reader.pages)
+        
+        info(f"PDF总页数: {total_pages}")
         
         # 获取PDF文件名（不含扩展名）
         pdf_name = pdf_path.stem

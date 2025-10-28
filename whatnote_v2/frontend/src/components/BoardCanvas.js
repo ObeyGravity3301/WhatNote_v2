@@ -1004,17 +1004,38 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           onClick={async () => {
             if (!showPageExtractPanel) {
               // 打开面板时，先加载页面信息
+              console.log('🔍 开始加载页面信息...');
+              console.log('  boardId:', boardId);
+              console.log('  windowId:', windowId);
+              
               try {
-                const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/info`);
+                const url = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/info`;
+                console.log('  请求URL:', url);
+                
+                const response = await fetch(url);
+                console.log('  响应状态:', response.status);
+                
                 if (response.ok) {
                   const data = await response.json();
-                  console.log('页面信息加载成功:', data);
+                  console.log('✅ 页面信息加载成功:', data);
                   setPagesInfo(data.pages || []);
                 } else {
-                  console.error('加载页面信息失败:', response.status);
+                  const errorText = await response.text();
+                  console.error('❌ 加载页面信息失败:', response.status);
+                  console.error('  错误详情:', errorText);
+                  addMessageWithSource(
+                    '❌ 加载页面信息失败',
+                    `HTTP ${response.status}: ${errorText}`,
+                    'error'
+                  );
                 }
               } catch (error) {
-                console.error('加载页面信息失败:', error);
+                console.error('❌ 加载页面信息异常:', error);
+                addMessageWithSource(
+                  '❌ 加载页面信息失败',
+                  error.message,
+                  'error'
+                );
               }
             }
             setShowPageExtractPanel(!showPageExtractPanel);
