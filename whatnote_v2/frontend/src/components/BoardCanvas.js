@@ -1740,15 +1740,32 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 {/* 已提取标记（右下角） - 点击查看 */}
                 {pageInfo.extracted && (
                   <div
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation(); // 阻止触发卡片的选择事件
                       console.log('👁 点击查看页面:', pageInfo.page);
                       console.log('  当前extractedContents:', extractedContents);
                       const content = extractedContents[pageInfo.page];
                       console.log('  找到的内容:', content);
                       if (content) {
+                        // 获取PyPDF原始文字
+                        let pdfText = '';
+                        try {
+                          const pdfTextUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${pageInfo.page}/text`;
+                          const pdfTextResponse = await fetch(pdfTextUrl);
+                          if (pdfTextResponse.ok) {
+                            const pdfTextData = await pdfTextResponse.json();
+                            pdfText = pdfTextData.text || '';
+                            console.log('  ✅ PyPDF文字:', pdfText.substring(0, 100) + '...');
+                          } else {
+                            console.warn('  ⚠️ PyPDF文字获取失败');
+                          }
+                        } catch (error) {
+                          console.error('  ❌ PyPDF文字获取异常:', error);
+                        }
+                        
                         setShowResultCompare({
                           page: pageInfo.page,
+                          pdfText: pdfText,
                           textContent: content.text,
                           imageContent: content.image,
                           fullContent: content.full
@@ -1808,7 +1825,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     position: 'absolute',
                     top: '28px',
                     left: '4px',
-                    backgroundColor: pageVersions[pageInfo.page] === 'text' ? '#000080' : '#800080',
+                    backgroundColor: pageVersions[pageInfo.page] === 'pdf' ? '#008000' : 
+                                     pageVersions[pageInfo.page] === 'llm' ? '#000080' : '#808080',
                     color: '#ffffff',
                     padding: '1px 4px',
                     borderRadius: '2px',
@@ -1817,7 +1835,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     fontWeight: 'bold',
                     zIndex: 2
                   }}>
-                    {pageVersions[pageInfo.page] === 'text' ? 'T' : 'V'}
+                    {pageVersions[pageInfo.page] === 'pdf' ? 'P' : 
+                     pageVersions[pageInfo.page] === 'llm' ? 'L' : '?'}
                   </div>
                 )}
                 
@@ -1989,7 +2008,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               gap: '8px',
               overflow: 'hidden'
             }}>
-              {/* 左侧：文本提取 */}
+              {/* 左侧：PyPDF文本提取 */}
               <div style={{
                 flex: 1,
                 display: 'flex',
@@ -1999,13 +2018,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               }}>
                 <div style={{
                   padding: '4px 8px',
-                  backgroundColor: '#000080',
+                  backgroundColor: '#008000',
                   color: '#ffffff',
                   fontSize: '11px',
                   fontWeight: 'bold',
                   textAlign: 'center'
                 }}>
-                  文本提取 ({showResultCompare.textContent.length}字)
+                  PyPDF提取 ({(showResultCompare.pdfText || '').length}字)
                 </div>
                 <div style={{
                   flex: 1,
@@ -2014,9 +2033,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   fontSize: '12px',
                   fontFamily: 'monospace',
                   lineHeight: '1.6',
-                  whiteSpace: 'pre-wrap'
+                  whiteSpace: 'pre-wrap',
+                  backgroundColor: '#f5f5f5'
                 }}>
-                  {showResultCompare.textContent}
+                  {showResultCompare.pdfText || '(原始PDF无文字内容)'}
                 </div>
                 <div style={{
                   padding: '4px',
@@ -2025,18 +2045,18 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 }}>
                   <button
                     onClick={async () => {
-                      // 保存文本提取版本
+                      // 保存PyPDF版本
                       try {
                         await fetch(
                           `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${showResultCompare.page}/content`,
                           {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content: showResultCompare.textContent, version: 'text' })
+                            body: JSON.stringify({ content: showResultCompare.pdfText || '', version: 'pdf' })
                           }
                         );
-                        addMessageWithSource('✅ 保存成功', `第${showResultCompare.page}页使用文本提取版本`, 'success');
-                        setPageVersions(prev => ({ ...prev, [showResultCompare.page]: 'text' }));
+                        addMessageWithSource('✅ 保存成功', `第${showResultCompare.page}页使用PyPDF提取`, 'success');
+                        setPageVersions(prev => ({ ...prev, [showResultCompare.page]: 'pdf' }));
                         setShowResultCompare(null);
                       } catch (error) {
                         addMessageWithSource('❌ 保存失败', error.message, 'error');
@@ -2054,12 +2074,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       fontWeight: 'bold'
                     }}
                   >
-                    ✓ 使用文本提取
+                    ✓ 使用PyPDF
                   </button>
                 </div>
               </div>
 
-              {/* 右侧：LLM提取（上下布局） */}
+              {/* 右侧：LLM提取（上下布局：文本+图片描述） */}
               <div style={{
                 flex: 1,
                 display: 'flex',
@@ -2067,22 +2087,32 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 backgroundColor: '#ffffff',
                 border: '2px inset #808080'
               }}>
+                <div style={{
+                  padding: '4px 8px',
+                  backgroundColor: '#000080',
+                  color: '#ffffff',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  textAlign: 'center'
+                }}>
+                  LLM提取 ({(showResultCompare.textContent || '').length + (showResultCompare.imageContent || '').length}字)
+                </div>
+                
                 {/* 上半部分：文本提取 */}
                 <div style={{
                   flex: 1,
                   display: 'flex',
                   flexDirection: 'column',
-                  borderBottom: '1px solid #808080'
+                  borderBottom: '1px solid #c0c0c0'
                 }}>
                   <div style={{
-                    padding: '4px 8px',
-                    backgroundColor: '#000080',
-                    color: '#ffffff',
-                    fontSize: '11px',
+                    padding: '2px 4px',
+                    backgroundColor: '#e0e0e0',
+                    fontSize: '10px',
                     fontWeight: 'bold',
-                    textAlign: 'center'
+                    color: '#000080'
                   }}>
-                    文本提取 ({showResultCompare.textContent.length}字)
+                    📝 文本内容 ({(showResultCompare.textContent || '').length}字)
                   </div>
                   <div style={{
                     flex: 1,
@@ -2097,21 +2127,20 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   </div>
                 </div>
 
-                {/* 下半部分：视觉描述 */}
+                {/* 下半部分：图片描述 */}
                 <div style={{
                   flex: 1,
                   display: 'flex',
                   flexDirection: 'column'
                 }}>
                   <div style={{
-                    padding: '4px 8px',
-                    backgroundColor: '#800080',
-                    color: '#ffffff',
-                    fontSize: '11px',
+                    padding: '2px 4px',
+                    backgroundColor: '#e0e0e0',
+                    fontSize: '10px',
                     fontWeight: 'bold',
-                    textAlign: 'center'
+                    color: '#800080'
                   }}>
-                    视觉描述 ({showResultCompare.imageContent.length}字)
+                    🖼️ 图片描述 ({(showResultCompare.imageContent || '').length}字)
                   </div>
                   <div style={{
                     flex: 1,
@@ -2126,36 +2155,35 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   </div>
                 </div>
 
-                {/* 底部按钮区域 */}
+                {/* 底部按钮 */}
                 <div style={{
                   padding: '4px',
                   borderTop: '2px groove #808080',
-                  display: 'flex',
-                  gap: '4px',
-                  justifyContent: 'center'
+                  textAlign: 'center'
                 }}>
                   <button
                     onClick={async () => {
-                      // 保存文本提取版本
+                      // 保存LLM提取版本（文本+图片描述）
+                      const llmContent = `## 文本内容\n\n${showResultCompare.textContent}\n\n## 图片描述\n\n${showResultCompare.imageContent}`;
                       try {
                         await fetch(
                           `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${showResultCompare.page}/content`,
                           {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content: showResultCompare.textContent, version: 'text' })
+                            body: JSON.stringify({ content: llmContent, version: 'llm' })
                           }
                         );
-                        addMessageWithSource('✅ 保存成功', `第${showResultCompare.page}页使用文本提取版本`, 'success');
-                        setPageVersions(prev => ({ ...prev, [showResultCompare.page]: 'text' }));
+                        addMessageWithSource('✅ 保存成功', `第${showResultCompare.page}页使用LLM提取`, 'success');
+                        setPageVersions(prev => ({ ...prev, [showResultCompare.page]: 'llm' }));
                         setShowResultCompare(null);
                       } catch (error) {
                         addMessageWithSource('❌ 保存失败', error.message, 'error');
                       }
                     }}
                     style={{
-                      padding: '4px 12px',
-                      fontSize: '10px',
+                      padding: '4px 16px',
+                      fontSize: '11px',
                       backgroundColor: '#000080',
                       color: '#ffffff',
                       border: '2px outset #000080',
@@ -2165,40 +2193,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       fontWeight: 'bold'
                     }}
                   >
-                    ✓ 文本
-                  </button>
-                  <button
-                    onClick={async () => {
-                      // 保存视觉描述版本
-                      try {
-                        await fetch(
-                          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${showResultCompare.page}/content`,
-                          {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content: showResultCompare.imageContent, version: 'image' })
-                          }
-                        );
-                        addMessageWithSource('✅ 保存成功', `第${showResultCompare.page}页使用视觉描述版本`, 'success');
-                        setPageVersions(prev => ({ ...prev, [showResultCompare.page]: 'image' }));
-                        setShowResultCompare(null);
-                      } catch (error) {
-                        addMessageWithSource('❌ 保存失败', error.message, 'error');
-                      }
-                    }}
-                    style={{
-                      padding: '4px 12px',
-                      fontSize: '10px',
-                      backgroundColor: '#800080',
-                      color: '#ffffff',
-                      border: '2px outset #800080',
-                      borderRadius: '0px',
-                      cursor: 'pointer',
-                      fontFamily: 'MS Sans Serif, sans-serif',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    ✓ 视觉
+                    ✓ 使用LLM
                   </button>
                 </div>
               </div>

@@ -3160,21 +3160,21 @@ async def extract_pages_content(
 - 使用Markdown格式（# 标题、## 副标题、- 列表、**粗体**等）
 - 忠实还原文字，不要添加解释
 
-**任务2：视觉元素描述**
-- 描述页面中的**非文字视觉元素**：
-  * 图片的内容和位置
-  * 图表的类型和数据展示方式
-  * 表格的结构和布局
-  * 配色方案和视觉风格
-  * 页面整体排版
-- **重要**：不要重复任务1中的文字内容，只描述视觉呈现
-- 如果页面只有纯文字没有图片，简单说明排版即可
+**任务2：图片与图表描述**
+- **只描述页面中嵌入的图片、照片、图表、图形等视觉内容**
+- 图片内容：如果有照片或插图，描述它们展示了什么
+- 图表数据：如果有柱状图、折线图、饼图等，描述数据趋势和关键信息
+- 表格结构：如果有表格，描述行列结构（不重复表格中的文字）
+- **注意**：
+  * 不要描述页面整体布局、配色、排版等（这不是图片）
+  * 不要重复任务1中已提取的文字
+  * 如果页面没有任何图片、图表，返回"本页无图片或图表"
 
 **输出格式（必须是纯JSON）：**
 ```json
 {{
   "text_extraction": "这里是所有文字内容（Markdown格式）",
-  "visual_description": "这里是视觉元素描述（不含文字）"
+  "visual_description": "这里只描述页面中的图片、图表内容（如果没有则说明无）"
 }}
 ```
 
@@ -3281,6 +3281,54 @@ async def extract_pages_content(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"提取页面内容失败: {str(e)}")
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/pages/{page}/text")
+async def get_page_text(board_id: str, window_id: str, page: int):
+    """获取指定页面的PyPDF原始文本"""
+    try:
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        window_data = None
+        for window in windows:
+            if window.get('id') == window_id:
+                window_data = window
+                break
+        
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        window_content = window_data.get('content', '')
+        pdf_path = Path(window_content)
+        if not pdf_path.is_absolute():
+            board_dir = Path(storage_base_dir) / board_id
+            pdf_path = board_dir / window_content
+        
+        if not pdf_path.exists():
+            raise HTTPException(status_code=404, detail="PDF文件不存在")
+        
+        # 使用PyPDF提取文字
+        import fitz
+        pdf_document = fitz.open(pdf_path)
+        
+        if page < 1 or page > len(pdf_document):
+            pdf_document.close()
+            raise HTTPException(status_code=400, detail="页码超出范围")
+        
+        pdf_page = pdf_document[page - 1]
+        text = pdf_page.get_text()
+        pdf_document.close()
+        
+        return {
+            'success': True,
+            'page': page,
+            'text': text
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取页面文字失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取页面文字失败: {str(e)}")
 
 @app.get("/api/boards/{board_id}/windows/{window_id}/pages/{page}/content")
 async def get_page_content(board_id: str, window_id: str, page: int):
