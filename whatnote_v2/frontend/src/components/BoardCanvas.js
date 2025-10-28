@@ -1197,36 +1197,87 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         </div>
       )}
 
-      {/* 页面提取面板 */}
+      {/* 页面提取模态窗口 */}
       {showPageExtractPanel && (
         <div style={{
-          backgroundColor: '#f0f0f0',
-          borderBottom: '2px inset #c0c0c0',
-          padding: '8px',
-          flexShrink: 0,
-          maxHeight: '500px',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
           display: 'flex',
-          flexDirection: 'column'
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
         }}>
-          {/* 顶部工具栏 */}
           <div style={{
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #ffffff',
+            boxShadow: '4px 4px 0px rgba(0, 0, 0, 0.5)',
+            width: '80%',
+            maxWidth: '1000px',
+            height: '80%',
             display: 'flex',
-            gap: '8px',
-            alignItems: 'center',
-            marginBottom: '8px',
-            paddingBottom: '8px',
-            borderBottom: '1px solid #c0c0c0'
+            flexDirection: 'column'
           }}>
+            {/* Windows 98 标题栏 */}
             <div style={{
-              fontSize: '12px',
-              fontFamily: 'MS Sans Serif, sans-serif',
-              fontWeight: 'bold',
-              color: '#000080'
+              background: 'linear-gradient(to right, #000080, #1084d0)',
+              padding: '3px 4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
             }}>
-              📸 选择要提取的页面
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                color: '#ffffff',
+                fontSize: '11px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                fontWeight: 'bold'
+              }}>
+                <span>■</span>
+                <span>提取页面内容 - {pagesInfo.length > 0 ? `${pagesInfo.length}页` : '加载中...'}</span>
+              </div>
+              <button
+                onClick={() => setShowPageExtractPanel(false)}
+                style={{
+                  width: '16px',
+                  height: '14px',
+                  padding: '0',
+                  fontSize: '10px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  fontWeight: 'bold',
+                  backgroundColor: '#c0c0c0',
+                  border: '1px outset #ffffff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
             </div>
-            
-            <div style={{ flex: 1 }}></div>
+
+            {/* 工具栏 */}
+            <div style={{
+              padding: '8px',
+              backgroundColor: '#c0c0c0',
+              borderBottom: '2px groove #808080',
+              display: 'flex',
+              gap: '8px',
+              alignItems: 'center'
+            }}>
+            <div style={{
+              fontSize: '11px',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              color: '#000000'
+            }}>
+              选择页面:
+            </div>
             
             <button
               onClick={() => {
@@ -1305,20 +1356,122 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             >
               清空
             </button>
+            
+            <div style={{ flex: 1 }}></div>
+            
+            <div style={{
+              fontSize: '11px',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              color: '#000080',
+              fontWeight: 'bold'
+            }}>
+              已选: {selectedPages.size} 页
+            </div>
+            
+            <button
+              onClick={async () => {
+                if (selectedPages.size === 0) {
+                  alert('请先选择要提取的页面');
+                  return;
+                }
+                
+                setIsExtracting(true);
+                setExtractionProgress({ current: 0, total: selectedPages.size });
+                
+                try {
+                  const response = await fetch(
+                    `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/extract`,
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        pages: Array.from(selectedPages),
+                        dpi: 300
+                      })
+                    }
+                  );
+                  
+                  const reader = response.body.getReader();
+                  const decoder = new TextDecoder();
+                  
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                      if (line.startsWith('data: ')) {
+                        const data = JSON.parse(line.substring(6));
+                        
+                        if (data.type === 'progress') {
+                          setExtractionProgress({ current: data.current, total: data.total });
+                        } else if (data.type === 'page_complete') {
+                          console.log(`页面 ${data.page} 提取完成`);
+                          // 更新页面信息
+                          setPagesInfo(prev => prev.map(p =>
+                            p.page === data.page ? { ...p, extracted: true, char_count: data.content?.length || 0 } : p
+                          ));
+                        } else if (data.type === 'complete') {
+                          console.log('全部提取完成');
+                          addMessageWithSource(
+                            '✅ 页面提取完成',
+                            `成功提取 ${data.total} 个页面的内容`,
+                            'success'
+                          );
+                        } else if (data.type === 'error') {
+                          console.error(`页面 ${data.page} 提取失败:`, data.error);
+                        }
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.error('提取失败:', error);
+                  addMessageWithSource(
+                    '❌ 提取失败',
+                    error.message,
+                    'error'
+                  );
+                } finally {
+                  setIsExtracting(false);
+                  setSelectedPages(new Set()); // 清空选择
+                }
+              }}
+              disabled={isExtracting || selectedPages.size === 0}
+              style={{
+                padding: '4px 16px',
+                fontSize: '11px',
+                backgroundColor: isExtracting || selectedPages.size === 0 ? '#808080' : '#008000',
+                color: '#ffffff',
+                border: '2px outset #ffffff',
+                cursor: isExtracting || selectedPages.size === 0 ? 'not-allowed' : 'pointer',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                fontWeight: 'bold'
+              }}
+            >
+              {isExtracting ? '提取中...' : `开始提取 (${selectedPages.size}页)`}
+            </button>
           </div>
           
-          {/* 页面网格 */}
+          {/* 页面网格容器 */}
           <div style={{
             flex: 1,
-            overflowY: 'auto',
-            backgroundColor: '#ffffff',
-            border: '2px inset #c0c0c0',
+            overflow: 'hidden',
             padding: '8px',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-            gap: '12px',
-            alignContent: 'start'
+            backgroundColor: '#c0c0c0'
           }}>
+            <div style={{
+              height: '100%',
+              overflowY: 'auto',
+              backgroundColor: '#ffffff',
+              border: '2px inset #808080',
+              padding: '12px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+              gap: '12px',
+              alignContent: 'start'
+            }}>
             {pagesInfo.map((pageInfo) => (
               <div
                 key={pageInfo.page}
@@ -1428,135 +1581,53 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 )}
               </div>
             ))}
+            </div>
           </div>
           
-          {/* 底部状态栏 */}
-          <div style={{
-            marginTop: '8px',
-            padding: '8px',
-            backgroundColor: '#e0e0e0',
-            border: '1px solid #808080',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            fontSize: '11px',
-            fontFamily: 'MS Sans Serif, sans-serif'
-          }}>
-            <div>
-              已选择: <strong>{selectedPages.size}</strong> 页
-            </div>
-            <div>
-              预计消耗: ~<strong>{(selectedPages.size * 0.03).toFixed(2)}</strong> 元
-            </div>
-            
-            <div style={{ flex: 1 }}></div>
-            
-            {isExtracting && (
+          {/* 底部进度栏（仅在提取时显示） */}
+          {isExtracting && (
+            <div style={{
+              padding: '8px',
+              backgroundColor: '#c0c0c0',
+              borderTop: '2px groove #808080'
+            }}>
               <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
+                fontSize: '11px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                marginBottom: '4px',
+                color: '#000080',
+                fontWeight: 'bold'
               }}>
-                <div>提取中: {extractionProgress.current}/{extractionProgress.total}</div>
+                正在提取: 第 {extractionProgress.current}/{extractionProgress.total} 页
+              </div>
+              <div style={{
+                width: '100%',
+                height: '20px',
+                backgroundColor: '#ffffff',
+                border: '2px inset #808080',
+                position: 'relative'
+              }}>
                 <div style={{
-                  width: '150px',
-                  height: '16px',
-                  backgroundColor: '#ffffff',
-                  border: '2px inset #808080'
+                  width: `${(extractionProgress.current / extractionProgress.total) * 100}%`,
+                  height: '100%',
+                  backgroundColor: '#000080',
+                  transition: 'width 0.3s'
+                }}></div>
+                <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  fontSize: '10px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  color: extractionProgress.current / extractionProgress.total > 0.5 ? '#ffffff' : '#000000',
+                  fontWeight: 'bold'
                 }}>
-                  <div style={{
-                    width: `${(extractionProgress.current / extractionProgress.total) * 100}%`,
-                    height: '100%',
-                    backgroundColor: '#0000ff',
-                    transition: 'width 0.3s'
-                  }}></div>
+                  {Math.round((extractionProgress.current / extractionProgress.total) * 100)}%
                 </div>
               </div>
-            )}
-            
-            <button
-              onClick={async () => {
-                if (selectedPages.size === 0) {
-                  alert('请先选择要提取的页面');
-                  return;
-                }
-                
-                setIsExtracting(true);
-                setExtractionProgress({ current: 0, total: selectedPages.size });
-                
-                try {
-                  const response = await fetch(
-                    `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/extract`,
-                    {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        pages: Array.from(selectedPages),
-                        dpi: 300
-                      })
-                    }
-                  );
-                  
-                  const reader = response.body.getReader();
-                  const decoder = new TextDecoder();
-                  
-                  while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-                    
-                    for (const line of lines) {
-                      if (line.startsWith('data: ')) {
-                        const data = JSON.parse(line.substring(6));
-                        
-                        if (data.type === 'progress') {
-                          setExtractionProgress({ current: data.current, total: data.total });
-                        } else if (data.type === 'page_complete') {
-                          console.log(`页面 ${data.page} 提取完成`);
-                          // 更新页面信息
-                          setPagesInfo(prev => prev.map(p =>
-                            p.page === data.page ? { ...p, extracted: true } : p
-                          ));
-                        } else if (data.type === 'complete') {
-                          console.log('全部提取完成');
-                          addMessageWithSource(
-                            '✅ 页面提取完成',
-                            `成功提取 ${data.total} 个页面的内容`,
-                            'success'
-                          );
-                        } else if (data.type === 'error') {
-                          console.error(`页面 ${data.page} 提取失败:`, data.error);
-                        }
-                      }
-                    }
-                  }
-                } catch (error) {
-                  console.error('提取失败:', error);
-                  addMessageWithSource(
-                    '❌ 提取失败',
-                    error.message,
-                    'error'
-                  );
-                } finally {
-                  setIsExtracting(false);
-                }
-              }}
-              disabled={isExtracting || selectedPages.size === 0}
-              style={{
-                padding: '4px 16px',
-                fontSize: '11px',
-                backgroundColor: isExtracting || selectedPages.size === 0 ? '#808080' : '#0078d4',
-                color: '#ffffff',
-                border: '2px outset #0078d4',
-                cursor: isExtracting || selectedPages.size === 0 ? 'not-allowed' : 'pointer',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                fontWeight: 'bold'
-              }}
-            >
-              {isExtracting ? '提取中...' : `开始提取 (${selectedPages.size}页)`}
-            </button>
+            </div>
+          )}
           </div>
         </div>
       )}
