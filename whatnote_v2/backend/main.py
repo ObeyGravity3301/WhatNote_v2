@@ -949,21 +949,6 @@ async def generate_pdf_annotation(
         if not page_contents.get('current'):
             raise HTTPException(status_code=404, detail="当前页面内容不存在")
         
-        # 输出版本日志
-        versions_info = []
-        if page_contents.get('previous'):
-            prev_version = content_manager.get_page_version(board_id, window_id, page - 1)
-            versions_info.append(f"前页{page-1}[{'LLM' if prev_version == 'llm' else 'PyPDF'}]")
-        
-        current_version = content_manager.get_page_version(board_id, window_id, page)
-        versions_info.append(f"当前页{page}[{'LLM' if current_version == 'llm' else 'PyPDF'}]")
-        
-        if page_contents.get('next'):
-            next_version = content_manager.get_page_version(board_id, window_id, page + 1)
-            versions_info.append(f"后页{page+1}[{'LLM' if next_version == 'llm' else 'PyPDF'}]")
-        
-        info(f"📝 [单页注释] 第{page}页: {', '.join(versions_info)}")
-        
         # 构建发送给LLM的提示词
         prompt_parts = []
         prompt_parts.append("请根据以下PDF页面内容生成注释。注意：我提供了前后页面的内容是为了防止页面分割导致内容不连续，你的注释应该主要针对当前页面。\n")
@@ -1372,34 +1357,27 @@ async def generate_batch_outline(
         pdf_filename = target_window.get('title', 'unknown')
         info(f"开始分析PDF文件: {pdf_filename}")
         
-        # 读取PDF所有页面内容（阶段1：所有页面单独读取）
-        info(f"📖 [阶段1-分段] 读取所有页面内容...")
+        # 读取PDF所有页面内容
         all_pages_content = []
         total_chars = 0
         page_num = 1
-        page_versions = []
         
         while True:
-            page_text = content_manager.get_single_pdf_page_content(board_id, window_id, page_num)
-            if not page_text:
+            page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
+            if not page_content.get('current'):
                 break
             
+            page_text = page_content['current']
             all_pages_content.append({
                 'page': page_num,
                 'content': page_text,
                 'length': len(page_text)
             })
             total_chars += len(page_text)
-            
-            # 记录版本信息
-            version = content_manager.get_page_version(board_id, window_id, page_num)
-            page_versions.append(f"{page_num}[{'LLM' if version == 'llm' else 'PyPDF'}]")
-            
             page_num += 1
         
         total_pages = len(all_pages_content)
-        info(f"  ✅ 已读取 {total_pages} 页: {', '.join(page_versions)}")
-        info(f"  📊 总字符数: {total_chars}")
+        info(f"PDF总页数: {total_pages}, 总字符数: {total_chars}")
         
         if total_pages == 0:
             raise HTTPException(status_code=400, detail="PDF文件无内容")
@@ -2014,20 +1992,15 @@ async def subdivide_outline_sections(
                         
                         await queue.put({'type': 'section_start', 'section': section_num, 'title': section_title, 'pages': f'{page_start}-{page_end}'})
                         
-                        # 读取该分段所有页面的内容（阶段2：只读当前页）
+                        # 读取该分段所有页面的内容
                         section_pages_content = []
-                        page_versions = []
                         for page_num in range(page_start, page_end + 1):
-                            page_content = content_manager.get_single_pdf_page_content(board_id, window_id, page_num)
-                            if page_content:
+                            page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
+                            if page_content.get('current'):
                                 section_pages_content.append({
                                     'page': page_num,
-                                    'content': page_content
+                                    'content': page_content['current']
                                 })
-                                version = content_manager.get_page_version(board_id, window_id, page_num)
-                                page_versions.append(f"{page_num}[{'LLM' if version == 'llm' else 'PyPDF'}]")
-                        
-                        info(f"📚 [阶段2-细分] 分段{section_num}: {', '.join(page_versions)}")
                         
                         if not section_pages_content:
                             await queue.put({'type': 'warning', 'message': f'分段{section_num}无内容，跳过'})
@@ -2302,25 +2275,19 @@ async def generate_section_annotations(
                 info(f"generate_stream 开始执行，分段索引: {section_index}")
                 yield f"data: {json.dumps({'type': 'status', 'message': f'正在为分段 {section_index + 1} 生成注释...'}, ensure_ascii=False)}\n\n"
                 
-                # 读取该分段所有页面的内容（批量注释：只读取当前页，不包括前后页）
-                info(f"📚 [批量注释] 分段{section_index + 1}: 读取第{page_start}-{page_end}页...")
+                # 读取该分段所有页面的内容
+                info(f"开始读取页面内容，范围: {page_start} - {page_end}")
                 pages_content = []
-                page_versions = []  # 记录每页使用的版本
-                
                 for page in range(page_start, page_end + 1):
-                    # 使用单页读取方法（不包括前后页）
-                    page_content = content_manager.get_single_pdf_page_content(board_id, window_id, page)
-                    if page_content:
+                    page_data = content_manager.get_pdf_page_contents(board_id, window_id, page)
+                    info(f"读取第{page}页，是否有内容: {bool(page_data and page_data.get('current'))}")
+                    if page_data and page_data.get('current'):
                         pages_content.append({
                             'page': page,
-                            'content': page_content
+                            'content': page_data['current']
                         })
-                        # 检测使用的版本
-                        version = content_manager.get_page_version(board_id, window_id, page)
-                        page_versions.append(f"{page}[{'LLM' if version == 'llm' else 'PyPDF'}]")
                 
-                # 输出统一的版本信息
-                info(f"  ✅ 已读取 {len(pages_content)} 页: {', '.join(page_versions)}")
+                info(f"共读取到 {len(pages_content)} 页内容")
                 
                 if not pages_content:
                     error_msg = f'未找到分段内容，页码范围: {page_start}-{page_end}'
