@@ -2104,6 +2104,88 @@ class ContentManager:
             print(f"获取PDF注释文件信息失败: {e}")
             return {}
     
+    def get_page_version_config_path(self, board_id: str, window_id: str) -> Optional[Path]:
+        """获取页面版本配置文件路径"""
+        try:
+            windows = self.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if not target_window:
+                return None
+            
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            
+            if not pdf_pages_dir:
+                return None
+            
+            pdf_pages_dir.mkdir(parents=True, exist_ok=True)
+            return pdf_pages_dir / "page_versions.json"
+        except Exception as e:
+            print(f"获取版本配置路径失败: {e}")
+            return None
+    
+    def get_page_version(self, board_id: str, window_id: str, page: int) -> str:
+        """
+        获取指定页面使用的版本
+        
+        Returns:
+            'llm' - 使用LLM提取的内容
+            'pdf' - 使用PyPDF提取的内容
+        """
+        try:
+            config_path = self.get_page_version_config_path(board_id, window_id)
+            if not config_path or not config_path.exists():
+                return 'pdf'  # 默认使用PyPDF版本
+            
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            # 获取该页面的版本配置
+            page_versions = config.get('page_versions', {})
+            return page_versions.get(str(page), config.get('default_version', 'pdf'))
+        except Exception as e:
+            print(f"读取页面版本配置失败: {e}")
+            return 'pdf'  # 出错时使用PyPDF版本
+    
+    def save_page_version(self, board_id: str, window_id: str, page: int, version: str) -> bool:
+        """
+        保存页面版本配置
+        
+        Args:
+            version: 'llm' 或 'pdf'
+        """
+        try:
+            config_path = self.get_page_version_config_path(board_id, window_id)
+            if not config_path:
+                return False
+            
+            # 读取现有配置
+            config = {'default_version': 'pdf', 'page_versions': {}}
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            
+            # 更新页面版本
+            config['page_versions'][str(page)] = version
+            
+            # 保存配置
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            
+            print(f"保存页面版本配置: 页面{page} -> {version}")
+            return True
+        except Exception as e:
+            print(f"保存页面版本配置失败: {e}")
+            return False
+    
     def get_pdf_page_contents(self, board_id: str, window_id: str, page: int) -> dict:
         """
         获取PDF页面内容（前一页、当前页、下一页）
@@ -2141,22 +2223,45 @@ class ContentManager:
             
             result = {}
             
+            # 辅助函数：根据版本获取页面文件
+            def get_page_file_by_version(page_num: int) -> Optional[Path]:
+                """根据版本配置获取对应的页面文件"""
+                version = self.get_page_version(board_id, window_id, page_num)
+                
+                if version == 'llm':
+                    # 优先使用LLM提取的内容
+                    llm_file = pdf_pages_dir / f"{pdf_name}_page_{page_num:03d}_llm.md"
+                    if llm_file.exists():
+                        print(f"使用LLM版本: 第{page_num}页")
+                        return llm_file
+                    else:
+                        # LLM文件不存在，回退到PyPDF
+                        print(f"LLM文件不存在，回退到PyPDF: 第{page_num}页")
+                
+                # 使用PyPDF版本
+                pdf_file = pdf_pages_dir / f"{pdf_name}_page_{page_num:03d}.md"
+                if pdf_file.exists():
+                    print(f"使用PyPDF版本: 第{page_num}页")
+                    return pdf_file
+                
+                return None
+            
             # 读取前一页内容
             if page > 1:
-                prev_page_file = pdf_pages_dir / f"{pdf_name}_page_{page-1:03d}.md"
-                if prev_page_file.exists():
+                prev_page_file = get_page_file_by_version(page - 1)
+                if prev_page_file:
                     with open(prev_page_file, 'r', encoding='utf-8') as f:
                         result['previous'] = f.read()
             
             # 读取当前页内容（必须存在）
-            current_page_file = pdf_pages_dir / f"{pdf_name}_page_{page:03d}.md"
-            if current_page_file.exists():
+            current_page_file = get_page_file_by_version(page)
+            if current_page_file:
                 with open(current_page_file, 'r', encoding='utf-8') as f:
                     result['current'] = f.read()
             
             # 读取下一页内容
-            next_page_file = pdf_pages_dir / f"{pdf_name}_page_{page+1:03d}.md"
-            if next_page_file.exists():
+            next_page_file = get_page_file_by_version(page + 1)
+            if next_page_file:
                 with open(next_page_file, 'r', encoding='utf-8') as f:
                     result['next'] = f.read()
             

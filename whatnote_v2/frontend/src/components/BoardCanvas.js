@@ -1525,6 +1525,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             return updated;
                           });
                           
+                          // LLM提取完成，自动标记为L版本
+                          setPageVersions(prev => ({
+                            ...prev,
+                            [data.page]: 'llm'
+                          }));
+                          console.log(`  ✅ 页面 ${data.page} 自动标记为LLM版本`);
+                          
                           // 更新页面信息
                           setPagesInfo(prev => prev.map(p =>
                             p.page === data.page ? { ...p, extracted: true, char_count: data.content?.length || 0 } : p

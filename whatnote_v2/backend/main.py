@@ -3270,6 +3270,10 @@ async def extract_pages_content(
                     
                     info(f"页面 {page_num} 内容已保存: {page_file}")
                     
+                    # 自动设置版本为LLM
+                    content_manager.save_page_version(board_id, window_id, page_num, 'llm')
+                    info(f"页面 {page_num} 版本已设置为LLM")
+                    
                     # 发送完成信号（包含分离的内容）
                     yield f"data: {json.dumps({'type': 'page_complete', 'page': page_num, 'content': accumulated_content, 'textContent': text_content, 'imageContent': image_content}, ensure_ascii=False)}\n\n"
                     
@@ -3439,9 +3443,17 @@ async def update_page_content(board_id: str, window_id: str, page: int, request_
     """更新页面内容（用户选择版本后）"""
     try:
         selected_content = request_data.get('content', '')
+        selected_version = request_data.get('version', 'llm')  # 'pdf', 'llm'
         
         if not selected_content:
             raise HTTPException(status_code=400, detail="内容不能为空")
+        
+        info(f"用户选择保存版本: 页面{page} -> {selected_version}")
+        
+        # 保存版本配置
+        version_saved = content_manager.save_page_version(board_id, window_id, page, selected_version)
+        if not version_saved:
+            info(f"警告: 版本配置保存失败，但继续保存内容")
         
         # 获取窗口信息
         windows = content_manager.get_board_windows(board_id)
@@ -3466,19 +3478,26 @@ async def update_page_content(board_id: str, window_id: str, page: int, request_
         pages_dir = pdf_path.parent / "pages" / pdf_name
         pages_dir.mkdir(parents=True, exist_ok=True)
         
-        page_file = pages_dir / f"{pdf_name}_page_{page:03d}_llm.md"
+        # 根据版本选择保存到不同文件
+        if selected_version == 'llm':
+            page_file = pages_dir / f"{pdf_name}_page_{page:03d}_llm.md"
+            version_label = "LLM提取"
+        else:
+            page_file = pages_dir / f"{pdf_name}_page_{page:03d}.md"
+            version_label = "PyPDF提取"
+        
         with open(page_file, 'w', encoding='utf-8') as f:
-            f.write(f"# {pdf_name} - 第 {page} 页 (LLM提取)\n\n")
+            f.write(f"# {pdf_name} - 第 {page} 页 ({version_label})\n\n")
             f.write(f"来源: {pdf_path.name}\n")
             f.write(f"更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"页码: {page}\n")
-            f.write(f"提取方式: 多模态LLM (用户编辑)\n\n")
+            f.write(f"版本: {selected_version}\n\n")
             f.write("---\n\n")
             f.write(selected_content)
         
-        info(f"页面 {page} 内容已更新")
+        info(f"页面 {page} 内容已更新为{selected_version}版本")
         
-        return {'success': True, 'message': '内容已更新'}
+        return {'success': True, 'message': '内容已更新', 'version': selected_version}
         
     except HTTPException:
         raise
