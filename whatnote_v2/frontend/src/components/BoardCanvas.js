@@ -1003,36 +1003,51 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         <button
           onClick={async () => {
             if (!showPageExtractPanel) {
-              // 打开面板时，先加载页面信息
-              console.log('🔍 开始加载页面信息...');
+              // 打开面板时，先渲染缩略图，再加载页面信息
+              console.log('🔍 开始渲染缩略图...');
               console.log('  boardId:', boardId);
               console.log('  windowId:', windowId);
               
               try {
-                const url = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/info`;
-                console.log('  请求URL:', url);
+                // 1. 先渲染所有页面的缩略图
+                const thumbnailsUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/thumbnails`;
+                console.log('  缩略图请求URL:', thumbnailsUrl);
                 
-                const response = await fetch(url);
-                console.log('  响应状态:', response.status);
+                const thumbnailsResponse = await fetch(thumbnailsUrl);
+                console.log('  缩略图响应状态:', thumbnailsResponse.status);
                 
-                if (response.ok) {
-                  const data = await response.json();
-                  console.log('✅ 页面信息加载成功:', data);
-                  setPagesInfo(data.pages || []);
+                if (thumbnailsResponse.ok) {
+                  const thumbnailsData = await thumbnailsResponse.json();
+                  console.log('✅ 缩略图渲染成功:', thumbnailsData);
                 } else {
-                  const errorText = await response.text();
-                  console.error('❌ 加载页面信息失败:', response.status);
+                  console.warn('⚠️ 缩略图渲染失败，继续加载页面信息');
+                }
+                
+                // 2. 然后加载页面信息
+                const infoUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/info`;
+                console.log('  页面信息请求URL:', infoUrl);
+                
+                const infoResponse = await fetch(infoUrl);
+                console.log('  页面信息响应状态:', infoResponse.status);
+                
+                if (infoResponse.ok) {
+                  const infoData = await infoResponse.json();
+                  console.log('✅ 页面信息加载成功:', infoData);
+                  setPagesInfo(infoData.pages || []);
+                } else {
+                  const errorText = await infoResponse.text();
+                  console.error('❌ 加载页面信息失败:', infoResponse.status);
                   console.error('  错误详情:', errorText);
                   addMessageWithSource(
                     '❌ 加载页面信息失败',
-                    `HTTP ${response.status}: ${errorText}`,
+                    `HTTP ${infoResponse.status}: ${errorText}`,
                     'error'
                   );
                 }
               } catch (error) {
-                console.error('❌ 加载页面信息异常:', error);
+                console.error('❌ 加载失败:', error);
                 addMessageWithSource(
-                  '❌ 加载页面信息失败',
+                  '❌ 加载失败',
                   error.message,
                   'error'
                 );
@@ -1561,11 +1576,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     src={(() => {
                       // 从pdfUrl构建缩略图URL
                       // pdfUrl格式: http://localhost:8081/static/files/courses/course-xxx/board-xxx/files/document.pdf
-                      // 目标格式: http://localhost:8081/static/files/courses/course-xxx/board-xxx/files/pages/document/document_page_001.png
+                      // 目标格式: http://localhost:8081/static/files/courses/course-xxx/board-xxx/files/pages/document/thumbnails/page_001.png
                       const pdfFileName = pdfUrl.split('/').pop(); // document.pdf
                       const pdfNameNoExt = pdfFileName.replace('.pdf', ''); // document
                       const baseUrl = pdfUrl.substring(0, pdfUrl.lastIndexOf('/files/') + 7); // .../files/
-                      const thumbnailUrl = `${baseUrl}pages/${pdfNameNoExt}/${pdfNameNoExt}_page_${String(pageInfo.page).padStart(3, '0')}.png`;
+                      const thumbnailUrl = `${baseUrl}pages/${pdfNameNoExt}/thumbnails/page_${String(pageInfo.page).padStart(3, '0')}.png`;
                       return thumbnailUrl;
                     })()}
                     alt={`第${pageInfo.page}页`}

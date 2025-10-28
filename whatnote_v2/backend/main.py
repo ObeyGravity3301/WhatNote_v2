@@ -2867,6 +2867,84 @@ async def semantic_search_annotations(
 # PDF页面内容提取API（多模态LLM）
 # ============================================
 
+@app.get("/api/boards/{board_id}/windows/{window_id}/pages/thumbnails")
+async def render_pages_thumbnails(board_id: str, window_id: str):
+    """渲染所有页面的轻量级缩略图"""
+    try:
+        info(f"开始渲染页面缩略图: board_id={board_id}, window_id={window_id}")
+        
+        # 获取窗口数据
+        windows = content_manager.get_board_windows(board_id)
+        window_data = None
+        for window in windows:
+            if window.get('id') == window_id:
+                window_data = window
+                break
+        
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        pdf_path = Path(window_data['content'])
+        if not pdf_path.exists():
+            raise HTTPException(status_code=404, detail="PDF文件不存在")
+        
+        # 获取PDF总页数
+        import fitz
+        pdf_document = fitz.open(pdf_path)
+        total_pages = len(pdf_document)
+        pdf_document.close()
+        
+        # 构建缩略图目录
+        pdf_name = pdf_path.stem
+        pages_dir = pdf_path.parent / "pages" / pdf_name
+        thumbnails_dir = pages_dir / "thumbnails"
+        thumbnails_dir.mkdir(parents=True, exist_ok=True)
+        
+        info(f"PDF总页数: {total_pages}")
+        info(f"缩略图目录: {thumbnails_dir}")
+        
+        # 渲染所有页面的缩略图
+        rendered_count = 0
+        for page_num in range(1, total_pages + 1):
+            thumbnail_path = thumbnails_dir / f"page_{page_num:03d}.png"
+            
+            # 如果缩略图已存在，跳过
+            if thumbnail_path.exists():
+                rendered_count += 1
+                continue
+            
+            try:
+                # 使用低DPI快速渲染（1.0倍缩放 = 72dpi）
+                pdf_document = fitz.open(pdf_path)
+                pdf_page = pdf_document[page_num - 1]
+                
+                # 低质量快速渲染
+                mat = fitz.Matrix(1.0, 1.0)  # 1倍缩放，速度快
+                pix = pdf_page.get_pixmap(matrix=mat)
+                
+                # 保存缩略图
+                pix.save(str(thumbnail_path))
+                pdf_document.close()
+                
+                rendered_count += 1
+                info(f"渲染缩略图: 第{page_num}页")
+                
+            except Exception as e:
+                error(f"渲染第{page_num}页缩略图失败: {e}")
+                if 'pdf_document' in locals():
+                    pdf_document.close()
+        
+        return {
+            "success": True,
+            "total_pages": total_pages,
+            "rendered_count": rendered_count,
+            "thumbnails_dir": str(thumbnails_dir.relative_to(pdf_path.parent))
+        }
+        
+    except Exception as e:
+        error(f"渲染缩略图失败: {e}")
+        raise HTTPException(status_code=500, detail=f"渲染缩略图失败: {str(e)}")
+
 @app.get("/api/boards/{board_id}/windows/{window_id}/pages/info")
 async def get_pages_extraction_info(board_id: str, window_id: str):
     """
