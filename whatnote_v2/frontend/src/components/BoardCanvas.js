@@ -2149,9 +2149,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     fontSize: '12px',
                     fontFamily: 'monospace',
                     lineHeight: '1.6',
-                    whiteSpace: 'pre-wrap'
+                    whiteSpace: 'pre-wrap',
+                    color: showResultCompare.imageContent ? '#000000' : '#999999',
+                    fontStyle: showResultCompare.imageContent ? 'normal' : 'italic'
                   }}>
-                    {showResultCompare.imageContent}
+                    {showResultCompare.imageContent || '(本页无图片或图表)'}
                   </div>
                 </div>
 
