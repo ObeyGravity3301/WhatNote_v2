@@ -3130,43 +3130,35 @@ async def extract_pages_content(
         # 获取PDF文件名（不含扩展名），用于统一命名
         pdf_name = pdf_path.stem
         
-        info(f"开始提取页面内容: {pages_to_extract}, PDF名称: {pdf_name}")
+        info(f"🚀 开始并行提取 {len(pages_to_extract)} 个页面")
         
-        # 准备SSE流式响应
-        async def generate_extraction_stream():
-            total_to_extract = len(pages_to_extract)
-            
-            for idx, page_num in enumerate(pages_to_extract, 1):
-                try:
-                    info(f"正在提取第 {page_num} 页 ({idx}/{total_to_extract})")
-                    
-                    # 发送进度
-                    yield f"data: {json.dumps({'type': 'progress', 'page': page_num, 'current': idx, 'total': total_to_extract}, ensure_ascii=False)}\n\n"
-                    
-                    # 使用content_manager渲染PDF页面为图片
-                    image_path = content_manager.render_pdf_page_to_image(board_id, window_id, page_num)
-                    
-                    if not image_path:
-                        raise Exception(f"渲染页面 {page_num} 失败")
-                    
-                    # 读取图片文件
-                    with open(image_path, 'rb') as f:
-                        img_bytes = f.read()
-                    
-                    # 转换为base64
-                    import base64
-                    img_base64 = base64.b64encode(img_bytes).decode('utf-8')
-                    
-                    info(f"页面 {page_num} 渲染完成，图片大小: {len(img_bytes)} bytes")
-                    
-                    # 调用多模态LLM
-                    messages = [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": f"""你正在分析PDF第{page_num}页的截图。请完成以下两个独立任务：
+        # 定义单个页面的提取任务（返回结果而不是yield）
+        async def extract_single_page(page_num: int):
+            """提取单个页面的内容（独立任务，不依赖其他页面）"""
+            try:
+                info(f"🚀 [任务{page_num}] 开始提取")
+                
+                # 渲染PDF页面为图片
+                image_path = content_manager.render_pdf_page_to_image(board_id, window_id, page_num)
+                if not image_path:
+                    raise Exception(f"渲染失败")
+                
+                # 读取图片
+                with open(image_path, 'rb') as f:
+                    img_bytes = f.read()
+                
+                import base64
+                img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+                info(f"✅ [任务{page_num}] 图片渲染完成: {len(img_bytes)} bytes")
+                
+                # 调用多模态LLM（每页独立，无历史对话）
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": f"""你正在分析PDF第{page_num}页的截图。请完成以下两个独立任务：
 
 **任务1：文本提取（OCR）**
 - 识别并提取页面中的**所有文字内容**
@@ -3220,14 +3212,12 @@ async def extract_pages_content(
                         }
                     ]
                     
-                    # 流式调用LLM
+                    # 非流式调用LLM（并行任务不使用流式）
                     accumulated_content = ""
-                    async for chunk in llm_service.chat_completion(messages, stream=True):
+                    async for chunk in llm_service.chat_completion(messages, stream=False):
                         accumulated_content += chunk
-                        # 发送LLM响应片段
-                        yield f"data: {json.dumps({'type': 'llm_chunk', 'page': page_num, 'content': chunk}, ensure_ascii=False)}\n\n"
                     
-                    info(f"页面 {page_num} LLM提取完成，内容长度: {len(accumulated_content)}")
+                    info(f"✅ [任务{page_num}] LLM提取完成: {len(accumulated_content)} 字")
                     
                     # 解析JSON格式的返回内容
                     text_content = ""
@@ -3283,19 +3273,57 @@ async def extract_pages_content(
                         f.write("---\n\n")
                         f.write(accumulated_content)
                     
-                    info(f"页面 {page_num} 内容已保存: {page_file}")
+                    info(f"💾 [任务{page_num}] 内容已保存")
                     
                     # 自动设置版本为LLM
                     content_manager.save_page_version(board_id, window_id, page_num, 'llm')
                     
-                    # 发送完成信号（包含分离的内容）
-                    yield f"data: {json.dumps({'type': 'page_complete', 'page': page_num, 'content': accumulated_content, 'textContent': text_content, 'imageContent': image_content}, ensure_ascii=False)}\n\n"
+                    info(f"✅ [任务{page_num}] 完成")
+                    
+                    # 返回结果
+                    return {
+                        'success': True,
+                        'page': page_num,
+                        'content': accumulated_content,
+                        'textContent': text_content,
+                        'imageContent': image_content
+                    }
                     
                 except Exception as e:
-                    error(f"提取页面 {page_num} 失败: {e}")
-                    yield f"data: {json.dumps({'type': 'error', 'page': page_num, 'error': str(e)}, ensure_ascii=False)}\n\n"
+                    error(f"❌ [任务{page_num}] 失败: {e}")
+                    return {
+                        'success': False,
+                        'page': page_num,
+                        'error': str(e)
+                    }
+            
+        # 并行执行所有页面提取任务
+        import asyncio
+        tasks = [extract_single_page(page_num) for page_num in pages_to_extract]
+        
+        info(f"🚀 启动 {len(tasks)} 个并行任务")
+        
+        # 准备SSE流式响应
+        async def generate_extraction_stream():
+            total_to_extract = len(pages_to_extract)
+            completed = 0
+            
+            # 使用 asyncio.as_completed 实时返回完成的任务
+            for coro in asyncio.as_completed(tasks):
+                result = await coro
+                completed += 1
+                
+                if result['success']:
+                    info(f"✅ 页面 {result['page']} 完成 ({completed}/{total_to_extract})")
+                    
+                    # 发送完成信号
+                    yield f"data: {json.dumps({'type': 'page_complete', 'page': result['page'], 'content': result['content'], 'textContent': result['textContent'], 'imageContent': result['imageContent']}, ensure_ascii=False)}\n\n"
+                else:
+                    error(f"❌ 页面 {result['page']} 失败")
+                    yield f"data: {json.dumps({'type': 'error', 'page': result['page'], 'error': result['error']}, ensure_ascii=False)}\n\n"
             
             # 发送总体完成信号
+            info(f"🎉 全部完成: {completed}/{total_to_extract}")
             yield f"data: {json.dumps({'type': 'complete', 'total': total_to_extract}, ensure_ascii=False)}\n\n"
         
         return StreamingResponse(
