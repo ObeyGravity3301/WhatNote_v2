@@ -3315,27 +3315,54 @@ async def get_page_content(board_id: str, window_id: str, page: int):
         with open(page_file, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # 尝试分离两个版本
-        text_version = ""
-        description_version = ""
+        # 尝试从文件内容中提取数据（跳过元数据）
+        # 文件格式：元数据头 + --- + 实际内容
+        actual_content = content
+        if "---\n\n" in content:
+            parts = content.split("---\n\n", 1)
+            if len(parts) == 2:
+                actual_content = parts[1]
         
-        if "## 文本提取" in content and "## 图片描述" in content:
-            parts = content.split("## 图片描述")
-            text_part = parts[0].split("## 文本提取")
-            if len(text_part) > 1:
-                text_version = text_part[1].strip()
-            if len(parts) > 1:
-                description_version = parts[1].strip()
-        else:
-            # 没有明确分版本，全部作为文本版本
-            text_version = content
+        # 尝试解析JSON格式（新格式）
+        text_content = ""
+        image_content = ""
+        
+        try:
+            # 尝试解析为JSON
+            json_content = actual_content.strip()
+            if json_content.startswith("```json"):
+                json_content = json_content[7:]
+            if json_content.startswith("```"):
+                json_content = json_content[3:]
+            if json_content.endswith("```"):
+                json_content = json_content[:-3]
+            json_content = json_content.strip()
+            
+            parsed = json.loads(json_content)
+            text_content = parsed.get("text_extraction", "")
+            image_content = parsed.get("visual_description", "")
+            
+            info(f"页面 {page} JSON解析成功")
+        except:
+            # 回退：尝试按标记分割（旧格式）
+            if "## 文本提取" in actual_content and "## 图片描述" in actual_content:
+                parts = actual_content.split("## 图片描述")
+                text_part = parts[0].split("## 文本提取")
+                if len(text_part) > 1:
+                    text_content = text_part[1].strip()
+                if len(parts) > 1:
+                    image_content = parts[1].strip()
+            else:
+                # 完全没有格式，全部作为文本内容
+                text_content = actual_content
+                image_content = ""
         
         return {
             'success': True,
             'page': page,
-            'full_content': content,
-            'text_version': text_version,
-            'description_version': description_version
+            'content': actual_content,
+            'text_content': text_content,
+            'image_content': image_content
         }
         
     except HTTPException:

@@ -1036,6 +1036,50 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   const infoData = await infoResponse.json();
                   console.log('✅ 页面信息加载成功:', infoData);
                   setPagesInfo(infoData.pages || []);
+                  
+                  // 加载已提取页面的内容
+                  console.log('🔄 开始加载已提取页面的内容...');
+                  const extractedPages = (infoData.pages || []).filter(p => p.extracted);
+                  console.log('  已提取的页面:', extractedPages.map(p => p.page));
+                  
+                  for (const pageInfo of extractedPages) {
+                    try {
+                      const contentUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${pageInfo.page}/content`;
+                      const contentResponse = await fetch(contentUrl);
+                      
+                      if (contentResponse.ok) {
+                        const contentData = await contentResponse.json();
+                        console.log(`  ✅ 加载页面 ${pageInfo.page} 内容:`, {
+                          textLength: contentData.text_content?.length,
+                          imageLength: contentData.image_content?.length
+                        });
+                        
+                        // 保存到extractedContents
+                        setExtractedContents(prev => ({
+                          ...prev,
+                          [pageInfo.page]: {
+                            text: contentData.text_content || contentData.content || '',
+                            image: contentData.image_content || '',
+                            full: contentData.content || ''
+                          }
+                        }));
+                        
+                        // 如果有版本信息，也保存
+                        if (contentData.version) {
+                          setPageVersions(prev => ({
+                            ...prev,
+                            [pageInfo.page]: contentData.version
+                          }));
+                        }
+                      } else {
+                        console.warn(`  ⚠️ 页面 ${pageInfo.page} 内容加载失败:`, contentResponse.status);
+                      }
+                    } catch (error) {
+                      console.error(`  ❌ 页面 ${pageInfo.page} 内容加载异常:`, error);
+                    }
+                  }
+                  
+                  console.log('✅ 已提取页面内容加载完成');
                 } else {
                   const errorText = await infoResponse.text();
                   console.error('❌ 加载页面信息失败:', infoResponse.status);
