@@ -1622,19 +1622,20 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             </div>
           </div>
           
-          {/* 底部进度栏（仅在提取时显示） - Windows 98方格风格 */}
+          {/* 底部进度栏（仅在提取时显示） - 完全复制大纲生成样式 */}
           {isExtracting && (
             <div style={{
+              marginBottom: '12px',
               padding: '8px',
               backgroundColor: '#c0c0c0',
-              borderTop: '2px groove #808080'
+              border: '2px inset #c0c0c0',
+              borderRadius: '0px'
             }}>
               <div style={{
                 fontSize: '11px',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                marginBottom: '6px',
-                color: '#000080',
                 fontWeight: 'bold',
+                marginBottom: '6px',
+                color: '#000000',
                 textAlign: 'center'
               }}>
                 正在提取: {extractionProgress.current} / {extractionProgress.total} 页
@@ -1643,44 +1644,59 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               {/* Windows 98风格量子化方格进度条 */}
               <div style={{
                 width: '100%',
-                height: '24px',
-                backgroundColor: '#ffffff',
-                border: '2px inset #808080',
-                padding: '3px',
-                boxSizing: 'border-box'
+                height: '30px',
+                backgroundColor: '#c0c0c0',
+                border: '2px inset #c0c0c0',
+                borderRadius: '0px',
+                overflow: 'hidden',
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '1px'
               }}>
+                {/* 进度条背景 */}
                 <div style={{
+                  width: '100%',
+                  height: '27px',
+                  backgroundColor: '#f0f0f0',
+                  border: '1px inset #c0c0c0',
                   display: 'flex',
-                  height: '100%',
-                  gap: '2px'
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  padding: '2px'
                 }}>
-                  {Array.from({ length: 25 }, (_, index) => {
-                    const progressPercentage = (extractionProgress.current / extractionProgress.total) * 100;
-                    const isActive = (index + 1) * 4 <= progressPercentage; // 每格代表4%
-                    
-                    return (
-                      <div
-                        key={index}
-                        style={{
-                          flex: 1,
-                          backgroundColor: isActive ? '#000080' : '#c0c0c0',
-                          border: '1px solid #808080',
-                          transition: 'background-color 0.3s'
-                        }}
-                      />
-                    );
-                  })}
+                  {/* 量子化方格进度条 */}
+                  <div style={{
+                    display: 'flex',
+                    width: '100%',
+                    gap: '2px',
+                    alignItems: 'center'
+                  }}>
+                    {Array.from({ length: 25 }, (_, index) => {
+                      const progressPercentage = (extractionProgress.current / extractionProgress.total) * 100;
+                      const isActive = (index + 1) * 4 <= progressPercentage; // 每格代表4%
+                      
+                      return (
+                        <div
+                          key={index}
+                          style={{
+                            flex: 1,
+                            height: '21px',
+                            backgroundColor: isActive ? '#000080' : 'transparent',
+                            border: '1px solid transparent',
+                            borderRadius: '0px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            position: 'relative',
+                            boxSizing: 'border-box'
+                          }}
+                        >
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-              
-              <div style={{
-                fontSize: '10px',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                marginTop: '4px',
-                color: '#000000',
-                textAlign: 'center'
-              }}>
-                {Math.round((extractionProgress.current / extractionProgress.total) * 100)}%
               </div>
             </div>
           )}
