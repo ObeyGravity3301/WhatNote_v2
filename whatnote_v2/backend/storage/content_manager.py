@@ -1612,9 +1612,17 @@ class ContentManager:
                     old_content_file.unlink()
                     print(f"删除原有内容文件: {old_content_file}")
             
-            # 生成新的文件名
-            safe_filename = self._sanitize_filename(filename)
-            new_file_path = files_dir / safe_filename
+            # 生成新的文件名（检查冲突并添加编号）
+            base_name = Path(filename).stem
+            file_extension = Path(filename).suffix
+            safe_basename = self._sanitize_filename(base_name)
+            
+            # 使用 _generate_unique_filename 确保不覆盖现有文件
+            unique_filename = self._generate_unique_filename(files_dir, safe_basename, file_extension)
+            new_file_path = files_dir / unique_filename
+            
+            print(f"📝 [窗口上传] 原始文件名: {filename}")
+            print(f"📝 [窗口上传] 生成唯一文件名: {unique_filename}")
             
             # 移动临时文件到目标位置
             import shutil
@@ -1639,13 +1647,13 @@ class ContentManager:
             
             # 更新窗口数据
             window_data['type'] = window_type
-            window_data['title'] = safe_filename
-            window_data['file_path'] = f"files/{safe_filename}"
-            window_data['content'] = f"files/{safe_filename}"  # 对于文件窗口，content存储文件路径
+            window_data['title'] = unique_filename
+            window_data['file_path'] = f"files/{unique_filename}"
+            window_data['content'] = f"files/{unique_filename}"  # 对于文件窗口，content存储文件路径
             window_data['updated_at'] = datetime.now().isoformat()
             
             # 生成新的JSON文件名
-            new_json_filename = f"{safe_filename}.json"
+            new_json_filename = f"{unique_filename}.json"
             new_json_path = files_dir / new_json_filename
             
             # 保存更新的JSON文件
@@ -1658,7 +1666,7 @@ class ContentManager:
                 print(f"删除旧JSON文件: {window_json_file}")
             
             print(f"窗口转换成功: {window_id} -> {window_type}")
-            print(f"新文件名: {safe_filename}")
+            print(f"新文件名: {unique_filename}")
             print(f"新JSON文件: {new_json_filename}")
             
             return True
