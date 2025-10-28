@@ -1450,6 +1450,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           }));
                         } else if (data.type === 'page_complete') {
                           console.log(`✅ 页面 ${data.page} 提取完成`);
+                          console.log('  完整数据:', data);
+                          console.log('  textContent长度:', data.textContent?.length);
+                          console.log('  imageContent长度:', data.imageContent?.length);
                           
                           // LLM返回完成后才更新进度
                           setExtractionProgress(prev => ({ 
@@ -1458,14 +1461,22 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           }));
                           
                           // 保存提取的内容（分离文本和图片描述）
-                          setExtractedContents(prev => ({
-                            ...prev,
-                            [data.page]: {
-                              text: data.textContent || data.content,
-                              image: data.imageContent || data.content,
-                              full: data.content
-                            }
-                          }));
+                          const extractedData = {
+                            text: data.textContent || data.content,
+                            image: data.imageContent || data.content,
+                            full: data.content
+                          };
+                          
+                          console.log(`  保存到extractedContents[${data.page}]:`, extractedData);
+                          
+                          setExtractedContents(prev => {
+                            const updated = {
+                              ...prev,
+                              [data.page]: extractedData
+                            };
+                            console.log('  更新后的extractedContents:', updated);
+                            return updated;
+                          });
                           
                           // 更新页面信息
                           setPagesInfo(prev => prev.map(p =>
@@ -1680,7 +1691,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   <div
                     onClick={(e) => {
                       e.stopPropagation(); // 阻止触发卡片的选择事件
+                      console.log('👁 点击查看页面:', pageInfo.page);
+                      console.log('  当前extractedContents:', extractedContents);
                       const content = extractedContents[pageInfo.page];
+                      console.log('  找到的内容:', content);
                       if (content) {
                         setShowResultCompare({
                           page: pageInfo.page,
@@ -1689,7 +1703,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           fullContent: content.full
                         });
                       } else {
-                        console.warn(`页面 ${pageInfo.page} 的提取内容未找到`);
+                        console.warn(`⚠️ 页面 ${pageInfo.page} 的提取内容未找到`);
+                        console.warn('  extractedContents中的所有键:', Object.keys(extractedContents));
                       }
                     }}
                     style={{
