@@ -3230,7 +3230,7 @@ async def extract_pages_content(
                     info(f"页面 {page_num} 内容已保存: {page_file}")
                     
                     # 发送完成信号（包含分离的内容）
-                    yield f"data: {json.dumps({{'type': 'page_complete', 'page': page_num, 'content': accumulated_content, 'textContent': text_content, 'imageContent': image_content}}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'page_complete', 'page': page_num, 'content': accumulated_content, 'textContent': text_content, 'imageContent': image_content}, ensure_ascii=False)}\n\n"
                     
                 except Exception as e:
                     error(f"提取页面 {page_num} 失败: {e}")
