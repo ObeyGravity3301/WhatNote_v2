@@ -1441,9 +1441,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     
                     for (const line of lines) {
                       if (line.startsWith('data: ')) {
-                        const data = JSON.parse(line.substring(6));
-                        
-                        if (data.type === 'progress') {
+                        try {
+                          const data = JSON.parse(line.substring(6));
+                          console.log('📦 收到SSE事件:', data.type, '页面:', data.page);
+                          
+                          if (data.type === 'progress') {
                           // progress事件只用于初始化，不更新进度（保持current不变）
                           setExtractionProgress(prev => ({ 
                             current: prev.current, 
@@ -1498,6 +1500,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             current: prev.current + 1, 
                             total: prev.total 
                           }));
+                        }
+                        } catch (parseError) {
+                          console.error('❌ SSE数据解析失败:', parseError);
+                          console.error('  原始行:', line);
                         }
                       }
                     }
