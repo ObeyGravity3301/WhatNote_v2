@@ -1006,41 +1006,26 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           onClick={async () => {
             if (!showPageExtractPanel) {
               // 打开面板时，先渲染缩略图，再加载页面信息
-              console.log('🔍 开始渲染缩略图...');
-              console.log('  boardId:', boardId);
-              console.log('  windowId:', windowId);
-              
               try {
                 // 1. 先渲染所有页面的缩略图
                 const thumbnailsUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/thumbnails`;
-                console.log('  缩略图请求URL:', thumbnailsUrl);
-                
                 const thumbnailsResponse = await fetch(thumbnailsUrl);
-                console.log('  缩略图响应状态:', thumbnailsResponse.status);
                 
-                if (thumbnailsResponse.ok) {
-                  const thumbnailsData = await thumbnailsResponse.json();
-                  console.log('✅ 缩略图渲染成功:', thumbnailsData);
-                } else {
-                  console.warn('⚠️ 缩略图渲染失败，继续加载页面信息');
+                if (!thumbnailsResponse.ok) {
+                  console.warn('⚠️ 缩略图渲染失败');
                 }
                 
                 // 2. 然后加载页面信息
                 const infoUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/info`;
-                console.log('  页面信息请求URL:', infoUrl);
-                
                 const infoResponse = await fetch(infoUrl);
-                console.log('  页面信息响应状态:', infoResponse.status);
                 
                 if (infoResponse.ok) {
                   const infoData = await infoResponse.json();
-                  console.log('✅ 页面信息加载成功:', infoData);
                   setPagesInfo(infoData.pages || []);
                   
                   // 加载已提取页面的内容
-                  console.log('🔄 开始加载已提取页面的内容...');
                   const extractedPages = (infoData.pages || []).filter(p => p.extracted);
-                  console.log('  已提取的页面:', extractedPages.map(p => p.page));
+                  console.log(`📚 加载已提取页面: ${extractedPages.length}个`);
                   
                   for (const pageInfo of extractedPages) {
                     try {
@@ -1049,10 +1034,6 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       
                       if (contentResponse.ok) {
                         const contentData = await contentResponse.json();
-                        console.log(`  ✅ 加载页面 ${pageInfo.page} 内容:`, {
-                          textLength: contentData.text_content?.length,
-                          imageLength: contentData.image_content?.length
-                        });
                         
                         // 保存到extractedContents
                         setExtractedContents(prev => ({
@@ -1071,19 +1052,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             [pageInfo.page]: contentData.version
                           }));
                         }
-                      } else {
-                        console.warn(`  ⚠️ 页面 ${pageInfo.page} 内容加载失败:`, contentResponse.status);
                       }
                     } catch (error) {
-                      console.error(`  ❌ 页面 ${pageInfo.page} 内容加载异常:`, error);
+                      console.error(`❌ 页面 ${pageInfo.page} 加载失败:`, error);
                     }
                   }
-                  
-                  console.log('✅ 已提取页面内容加载完成');
                 } else {
                   const errorText = await infoResponse.text();
-                  console.error('❌ 加载页面信息失败:', infoResponse.status);
-                  console.error('  错误详情:', errorText);
+                  console.error('❌ 加载页面信息失败:', infoResponse.status, errorText);
                   addMessageWithSource(
                     '❌ 加载页面信息失败',
                     `HTTP ${infoResponse.status}: ${errorText}`,
@@ -1514,23 +1490,17 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             full: data.content
                           };
                           
-                          console.log(`  保存到extractedContents[${data.page}]:`, extractedData);
-                          
-                          setExtractedContents(prev => {
-                            const updated = {
-                              ...prev,
-                              [data.page]: extractedData
-                            };
-                            console.log('  更新后的extractedContents:', updated);
-                            return updated;
-                          });
+                          setExtractedContents(prev => ({
+                            ...prev,
+                            [data.page]: extractedData
+                          }));
                           
                           // LLM提取完成，自动标记为L版本
                           setPageVersions(prev => ({
                             ...prev,
                             [data.page]: 'llm'
                           }));
-                          console.log(`  ✅ 页面 ${data.page} 自动标记为LLM版本`);
+                          console.log(`✅ 页面 ${data.page} 提取完成，自动标记为LLM版本`);
                           
                           // 更新页面信息
                           setPagesInfo(prev => prev.map(p =>
@@ -1749,10 +1719,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   <div
                     onClick={async (e) => {
                       e.stopPropagation(); // 阻止触发卡片的选择事件
-                      console.log('👁 点击查看页面:', pageInfo.page);
-                      console.log('  当前extractedContents:', extractedContents);
                       const content = extractedContents[pageInfo.page];
-                      console.log('  找到的内容:', content);
                       if (content) {
                         // 获取PyPDF原始文字
                         let pdfText = '';
@@ -1762,12 +1729,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           if (pdfTextResponse.ok) {
                             const pdfTextData = await pdfTextResponse.json();
                             pdfText = pdfTextData.text || '';
-                            console.log('  ✅ PyPDF文字:', pdfText.substring(0, 100) + '...');
-                          } else {
-                            console.warn('  ⚠️ PyPDF文字获取失败');
                           }
                         } catch (error) {
-                          console.error('  ❌ PyPDF文字获取异常:', error);
+                          console.error('❌ PyPDF文字获取失败:', error);
                         }
                         
                         setShowResultCompare({
@@ -1778,8 +1742,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           fullContent: content.full
                         });
                       } else {
-                        console.warn(`⚠️ 页面 ${pageInfo.page} 的提取内容未找到`);
-                        console.warn('  extractedContents中的所有键:', Object.keys(extractedContents));
+                        console.warn(`⚠️ 页面 ${pageInfo.page} 内容未找到`);
                       }
                     }}
                     style={{

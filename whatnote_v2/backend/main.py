@@ -3272,7 +3272,6 @@ async def extract_pages_content(
                     
                     # 自动设置版本为LLM
                     content_manager.save_page_version(board_id, window_id, page_num, 'llm')
-                    info(f"页面 {page_num} 版本已设置为LLM")
                     
                     # 发送完成信号（包含分离的内容）
                     yield f"data: {json.dumps({'type': 'page_complete', 'page': page_num, 'content': accumulated_content, 'textContent': text_content, 'imageContent': image_content}, ensure_ascii=False)}\n\n"
@@ -3448,12 +3447,10 @@ async def update_page_content(board_id: str, window_id: str, page: int, request_
         if not selected_content:
             raise HTTPException(status_code=400, detail="内容不能为空")
         
-        info(f"用户选择保存版本: 页面{page} -> {selected_version}")
-        
         # 保存版本配置
         version_saved = content_manager.save_page_version(board_id, window_id, page, selected_version)
         if not version_saved:
-            info(f"警告: 版本配置保存失败，但继续保存内容")
+            info(f"⚠️ 版本配置保存失败，但继续保存内容")
         
         # 获取窗口信息
         windows = content_manager.get_board_windows(board_id)
@@ -3494,8 +3491,6 @@ async def update_page_content(board_id: str, window_id: str, page: int, request_
             f.write(f"版本: {selected_version}\n\n")
             f.write("---\n\n")
             f.write(selected_content)
-        
-        info(f"页面 {page} 内容已更新为{selected_version}版本")
         
         return {'success': True, 'message': '内容已更新', 'version': selected_version}
         

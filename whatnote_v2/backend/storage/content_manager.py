@@ -2180,10 +2180,10 @@ class ContentManager:
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
             
-            print(f"保存页面版本配置: 页面{page} -> {version}")
+            print(f"💾 [版本配置] 页面{page} 已保存为 {version.upper()} 版本")
             return True
         except Exception as e:
-            print(f"保存页面版本配置失败: {e}")
+            print(f"❌ 保存页面版本配置失败: {e}")
             return False
     
     def get_pdf_page_contents(self, board_id: str, window_id: str, page: int) -> dict:
@@ -2232,16 +2232,16 @@ class ContentManager:
                     # 优先使用LLM提取的内容
                     llm_file = pdf_pages_dir / f"{pdf_name}_page_{page_num:03d}_llm.md"
                     if llm_file.exists():
-                        print(f"使用LLM版本: 第{page_num}页")
+                        print(f"📖 [版本选择] 第{page_num}页 → 使用LLM提取内容")
                         return llm_file
                     else:
                         # LLM文件不存在，回退到PyPDF
-                        print(f"LLM文件不存在，回退到PyPDF: 第{page_num}页")
+                        print(f"⚠️ [版本回退] 第{page_num}页 → LLM文件不存在，回退到PyPDF")
                 
                 # 使用PyPDF版本
                 pdf_file = pdf_pages_dir / f"{pdf_name}_page_{page_num:03d}.md"
                 if pdf_file.exists():
-                    print(f"使用PyPDF版本: 第{page_num}页")
+                    print(f"📖 [版本选择] 第{page_num}页 → 使用PyPDF提取内容")
                     return pdf_file
                 
                 return None
