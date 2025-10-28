@@ -3151,25 +3151,34 @@ async def extract_pages_content(
                             "content": [
                                 {
                                     "type": "text",
-                                    "text": f"""请分析这张PDF第{page_num}页的图片，提供两个版本的内容：
+                                    "text": f"""你正在分析PDF第{page_num}页的截图。请完成以下两个独立任务：
 
-**版本1：文本提取**
-- 提取图片中的所有文字内容
-- 保持原有的格式和结构
-- 如果有标题、列表、表格等，请用Markdown格式表示
+**任务1：文本提取（OCR）**
+- 识别并提取页面中的**所有文字内容**
+- 包括：标题、正文、列表、表格文字、页眉页脚、logo文字等
+- 保持原有的层次结构和格式
+- 使用Markdown格式（# 标题、## 副标题、- 列表、**粗体**等）
+- 忠实还原文字，不要添加解释
 
-**版本2：图片描述**
-- 描述图片的整体内容和布局
-- 说明关键信息和重点
-- 描述图表、图片等非文字内容
+**任务2：视觉元素描述**
+- 描述页面中的**非文字视觉元素**：
+  * 图片的内容和位置
+  * 图表的类型和数据展示方式
+  * 表格的结构和布局
+  * 配色方案和视觉风格
+  * 页面整体排版
+- **重要**：不要重复任务1中的文字内容，只描述视觉呈现
+- 如果页面只有纯文字没有图片，简单说明排版即可
 
-请按以下格式输出：
+**输出格式（必须是纯JSON）：**
+```json
+{{
+  "text_extraction": "这里是所有文字内容（Markdown格式）",
+  "visual_description": "这里是视觉元素描述（不含文字）"
+}}
+```
 
-## 文本提取
-[这里是提取的文字内容]
-
-## 图片描述
-[这里是对图片内容的描述]"""
+只返回JSON，不要markdown代码块标记。"""
                                 },
                                 {
                                     "type": "image_url",
@@ -3190,28 +3199,45 @@ async def extract_pages_content(
                     
                     info(f"页面 {page_num} LLM提取完成，内容长度: {len(accumulated_content)}")
                     
-                    # 解析文本提取和图片描述
+                    # 解析JSON格式的返回内容
                     text_content = ""
                     image_content = ""
                     
-                    # 尝试按标记分割
-                    if "## 文本提取" in accumulated_content and "## 图片描述" in accumulated_content:
-                        parts = accumulated_content.split("## 图片描述")
-                        if len(parts) == 2:
-                            text_part = parts[0].replace("## 文本提取", "").strip()
-                            image_part = parts[1].strip()
-                            text_content = text_part
-                            image_content = image_part
+                    try:
+                        # 移除可能的markdown代码块标记
+                        json_content = accumulated_content.strip()
+                        if json_content.startswith("```json"):
+                            json_content = json_content[7:]
+                        if json_content.startswith("```"):
+                            json_content = json_content[3:]
+                        if json_content.endswith("```"):
+                            json_content = json_content[:-3]
+                        json_content = json_content.strip()
+                        
+                        # 解析JSON
+                        parsed = json.loads(json_content)
+                        text_content = parsed.get("text_extraction", "")
+                        image_content = parsed.get("visual_description", "")
+                        
+                        info(f"页面 {page_num} JSON解析成功")
+                    except json.JSONDecodeError as e:
+                        info(f"页面 {page_num} JSON解析失败，尝试按标记分割: {e}")
+                        
+                        # 回退到旧的解析方式
+                        if "## 文本提取" in accumulated_content and "## 图片描述" in accumulated_content:
+                            parts = accumulated_content.split("## 图片描述")
+                            if len(parts) == 2:
+                                text_content = parts[0].replace("## 文本提取", "").strip()
+                                image_content = parts[1].strip()
+                            else:
+                                text_content = accumulated_content
+                                image_content = "（解析失败，仅保存完整内容）"
                         else:
-                            # 解析失败，使用完整内容
+                            # 完全失败，使用完整内容
                             text_content = accumulated_content
-                            image_content = accumulated_content
-                    else:
-                        # 没有找到标记，使用完整内容
-                        text_content = accumulated_content
-                        image_content = accumulated_content
+                            image_content = "（未能分离视觉描述）"
                     
-                    info(f"页面 {page_num} 解析结果: 文本 {len(text_content)} 字, 图片描述 {len(image_content)} 字")
+                    info(f"页面 {page_num} 最终结果: 文本 {len(text_content)} 字, 视觉描述 {len(image_content)} 字")
                     
                     # 保存结果（使用统一的命名格式：{pdf_name}_page_{page_num:03d}_llm.md）
                     pages_dir = pdf_path.parent / "pages" / pdf_name
