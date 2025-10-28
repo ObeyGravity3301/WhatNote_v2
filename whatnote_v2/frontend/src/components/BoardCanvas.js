@@ -2085,7 +2085,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 display: 'flex',
                 flexDirection: 'column',
                 backgroundColor: '#ffffff',
-                border: '2px inset #808080'
+                border: '2px inset #808080',
+                overflow: 'hidden'
               }}>
                 <div style={{
                   padding: '4px 8px',
@@ -2093,24 +2094,27 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   color: '#ffffff',
                   fontSize: '11px',
                   fontWeight: 'bold',
-                  textAlign: 'center'
+                  textAlign: 'center',
+                  flexShrink: 0
                 }}>
                   LLM提取 ({(showResultCompare.textContent || '').length + (showResultCompare.imageContent || '').length}字)
                 </div>
                 
-                {/* 上半部分：文本提取 */}
+                {/* 上半部分：文本提取 - 固定60%高度 */}
                 <div style={{
-                  flex: 1,
+                  height: '60%',
                   display: 'flex',
                   flexDirection: 'column',
-                  borderBottom: '1px solid #c0c0c0'
+                  borderBottom: '2px solid #c0c0c0',
+                  flexShrink: 0
                 }}>
                   <div style={{
                     padding: '2px 4px',
                     backgroundColor: '#e0e0e0',
                     fontSize: '10px',
                     fontWeight: 'bold',
-                    color: '#000080'
+                    color: '#000080',
+                    flexShrink: 0
                   }}>
                     📝 文本内容 ({(showResultCompare.textContent || '').length}字)
                   </div>
@@ -2121,24 +2125,27 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     fontSize: '12px',
                     fontFamily: 'monospace',
                     lineHeight: '1.6',
-                    whiteSpace: 'pre-wrap'
+                    whiteSpace: 'pre-wrap',
+                    minHeight: 0
                   }}>
                     {showResultCompare.textContent}
                   </div>
                 </div>
 
-                {/* 下半部分：图片描述 */}
+                {/* 下半部分：图片描述 - 固定40%高度 */}
                 <div style={{
-                  flex: 1,
+                  height: '40%',
                   display: 'flex',
-                  flexDirection: 'column'
+                  flexDirection: 'column',
+                  flexShrink: 0
                 }}>
                   <div style={{
                     padding: '2px 4px',
                     backgroundColor: '#e0e0e0',
                     fontSize: '10px',
                     fontWeight: 'bold',
-                    color: '#800080'
+                    color: '#800080',
+                    flexShrink: 0
                   }}>
                     🖼️ 图片描述 ({(showResultCompare.imageContent || '').length}字)
                   </div>
@@ -2151,7 +2158,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     lineHeight: '1.6',
                     whiteSpace: 'pre-wrap',
                     color: showResultCompare.imageContent ? '#000000' : '#999999',
-                    fontStyle: showResultCompare.imageContent ? 'normal' : 'italic'
+                    fontStyle: showResultCompare.imageContent ? 'normal' : 'italic',
+                    minHeight: 0
                   }}>
                     {showResultCompare.imageContent || '(本页无图片或图表)'}
                   </div>
