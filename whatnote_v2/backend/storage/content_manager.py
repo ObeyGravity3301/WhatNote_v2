@@ -2186,6 +2186,63 @@ class ContentManager:
             print(f"❌ 保存页面版本配置失败: {e}")
             return False
     
+    def get_single_pdf_page_content(self, board_id: str, window_id: str, page: int) -> str:
+        """
+        获取单个PDF页面的内容（不包括前后页）
+        用于批量注释场景
+        
+        Args:
+            board_id: 展板ID
+            window_id: 窗口ID
+            page: 页码
+            
+        Returns:
+            str: 页面内容
+        """
+        try:
+            # 获取窗口信息
+            windows = self.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if not target_window:
+                return ""
+            
+            # 构建页面文件路径
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            
+            if not pdf_pages_dir or not pdf_pages_dir.exists():
+                return ""
+            
+            # 根据版本配置获取对应的文件
+            version = self.get_page_version(board_id, window_id, page)
+            
+            if version == 'llm':
+                # 优先使用LLM提取的内容
+                llm_file = pdf_pages_dir / f"{pdf_name}_page_{page:03d}_llm.md"
+                if llm_file.exists():
+                    with open(llm_file, 'r', encoding='utf-8') as f:
+                        return f.read()
+            
+            # 使用PyPDF版本
+            pdf_file = pdf_pages_dir / f"{pdf_name}_page_{page:03d}.md"
+            if pdf_file.exists():
+                with open(pdf_file, 'r', encoding='utf-8') as f:
+                    return f.read()
+            
+            return ""
+            
+        except Exception as e:
+            print(f"获取PDF单页内容失败: {e}")
+            return ""
+    
     def get_pdf_page_contents(self, board_id: str, window_id: str, page: int) -> dict:
         """
         获取PDF页面内容（前一页、当前页、下一页）
@@ -2221,8 +2278,6 @@ class ContentManager:
             if not pdf_pages_dir or not pdf_pages_dir.exists():
                 return {}
             
-            print(f"🔍 [注释生成] 正在读取第{page}页内容...")
-            
             result = {}
             
             # 辅助函数：根据版本获取页面文件
@@ -2250,27 +2305,18 @@ class ContentManager:
                 if prev_page_file:
                     with open(prev_page_file, 'r', encoding='utf-8') as f:
                         result['previous'] = f.read()
-                    # 日志：记录实际读取的文件
-                    version_type = "LLM" if "_llm.md" in str(prev_page_file) else "PyPDF"
-                    print(f"  📄 读取前一页: 第{page-1}页 [{version_type}]")
             
             # 读取当前页内容（必须存在）
             current_page_file = get_page_file_by_version(page)
             if current_page_file:
                 with open(current_page_file, 'r', encoding='utf-8') as f:
                     result['current'] = f.read()
-                # 日志：记录实际读取的文件
-                version_type = "LLM" if "_llm.md" in str(current_page_file) else "PyPDF"
-                print(f"  📄 读取当前页: 第{page}页 [{version_type}]")
             
             # 读取下一页内容
             next_page_file = get_page_file_by_version(page + 1)
             if next_page_file:
                 with open(next_page_file, 'r', encoding='utf-8') as f:
                     result['next'] = f.read()
-                # 日志：记录实际读取的文件
-                version_type = "LLM" if "_llm.md" in str(next_page_file) else "PyPDF"
-                print(f"  📄 读取下一页: 第{page+1}页 [{version_type}]")
             
             return result
             
