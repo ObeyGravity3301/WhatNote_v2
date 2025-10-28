@@ -1390,16 +1390,32 @@ class ContentManager:
         
         # 检查文件是否存在，如果存在则添加编号
         file_name = f"{safe_name}{extension}"
-        if not (files_dir / file_name).exists():
+        file_path = files_dir / file_name
+        
+        print(f"🔍 [文件名检查] 基础文件名: {file_name}")
+        print(f"🔍 [文件名检查] 检查路径: {file_path}")
+        print(f"🔍 [文件名检查] 文件存在: {file_path.exists()}")
+        
+        if not file_path.exists():
+            print(f"✅ [文件名检查] 文件名可用: {file_name}")
             return file_name
         
         # 添加编号直到找到唯一名称
+        print(f"⚠️ [文件名检查] 文件已存在，开始查找可用编号...")
         counter = 1
         while True:
             file_name = f"{safe_name}({counter}){extension}"
-            if not (files_dir / file_name).exists():
+            file_path = files_dir / file_name
+            print(f"🔍 [文件名检查] 尝试: {file_name} → 存在: {file_path.exists()}")
+            if not file_path.exists():
+                print(f"✅ [文件名检查] 找到可用文件名: {file_name}")
                 return file_name
             counter += 1
+            if counter > 100:  # 安全限制
+                print(f"❌ [文件名检查] 超过100个副本，停止")
+                break
+        
+        return file_name
     
     def _sanitize_filename(self, filename: str) -> str:
         """清理文件名中的非法字符"""

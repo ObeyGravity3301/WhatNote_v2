@@ -1517,5 +1517,68 @@
     "deleted_at": "2025-10-28T20:11:21.320390",
     "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761653414589/board-1761653423530/files/pages",
     "is_folder": true
+  },
+  {
+    "id": "trash_1761659032605",
+    "original_name": "新建项目.md",
+    "trash_filename": "1761659032605_新建项目.md",
+    "window_data": {
+      "default_version": "pdf",
+      "page_versions": {
+        "1": "llm",
+        "2": "pdf",
+        "3": "llm",
+        "4": "pdf",
+        "5": "llm"
+      },
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 400,
+        "height": 300
+      },
+      "hidden": true,
+      "updated_at": "2025-10-28T21:43:46.699459",
+      "id": "undefined",
+      "file_path": "files/新建项目.md"
+    },
+    "board_id": "board-1761658605956",
+    "deleted_at": "2025-10-28T21:43:52.607342",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761658517425/board-1761658605956/files",
+    "file_size": 0
+  },
+  {
+    "id": "trash_1761659032611",
+    "original_name": "新建项目.md.json",
+    "trash_filename": "1761659032611_新建项目.md.json",
+    "window_data": {
+      "default_version": "pdf",
+      "page_versions": {
+        "1": "llm",
+        "2": "pdf",
+        "3": "llm",
+        "4": "pdf",
+        "5": "llm"
+      },
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 400,
+        "height": 300
+      },
+      "hidden": true,
+      "updated_at": "2025-10-28T21:43:46.699459",
+      "id": "undefined",
+      "file_path": "files/新建项目.md",
+      "is_json_config": true
+    },
+    "board_id": "board-1761658605956",
+    "deleted_at": "2025-10-28T21:43:52.612108",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761658517425/board-1761658605956/files",
+    "file_size": 361
   }
 ]
