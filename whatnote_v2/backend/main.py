@@ -1372,27 +1372,34 @@ async def generate_batch_outline(
         pdf_filename = target_window.get('title', 'unknown')
         info(f"开始分析PDF文件: {pdf_filename}")
         
-        # 读取PDF所有页面内容
+        # 读取PDF所有页面内容（阶段1：所有页面单独读取）
+        info(f"📖 [阶段1-分段] 读取所有页面内容...")
         all_pages_content = []
         total_chars = 0
         page_num = 1
+        page_versions = []
         
         while True:
-            page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
-            if not page_content.get('current'):
+            page_text = content_manager.get_single_pdf_page_content(board_id, window_id, page_num)
+            if not page_text:
                 break
             
-            page_text = page_content['current']
             all_pages_content.append({
                 'page': page_num,
                 'content': page_text,
                 'length': len(page_text)
             })
             total_chars += len(page_text)
+            
+            # 记录版本信息
+            version = content_manager.get_page_version(board_id, window_id, page_num)
+            page_versions.append(f"{page_num}[{'LLM' if version == 'llm' else 'PyPDF'}]")
+            
             page_num += 1
         
         total_pages = len(all_pages_content)
-        info(f"PDF总页数: {total_pages}, 总字符数: {total_chars}")
+        info(f"  ✅ 已读取 {total_pages} 页: {', '.join(page_versions)}")
+        info(f"  📊 总字符数: {total_chars}")
         
         if total_pages == 0:
             raise HTTPException(status_code=400, detail="PDF文件无内容")
@@ -2007,8 +2014,9 @@ async def subdivide_outline_sections(
                         
                         await queue.put({'type': 'section_start', 'section': section_num, 'title': section_title, 'pages': f'{page_start}-{page_end}'})
                         
-                        # 读取该分段所有页面的内容（细分阶段：只读当前页）
+                        # 读取该分段所有页面的内容（阶段2：只读当前页）
                         section_pages_content = []
+                        page_versions = []
                         for page_num in range(page_start, page_end + 1):
                             page_content = content_manager.get_single_pdf_page_content(board_id, window_id, page_num)
                             if page_content:
@@ -2016,6 +2024,10 @@ async def subdivide_outline_sections(
                                     'page': page_num,
                                     'content': page_content
                                 })
+                                version = content_manager.get_page_version(board_id, window_id, page_num)
+                                page_versions.append(f"{page_num}[{'LLM' if version == 'llm' else 'PyPDF'}]")
+                        
+                        info(f"📚 [阶段2-细分] 分段{section_num}: {', '.join(page_versions)}")
                         
                         if not section_pages_content:
                             await queue.put({'type': 'warning', 'message': f'分段{section_num}无内容，跳过'})
