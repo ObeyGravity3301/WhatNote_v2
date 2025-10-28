@@ -3061,6 +3061,7 @@ async def extract_pages_content(
                         img_bytes = f.read()
                     
                     # 转换为base64
+                    import base64
                     img_base64 = base64.b64encode(img_bytes).decode('utf-8')
                     
                     info(f"页面 {page_num} 渲染完成，图片大小: {len(img_bytes)} bytes")
