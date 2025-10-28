@@ -1427,22 +1427,39 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         const data = JSON.parse(line.substring(6));
                         
                         if (data.type === 'progress') {
-                          setExtractionProgress({ current: data.current, total: data.total });
+                          // progress事件只用于初始化，不更新进度（保持current不变）
+                          setExtractionProgress(prev => ({ 
+                            current: prev.current, 
+                            total: data.total 
+                          }));
                         } else if (data.type === 'page_complete') {
-                          console.log(`页面 ${data.page} 提取完成`);
+                          console.log(`✅ 页面 ${data.page} 提取完成`);
+                          
+                          // LLM返回完成后才更新进度
+                          setExtractionProgress(prev => ({ 
+                            current: prev.current + 1, 
+                            total: prev.total 
+                          }));
+                          
                           // 更新页面信息
                           setPagesInfo(prev => prev.map(p =>
                             p.page === data.page ? { ...p, extracted: true, char_count: data.content?.length || 0 } : p
                           ));
                         } else if (data.type === 'complete') {
-                          console.log('全部提取完成');
+                          console.log('✅ 全部提取完成');
                           addMessageWithSource(
                             '✅ 页面提取完成',
                             `成功提取 ${data.total} 个页面的内容`,
                             'success'
                           );
                         } else if (data.type === 'error') {
-                          console.error(`页面 ${data.page} 提取失败:`, data.error);
+                          console.error(`❌ 页面 ${data.page} 提取失败:`, data.error);
+                          
+                          // 错误也算完成，更新进度
+                          setExtractionProgress(prev => ({ 
+                            current: prev.current + 1, 
+                            total: prev.total 
+                          }));
                         }
                       }
                     }
@@ -1605,7 +1622,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             </div>
           </div>
           
-          {/* 底部进度栏（仅在提取时显示） */}
+          {/* 底部进度栏（仅在提取时显示） - Windows 98方格风格 */}
           {isExtracting && (
             <div style={{
               padding: '8px',
@@ -1615,37 +1632,55 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               <div style={{
                 fontSize: '11px',
                 fontFamily: 'MS Sans Serif, sans-serif',
-                marginBottom: '4px',
+                marginBottom: '6px',
                 color: '#000080',
-                fontWeight: 'bold'
+                fontWeight: 'bold',
+                textAlign: 'center'
               }}>
-                正在提取: 第 {extractionProgress.current}/{extractionProgress.total} 页
+                正在提取: {extractionProgress.current} / {extractionProgress.total} 页
               </div>
+              
+              {/* Windows 98风格量子化方格进度条 */}
               <div style={{
                 width: '100%',
-                height: '20px',
+                height: '24px',
                 backgroundColor: '#ffffff',
                 border: '2px inset #808080',
-                position: 'relative'
+                padding: '3px',
+                boxSizing: 'border-box'
               }}>
                 <div style={{
-                  width: `${(extractionProgress.current / extractionProgress.total) * 100}%`,
+                  display: 'flex',
                   height: '100%',
-                  backgroundColor: '#000080',
-                  transition: 'width 0.3s'
-                }}></div>
-                <div style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  fontSize: '10px',
-                  fontFamily: 'MS Sans Serif, sans-serif',
-                  color: extractionProgress.current / extractionProgress.total > 0.5 ? '#ffffff' : '#000000',
-                  fontWeight: 'bold'
+                  gap: '2px'
                 }}>
-                  {Math.round((extractionProgress.current / extractionProgress.total) * 100)}%
+                  {Array.from({ length: 25 }, (_, index) => {
+                    const progressPercentage = (extractionProgress.current / extractionProgress.total) * 100;
+                    const isActive = (index + 1) * 4 <= progressPercentage; // 每格代表4%
+                    
+                    return (
+                      <div
+                        key={index}
+                        style={{
+                          flex: 1,
+                          backgroundColor: isActive ? '#000080' : '#c0c0c0',
+                          border: '1px solid #808080',
+                          transition: 'background-color 0.3s'
+                        }}
+                      />
+                    );
+                  })}
                 </div>
+              </div>
+              
+              <div style={{
+                fontSize: '10px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                marginTop: '4px',
+                color: '#000000',
+                textAlign: 'center'
+              }}>
+                {Math.round((extractionProgress.current / extractionProgress.total) * 100)}%
               </div>
             </div>
           )}
