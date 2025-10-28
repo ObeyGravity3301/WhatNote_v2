@@ -2088,6 +2088,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 border: '2px inset #808080',
                 overflow: 'hidden'
               }}>
+                {/* 标题栏 */}
                 <div style={{
                   padding: '4px 8px',
                   backgroundColor: '#000080',
@@ -2100,76 +2101,88 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   LLM提取 ({(showResultCompare.textContent || '').length + (showResultCompare.imageContent || '').length}字)
                 </div>
                 
-                {/* 上半部分：文本提取 - 固定60%高度 */}
+                {/* 内容区域容器 - 使用flex: 1填充剩余空间 */}
                 <div style={{
-                  height: '60%',
+                  flex: 1,
                   display: 'flex',
                   flexDirection: 'column',
-                  borderBottom: '2px solid #c0c0c0',
-                  flexShrink: 0
+                  minHeight: 0,
+                  overflow: 'hidden'
                 }}>
+                  {/* 上半部分：文本提取 - 55% */}
                   <div style={{
-                    padding: '2px 4px',
-                    backgroundColor: '#e0e0e0',
-                    fontSize: '10px',
-                    fontWeight: 'bold',
-                    color: '#000080',
-                    flexShrink: 0
-                  }}>
-                    📝 文本内容 ({(showResultCompare.textContent || '').length}字)
-                  </div>
-                  <div style={{
-                    flex: 1,
-                    padding: '8px',
-                    overflow: 'auto',
-                    fontSize: '12px',
-                    fontFamily: 'monospace',
-                    lineHeight: '1.6',
-                    whiteSpace: 'pre-wrap',
+                    height: '55%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    borderBottom: '2px solid #c0c0c0',
+                    flexShrink: 0,
                     minHeight: 0
                   }}>
-                    {showResultCompare.textContent}
+                    <div style={{
+                      padding: '2px 4px',
+                      backgroundColor: '#e0e0e0',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      color: '#000080',
+                      flexShrink: 0
+                    }}>
+                      📝 文本内容 ({(showResultCompare.textContent || '').length}字)
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      padding: '8px',
+                      overflow: 'auto',
+                      fontSize: '12px',
+                      fontFamily: 'monospace',
+                      lineHeight: '1.6',
+                      whiteSpace: 'pre-wrap',
+                      minHeight: 0
+                    }}>
+                      {showResultCompare.textContent}
+                    </div>
+                  </div>
+
+                  {/* 下半部分：图片描述 - 45% */}
+                  <div style={{
+                    height: '45%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flexShrink: 0,
+                    minHeight: 0
+                  }}>
+                    <div style={{
+                      padding: '2px 4px',
+                      backgroundColor: '#e0e0e0',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      color: '#800080',
+                      flexShrink: 0
+                    }}>
+                      🖼️ 图片描述 ({(showResultCompare.imageContent || '').length}字)
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      padding: '8px',
+                      overflow: 'auto',
+                      fontSize: '12px',
+                      fontFamily: 'monospace',
+                      lineHeight: '1.6',
+                      whiteSpace: 'pre-wrap',
+                      color: showResultCompare.imageContent ? '#000000' : '#999999',
+                      fontStyle: showResultCompare.imageContent ? 'normal' : 'italic',
+                      minHeight: 0
+                    }}>
+                      {showResultCompare.imageContent || '(本页无图片或图表)'}
+                    </div>
                   </div>
                 </div>
 
-                {/* 下半部分：图片描述 - 固定40%高度 */}
-                <div style={{
-                  height: '40%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  flexShrink: 0
-                }}>
-                  <div style={{
-                    padding: '2px 4px',
-                    backgroundColor: '#e0e0e0',
-                    fontSize: '10px',
-                    fontWeight: 'bold',
-                    color: '#800080',
-                    flexShrink: 0
-                  }}>
-                    🖼️ 图片描述 ({(showResultCompare.imageContent || '').length}字)
-                  </div>
-                  <div style={{
-                    flex: 1,
-                    padding: '8px',
-                    overflow: 'auto',
-                    fontSize: '12px',
-                    fontFamily: 'monospace',
-                    lineHeight: '1.6',
-                    whiteSpace: 'pre-wrap',
-                    color: showResultCompare.imageContent ? '#000000' : '#999999',
-                    fontStyle: showResultCompare.imageContent ? 'normal' : 'italic',
-                    minHeight: 0
-                  }}>
-                    {showResultCompare.imageContent || '(本页无图片或图表)'}
-                  </div>
-                </div>
-
-                {/* 底部按钮 */}
+                {/* 底部按钮 - 固定在底部 */}
                 <div style={{
                   padding: '4px',
                   borderTop: '2px groove #808080',
-                  textAlign: 'center'
+                  textAlign: 'center',
+                  flexShrink: 0
                 }}>
                   <button
                     onClick={async () => {
