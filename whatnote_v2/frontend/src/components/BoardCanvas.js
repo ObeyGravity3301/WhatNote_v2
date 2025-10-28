@@ -1525,29 +1525,108 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 style={{
                   width: '100%',
                   aspectRatio: '0.7',
-                  backgroundColor: selectedPages.has(pageInfo.page) ? '#e0e0ff' : '#f0f0f0',
+                  backgroundColor: selectedPages.has(pageInfo.page) ? '#e0e0ff' : '#ffffff',
                   border: selectedPages.has(pageInfo.page) ? '3px solid #0000ff' : '2px solid #808080',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
                   position: 'relative',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  overflow: 'hidden'
                 }}
                 onMouseEnter={(e) => {
                   if (!selectedPages.has(pageInfo.page)) {
-                    e.currentTarget.style.backgroundColor = '#e8e8e8';
+                    e.currentTarget.style.borderColor = '#0000ff';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,255,0.3)';
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!selectedPages.has(pageInfo.page)) {
-                    e.currentTarget.style.backgroundColor = '#f0f0f0';
+                    e.currentTarget.style.borderColor = '#808080';
+                    e.currentTarget.style.boxShadow = 'none';
                   }
                 }}
               >
-                {/* 选中标记 */}
+                {/* 缩略图背景 */}
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#f5f5f5',
+                  position: 'relative'
+                }}>
+                  {/* PDF页面缩略图 */}
+                  <img
+                    src={(() => {
+                      // 从pdfUrl构建缩略图URL
+                      // pdfUrl格式: http://localhost:8081/static/files/courses/course-xxx/board-xxx/files/document.pdf
+                      // 目标格式: http://localhost:8081/static/files/courses/course-xxx/board-xxx/files/pages/document/document_page_001.png
+                      const pdfFileName = pdfUrl.split('/').pop(); // document.pdf
+                      const pdfNameNoExt = pdfFileName.replace('.pdf', ''); // document
+                      const baseUrl = pdfUrl.substring(0, pdfUrl.lastIndexOf('/files/') + 7); // .../files/
+                      const thumbnailUrl = `${baseUrl}pages/${pdfNameNoExt}/${pdfNameNoExt}_page_${String(pageInfo.page).padStart(3, '0')}.png`;
+                      return thumbnailUrl;
+                    })()}
+                    alt={`第${pageInfo.page}页`}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      objectFit: 'contain',
+                      opacity: selectedPages.has(pageInfo.page) ? 0.8 : 1
+                    }}
+                    onError={(e) => {
+                      // 图片加载失败时显示占位符
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                  
+                  {/* 占位符（图片未加载时显示） */}
+                  <div style={{
+                    display: 'none',
+                    width: '100%',
+                    height: '100%',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#999'
+                  }}>
+                    <div style={{
+                      fontSize: '48px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold',
+                      color: '#cccccc'
+                    }}>
+                      {pageInfo.page}
+                    </div>
+                    <div style={{
+                      fontSize: '10px',
+                      marginTop: '8px'
+                    }}>
+                      未渲染
+                    </div>
+                  </div>
+                </div>
+                
+                {/* 页码标签（左上角） */}
+                <div style={{
+                  position: 'absolute',
+                  top: '4px',
+                  left: '4px',
+                  backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                  color: '#ffffff',
+                  padding: '2px 6px',
+                  borderRadius: '3px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  fontWeight: 'bold',
+                  zIndex: 2
+                }}>
+                  #{pageInfo.page}
+                </div>
+                
+                {/* 选中标记（右上角） */}
                 {selectedPages.has(pageInfo.page) && (
                   <div style={{
                     position: 'absolute',
@@ -1555,64 +1634,71 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     right: '4px',
                     backgroundColor: '#0000ff',
                     color: '#ffffff',
-                    width: '20px',
-                    height: '20px',
+                    width: '24px',
+                    height: '24px',
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '14px',
-                    fontWeight: 'bold'
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    zIndex: 2,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
                   }}>
                     ✓
                   </div>
                 )}
                 
-                {/* 已提取标记 */}
+                {/* 已提取标记（右下角） */}
                 {pageInfo.extracted && (
                   <div style={{
                     position: 'absolute',
-                    top: '4px',
-                    left: '4px',
+                    bottom: '4px',
+                    right: '4px',
                     backgroundColor: '#008000',
                     color: '#ffffff',
                     padding: '2px 6px',
                     borderRadius: '3px',
                     fontSize: '9px',
                     fontFamily: 'MS Sans Serif, sans-serif',
-                    fontWeight: 'bold'
+                    fontWeight: 'bold',
+                    zIndex: 2
                   }}>
                     已提取
                   </div>
                 )}
                 
-                {/* 页码 */}
+                {/* 字数信息（左下角） */}
                 <div style={{
-                  fontSize: '32px',
+                  position: 'absolute',
+                  bottom: '4px',
+                  left: '4px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                  color: '#000000',
+                  padding: '2px 6px',
+                  borderRadius: '3px',
+                  fontSize: '9px',
                   fontFamily: 'MS Sans Serif, sans-serif',
-                  fontWeight: 'bold',
-                  color: '#000080'
+                  zIndex: 2
                 }}>
-                  {pageInfo.page}
-                </div>
-                
-                {/* 字数信息 */}
-                <div style={{
-                  fontSize: '10px',
-                  fontFamily: 'MS Sans Serif, sans-serif',
-                  color: '#666',
-                  marginTop: '4px'
-                }}>
-                  {pageInfo.char_count || 0} 字
+                  {pageInfo.char_count || 0}字
                 </div>
                 
                 {/* 原始文字可用标记 */}
                 {!pageInfo.extracted && pageInfo.original_text_available && (
                   <div style={{
-                    fontSize: '9px',
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    backgroundColor: 'rgba(0, 128, 0, 0.8)',
+                    color: '#ffffff',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '10px',
                     fontFamily: 'MS Sans Serif, sans-serif',
-                    color: '#008000',
-                    marginTop: '2px'
+                    fontWeight: 'bold',
+                    zIndex: 1
                   }}>
                     有文字
                   </div>
