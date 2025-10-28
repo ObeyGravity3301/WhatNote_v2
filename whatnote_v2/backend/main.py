@@ -2897,13 +2897,17 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
         pdf_reader = pypdf.PdfReader(str(pdf_path))
         total_pages = len(pdf_reader.pages)
         
-        # 获取pages目录
-        pages_dir = pdf_path.parent / "pages"
+        # 获取PDF文件名（不含扩展名）
+        pdf_name = pdf_path.stem
+        
+        # 获取pages目录（统一的路径结构）
+        pages_dir = pdf_path.parent / "pages" / pdf_name
         
         # 收集每页的信息
         pages_info = []
         for page_num in range(1, total_pages + 1):
-            page_file = pages_dir / f"page-{page_num}.md"
+            # LLM提取的文件（新格式）
+            page_file = pages_dir / f"{pdf_name}_page_{page_num:03d}_llm.md"
             
             if page_file.exists():
                 # 读取文件内容统计字数
@@ -3008,7 +3012,10 @@ async def extract_pages_content(
         if not pdf_path.exists():
             raise HTTPException(status_code=404, detail="PDF文件不存在")
         
-        info(f"开始提取页面内容: {pages_to_extract}")
+        # 获取PDF文件名（不含扩展名），用于统一命名
+        pdf_name = pdf_path.stem
+        
+        info(f"开始提取页面内容: {pages_to_extract}, PDF名称: {pdf_name}")
         
         # 准备SSE流式响应
         async def generate_extraction_stream():
@@ -3082,13 +3089,18 @@ async def extract_pages_content(
                     
                     info(f"页面 {page_num} LLM提取完成，内容长度: {len(accumulated_content)}")
                     
-                    # 保存结果
-                    pages_dir = pdf_path.parent / "pages"
-                    pages_dir.mkdir(exist_ok=True)
+                    # 保存结果（使用统一的命名格式：{pdf_name}_page_{page_num:03d}_llm.md）
+                    pages_dir = pdf_path.parent / "pages" / pdf_name
+                    pages_dir.mkdir(parents=True, exist_ok=True)
                     
-                    page_file = pages_dir / f"page-{page_num}.md"
+                    page_file = pages_dir / f"{pdf_name}_page_{page_num:03d}_llm.md"
                     with open(page_file, 'w', encoding='utf-8') as f:
-                        f.write(f"# 第{page_num}页内容\n\n")
+                        f.write(f"# {pdf_name} - 第 {page_num} 页 (LLM提取)\n\n")
+                        f.write(f"来源: {pdf_path.name}\n")
+                        f.write(f"提取时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        f.write(f"页码: {page_num}\n")
+                        f.write(f"提取方式: 多模态LLM\n\n")
+                        f.write("---\n\n")
                         f.write(accumulated_content)
                     
                     info(f"页面 {page_num} 内容已保存: {page_file}")
@@ -3135,8 +3147,11 @@ async def get_page_content(board_id: str, window_id: str, page: int):
             board_dir = Path(storage_base_dir) / board_id
             pdf_path = board_dir / window_content
         
-        pages_dir = pdf_path.parent / "pages"
-        page_file = pages_dir / f"page-{page}.md"
+        # 获取PDF文件名（不含扩展名）
+        pdf_name = pdf_path.stem
+        
+        pages_dir = pdf_path.parent / "pages" / pdf_name
+        page_file = pages_dir / f"{pdf_name}_page_{page:03d}_llm.md"
         
         if not page_file.exists():
             raise HTTPException(status_code=404, detail="页面内容未提取")
@@ -3193,12 +3208,20 @@ async def update_page_content(board_id: str, window_id: str, page: int, request_
             board_dir = Path(storage_base_dir) / board_id
             pdf_path = board_dir / window_content
         
-        pages_dir = pdf_path.parent / "pages"
-        pages_dir.mkdir(exist_ok=True)
+        # 获取PDF文件名（不含扩展名）
+        pdf_name = pdf_path.stem
         
-        page_file = pages_dir / f"page-{page}.md"
+        pages_dir = pdf_path.parent / "pages" / pdf_name
+        pages_dir.mkdir(parents=True, exist_ok=True)
+        
+        page_file = pages_dir / f"{pdf_name}_page_{page:03d}_llm.md"
         with open(page_file, 'w', encoding='utf-8') as f:
-            f.write(f"# 第{page}页内容\n\n")
+            f.write(f"# {pdf_name} - 第 {page} 页 (LLM提取)\n\n")
+            f.write(f"来源: {pdf_path.name}\n")
+            f.write(f"更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"页码: {page}\n")
+            f.write(f"提取方式: 多模态LLM (用户编辑)\n\n")
+            f.write("---\n\n")
             f.write(selected_content)
         
         info(f"页面 {page} 内容已更新")
