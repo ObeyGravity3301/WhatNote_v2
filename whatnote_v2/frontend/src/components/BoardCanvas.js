@@ -7206,16 +7206,20 @@ function BoardCanvas({
         
         // 保留特殊窗口（聊天窗口和消息中心），这些窗口不应该被后端数据覆盖
         setWindows(prev => {
+          console.log('🔍 检查需要保留的窗口:', prev.map(w => ({ id: w.id, type: w.type, title: w.title })));
+          
           const specialWindows = prev.filter(w => 
             w.id === CHAT_WINDOW_ID || w.id === MESSAGE_CENTER_WINDOW_ID
           ).map(w => {
+            console.log('🔍 检查特殊窗口属性:', { id: w.id, type: w.type, title: w.title, hasAllProps: !!w.id && !!w.type && !!w.title });
+            
             // 确保特殊窗口有完整的属性
             if (w.id === CHAT_WINDOW_ID && (!w.type || w.type !== 'chat')) {
               console.log('🔧 修复聊天窗口属性');
               return createChatWindow();
             }
             if (w.id === MESSAGE_CENTER_WINDOW_ID && (!w.type || w.type !== 'message-center')) {
-              console.log('🔧 修复消息中心窗口属性');
+              console.log('🔧 修复消息中心窗口属性，原属性:', { id: w.id, type: w.type, title: w.title });
               return createMessageCenterWindow();
             }
             return w;
@@ -7225,9 +7229,17 @@ function BoardCanvas({
           const allWindows = [...validatedWindows, ...specialWindows];
           console.log('🔄 设置窗口状态，窗口数量:', allWindows.length, 
             `(后端:${validatedWindows.length}, 特殊:${specialWindows.length})`);
+          console.log('🔄 所有窗口详情:', allWindows.map(w => ({ id: w.id, type: w.type, title: w.title })));
           if (specialWindows.length > 0) {
             console.log('📬 保留的特殊窗口:', specialWindows.map(w => ({ id: w.id, type: w.type, title: w.title })));
           }
+          
+          // 验证：检查是否有缺少关键属性的窗口
+          const invalidWindows = allWindows.filter(w => !w.id || !w.type || !w.title);
+          if (invalidWindows.length > 0) {
+            console.error('❌ 发现无效窗口（缺少id/type/title）:', invalidWindows);
+          }
+          
           return allWindows;
         });
         
@@ -7381,10 +7393,27 @@ function BoardCanvas({
     console.log('🎯 当前窗口数量:', windows.length);
     console.log('🎯 当前桌面图标数量:', desktopIcons.length);
     console.log('🎯 隐藏窗口数量:', hiddenWindows ? hiddenWindows.size : 0);
+    console.log('🎯 所有窗口列表:', windows.map(w => ({ 
+      id: w.id, 
+      type: w.type, 
+      title: w.title,
+      hasTitle: !!w.title,
+      hasType: !!w.type
+    })));
     
     // 过滤掉聊天窗口和消息中心窗口，这些特殊窗口不应该有桌面图标
     // 使用ID和type双重检查，确保即使type丢失也不会创建图标
     const regularWindows = windows.filter(window => {
+      // 检查是否缺少关键属性
+      if (!window.id || !window.type || !window.title) {
+        console.error('❌ 发现无效窗口，跳过创建图标:', { 
+          id: window.id, 
+          type: window.type, 
+          title: window.title 
+        });
+        return false;
+      }
+      
       const isSpecialWindow = 
         window.id === CHAT_WINDOW_ID || 
         window.id === MESSAGE_CENTER_WINDOW_ID ||
