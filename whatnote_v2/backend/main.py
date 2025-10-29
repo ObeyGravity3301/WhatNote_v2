@@ -3211,91 +3211,91 @@ async def extract_pages_content(
                             ]
                         }
                     ]
+                
+                # 非流式调用LLM（并行任务不使用流式）
+                accumulated_content = ""
+                async for chunk in llm_service.chat_completion(messages, stream=False):
+                    accumulated_content += chunk
+                
+                info(f"✅ [任务{page_num}] LLM提取完成: {len(accumulated_content)} 字")
+                
+                # 解析JSON格式的返回内容
+                text_content = ""
+                image_content = ""
+                
+                try:
+                    # 移除可能的markdown代码块标记
+                    json_content = accumulated_content.strip()
+                    if json_content.startswith("```json"):
+                        json_content = json_content[7:]
+                    if json_content.startswith("```"):
+                        json_content = json_content[3:]
+                    if json_content.endswith("```"):
+                        json_content = json_content[:-3]
+                    json_content = json_content.strip()
                     
-                    # 非流式调用LLM（并行任务不使用流式）
-                    accumulated_content = ""
-                    async for chunk in llm_service.chat_completion(messages, stream=False):
-                        accumulated_content += chunk
+                    # 解析JSON
+                    parsed = json.loads(json_content)
+                    text_content = parsed.get("text_extraction", "")
+                    image_content = parsed.get("visual_description", "")
                     
-                    info(f"✅ [任务{page_num}] LLM提取完成: {len(accumulated_content)} 字")
+                    info(f"页面 {page_num} JSON解析成功")
+                except json.JSONDecodeError as e:
+                    info(f"页面 {page_num} JSON解析失败，尝试按标记分割: {e}")
                     
-                    # 解析JSON格式的返回内容
-                    text_content = ""
-                    image_content = ""
-                    
-                    try:
-                        # 移除可能的markdown代码块标记
-                        json_content = accumulated_content.strip()
-                        if json_content.startswith("```json"):
-                            json_content = json_content[7:]
-                        if json_content.startswith("```"):
-                            json_content = json_content[3:]
-                        if json_content.endswith("```"):
-                            json_content = json_content[:-3]
-                        json_content = json_content.strip()
-                        
-                        # 解析JSON
-                        parsed = json.loads(json_content)
-                        text_content = parsed.get("text_extraction", "")
-                        image_content = parsed.get("visual_description", "")
-                        
-                        info(f"页面 {page_num} JSON解析成功")
-                    except json.JSONDecodeError as e:
-                        info(f"页面 {page_num} JSON解析失败，尝试按标记分割: {e}")
-                        
-                        # 回退到旧的解析方式
-                        if "## 文本提取" in accumulated_content and "## 图片描述" in accumulated_content:
-                            parts = accumulated_content.split("## 图片描述")
-                            if len(parts) == 2:
-                                text_content = parts[0].replace("## 文本提取", "").strip()
-                                image_content = parts[1].strip()
-                            else:
-                                text_content = accumulated_content
-                                image_content = "（解析失败，仅保存完整内容）"
+                    # 回退到旧的解析方式
+                    if "## 文本提取" in accumulated_content and "## 图片描述" in accumulated_content:
+                        parts = accumulated_content.split("## 图片描述")
+                        if len(parts) == 2:
+                            text_content = parts[0].replace("## 文本提取", "").strip()
+                            image_content = parts[1].strip()
                         else:
-                            # 完全失败，使用完整内容
                             text_content = accumulated_content
-                            image_content = "（未能分离视觉描述）"
-                    
-                    info(f"页面 {page_num} 最终结果: 文本 {len(text_content)} 字, 视觉描述 {len(image_content)} 字")
-                    
-                    # 保存结果（使用统一的命名格式：{pdf_name}_page_{page_num:03d}_llm.md）
-                    pages_dir = pdf_path.parent / "pages" / pdf_name
-                    pages_dir.mkdir(parents=True, exist_ok=True)
-                    
-                    page_file = pages_dir / f"{pdf_name}_page_{page_num:03d}_llm.md"
-                    with open(page_file, 'w', encoding='utf-8') as f:
-                        f.write(f"# {pdf_name} - 第 {page_num} 页 (LLM提取)\n\n")
-                        f.write(f"来源: {pdf_path.name}\n")
-                        f.write(f"提取时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                        f.write(f"页码: {page_num}\n")
-                        f.write(f"提取方式: 多模态LLM\n\n")
-                        f.write("---\n\n")
-                        f.write(accumulated_content)
-                    
-                    info(f"💾 [任务{page_num}] 内容已保存")
-                    
-                    # 自动设置版本为LLM
-                    content_manager.save_page_version(board_id, window_id, page_num, 'llm')
-                    
-                    info(f"✅ [任务{page_num}] 完成")
-                    
-                    # 返回结果
-                    return {
-                        'success': True,
-                        'page': page_num,
-                        'content': accumulated_content,
-                        'textContent': text_content,
-                        'imageContent': image_content
-                    }
-                    
-                except Exception as e:
-                    error(f"❌ [任务{page_num}] 失败: {e}")
-                    return {
-                        'success': False,
-                        'page': page_num,
-                        'error': str(e)
-                    }
+                            image_content = "（解析失败，仅保存完整内容）"
+                    else:
+                        # 完全失败，使用完整内容
+                        text_content = accumulated_content
+                        image_content = "（未能分离视觉描述）"
+                
+                info(f"页面 {page_num} 最终结果: 文本 {len(text_content)} 字, 视觉描述 {len(image_content)} 字")
+                
+                # 保存结果（使用统一的命名格式：{pdf_name}_page_{page_num:03d}_llm.md）
+                pages_dir = pdf_path.parent / "pages" / pdf_name
+                pages_dir.mkdir(parents=True, exist_ok=True)
+                
+                page_file = pages_dir / f"{pdf_name}_page_{page_num:03d}_llm.md"
+                with open(page_file, 'w', encoding='utf-8') as f:
+                    f.write(f"# {pdf_name} - 第 {page_num} 页 (LLM提取)\n\n")
+                    f.write(f"来源: {pdf_path.name}\n")
+                    f.write(f"提取时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write(f"页码: {page_num}\n")
+                    f.write(f"提取方式: 多模态LLM\n\n")
+                    f.write("---\n\n")
+                    f.write(accumulated_content)
+                
+                info(f"💾 [任务{page_num}] 内容已保存")
+                
+                # 自动设置版本为LLM
+                content_manager.save_page_version(board_id, window_id, page_num, 'llm')
+                
+                info(f"✅ [任务{page_num}] 完成")
+                
+                # 返回结果
+                return {
+                    'success': True,
+                    'page': page_num,
+                    'content': accumulated_content,
+                    'textContent': text_content,
+                    'imageContent': image_content
+                }
+                
+            except Exception as e:
+                error(f"❌ [任务{page_num}] 失败: {e}")
+                return {
+                    'success': False,
+                    'page': page_num,
+                    'error': str(e)
+                }
             
         # 并行执行所有页面提取任务
         import asyncio
