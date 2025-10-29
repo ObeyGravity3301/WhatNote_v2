@@ -618,7 +618,26 @@ class ContentManager:
         # 扫描files目录，为没有JSON配置的文件创建窗口配置
         self._auto_create_windows_for_orphaned_files(board_id, files_dir, windows)
         
-        return windows
+        # 验证和过滤窗口数据，移除无效窗口
+        valid_windows = []
+        for window in windows:
+            # 检查必需的属性
+            if not window.get('id'):
+                print(f"❌ 无效窗口（缺少id）: {window}")
+                continue
+            if not window.get('type'):
+                print(f"❌ 无效窗口（缺少type）: id={window.get('id')}, {window}")
+                continue
+            if not window.get('title'):
+                print(f"❌ 无效窗口（缺少title）: id={window.get('id')}, type={window.get('type')}, {window}")
+                continue
+            
+            valid_windows.append(window)
+        
+        if len(valid_windows) != len(windows):
+            print(f"⚠️ 过滤了 {len(windows) - len(valid_windows)} 个无效窗口")
+        
+        return valid_windows
     
     def _auto_create_windows_for_orphaned_files(self, board_id: str, files_dir: Path, existing_windows: List[Dict]):
         """为没有JSON配置的文件自动创建窗口配置"""
