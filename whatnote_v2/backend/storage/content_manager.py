@@ -558,6 +558,10 @@ class ContentManager:
         # 扫描files目录，查找所有JSON配置文件（新命名规则：xxx.ext.json）
         for file_path in files_dir.iterdir():
             if file_path.is_file() and file_path.suffix == ".json":
+                # 排除特殊JSON文件（版本配置、图标位置等）
+                special_json_files = ['page_versions.json', 'icon_positions.json', 'board_info.json']
+                if file_path.name in special_json_files or file_path.name.endswith('.versions.json'):
+                    continue
                 try:
                     with open(file_path, "r", encoding="utf-8") as f:
                         window_data = json.load(f)
