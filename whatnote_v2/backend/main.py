@@ -3058,21 +3058,33 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
             error(f"打开PDF文件失败: {e}")
             all_pages_image_stats = [{'page': i, 'count': 0, 'size': 0, 'large_count': 0} for i in range(1, total_pages + 1)]
         
-        # 计算基准值（中位数，更能代表"正常"页面）
-        image_counts = [p['count'] for p in all_pages_image_stats]
-        image_sizes = [p['size'] for p in all_pages_image_stats]
-        large_image_counts = [p['large_count'] for p in all_pages_image_stats]
-        
-        # 排序后取中位数
-        sorted_counts = sorted(image_counts)
-        sorted_sizes = sorted(image_sizes)
-        sorted_large_counts = sorted(large_image_counts)
-        
-        baseline_count = sorted_counts[len(sorted_counts) // 2] if sorted_counts else 0
-        baseline_size = sorted_sizes[len(sorted_sizes) // 2] if sorted_sizes else 0
-        baseline_large_count = sorted_large_counts[len(sorted_large_counts) // 2] if sorted_large_counts else 0
-        
-        info(f"📊 图片基准值: {baseline_count} 张 / {baseline_size/1024:.1f}KB / {baseline_large_count} 张大图")
+        # 计算基准值：使用第一页和最后一页中图片较少的作为基准
+        # 原理：首尾页通常是封面/目录/参考文献，最能代表"纯装饰"的基准
+        if len(all_pages_image_stats) >= 2:
+            first_page = all_pages_image_stats[0]
+            last_page = all_pages_image_stats[-1]
+            
+            # 取首尾页中图片较少的作为基准
+            baseline_count = min(first_page['count'], last_page['count'])
+            baseline_size = min(first_page['size'], last_page['size'])
+            baseline_large_count = min(first_page['large_count'], last_page['large_count'])
+            
+            info(f"📊 图片基准值（取自第1页和第{len(all_pages_image_stats)}页的最小值）:")
+            info(f"   第1页: {first_page['count']}张 / {first_page['size']/1024:.1f}KB / {first_page['large_count']}大图")
+            info(f"   第{len(all_pages_image_stats)}页: {last_page['count']}张 / {last_page['size']/1024:.1f}KB / {last_page['large_count']}大图")
+            info(f"   → 基准: {baseline_count}张 / {baseline_size/1024:.1f}KB / {baseline_large_count}大图")
+        elif len(all_pages_image_stats) == 1:
+            # 只有一页，直接用第一页
+            baseline_count = all_pages_image_stats[0]['count']
+            baseline_size = all_pages_image_stats[0]['size']
+            baseline_large_count = all_pages_image_stats[0]['large_count']
+            info(f"📊 图片基准值（单页文档）: {baseline_count}张 / {baseline_size/1024:.1f}KB / {baseline_large_count}大图")
+        else:
+            # 没有页面
+            baseline_count = 0
+            baseline_size = 0
+            baseline_large_count = 0
+            info(f"📊 图片基准值: 0张 / 0KB / 0大图（无页面）")
         
         # 收集每页的信息
         pages_info = []
