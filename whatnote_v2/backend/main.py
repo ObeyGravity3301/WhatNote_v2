@@ -3012,6 +3012,68 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
         # 获取pages目录（统一的路径结构）
         pages_dir = pdf_path.parent / "pages" / pdf_name
         
+        # 第一遍：收集所有页面的图片统计信息
+        all_pages_image_stats = []
+        import fitz
+        try:
+            pdf_doc = fitz.open(pdf_path)
+            for page_num in range(1, total_pages + 1):
+                try:
+                    pdf_page = pdf_doc[page_num - 1]
+                    image_list = pdf_page.get_images(full=True)
+                    
+                    page_image_count = len(image_list)
+                    page_image_size = 0
+                    large_images = 0  # 大图片数量（>10KB）
+                    
+                    for img in image_list:
+                        xref = img[0]
+                        try:
+                            base_image = pdf_doc.extract_image(xref)
+                            image_bytes = base_image["image"]
+                            img_size = len(image_bytes)
+                            page_image_size += img_size
+                            
+                            # 统计大图片（>10KB，通常是内容图片而非装饰）
+                            if img_size > 10240:  # 10KB
+                                large_images += 1
+                        except:
+                            pass
+                    
+                    all_pages_image_stats.append({
+                        'page': page_num,
+                        'count': page_image_count,
+                        'size': page_image_size,
+                        'large_count': large_images
+                    })
+                except Exception as e:
+                    all_pages_image_stats.append({
+                        'page': page_num,
+                        'count': 0,
+                        'size': 0,
+                        'large_count': 0
+                    })
+            pdf_doc.close()
+        except Exception as e:
+            error(f"打开PDF文件失败: {e}")
+            all_pages_image_stats = [{'page': i, 'count': 0, 'size': 0, 'large_count': 0} for i in range(1, total_pages + 1)]
+        
+        # 计算基准值（中位数，更能代表"正常"页面）
+        image_counts = [p['count'] for p in all_pages_image_stats]
+        image_sizes = [p['size'] for p in all_pages_image_stats]
+        large_image_counts = [p['large_count'] for p in all_pages_image_stats]
+        
+        # 排序后取中位数
+        sorted_counts = sorted(image_counts)
+        sorted_sizes = sorted(image_sizes)
+        sorted_large_counts = sorted(large_image_counts)
+        
+        baseline_count = sorted_counts[len(sorted_counts) // 2] if sorted_counts else 0
+        baseline_size = sorted_sizes[len(sorted_sizes) // 2] if sorted_sizes else 0
+        baseline_large_count = sorted_large_counts[len(sorted_large_counts) // 2] if sorted_large_counts else 0
+        
+        info(f"📊 图片基准值: {baseline_count} 张 / {baseline_size/1024:.1f}KB / {baseline_large_count} 张大图")
+        
         # 收集每页的信息
         pages_info = []
         for page_num in range(1, total_pages + 1):
@@ -3054,39 +3116,39 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                     text = page.extract_text() or ''
                     char_count = len(text.strip())
                     
-                    # 检测图片数量和大小（使用PyMuPDF）
-                    image_count = 0
-                    total_image_size = 0
-                    try:
-                        import fitz
-                        pdf_doc = fitz.open(pdf_path)
-                        pdf_page = pdf_doc[page_num - 1]
-                        image_list = pdf_page.get_images(full=True)
-                        image_count = len(image_list)
-                        
-                        # 计算图片总大小
-                        for img_index, img in enumerate(image_list):
-                            xref = img[0]
-                            try:
-                                base_image = pdf_doc.extract_image(xref)
-                                image_bytes = base_image["image"]
-                                total_image_size += len(image_bytes)
-                            except:
-                                pass
-                        
-                        pdf_doc.close()
-                    except Exception as img_error:
-                        info(f"页面 {page_num} 图片检测失败: {img_error}")
+                    # 从之前统计的数据中获取图片信息
+                    page_stats = all_pages_image_stats[page_num - 1]
+                    image_count = page_stats['count']
+                    total_image_size = page_stats['size']
+                    large_image_count = page_stats['large_count']
+                    
+                    # 智能判断是否需要LLM提取
+                    # 规则1：文字很少（<=50字）
+                    low_text = char_count <= 50
+                    
+                    # 规则2：大图片数量超过基准值（说明有实质内容图片）
+                    has_significant_images = large_image_count > baseline_large_count
+                    
+                    # 规则3：图片总大小超过基准值1.5倍（说明图片内容丰富）
+                    has_large_image_content = total_image_size > baseline_size * 1.5
+                    
+                    # 规则4：图片数量远超基准值（说明不只是背景/水印）
+                    has_many_images = image_count > baseline_count + 2
+                    
+                    # 综合判断：文字少 OR (有大图 OR 图片内容丰富 OR 图片数量明显多)
+                    needs_llm = low_text or has_significant_images or has_large_image_content or has_many_images
                     
                     pages_info.append({
                         'page': page_num,
                         'extracted': False,
                         'char_count': char_count,
                         'versions': {'has_text': False, 'has_description': False},
-                        'original_text_available': char_count > 50,  # 判断是否有足够的原始文字
-                        'image_count': image_count,  # 图片数量
-                        'total_image_size': total_image_size,  # 图片总大小（字节）
-                        'needs_llm_extraction': char_count <= 50 or image_count > 0  # 需要LLM提取的标志
+                        'original_text_available': char_count > 50,
+                        'image_count': image_count,
+                        'total_image_size': total_image_size,
+                        'large_image_count': large_image_count,  # 新增：大图片数量
+                        'baseline_exceeded': has_significant_images or has_large_image_content or has_many_images,  # 新增：是否超过基准
+                        'needs_llm_extraction': needs_llm
                     })
                 except Exception as e:
                     error(f"提取原始文字失败: {e}")

@@ -1795,10 +1795,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     {pageInfo.char_count || 0}字
                   </div>
                   
-                  {/* 图片信息 */}
-                  {pageInfo.image_count > 0 && (
+                  {/* 图片信息（仅显示超过基准或有大图的） */}
+                  {(pageInfo.baseline_exceeded || pageInfo.large_image_count > 0) && (
                     <div style={{
-                      backgroundColor: 'rgba(255, 140, 0, 0.9)',
+                      backgroundColor: pageInfo.baseline_exceeded ? 'rgba(255, 69, 0, 0.9)' : 'rgba(255, 140, 0, 0.9)',
                       color: '#ffffff',
                       padding: '2px 6px',
                       borderRadius: '3px',
@@ -1806,7 +1806,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       fontFamily: 'MS Sans Serif, sans-serif',
                       fontWeight: 'bold'
                     }}>
-                      📷 {pageInfo.image_count}张 {(pageInfo.total_image_size / 1024).toFixed(0)}KB
+                      📷 {pageInfo.large_image_count > 0 ? `${pageInfo.large_image_count}大图` : `${pageInfo.image_count}张`}
+                      {pageInfo.total_image_size > 0 && ` ${(pageInfo.total_image_size / 1024).toFixed(0)}KB`}
                     </div>
                   )}
                 </div>
@@ -1832,14 +1833,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   </div>
                 )}
                 
-                {/* 需要LLM提取的标记（无文字或有图片） */}
+                {/* 需要LLM提取的标记（智能判断） */}
                 {!pageInfo.extracted && pageInfo.needs_llm_extraction && (
                   <div style={{
                     position: 'absolute',
                     top: '50%',
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
-                    backgroundColor: 'rgba(255, 140, 0, 0.85)',
+                    backgroundColor: pageInfo.baseline_exceeded ? 'rgba(255, 69, 0, 0.85)' : 'rgba(255, 140, 0, 0.85)',
                     color: '#ffffff',
                     padding: '4px 8px',
                     borderRadius: '4px',
@@ -1850,12 +1851,16 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     textAlign: 'center',
                     lineHeight: '1.2'
                   }}>
-                    {pageInfo.char_count <= 50 && pageInfo.image_count > 0 ? 
-                      `少文字+${pageInfo.image_count}图` :
+                    {pageInfo.char_count <= 50 && pageInfo.large_image_count > 0 ? 
+                      `少文字+${pageInfo.large_image_count}大图` :
+                     pageInfo.char_count <= 50 && pageInfo.baseline_exceeded ? 
+                      '少文字+重图' :
                      pageInfo.char_count <= 50 ? 
                       '少文字' :
-                     pageInfo.image_count > 0 ? 
-                      `有${pageInfo.image_count}图` :
+                     pageInfo.large_image_count > 0 ? 
+                      `有${pageInfo.large_image_count}大图` :
+                     pageInfo.baseline_exceeded ? 
+                      '重图内容' :
                       '建议提取'}
                   </div>
                 )}
