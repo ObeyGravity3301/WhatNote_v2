@@ -1773,20 +1773,42 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   </div>
                 )}
                 
-                {/* 字数信息（左下角） */}
+                {/* 字数和图片信息（左下角） */}
                 <div style={{
                   position: 'absolute',
                   bottom: '4px',
                   left: '4px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                  color: '#000000',
-                  padding: '2px 6px',
-                  borderRadius: '3px',
-                  fontSize: '9px',
-                  fontFamily: 'MS Sans Serif, sans-serif',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
                   zIndex: 2
                 }}>
-                  {pageInfo.char_count || 0}字
+                  {/* 字数 */}
+                  <div style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                    color: '#000000',
+                    padding: '2px 6px',
+                    borderRadius: '3px',
+                    fontSize: '9px',
+                    fontFamily: 'MS Sans Serif, sans-serif'
+                  }}>
+                    {pageInfo.char_count || 0}字
+                  </div>
+                  
+                  {/* 图片信息 */}
+                  {pageInfo.image_count > 0 && (
+                    <div style={{
+                      backgroundColor: 'rgba(255, 140, 0, 0.9)',
+                      color: '#ffffff',
+                      padding: '2px 6px',
+                      borderRadius: '3px',
+                      fontSize: '8px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}>
+                      📷 {pageInfo.image_count}张 {(pageInfo.total_image_size / 1024).toFixed(0)}KB
+                    </div>
+                  )}
                 </div>
                 
                 {/* 版本标记（左上角，在页码下方） */}
@@ -1810,23 +1832,31 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   </div>
                 )}
                 
-                {/* 原始文字可用标记 */}
-                {!pageInfo.extracted && pageInfo.original_text_available && (
+                {/* 需要LLM提取的标记（无文字或有图片） */}
+                {!pageInfo.extracted && pageInfo.needs_llm_extraction && (
                   <div style={{
                     position: 'absolute',
                     top: '50%',
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
-                    backgroundColor: 'rgba(0, 128, 0, 0.8)',
+                    backgroundColor: 'rgba(255, 140, 0, 0.85)',
                     color: '#ffffff',
                     padding: '4px 8px',
                     borderRadius: '4px',
                     fontSize: '10px',
                     fontFamily: 'MS Sans Serif, sans-serif',
                     fontWeight: 'bold',
-                    zIndex: 1
+                    zIndex: 1,
+                    textAlign: 'center',
+                    lineHeight: '1.2'
                   }}>
-                    有文字
+                    {pageInfo.char_count <= 50 && pageInfo.image_count > 0 ? 
+                      `少文字+${pageInfo.image_count}图` :
+                     pageInfo.char_count <= 50 ? 
+                      '少文字' :
+                     pageInfo.image_count > 0 ? 
+                      `有${pageInfo.image_count}图` :
+                      '建议提取'}
                   </div>
                 )}
               </div>

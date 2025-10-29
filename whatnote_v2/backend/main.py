@@ -3048,18 +3048,45 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                         'versions': {'has_text': False, 'has_description': False}
                     })
             else:
-                # 尝试提取原始文字统计字数
+                # 尝试提取原始文字统计字数和检测图片
                 try:
                     page = pdf_reader.pages[page_num - 1]
                     text = page.extract_text() or ''
                     char_count = len(text.strip())
+                    
+                    # 检测图片数量和大小（使用PyMuPDF）
+                    image_count = 0
+                    total_image_size = 0
+                    try:
+                        import fitz
+                        pdf_doc = fitz.open(pdf_path)
+                        pdf_page = pdf_doc[page_num - 1]
+                        image_list = pdf_page.get_images(full=True)
+                        image_count = len(image_list)
+                        
+                        # 计算图片总大小
+                        for img_index, img in enumerate(image_list):
+                            xref = img[0]
+                            try:
+                                base_image = pdf_doc.extract_image(xref)
+                                image_bytes = base_image["image"]
+                                total_image_size += len(image_bytes)
+                            except:
+                                pass
+                        
+                        pdf_doc.close()
+                    except Exception as img_error:
+                        info(f"页面 {page_num} 图片检测失败: {img_error}")
                     
                     pages_info.append({
                         'page': page_num,
                         'extracted': False,
                         'char_count': char_count,
                         'versions': {'has_text': False, 'has_description': False},
-                        'original_text_available': char_count > 50  # 判断是否有足够的原始文字
+                        'original_text_available': char_count > 50,  # 判断是否有足够的原始文字
+                        'image_count': image_count,  # 图片数量
+                        'total_image_size': total_image_size,  # 图片总大小（字节）
+                        'needs_llm_extraction': char_count <= 50 or image_count > 0  # 需要LLM提取的标志
                     })
                 except Exception as e:
                     error(f"提取原始文字失败: {e}")
@@ -3068,7 +3095,10 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                         'extracted': False,
                         'char_count': 0,
                         'versions': {'has_text': False, 'has_description': False},
-                        'original_text_available': False
+                        'original_text_available': False,
+                        'image_count': 0,
+                        'total_image_size': 0,
+                        'needs_llm_extraction': True
                     })
         
         return {
