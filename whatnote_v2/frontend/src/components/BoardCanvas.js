@@ -7203,8 +7203,33 @@ function BoardCanvas({
             height: window.height || 300 
           }
         }));
-        console.log('🔄 设置窗口状态，窗口数量:', validatedWindows.length);
-        setWindowsWithTrace(validatedWindows);
+        
+        // 保留特殊窗口（聊天窗口和消息中心），这些窗口不应该被后端数据覆盖
+        setWindows(prev => {
+          const specialWindows = prev.filter(w => 
+            w.id === CHAT_WINDOW_ID || w.id === MESSAGE_CENTER_WINDOW_ID
+          ).map(w => {
+            // 确保特殊窗口有完整的属性
+            if (w.id === CHAT_WINDOW_ID && (!w.type || w.type !== 'chat')) {
+              console.log('🔧 修复聊天窗口属性');
+              return createChatWindow();
+            }
+            if (w.id === MESSAGE_CENTER_WINDOW_ID && (!w.type || w.type !== 'message-center')) {
+              console.log('🔧 修复消息中心窗口属性');
+              return createMessageCenterWindow();
+            }
+            return w;
+          });
+          
+          // 合并：后端窗口 + 特殊窗口
+          const allWindows = [...validatedWindows, ...specialWindows];
+          console.log('🔄 设置窗口状态，窗口数量:', allWindows.length, 
+            `(后端:${validatedWindows.length}, 特殊:${specialWindows.length})`);
+          if (specialWindows.length > 0) {
+            console.log('📬 保留的特殊窗口:', specialWindows.map(w => ({ id: w.id, type: w.type, title: w.title })));
+          }
+          return allWindows;
+        });
         
         // 延迟验证状态是否正确设置（使用ref获取最新状态）
         setTimeout(() => {
@@ -7358,16 +7383,42 @@ function BoardCanvas({
     console.log('🎯 隐藏窗口数量:', hiddenWindows ? hiddenWindows.size : 0);
     
     // 过滤掉聊天窗口和消息中心窗口，这些特殊窗口不应该有桌面图标
-    const regularWindows = windows.filter(window => 
-      window.type !== 'chat' && window.type !== 'message-center'
-    );
+    // 使用ID和type双重检查，确保即使type丢失也不会创建图标
+    const regularWindows = windows.filter(window => {
+      const isSpecialWindow = 
+        window.id === CHAT_WINDOW_ID || 
+        window.id === MESSAGE_CENTER_WINDOW_ID ||
+        window.type === 'chat' || 
+        window.type === 'message-center';
+      
+      if (isSpecialWindow) {
+        console.log('🎯 跳过特殊窗口，不创建桌面图标:', window.id, window.title);
+        return false;
+      }
+      return true;
+    });
     
-    // 先更新网格占用状态，基于现有图标
-    updateGridOccupancy(desktopIcons);
+    // 先清理掉现有的特殊窗口图标（如果存在）
+    const cleanedDesktopIcons = desktopIcons.filter(icon => {
+      const isSpecialIcon = 
+        icon.windowId === CHAT_WINDOW_ID || 
+        icon.windowId === MESSAGE_CENTER_WINDOW_ID ||
+        icon.id === CHAT_WINDOW_ID || 
+        icon.id === MESSAGE_CENTER_WINDOW_ID;
+      
+      if (isSpecialIcon) {
+        console.log('🎯 清理特殊窗口图标:', icon.id, icon.title);
+        return false;
+      }
+      return true;
+    });
+    
+    // 先更新网格占用状态，基于清理后的图标
+    updateGridOccupancy(cleanedDesktopIcons);
     
     const icons = regularWindows.map(window => {
-      // 查找是否已有该图标，保持位置和网格信息
-      const existingIcon = desktopIcons.find(icon => icon.id === window.id);
+      // 查找是否已有该图标，保持位置和网格信息（使用清理后的图标列表）
+      const existingIcon = cleanedDesktopIcons.find(icon => icon.id === window.id);
       
       if (existingIcon) {
         console.log(`🎯 保持现有图标位置: ${window.title} (${window.id}) at (${existingIcon.gridPosition?.gridX},${existingIcon.gridPosition?.gridY})`);
