@@ -3058,33 +3058,27 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
             error(f"打开PDF文件失败: {e}")
             all_pages_image_stats = [{'page': i, 'count': 0, 'size': 0, 'large_count': 0} for i in range(1, total_pages + 1)]
         
-        # 计算基准值：使用第一页和最后一页中图片较少的作为基准
+        # 计算基准值：使用第一页和最后一页图片数量的最小值
         # 原理：首尾页通常是封面/目录/参考文献，最能代表"纯装饰"的基准
         if len(all_pages_image_stats) >= 2:
             first_page = all_pages_image_stats[0]
             last_page = all_pages_image_stats[-1]
             
-            # 取首尾页中图片较少的作为基准
+            # 只取图片数量作为基准
             baseline_count = min(first_page['count'], last_page['count'])
-            baseline_size = min(first_page['size'], last_page['size'])
-            baseline_large_count = min(first_page['large_count'], last_page['large_count'])
             
-            info(f"📊 图片基准值（取自第1页和第{len(all_pages_image_stats)}页的最小值）:")
-            info(f"   第1页: {first_page['count']}张 / {first_page['size']/1024:.1f}KB / {first_page['large_count']}大图")
-            info(f"   第{len(all_pages_image_stats)}页: {last_page['count']}张 / {last_page['size']/1024:.1f}KB / {last_page['large_count']}大图")
-            info(f"   → 基准: {baseline_count}张 / {baseline_size/1024:.1f}KB / {baseline_large_count}大图")
+            info(f"📊 图片基准数量（取自第1页和第{len(all_pages_image_stats)}页的最小值）:")
+            info(f"   第1页: {first_page['count']}张")
+            info(f"   第{len(all_pages_image_stats)}页: {last_page['count']}张")
+            info(f"   → 基准: {baseline_count}张")
         elif len(all_pages_image_stats) == 1:
             # 只有一页，直接用第一页
             baseline_count = all_pages_image_stats[0]['count']
-            baseline_size = all_pages_image_stats[0]['size']
-            baseline_large_count = all_pages_image_stats[0]['large_count']
-            info(f"📊 图片基准值（单页文档）: {baseline_count}张 / {baseline_size/1024:.1f}KB / {baseline_large_count}大图")
+            info(f"📊 图片基准数量（单页文档）: {baseline_count}张")
         else:
             # 没有页面
             baseline_count = 0
-            baseline_size = 0
-            baseline_large_count = 0
-            info(f"📊 图片基准值: 0张 / 0KB / 0大图（无页面）")
+            info(f"📊 图片基准数量: 0张（无页面）")
         
         # 收集每页的信息
         pages_info = []
@@ -3134,21 +3128,15 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                     total_image_size = page_stats['size']
                     large_image_count = page_stats['large_count']
                     
-                    # 智能判断是否需要LLM提取
+                    # 判断是否需要LLM提取（简化规则）
                     # 规则1：文字很少（<=50字）
                     low_text = char_count <= 50
                     
-                    # 规则2：大图片数量超过基准值（说明有实质内容图片）
-                    has_significant_images = large_image_count > baseline_large_count
+                    # 规则2：图片数量超过基准值（说明有额外的内容图片）
+                    has_extra_images = image_count > baseline_count
                     
-                    # 规则3：图片总大小超过基准值1.5倍（说明图片内容丰富）
-                    has_large_image_content = total_image_size > baseline_size * 1.5
-                    
-                    # 规则4：图片数量远超基准值（说明不只是背景/水印）
-                    has_many_images = image_count > baseline_count + 2
-                    
-                    # 综合判断：文字少 OR (有大图 OR 图片内容丰富 OR 图片数量明显多)
-                    needs_llm = low_text or has_significant_images or has_large_image_content or has_many_images
+                    # 综合判断：文字少 OR 图片数量超基准
+                    needs_llm = low_text or has_extra_images
                     
                     pages_info.append({
                         'page': page_num,
@@ -3158,8 +3146,9 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                         'original_text_available': char_count > 50,
                         'image_count': image_count,
                         'total_image_size': total_image_size,
-                        'large_image_count': large_image_count,  # 新增：大图片数量
-                        'baseline_exceeded': has_significant_images or has_large_image_content or has_many_images,  # 新增：是否超过基准
+                        'large_image_count': large_image_count,
+                        'baseline_count': baseline_count,  # 新增：基准值
+                        'extra_images': max(0, image_count - baseline_count),  # 新增：超出基准的图片数
                         'needs_llm_extraction': needs_llm
                     })
                 except Exception as e:
