@@ -27,18 +27,27 @@ function App() {
   const [newBoardName, setNewBoardName] = useState('');
   const [isComposing, setIsComposing] = useState(false);
   const [courseBoards, setCourseBoards] = useState({});
+
+  // 系统提示状态
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'info' });
+  const toastTimeoutRef = useRef(null);
+
+  // 全局确认弹窗状态
+  const [confirmDialog, setConfirmDialog] = useState(null);
   
   // 任务栏右键菜单状态
   const [showTaskbarContextMenu, setShowTaskbarContextMenu] = useState(false);
   const [taskbarMenuPosition, setTaskbarMenuPosition] = useState({ x: 0, y: 0 });
   
-  // 子菜单悬浮状态
-  const [hoveredCourse, setHoveredCourse] = useState(null);
-  const [hoveredSubmenu, setHoveredSubmenu] = useState(false);
+  // 子菜单激活状态
+  const [activeCourseId, setActiveCourseId] = useState(null);
   const [submenuPosition, setSubmenuPosition] = useState({ top: 0 });
-  
-  // 延迟定时器引用
-  const hideTimeoutRef = useRef(null);
+
+  const toastTypeConfig = {
+    success: { icon: '✅', title: '操作成功' },
+    error: { icon: '⚠️', title: '操作失败' },
+    info: { icon: 'ℹ️', title: '提示' }
+  };
   
   // 计算子菜单位置
   const calculateSubmenuPosition = (element) => {
@@ -106,51 +115,24 @@ function App() {
     }
   };
   
-  // 处理课程悬浮 - 立即显示，延迟隐藏
-  const handleCourseMouseEnter = (courseId, event) => {
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-      hideTimeoutRef.current = null;
-    }
-    
-    // 立即保存元素引用，避免异步时失效
+  const handleCourseClick = (courseId, event) => {
     const targetElement = event.currentTarget;
-    
-    setHoveredCourse(courseId);
-    
-    // 延迟计算位置，等待子菜单渲染完成
+
+    if (activeCourseId === courseId) {
+      setActiveCourseId(null);
+      setShowCreateBoardInput(false);
+      setNewBoardName('');
+      return;
+    }
+
+    setShowCreateBoardInput(false);
+    setNewBoardName('');
+    setActiveCourseId(courseId);
+
     setTimeout(() => {
       const position = calculateSubmenuPosition(targetElement);
       setSubmenuPosition(position);
     }, 10);
-  };
-  
-  const handleCourseMouseLeave = () => {
-    hideTimeoutRef.current = setTimeout(() => {
-      // 如果正在显示输入框，不要关闭课程悬浮
-      if (!hoveredSubmenu && !showCreateBoardInput) {
-        setHoveredCourse(null);
-      }
-    }, 150); // 150ms延迟
-  };
-  
-  
-  // 处理子菜单悬浮
-  const handleSubmenuMouseEnter = () => {
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-      hideTimeoutRef.current = null;
-    }
-    setHoveredSubmenu(true);
-  };
-  
-  const handleSubmenuMouseLeave = () => {
-    // 如果正在显示输入框，不要关闭子菜单
-    if (showCreateBoardInput) {
-      return;
-    }
-    setHoveredSubmenu(false);
-    setHoveredCourse(null);
   };
   
   // 任务栏右键菜单处理
@@ -159,9 +141,58 @@ function App() {
     setTaskbarMenuPosition({ x: e.clientX, y: e.clientY });
     setShowTaskbarContextMenu(true);
   };
+
+  const showToast = (message, type = 'info') => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+
+    setToast({ visible: true, message, type });
+
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(prev => ({ ...prev, visible: false }));
+      toastTimeoutRef.current = null;
+    }, 3000);
+  };
+
+  const hideToast = () => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    setToast(prev => ({ ...prev, visible: false }));
+  };
+
+  const openConfirmDialog = ({ title, message, confirmText = '确定', cancelText = '取消', icon = '⚠️' }) => {
+    return new Promise((resolve) => {
+      setConfirmDialog({
+        title,
+        message,
+        confirmText,
+        cancelText,
+        icon,
+        onConfirm: () => {
+          setConfirmDialog(null);
+          resolve(true);
+        },
+        onCancel: () => {
+          setConfirmDialog(null);
+          resolve(false);
+        }
+      });
+    });
+  };
   
   const handleTaskbarMenuClose = () => {
     setShowTaskbarContextMenu(false);
+  };
+
+  const handleOpenPersonalization = () => {
+    setShowTaskbarContextMenu(false);
+    if (typeof window !== 'undefined') {
+      const event = new CustomEvent('openPersonalization');
+      window.dispatchEvent(event);
+    }
   };
   
   // 回收站相关状态
@@ -202,6 +233,14 @@ function App() {
   // 加载课程列表
   useEffect(() => {
     fetchCourses();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
   }, []);
 
   // 获取课程的展板列表
@@ -277,6 +316,8 @@ function App() {
       setNewCourseName('');
       setShowCreateCourseInput(false);
       setShowStartMenu(false);
+      setActiveCourseId(null);
+      setShowCreateBoardInput(false);
     }
   };
 
@@ -286,6 +327,7 @@ function App() {
       setNewBoardName('');
       setShowCreateBoardInput(false);
       setShowStartMenu(false);
+      setActiveCourseId(null);
     }
   };
 
@@ -401,53 +443,69 @@ function App() {
       if (response.ok) {
         await loadTrashItems();
         await loadTrashSize();
-        alert('文件恢复成功！');
+        showToast('文件恢复成功！', 'success');
       } else {
-        alert('文件恢复失败！');
+        showToast('文件恢复失败！', 'error');
       }
     } catch (error) {
       console.error('恢复文件失败:', error);
-      alert('文件恢复失败！');
+      showToast('文件恢复失败！', 'error');
     }
   };
 
   const handlePermanentDelete = async (trashId) => {
-    if (window.confirm('确定要永久删除这个文件吗？此操作无法撤销！')) {
-      try {
-        const response = await fetch(`http://localhost:8081/api/trash/${trashId}`, {
-          method: 'DELETE'
-        });
-        if (response.ok) {
-          await loadTrashItems();
-          await loadTrashSize();
-          alert('文件已永久删除！');
-        } else {
-          alert('删除失败！');
-        }
-      } catch (error) {
-        console.error('永久删除失败:', error);
-        alert('删除失败！');
+    const confirmed = await openConfirmDialog({
+      title: '永久删除确认',
+      message: '确定要永久删除这个文件吗？此操作无法撤销！',
+      icon: '⚠️'
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8081/api/trash/${trashId}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        await loadTrashItems();
+        await loadTrashSize();
+        showToast('文件已永久删除！', 'success');
+      } else {
+        showToast('删除失败！', 'error');
       }
+    } catch (error) {
+      console.error('永久删除失败:', error);
+      showToast('删除失败！', 'error');
     }
   };
 
   const handleEmptyTrash = async () => {
-    if (window.confirm('确定要清空回收站吗？此操作将永久删除所有文件，无法撤销！')) {
-      try {
-        const response = await fetch('http://localhost:8081/api/trash', {
-          method: 'DELETE'
-        });
-        if (response.ok) {
-          await loadTrashItems();
-          await loadTrashSize();
-          alert('回收站已清空！');
-        } else {
-          alert('清空回收站失败！');
-        }
-      } catch (error) {
-        console.error('清空回收站失败:', error);
-        alert('清空回收站失败！');
+    const confirmed = await openConfirmDialog({
+      title: '清空回收站',
+      message: '确定要清空回收站吗？此操作将永久删除所有文件，无法撤销！',
+      icon: '⚠️'
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:8081/api/trash', {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        await loadTrashItems();
+        await loadTrashSize();
+        showToast('回收站已清空！', 'success');
+      } else {
+        showToast('清空回收站失败！', 'error');
       }
+    } catch (error) {
+      console.error('清空回收站失败:', error);
+      showToast('清空回收站失败！', 'error');
     }
   };
 
@@ -510,6 +568,7 @@ function App() {
         setNewCourseName(''); // 清空输入内容
         setShowCreateBoardInput(false); // 重置新建展板输入框状态
         setNewBoardName(''); // 清空展板输入内容
+        setActiveCourseId(null);
       }
       
       // 关闭任务栏右键菜单
@@ -524,32 +583,13 @@ function App() {
     }
   }, [showStartMenu, showTaskbarContextMenu]);
 
-  // 清理定时器
   useEffect(() => {
-    return () => {
-      if (hideTimeoutRef.current) {
-        clearTimeout(hideTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // 子菜单显示后重新计算位置
-  useEffect(() => {
-    if (hoveredCourse && hoveredSubmenu) {
-      // 延迟一点时间让子菜单完全渲染
-      setTimeout(() => {
-        const submenuElement = document.querySelector('.start-menu-submenu');
-        if (submenuElement) {
-          // 获取当前悬浮的菜单项
-          const hoveredElement = document.querySelector('.start-menu-item:hover');
-          if (hoveredElement) {
-            const position = calculateSubmenuPosition(hoveredElement);
-            setSubmenuPosition(position);
-          }
-        }
-      }, 10);
+    if (!showStartMenu) {
+      setActiveCourseId(null);
+      setShowCreateBoardInput(false);
+      setNewBoardName('');
     }
-  }, [hoveredCourse, hoveredSubmenu]);
+  }, [showStartMenu]);
 
   return (
     <div className="app">
@@ -610,14 +650,16 @@ function App() {
               {currentBoardWindows.filter(window => 
                 !hiddenWindows.has(window.id) && 
                 window.type !== 'chat' && 
-                window.type !== 'message-center'
+                window.type !== 'message-center' &&
+                window.type !== 'planner'
               ).length > 0 ? (
                 <>
                   <span className="taskbar-label">窗口:</span>
                   {currentBoardWindows.filter(window => 
                     !hiddenWindows.has(window.id) && 
                     window.type !== 'chat' && 
-                    window.type !== 'message-center'
+                    window.type !== 'message-center' &&
+                    window.type !== 'planner'
                   ).map(window => {
                     const isMinimized = minimizedWindows.has(window.id);
                     const isFocused = focusedWindowId === window.id;
@@ -683,6 +725,21 @@ function App() {
                   <span className="taskbar-icon">📬</span>
                   <span className="taskbar-text">消息</span>
                 </button>
+
+                <button
+                  className="taskbar-item planner-taskbar-btn"
+                  onClick={() => {
+                    const event = new CustomEvent('togglePlannerWindow');
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(event);
+                    }
+                  }}
+                  title="日历与计划"
+                  style={{ minWidth: 'auto', width: '90px' }}
+                >
+                  <span className="taskbar-icon">📅</span>
+                  <span className="taskbar-text">日历</span>
+                </button>
               </>
             )}
             
@@ -709,8 +766,8 @@ function App() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="context-menu-item" onClick={handleTaskbarMenuClose}>
-            <span className="menu-icon">🎨</span>
+          <div className="context-menu-item" onClick={handleOpenPersonalization}>
+            <span className="menu-icon win98-icon win98-icon-palette"></span>
             <span className="menu-text">个性化</span>
           </div>
         </div>
@@ -733,7 +790,7 @@ function App() {
                     setNewCourseName('');
                   }}
                 >
-                  <span className="menu-icon">📚</span>
+                  <span className="menu-icon win98-icon win98-icon-document-plus"></span>
                   <span className="menu-text">新建课程</span>
                 </div>
               ) : (
@@ -783,11 +840,10 @@ function App() {
                 courses.map(course => (
                   <div 
                     key={course.id} 
-                    className="start-menu-item"
-                    onMouseEnter={(e) => handleCourseMouseEnter(course.id, e)}
-                    onMouseLeave={handleCourseMouseLeave}
+                    className={`start-menu-item ${activeCourseId === course.id ? 'active' : ''}`}
+                    onClick={(e) => handleCourseClick(course.id, e)}
                   >
-                    <span className="menu-icon">📖</span>
+                    <span className="menu-icon win98-icon win98-icon-folder"></span>
                     <span className="menu-text">{course.name || '未命名课程'}</span>
                     <span className="menu-arrow">▶</span>
                   </div>
@@ -805,7 +861,7 @@ function App() {
                   setShowStartMenu(false);
                 }}
               >
-                <span className="menu-icon">🗑️</span>
+                <span className="menu-icon win98-icon win98-icon-recycle"></span>
                 <span className="menu-text">回收站</span>
               </div>
             </div>
@@ -813,12 +869,10 @@ function App() {
           </div>
           
           {/* 外侧子菜单 */}
-          {hoveredCourse && (
+          {activeCourseId && (
             <div 
               className="start-menu-submenu"
               style={{ top: `${submenuPosition.top}px` }}
-              onMouseEnter={handleSubmenuMouseEnter}
-              onMouseLeave={handleSubmenuMouseLeave}
             >
               <div className="submenu-content">
                 <div className="submenu-items">
@@ -826,12 +880,12 @@ function App() {
                     <div 
                       className="submenu-item"
                       onClick={() => {
-                        setSelectedCourse(courses.find(c => c.id === hoveredCourse));
+                        setSelectedCourse(courses.find(c => c.id === activeCourseId));
                         setShowCreateBoardInput(true);
                         setNewBoardName('');
                       }}
                     >
-                      <span className="submenu-icon">➕</span>
+                      <span className="submenu-icon win98-icon win98-icon-document-plus"></span>
                       <span className="submenu-text">新建展板</span>
                     </div>
                   ) : (
@@ -856,7 +910,7 @@ function App() {
                             setTimeout(() => {
                               if (newBoardName.trim() === '') {
                                 setShowCreateBoardInput(false);
-                                setHoveredCourse(null);
+                                setActiveCourseId(null);
                               }
                             }, 200);
                           }
@@ -874,21 +928,24 @@ function App() {
                     </div>
                   )}
                   
-                  {courseBoards[hoveredCourse]?.map(board => (
+                  {courseBoards[activeCourseId]?.map(board => (
                     <div 
                       key={board.id}
                       className="submenu-item"
                       onClick={() => {
                         setSelectedBoard(board);
                         setShowStartMenu(false);
+                        setActiveCourseId(null);
+                        setShowCreateBoardInput(false);
+                        setNewBoardName('');
                       }}
                     >
-                      <span className="submenu-icon">📋</span>
+                      <span className="submenu-icon win98-icon win98-icon-clipboard"></span>
                       <span className="submenu-text">{board.name || '未命名展板'}</span>
                     </div>
                   ))}
                   
-                  {(!courseBoards[hoveredCourse] || courseBoards[hoveredCourse].length === 0) && (
+                  {(!courseBoards[activeCourseId] || courseBoards[activeCourseId].length === 0) && (
                     <div className="submenu-empty">
                       暂无展板
                     </div>
@@ -973,6 +1030,49 @@ function App() {
       {showConsole && (
         <Console onClose={() => setShowConsole(false)} />
       )}
+
+      {confirmDialog && (
+        <div className="win98-dialog-overlay" role="dialog" aria-modal="true">
+          <div className="win98-dialog">
+            <div className="win98-dialog-titlebar">
+              <span className="win98-dialog-icon">{confirmDialog.icon || '⚠️'}</span>
+              <span className="win98-dialog-title">{confirmDialog.title || '确认操作'}</span>
+            </div>
+            <div className="win98-dialog-content">
+              {React.isValidElement(confirmDialog.message) ? (
+                confirmDialog.message
+              ) : (
+                <div className="win98-dialog-message">{confirmDialog.message}</div>
+              )}
+            </div>
+            <div className="win98-dialog-actions">
+              <button className="win98-btn primary" onClick={confirmDialog.onConfirm}>
+                {confirmDialog.confirmText || '确定'}
+              </button>
+              <button className="win98-btn" onClick={confirmDialog.onCancel}>
+                {confirmDialog.cancelText || '取消'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast.visible && (
+        <div className="win98-toast-container">
+          <div className={`win98-toast ${toast.type}`}>
+            <div className="win98-toast-icon">
+              {(toastTypeConfig[toast.type] || toastTypeConfig.info).icon}
+            </div>
+            <div className="win98-toast-content">
+              <div className="win98-toast-title">
+                {(toastTypeConfig[toast.type] || toastTypeConfig.info).title}
+              </div>
+              <div className="win98-toast-message">{toast.message}</div>
+            </div>
+            <button className="win98-toast-close" onClick={hideToast} aria-label="关闭提示">×</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -984,7 +1084,11 @@ const getWindowIcon = (type) => {
     'image': '🖼️',
     'video': '🎥',
     'audio': '🎵',
-    'pdf': '📄'
+    'pdf': '📄',
+    'chat': '💬',
+    'message-center': '📬',
+    'personalization': '🎨',
+    'planner': '📅'
   };
   return typeIcons[type] || '🪟';
 };

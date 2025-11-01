@@ -8,6 +8,8 @@ import 'katex/dist/katex.min.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import ChatWindow from './ChatWindow';
 import RadialMindMap from './RadialMindMap';
+import PersonalizationPanel from './PersonalizationPanel';
+import CalendarPlannerWindow from './CalendarPlannerWindow';
 
 // 配置PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -3968,21 +3970,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             return;
                           }
 
-                          // 使用自定义确认对话框
-                          const confirmStart = await new Promise((resolve) => {
-                            setConfirmDialog({
-                              show: true,
-                              title: '确认批量生成',
-                              message: `即将并行生成所有 ${batchOutline.outline.length} 个分段的注释，这可能需要较长时间。\n\n确认开始？`,
-                              onConfirm: () => {
-                                setConfirmDialog(null);
-                                resolve(true);
-                              },
-                              onCancel: () => {
-                                setConfirmDialog(null);
-                                resolve(false);
-                              }
-                            });
+                          const confirmStart = await showConfirmDialog({
+                            title: '确认批量生成',
+                            message: `即将并行生成所有 ${batchOutline.outline.length} 个分段的注释，这可能需要较长时间。\n\n确认开始？`
                           });
                           
                           if (!confirmStart) return;
@@ -4614,23 +4604,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                         const validSubdivCount = oldSubdivisions.subdivisions.filter(s => s !== null).length;
                                         
                                         // 使用自定义确认对话框
-                                        const userConfirm = await new Promise((resolve) => {
-                                          setConfirmDialog({
-                                            title: '⚠️ 检测到大纲变化',
-                                            message: {
-                                              oldSections: oldOutline.outline.length,
-                                              newSections: newOutline.outline.length,
-                                              completedSubdivisions: validSubdivCount
-                                            },
-                                            onConfirm: () => {
-                                              setConfirmDialog(null);
-                                              resolve(true);
-                                            },
-                                            onCancel: () => {
-                                              setConfirmDialog(null);
-                                              resolve(false);
-                                            }
-                                          });
+                                        const userConfirm = await showConfirmDialog({
+                                          title: '⚠️ 检测到大纲变化',
+                                          message: {
+                                            oldSections: oldOutline.outline.length,
+                                            newSections: newOutline.outline.length,
+                                            completedSubdivisions: validSubdivCount
+                                          },
+                                          confirmText: '使用新大纲',
+                                          cancelText: '保留原大纲'
                                         });
                                         
                                         shouldUseNewOutline = userConfirm;
@@ -4742,17 +4724,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           
                           // 根据文件大小决定是否需要确认
                           if (estimatedTotalPages > SMALL_FILE_THRESHOLD) {
-                            const userConfirm = window.confirm(
-                              `检测到文档共约 ${estimatedTotalPages} 页。\n\n` +
-                              `逐页注释功能将自动执行以下操作：\n` +
-                              `  1. 生成文档大纲\n` +
-                              `  2. 细分各个分段\n` +
-                              `  3. 为所有页面生成注释\n\n` +
-                              `此操作将消耗大量 Token 和时间。\n` +
-                              `估算耗时：${Math.ceil(estimatedTotalPages / 2)} - ${estimatedTotalPages} 分钟\n\n` +
-                              `是否继续？`
-                            );
-                            
+                            const userConfirm = await showConfirmDialog({
+                              title: '逐页注释提示',
+                              message: `检测到文档共约 ${estimatedTotalPages} 页。\n\n逐页注释功能将自动执行以下操作：\n  1. 生成文档大纲\n  2. 细分各个分段\n  3. 为所有页面生成注释\n\n此操作将消耗大量 Token 和时间。\n估算耗时：${Math.ceil(estimatedTotalPages / 2)} - ${estimatedTotalPages} 分钟\n\n是否继续？`,
+                              icon: '⚠️'
+                            });
+
                             if (!userConfirm) {
                               console.log('用户取消逐页注释');
                               return;
@@ -6767,13 +6744,69 @@ function BoardCanvas({
   const [isMessageCenterOpen, setIsMessageCenterOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [personalizationSettings, setPersonalizationSettings] = useState(null);
+  const [appliedWallpaper, setAppliedWallpaper] = useState(null);
   
   // 确认对话框状态
   const [confirmDialog, setConfirmDialog] = useState(null);
+
+  const showConfirmDialog = ({ title, message, confirmText = '确定', cancelText = '取消', icon = '⚠️' }) => {
+    return new Promise((resolve) => {
+      setConfirmDialog({
+        title,
+        message,
+        confirmText,
+        cancelText,
+        icon,
+        onConfirm: () => {
+          setConfirmDialog(null);
+          resolve(true);
+        },
+        onCancel: () => {
+          setConfirmDialog(null);
+          resolve(false);
+        }
+      });
+    });
+  };
+
+  const renderConfirmDialogMessage = () => {
+    if (!confirmDialog) return null;
+    const { message } = confirmDialog;
+
+    if (React.isValidElement(message)) {
+      return message;
+    }
+
+    if (message && typeof message === 'object') {
+      return (
+        <>
+          <div className="win98-dialog-hint">新生成的大纲与现有大纲不同：</div>
+          <div className="win98-dialog-details">
+            <div>📊 <strong>原大纲：</strong>{message.oldSections} 个分段</div>
+            <div>📊 <strong>新大纲：</strong>{message.newSections} 个分段</div>
+            <div>✓ <strong>已完成细分：</strong>{message.completedSubdivisions} 个分段</div>
+          </div>
+          <div className="win98-dialog-warning-box">
+            ⚠️ 如果使用新大纲，现有的细分数据将被清空，需要重新执行第二阶段。
+          </div>
+          <div className="win98-dialog-hint">是否使用新大纲？</div>
+          <ul className="win98-dialog-tip-list">
+            <li>点击“使用新大纲”：清空细分数据，使用新大纲</li>
+            <li>点击“保留原大纲”：放弃新大纲，保留现有数据</li>
+          </ul>
+        </>
+      );
+    }
+
+    return <div className="win98-dialog-message">{message}</div>;
+  };
   
   // 特殊窗口ID常量
   const CHAT_WINDOW_ID = 'chat-window-special';
   const MESSAGE_CENTER_WINDOW_ID = 'message-center-window-special';
+  const PERSONALIZATION_WINDOW_ID = 'personalization-window-special';
+  const PLANNER_WINDOW_ID = 'planner-window-special';
   
   // 创建聊天窗口对象
   const createChatWindow = () => {
@@ -6797,6 +6830,34 @@ function BoardCanvas({
       title: `📬 消息中心`,
       position: { x: 200, y: 150 },
       size: { width: 500, height: 600 },
+      content: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  };
+
+  // 创建个性化窗口对象
+  const createPersonalizationWindow = () => {
+    return {
+      id: PERSONALIZATION_WINDOW_ID,
+      type: 'personalization',
+      title: `🎨 个性化设置 - ${boardName || ''}`.trim(),
+      position: { x: 220, y: 160 },
+      size: { width: 540, height: 520 },
+      content: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  };
+
+  // 创建日历与计划窗口对象
+  const createPlannerWindow = () => {
+    return {
+      id: PLANNER_WINDOW_ID,
+      type: 'planner',
+      title: '📅 日历与计划',
+      position: { x: 240, y: 140 },
+      size: { width: 560, height: 520 },
       content: '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -7060,6 +7121,10 @@ function BoardCanvas({
         return '📄';
       case 'chat':
         return '💬';
+      case 'personalization':
+        return '🎨';
+      case 'planner':
+        return '📅';
       default:
         return '🪟';
     }
@@ -7208,8 +7273,11 @@ function BoardCanvas({
         setWindows(prev => {
           console.log('🔍 检查需要保留的窗口:', prev.map(w => ({ id: w.id, type: w.type, title: w.title })));
           
-          const specialWindows = prev.filter(w => 
-            w.id === CHAT_WINDOW_ID || w.id === MESSAGE_CENTER_WINDOW_ID
+        const specialWindows = prev.filter(w => 
+          w.id === CHAT_WINDOW_ID || 
+          w.id === MESSAGE_CENTER_WINDOW_ID || 
+          w.id === PERSONALIZATION_WINDOW_ID ||
+          w.id === PLANNER_WINDOW_ID
           ).map(w => {
             console.log('🔍 检查特殊窗口属性:', { id: w.id, type: w.type, title: w.title, hasAllProps: !!w.id && !!w.type && !!w.title });
             
@@ -7222,6 +7290,21 @@ function BoardCanvas({
               console.log('🔧 修复消息中心窗口属性，原属性:', { id: w.id, type: w.type, title: w.title });
               return createMessageCenterWindow();
             }
+          if (w.id === PERSONALIZATION_WINDOW_ID && (!w.type || w.type !== 'personalization')) {
+            console.log('🔧 修复个性化窗口属性');
+            return createPersonalizationWindow();
+          }
+          if (w.id === PLANNER_WINDOW_ID && (!w.type || w.type !== 'planner')) {
+            console.log('🔧 修复日历计划窗口属性');
+            return createPlannerWindow();
+          }
+
+          if (w.id === PERSONALIZATION_WINDOW_ID) {
+            const expectedTitle = `🎨 个性化设置 - ${boardName || ''}`.trim();
+            if (w.title !== expectedTitle) {
+              return { ...w, title: expectedTitle };
+            }
+          }
             return w;
           });
           
@@ -7277,6 +7360,49 @@ function BoardCanvas({
     }
   }, [boardId, onBatchWindowHide]);
 
+  const fetchPersonalizationSettings = useCallback(async () => {
+    if (!boardId) {
+      setPersonalizationSettings(null);
+      setAppliedWallpaper(null);
+      return null;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8081/api/personalization/settings/${boardId}`);
+      if (!response.ok) {
+        throw new Error(`获取个性化设置失败: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setPersonalizationSettings(data);
+
+      const boardDisplayMode = data?.boardDisplayMode || data?.defaultDisplayMode || 'fit';
+      const appliedWallpaperData = data?.appliedWallpaper || null;
+
+      const wallpaperUrl = appliedWallpaperData?.url
+        ? `http://localhost:8081${appliedWallpaperData.url}`
+        : null;
+
+      if (wallpaperUrl) {
+        setAppliedWallpaper({
+          url: wallpaperUrl,
+          type: appliedWallpaperData?.type || null,
+          originalName: appliedWallpaperData?.originalName || '',
+          displayMode: appliedWallpaperData?.displayMode || boardDisplayMode,
+        });
+      } else {
+        setAppliedWallpaper(null);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('获取个性化设置失败:', error);
+      setPersonalizationSettings(null);
+      setAppliedWallpaper(null);
+      return null;
+    }
+  }, [boardId]);
+
   useEffect(() => {
     if (boardId) {
       console.log('🔄 展板ID变化，开始加载新展板数据:', boardId);
@@ -7316,6 +7442,58 @@ function BoardCanvas({
       loadNewBoardData();
     }
   }, [boardId]);
+
+  useEffect(() => {
+    setPersonalizationSettings(null);
+    setAppliedWallpaper(null);
+    fetchPersonalizationSettings();
+  }, [fetchPersonalizationSettings]);
+
+  const canvasBackgroundStyle = useMemo(() => {
+    const style = {
+      backgroundColor: '#3a6ea5'
+    };
+
+    if (appliedWallpaper && appliedWallpaper.url) {
+      style.backgroundImage = `url(${appliedWallpaper.url})`;
+      const mode = appliedWallpaper.displayMode || 'fit';
+      switch (mode) {
+        case 'stretch':
+          style.backgroundSize = '100% 100%';
+          style.backgroundRepeat = 'no-repeat';
+          style.backgroundPosition = 'center center';
+          break;
+        case 'tile':
+          style.backgroundSize = 'auto';
+          style.backgroundRepeat = 'repeat';
+          style.backgroundPosition = '0 0';
+          break;
+        case 'cover':
+          style.backgroundSize = 'cover';
+          style.backgroundRepeat = 'no-repeat';
+          style.backgroundPosition = 'center center';
+          break;
+        case 'none':
+          style.backgroundSize = 'auto';
+          style.backgroundRepeat = 'no-repeat';
+          style.backgroundPosition = 'center center';
+          break;
+        case 'fit':
+        default:
+          style.backgroundSize = 'contain';
+          style.backgroundRepeat = 'no-repeat';
+          style.backgroundPosition = 'center center';
+          break;
+      }
+    } else {
+      style.backgroundImage = 'none';
+      style.backgroundRepeat = 'no-repeat';
+      style.backgroundSize = 'auto';
+      style.backgroundPosition = 'center center';
+    }
+
+    return style;
+  }, [appliedWallpaper]);
 
   // 监听文件监控事件
   useEffect(() => {
@@ -7417,8 +7595,12 @@ function BoardCanvas({
       const isSpecialWindow = 
         window.id === CHAT_WINDOW_ID || 
         window.id === MESSAGE_CENTER_WINDOW_ID ||
+        window.id === PERSONALIZATION_WINDOW_ID ||
+        window.id === PLANNER_WINDOW_ID ||
         window.type === 'chat' || 
-        window.type === 'message-center';
+        window.type === 'message-center' ||
+        window.type === 'personalization' ||
+        window.type === 'planner';
       
       if (isSpecialWindow) {
         console.log('🎯 跳过特殊窗口，不创建桌面图标:', window.id, window.title);
@@ -7428,12 +7610,16 @@ function BoardCanvas({
     });
     
     // 先清理掉现有的特殊窗口图标（如果存在）
-    const cleanedDesktopIcons = desktopIcons.filter(icon => {
-      const isSpecialIcon = 
-        icon.windowId === CHAT_WINDOW_ID || 
-        icon.windowId === MESSAGE_CENTER_WINDOW_ID ||
-        icon.id === CHAT_WINDOW_ID || 
-        icon.id === MESSAGE_CENTER_WINDOW_ID;
+      const cleanedDesktopIcons = desktopIcons.filter(icon => {
+        const isSpecialIcon = 
+          icon.windowId === CHAT_WINDOW_ID || 
+          icon.windowId === MESSAGE_CENTER_WINDOW_ID ||
+          icon.windowId === PERSONALIZATION_WINDOW_ID ||
+          icon.windowId === PLANNER_WINDOW_ID ||
+          icon.id === CHAT_WINDOW_ID || 
+          icon.id === MESSAGE_CENTER_WINDOW_ID ||
+          icon.id === PERSONALIZATION_WINDOW_ID ||
+          icon.id === PLANNER_WINDOW_ID;
       
       if (isSpecialIcon) {
         console.log('🎯 清理特殊窗口图标:', icon.id, icon.title);
@@ -8108,8 +8294,8 @@ function BoardCanvas({
       }
 
       // 聊天窗口和消息中心窗口不需要保存到后端文件系统
-      if (window.type === 'chat' || window.type === 'message-center') {
-        console.log(`${window.type === 'chat' ? '💬 聊天' : '📬 消息中心'}窗口状态不保存到后端，跳过保存`);
+      if (window.type === 'chat' || window.type === 'message-center' || window.type === 'personalization' || window.type === 'planner') {
+        console.log(`${window.type === 'chat' ? '💬 聊天' : window.type === 'message-center' ? '📬 消息中心' : window.type === 'personalization' ? '🎨 个性化' : '📅 日历计划'}窗口状态不保存到后端，跳过保存`);
         return true;
       }
 
@@ -8246,6 +8432,7 @@ function BoardCanvas({
   // 关闭窗口（隐藏而不删除）- 使用App传来的处理函数
   const handleWindowCloseLocal = async (windowId) => {
     console.log('BoardCanvas: 关闭窗口（隐藏）:', windowId);
+    const targetWindow = windows.find(w => w.id === windowId);
     
     // 如果该窗口正在被拖拽或缩放，先停止这些操作
     if (isDragging && dragState.current.windowId === windowId) {
@@ -8262,6 +8449,20 @@ function BoardCanvas({
       cleanupResizeListeners();
     }
     
+    if (targetWindow && targetWindow.type === 'personalization') {
+      setWindows(prev => prev.filter(w => w.id !== windowId));
+      if (hiddenWindows && hiddenWindows.has(windowId) && onWindowShow) {
+        onWindowShow(windowId);
+      }
+      if (minimizedWindows && minimizedWindows.has(windowId) && onWindowMinimize) {
+        onWindowMinimize(windowId);
+      }
+      if (focusedWindowId === windowId && onWindowFocus) {
+        onWindowFocus(null);
+      }
+      return;
+    }
+
     if (onWindowClose) {
       onWindowClose(windowId);
       // 立即保存隐藏状态到后端，明确设置hidden为true
@@ -8271,64 +8472,80 @@ function BoardCanvas({
 
   // 真正删除窗口（将来通过右键菜单调用）
   const handleWindowDelete = async (windowId) => {
-    if (window.confirm('确定要将这个窗口移动到回收站吗？')) {
-      try {
-        // 在删除前记录图标位置，供新图标重用
-        const iconToDelete = desktopIcons.find(icon => icon.windowId === windowId);
-        if (iconToDelete && iconToDelete.gridPosition) {
-          deletedIconPositionsRef.current.push(iconToDelete.gridPosition);
-          console.log(`🎯 记录被删除图标的位置: (${iconToDelete.gridPosition.gridX},${iconToDelete.gridPosition.gridY})`);
-        }
-        
-        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
-          method: 'DELETE',
-        });
+    const confirmed = await showConfirmDialog({
+      title: '移动到回收站',
+      message: '确定要将这个窗口移动到回收站吗？',
+      icon: '⚠️'
+    });
 
-        if (response.ok) {
-          console.log('开始移动窗口到回收站:', windowId);
-          // 从本地窗口列表中移除
-          setWindows(prev => {
-            const filtered = prev.filter(w => w.id !== windowId);
-            console.log('从窗口列表移除窗口:', windowId, '剩余窗口数:', filtered.length);
-            return filtered;
-          });
-          // 通知App组件处理状态更新（App组件会处理隐藏状态的清理）
-          if (onWindowDelete) {
-            onWindowDelete(windowId);
-          }
-          console.log('✅ 窗口已移动到回收站:', windowId);
-        }
-      } catch (error) {
-        console.error('移动窗口到回收站失败:', error);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      // 在删除前记录图标位置，供新图标重用
+      const iconToDelete = desktopIcons.find(icon => icon.windowId === windowId);
+      if (iconToDelete && iconToDelete.gridPosition) {
+        deletedIconPositionsRef.current.push(iconToDelete.gridPosition);
+        console.log(`🎯 记录被删除图标的位置: (${iconToDelete.gridPosition.gridX},${iconToDelete.gridPosition.gridY})`);
       }
+      
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        console.log('开始移动窗口到回收站:', windowId);
+        // 从本地窗口列表中移除
+        setWindows(prev => {
+          const filtered = prev.filter(w => w.id !== windowId);
+          console.log('从窗口列表移除窗口:', windowId, '剩余窗口数:', filtered.length);
+          return filtered;
+        });
+        // 通知App组件处理状态更新（App组件会处理隐藏状态的清理）
+        if (onWindowDelete) {
+          onWindowDelete(windowId);
+        }
+        console.log('✅ 窗口已移动到回收站:', windowId);
+      }
+    } catch (error) {
+      console.error('移动窗口到回收站失败:', error);
     }
   };
   
   // 永久删除窗口
   const handleWindowPermanentDelete = async (windowId) => {
-    if (window.confirm('确定要永久删除这个窗口及其内容吗？此操作无法撤销！')) {
-      try {
-        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}?permanent=true`, {
-          method: 'DELETE',
-        });
+    const confirmed = await showConfirmDialog({
+      title: '永久删除窗口',
+      message: '确定要永久删除这个窗口及其内容吗？此操作无法撤销！',
+      icon: '⚠️'
+    });
 
-        if (response.ok) {
-          console.log('开始永久删除窗口:', windowId);
-          // 从本地窗口列表中移除
-          setWindows(prev => {
-            const filtered = prev.filter(w => w.id !== windowId);
-            console.log('从窗口列表移除窗口:', windowId, '剩余窗口数:', filtered.length);
-            return filtered;
-          });
-          // 通知App组件处理状态更新（App组件会处理隐藏状态的清理）
-          if (onWindowDelete) {
-            onWindowDelete(windowId);
-          }
-          console.log('✅ 窗口永久删除成功:', windowId);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}?permanent=true`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        console.log('开始永久删除窗口:', windowId);
+        // 从本地窗口列表中移除
+        setWindows(prev => {
+          const filtered = prev.filter(w => w.id !== windowId);
+          console.log('从窗口列表移除窗口:', windowId, '剩余窗口数:', filtered.length);
+          return filtered;
+        });
+        // 通知App组件处理状态更新（App组件会处理隐藏状态的清理）
+        if (onWindowDelete) {
+          onWindowDelete(windowId);
         }
-      } catch (error) {
-        console.error('永久删除窗口失败:', error);
+        console.log('✅ 窗口永久删除成功:', windowId);
       }
+    } catch (error) {
+      console.error('永久删除窗口失败:', error);
     }
   };
 
@@ -9042,6 +9259,42 @@ function BoardCanvas({
     };
   }, [boardName, minimizedWindows]);
   
+  // 监听日历计划窗口切换事件
+  useEffect(() => {
+    const handleTogglePlannerWindow = () => {
+      setWindows(prev => {
+        const plannerWindow = prev.find(w => w.id === PLANNER_WINDOW_ID);
+
+        if (plannerWindow) {
+          if (minimizedWindows.has(PLANNER_WINDOW_ID)) {
+            handleWindowMinimizeLocal(PLANNER_WINDOW_ID);
+          } else {
+            handleWindowMinimizeLocal(PLANNER_WINDOW_ID);
+          }
+          return prev;
+        }
+
+        const newPlannerWindow = createPlannerWindow();
+        const updatedWindows = [...prev, newPlannerWindow];
+
+        setTimeout(() => {
+          handleWindowFocusLocal(PLANNER_WINDOW_ID);
+        }, 0);
+
+        return updatedWindows;
+      });
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('togglePlannerWindow', handleTogglePlannerWindow);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('togglePlannerWindow', handleTogglePlannerWindow);
+      }
+    };
+  }, [minimizedWindows]);
+  
   // 监听打开消息中心事件
   useEffect(() => {
     const handleToggleMessageCenter = () => {
@@ -9094,6 +9347,54 @@ function BoardCanvas({
       }
     };
   }, [minimizedWindows]);
+
+  useEffect(() => {
+    const handleOpenPersonalization = () => {
+      fetchPersonalizationSettings();
+
+      setWindows(prev => {
+        const personalizationWindow = prev.find(w => w.id === PERSONALIZATION_WINDOW_ID);
+        const expectedTitle = `🎨 个性化设置 - ${boardName || ''}`.trim();
+
+        if (personalizationWindow) {
+          if (hiddenWindows && hiddenWindows.has(PERSONALIZATION_WINDOW_ID) && onWindowShow) {
+            onWindowShow(PERSONALIZATION_WINDOW_ID);
+          }
+          if (minimizedWindows && minimizedWindows.has(PERSONALIZATION_WINDOW_ID) && onWindowMinimize) {
+            onWindowMinimize(PERSONALIZATION_WINDOW_ID);
+          }
+
+          setTimeout(() => {
+            handleWindowFocusLocal(PERSONALIZATION_WINDOW_ID);
+          }, 0);
+
+          return prev.map(w =>
+            w.id === PERSONALIZATION_WINDOW_ID
+              ? { ...w, title: expectedTitle }
+              : w
+          );
+        }
+
+        const newWindow = createPersonalizationWindow();
+        const updatedWindows = [...prev, newWindow];
+
+        setTimeout(() => {
+          handleWindowFocusLocal(PERSONALIZATION_WINDOW_ID);
+        }, 0);
+
+        return updatedWindows;
+      });
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('openPersonalization', handleOpenPersonalization);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('openPersonalization', handleOpenPersonalization);
+      }
+    };
+  }, [boardName, fetchPersonalizationSettings, hiddenWindows, minimizedWindows, onWindowMinimize, onWindowShow]);
 
   // 监听打开PDF页面事件
   useEffect(() => {
@@ -9317,6 +9618,7 @@ function BoardCanvas({
       
       <div 
         className={`canvas-area ${isDragOver ? 'drag-over' : ''}`}
+        style={canvasBackgroundStyle}
         onMouseDown={(e) => {
           // 点击空白区域时取消所有窗口焦点和图标选择
           if (e.target === e.currentTarget) {
@@ -9478,7 +9780,7 @@ function BoardCanvas({
               )}
               <div className="window-controls">
                 {/* Chat 和消息中心窗口只显示关闭按钮，关闭时执行最小化 */}
-                {window.type !== 'chat' && window.type !== 'message-center' && (
+                {window.type !== 'chat' && window.type !== 'message-center' && window.type !== 'planner' && (
                 <button 
                   className="minimize-btn"
                   onClick={(e) => {
@@ -9499,13 +9801,13 @@ function BoardCanvas({
                     e.stopPropagation();
                     e.preventDefault();
                     // Chat 和消息中心窗口关闭时执行最小化，其他窗口执行真正的关闭
-                    if (window.type === 'chat' || window.type === 'message-center') {
+                    if (window.type === 'chat' || window.type === 'message-center' || window.type === 'planner') {
                       handleWindowMinimizeLocal(window.id);
                     } else {
                     handleWindowCloseLocal(window.id);
                     }
                   }}
-                  title={(window.type === 'chat' || window.type === 'message-center') ? "最小化" : "关闭窗口"}
+                  title={(window.type === 'chat' || window.type === 'message-center' || window.type === 'planner') ? "最小化" : "关闭窗口"}
                 >
                   ✕
                 </button>
@@ -9707,6 +10009,17 @@ function BoardCanvas({
                   )}
                 </div>
               )}
+              {window.type === 'personalization' && (
+                <PersonalizationPanel
+                  boardId={boardId}
+                  boardName={boardName}
+                  settings={personalizationSettings}
+                  onRefresh={fetchPersonalizationSettings}
+                />
+              )}
+              {window.type === 'planner' && (
+                <CalendarPlannerWindow />
+              )}
               {window.type === 'image' && (
                 <label className="image-placeholder" title={window.content || '点击上传图片'}>
                   {hasRealMediaContent(window) ? (
@@ -9862,159 +10175,22 @@ function BoardCanvas({
 
       {/* 确认对话框 */}
       {confirmDialog && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.3)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100000
-        }}>
-          <div style={{
-            width: '480px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #ffffff',
-            boxShadow: '4px 4px 10px rgba(0, 0, 0, 0.5)',
-            fontFamily: 'MS Sans Serif, sans-serif'
-          }}>
-            {/* 标题栏 */}
-            <div style={{
-              backgroundColor: '#000080',
-              color: '#ffffff',
-              padding: '3px 5px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '11px',
-              fontWeight: 'bold'
-            }}>
-              <span>⚠️</span>
-              <span style={{ flex: 1 }}>{confirmDialog.title}</span>
+        <div className="win98-dialog-overlay" role="dialog" aria-modal="true">
+          <div className="win98-dialog">
+            <div className="win98-dialog-titlebar">
+              <span className="win98-dialog-icon">{confirmDialog.icon || '⚠️'}</span>
+              <span className="win98-dialog-title">{confirmDialog.title || '确认操作'}</span>
             </div>
-
-            {/* 对话框内容 */}
-            <div style={{
-              padding: '20px',
-              backgroundColor: '#c0c0c0'
-            }}>
-              {/* 图标和消息 */}
-              <div style={{
-                display: 'flex',
-                gap: '16px',
-                marginBottom: '20px'
-              }}>
-                <div style={{
-                  fontSize: '48px',
-                  flexShrink: 0
-                }}>
-                  ⚠️
-                </div>
-                <div style={{
-                  flex: 1,
-                  fontSize: '11px',
-                  lineHeight: '1.6'
-                }}>
-                  {/* 检查message是对象还是字符串 */}
-                  {typeof confirmDialog.message === 'object' ? (
-                    // 大纲更新确认
-                    <>
-                      <div style={{ marginBottom: '12px', fontWeight: 'bold' }}>
-                        新生成的大纲与现有大纲不同：
-                      </div>
-                      
-                      <div style={{
-                        backgroundColor: '#ffffff',
-                        border: '1px solid #808080',
-                        padding: '8px',
-                        marginBottom: '12px'
-                      }}>
-                        <div style={{ marginBottom: '4px' }}>
-                          📊 <strong>原大纲：</strong>{confirmDialog.message.oldSections} 个分段
-                        </div>
-                        <div style={{ marginBottom: '4px' }}>
-                          📊 <strong>新大纲：</strong>{confirmDialog.message.newSections} 个分段
-                        </div>
-                        <div>
-                          ✓ <strong>已完成细分：</strong>{confirmDialog.message.completedSubdivisions} 个分段
-                        </div>
-                      </div>
-
-                      <div style={{ 
-                        backgroundColor: '#ffffcc',
-                        border: '1px solid #e0e000',
-                        padding: '8px',
-                        marginBottom: '12px'
-                      }}>
-                        ⚠️ 如果使用新大纲，现有的细分数据将被清空，需要重新执行第二阶段。
-                      </div>
-
-                      <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-                        是否使用新大纲？
-                      </div>
-                      <div style={{ paddingLeft: '12px', fontSize: '10px', color: '#000080' }}>
-                        <div>• 点击"使用新大纲"：清空细分数据，使用新大纲</div>
-                        <div>• 点击"保留原大纲"：放弃新大纲，保留现有数据</div>
-                      </div>
-                    </>
-                  ) : (
-                    // 通用确认（字符串消息）
-                    <div style={{ 
-                      whiteSpace: 'pre-line',
-                      fontSize: '12px',
-                      lineHeight: '1.8'
-                    }}>
-                      {confirmDialog.message}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 按钮 */}
-              <div style={{
-                display: 'flex',
-                gap: '8px',
-                justifyContent: 'center'
-              }}>
-                <button
-                  onClick={confirmDialog.onConfirm}
-                  style={{
-                    minWidth: '100px',
-                    padding: '6px 20px',
-                    fontSize: '11px',
-                    backgroundColor: typeof confirmDialog.message === 'object' ? '#c0c0c0' : '#0078d4',
-                    color: typeof confirmDialog.message === 'object' ? '#000000' : '#ffffff',
-                    border: '2px outset #ffffff',
-                    cursor: 'pointer',
-                    fontFamily: 'MS Sans Serif, sans-serif',
-                    fontWeight: 'bold'
-                  }}
-                  onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
-                  onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
-                >
-                  {typeof confirmDialog.message === 'object' ? '使用新大纲' : '确认'}
-                </button>
-                <button
-                  onClick={confirmDialog.onCancel}
-                  style={{
-                    minWidth: '100px',
-                    padding: '6px 20px',
-                    fontSize: '11px',
-                    backgroundColor: '#c0c0c0',
-                    border: '2px outset #ffffff',
-                    cursor: 'pointer',
-                    fontFamily: 'MS Sans Serif, sans-serif',
-                    fontWeight: 'bold'
-                  }}
-                  onMouseDown={(e) => e.target.style.border = '2px inset #ffffff'}
-                  onMouseUp={(e) => e.target.style.border = '2px outset #ffffff'}
-                >
-                  {typeof confirmDialog.message === 'object' ? '保留原大纲' : '取消'}
-                </button>
-              </div>
+            <div className="win98-dialog-content">
+              {renderConfirmDialogMessage()}
+            </div>
+            <div className="win98-dialog-actions">
+              <button className="win98-btn primary" onClick={confirmDialog.onConfirm}>
+                {confirmDialog.confirmText || '确定'}
+              </button>
+              <button className="win98-btn" onClick={confirmDialog.onCancel}>
+                {confirmDialog.cancelText || '取消'}
+              </button>
             </div>
           </div>
         </div>
@@ -10029,7 +10205,11 @@ const getWindowIcon = (type) => {
     'image': '🖼️',
     'video': '🎥',
     'audio': '🎵',
-    'pdf': '📄'
+    'pdf': '📄',
+    'chat': '💬',
+    'message-center': '📬',
+    'personalization': '🎨',
+    'planner': '📅'
   };
   return typeIcons[type] || '🪟';
 };

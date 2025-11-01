@@ -83,7 +83,7 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
                 onOpenWindow(file.name);
               } else {
                 if (typeof window !== 'undefined') {
-                  window.open(file.url, '_blank');
+                window.open(file.url, '_blank');
                 }
               }
             }}

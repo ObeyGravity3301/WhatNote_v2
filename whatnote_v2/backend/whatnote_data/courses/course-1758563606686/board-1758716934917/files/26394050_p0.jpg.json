@@ -2,16 +2,16 @@
   "type": "image",
   "title": "26394050_p0.jpg",
   "position": {
-    "x": 903,
-    "y": 257
+    "x": 127,
+    "y": 63
   },
   "size": {
-    "width": 800,
-    "height": 600
+    "width": 1647,
+    "height": 976
   },
   "id": "window_1758716940095",
   "created_at": "2025-09-24T20:29:00.095649",
-  "updated_at": "2025-10-28T15:06:45.009591",
+  "updated_at": "2025-11-01T16:38:31.324574",
   "file_path": "files/26394050_p0.jpg",
-  "hidden": false
+  "hidden": true
 }

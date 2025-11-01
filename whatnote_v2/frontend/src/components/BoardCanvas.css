@@ -171,6 +171,7 @@
 .desktop-icon-title-text {
   display: -webkit-box;
   -webkit-line-clamp: 3; /* 最多显示3行 */
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -184,6 +185,7 @@
 /* 扩展状态下显示完整文件名 */
 .desktop-icon.expanded .desktop-icon-title-text {
   -webkit-line-clamp: none; /* 移除行数限制 */
+  line-clamp: none;
   overflow: visible; /* 显示所有内容 */
   text-overflow: clip; /* 不使用省略号 */
   display: block; /* 改为块级显示 */

@@ -159,10 +159,13 @@ class TrashManager:
                 print(f"回收站中未找到项目: {trash_id}")
                 return False
             
-            # 删除回收站文件
+            # 删除回收站文件/文件夹
             trash_file_path = self.trash_dir / trash_item["trash_filename"]
             if trash_file_path.exists():
-                trash_file_path.unlink()
+                if trash_file_path.is_dir():
+                    shutil.rmtree(trash_file_path)
+                else:
+                    trash_file_path.unlink()
             
             # 从回收站信息中移除
             trash_info.pop(item_index)
@@ -180,11 +183,14 @@ class TrashManager:
         try:
             trash_info = self._load_trash_info()
             
-            # 删除所有回收站文件
+            # 删除所有回收站文件或文件夹
             for item in trash_info:
                 trash_file_path = self.trash_dir / item["trash_filename"]
                 if trash_file_path.exists():
-                    trash_file_path.unlink()
+                    if trash_file_path.is_dir():
+                        shutil.rmtree(trash_file_path)
+                    else:
+                        trash_file_path.unlink()
             
             # 清空回收站信息
             self._save_trash_info([])
@@ -205,7 +211,12 @@ class TrashManager:
             for item in trash_info:
                 trash_file_path = self.trash_dir / item["trash_filename"]
                 if trash_file_path.exists():
-                    total_size += trash_file_path.stat().st_size
+                    if trash_file_path.is_dir():
+                        for sub_path in trash_file_path.rglob('*'):
+                            if sub_path.is_file():
+                                total_size += sub_path.stat().st_size
+                    else:
+                        total_size += trash_file_path.stat().st_size
             
             return total_size
             

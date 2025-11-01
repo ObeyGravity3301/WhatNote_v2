@@ -271,14 +271,71 @@ html, body {
   border: 1px solid #316ac5;
 }
 
-.menu-icon {
+.start-menu-item.active {
+  background: #316ac5;
+  color: white;
+  border: 1px solid #316ac5;
+}
+
+.start-menu-item.active .menu-arrow {
+  color: white;
+}
+
+.menu-icon,
+.submenu-icon {
   width: 16px;
   height: 16px;
   margin-right: 8px;
-  font-size: 12px;
-  display: flex;
+  font-size: 0;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+
+.submenu-icon {
+  margin-right: 6px;
+}
+
+.win98-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  image-rendering: pixelated;
+}
+
+.menu-icon.win98-icon,
+.submenu-icon.win98-icon {
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+}
+
+.win98-icon-document {
+  background-image: url('./assets/icons/pdf.png');
+}
+
+.win98-icon-document-plus {
+  background-image: url('./assets/icons/directory_closed_cool-1.png');
+}
+
+.win98-icon-folder {
+  background-image: url('./assets/icons/course-3.png');
+}
+
+.win98-icon-clipboard {
+  background-image: url('./assets/icons/directory_open_file_mydocs_2k-1.png');
+}
+
+.win98-icon-recycle {
+  background-image: url('./assets/icons/recycle_bin_full-3.png');
+}
+
+.win98-icon-palette {
+  background-image: url('./assets/icons/windows-start.png');
 }
 
 .menu-text {
@@ -403,6 +460,253 @@ html, body {
   border: 1px solid #316ac5;
 }
 
+.win98-toast-container {
+  position: fixed;
+  right: 16px;
+  bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 20020;
+  pointer-events: none;
+}
+
+.win98-toast {
+  min-width: 240px;
+  max-width: 320px;
+  background: #c0c0c0;
+  border-top: 2px solid #dfdfdf;
+  border-left: 2px solid #dfdfdf;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.35);
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.win98-toast.success {
+  border-left: 2px solid #1e8449;
+}
+
+.win98-toast.error {
+  border-left: 2px solid #c0392b;
+}
+
+.win98-toast.info {
+  border-left: 2px solid #1f618d;
+}
+
+.win98-toast-icon {
+  font-size: 20px;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.win98-toast-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.win98-toast-title {
+  font-weight: bold;
+  color: #000000;
+}
+
+.win98-toast.success .win98-toast-title {
+  color: #1e8449;
+}
+
+.win98-toast.error .win98-toast-title {
+  color: #c0392b;
+}
+
+.win98-toast.info .win98-toast-title {
+  color: #1f618d;
+}
+
+.win98-toast-message {
+  color: #000000;
+  line-height: 1.4;
+  white-space: pre-line;
+}
+
+.win98-toast-close {
+  background: #c0c0c0;
+  border-top: 1px solid #dfdfdf;
+  border-left: 1px solid #dfdfdf;
+  border-right: 1px solid #404040;
+  border-bottom: 1px solid #404040;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  color: #000000;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  margin-left: 4px;
+}
+
+.win98-toast-close:hover {
+  background: #d4d4d4;
+}
+
+.win98-toast-close:active {
+  border-top: 1px solid #404040;
+  border-left: 1px solid #404040;
+  border-right: 1px solid #dfdfdf;
+  border-bottom: 1px solid #dfdfdf;
+  background: #a0a0a0;
+}
+
+.win98-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20030;
+}
+
+.win98-dialog {
+  width: 320px;
+  background: #c0c0c0;
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.5);
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+}
+
+.win98-dialog-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: linear-gradient(to right, #000080, #3a6ea5);
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.win98-dialog-icon {
+  font-size: 12px;
+}
+
+.win98-dialog-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.win98-dialog-content {
+  padding: 16px;
+  background: #c0c0c0;
+  color: #000000;
+  line-height: 1.5;
+}
+
+.win98-dialog-message {
+  white-space: pre-line;
+}
+
+.win98-dialog-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 16px 16px;
+}
+
+.win98-btn {
+  min-width: 80px;
+  padding: 4px 16px;
+  background: #c0c0c0;
+  border-top: 2px solid #dfdfdf;
+  border-left: 2px solid #dfdfdf;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  color: #000000;
+}
+
+.win98-btn:hover {
+  background: #d4d4d4;
+}
+
+.win98-btn:active {
+  border-top: 2px solid #404040;
+  border-left: 2px solid #404040;
+  border-right: 2px solid #dfdfdf;
+  border-bottom: 2px solid #dfdfdf;
+  background: #a0a0a0;
+}
+
+.win98-btn.primary {
+  background: #0078d4;
+  color: #ffffff;
+  border-top: 2px solid #7fbaf5;
+  border-left: 2px solid #7fbaf5;
+  border-right: 2px solid #003f73;
+  border-bottom: 2px solid #003f73;
+}
+
+.win98-btn.primary:hover {
+  background: #0b84e5;
+}
+
+.win98-btn.primary:active {
+  border-top: 2px solid #003f73;
+  border-left: 2px solid #003f73;
+  border-right: 2px solid #7fbaf5;
+  border-bottom: 2px solid #7fbaf5;
+  background: #0061a8;
+}
+
+.win98-dialog-details {
+  background: #ffffff;
+  border: 1px solid #808080;
+  padding: 8px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.win98-dialog-warning-box {
+  background: #ffffcc;
+  border: 1px solid #e0e000;
+  padding: 8px;
+  margin-bottom: 12px;
+}
+
+.win98-dialog-hint {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.win98-dialog-tip-list {
+  font-size: 10px;
+  color: #000080;
+  padding-left: 16px;
+  margin: 0;
+}
+
+.win98-dialog-tip-list li {
+  margin-bottom: 4px;
+}
+
 .context-menu-item .menu-icon {
   width: 16px;
   height: 16px;
@@ -442,16 +746,6 @@ html, body {
   border: 1px inset #c0c0c0;
   margin-bottom: 2px;
   font-weight: bold;
-}
-
-.submenu-icon {
-  width: 16px;
-  height: 16px;
-  margin-right: 8px;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .submenu-title {

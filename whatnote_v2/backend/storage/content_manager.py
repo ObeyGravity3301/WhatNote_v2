@@ -2149,7 +2149,7 @@ class ContentManager:
                 
         except Exception as e:
             print(f"获取PDF注释文件信息失败: {e}")
-            return {}
+            return {} 
     
     def get_page_version_config_path(self, board_id: str, window_id: str) -> Optional[Path]:
         """获取页面版本配置文件路径"""

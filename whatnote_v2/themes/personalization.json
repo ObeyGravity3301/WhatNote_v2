@@ -1,0 +1,63 @@
+{
+  "theme": "win98",
+  "language": "zh-CN",
+  "default_wallpaper": {
+    "filename": "default_wallpaper.png",
+    "original_name": "window xp bliss original.png",
+    "uploaded_at": "2025-11-02T01:54:29.584058",
+    "content_type": "image/png"
+  },
+  "boards": {
+    "board-1761523768068": {
+      "selected_wallpaper_id": "wallpaper-1761985559941",
+      "display_mode": "cover"
+    },
+    "board-1761150318406": {
+      "selected_wallpaper_id": "wallpaper-1761985586648",
+      "display_mode": null
+    },
+    "board-1758716934917": {
+      "selected_wallpaper_id": "wallpaper-1761986421781",
+      "display_mode": null
+    },
+    "board-1758755083149": {
+      "selected_wallpaper_id": null,
+      "display_mode": "cover"
+    }
+  },
+  "board_wallpapers": [
+    {
+      "id": "wallpaper-1761985550335",
+      "filename": "boards/board-1761523768068/wallpaper-1761985550335.jpg",
+      "original_name": "20251026172930_38_4.jpg",
+      "uploaded_at": "2025-11-01T16:25:50.336882",
+      "content_type": "image/jpeg",
+      "uploaded_by_board": "board-1761523768068"
+    },
+    {
+      "id": "wallpaper-1761985559941",
+      "filename": "boards/board-1761523768068/wallpaper-1761985559941.jpg",
+      "original_name": "20251026172931_39_4.jpg",
+      "uploaded_at": "2025-11-01T16:25:59.942399",
+      "content_type": "image/jpeg",
+      "uploaded_by_board": "board-1761523768068"
+    },
+    {
+      "id": "wallpaper-1761985586648",
+      "filename": "boards/board-1761150318406/wallpaper-1761985586648.png",
+      "original_name": "20251026164809_37_4.png",
+      "uploaded_at": "2025-11-01T16:26:26.652514",
+      "content_type": "image/png",
+      "uploaded_by_board": "board-1761150318406"
+    },
+    {
+      "id": "wallpaper-1761986421781",
+      "filename": "boards/board-1758716934917/wallpaper-1761986421781.jpg",
+      "original_name": "Image_1760448733680.jpg",
+      "uploaded_at": "2025-11-01T16:40:21.782899",
+      "content_type": "image/jpeg",
+      "uploaded_by_board": "board-1758716934917"
+    }
+  ],
+  "default_display_mode": "cover"
+}

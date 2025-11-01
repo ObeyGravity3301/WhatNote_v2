@@ -60,7 +60,7 @@ function Console({ onClose }) {
   // 暴露到全局，便于其他模块快速调试输出
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      window.__whatnoteLog = (msg, type = 'info') => addLog(String(msg), type);
+    window.__whatnoteLog = (msg, type = 'info') => addLog(String(msg), type);
     }
   }, []);
 

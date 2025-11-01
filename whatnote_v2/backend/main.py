@@ -24,6 +24,7 @@ from storage.content_manager import ContentManager
 from storage.file_watcher import FileWatcher
 from storage.conversation_manager import ConversationManager
 from storage.api_config_manager import APIConfigManager
+from storage.theme_manager import ThemeManager
 from llm_service import LLMService
 from document_converter import document_converter
 
@@ -195,6 +196,7 @@ content_manager = ContentManager(file_manager)
 conversation_manager = ConversationManager(file_manager)
 api_config_manager = APIConfigManager(DATA_DIR)
 llm_service = LLMService(api_config_manager, content_manager)
+theme_manager = ThemeManager()
 
 # 初始化WebSocket连接管理器
 manager = ConnectionManager()
@@ -512,6 +514,113 @@ async def rename_window(board_id: str, window_id: str, data: Dict):
     except Exception as e:
         error(f"重命名窗口失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# 个性化设置与壁纸管理 API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/personalization/settings/{board_id}")
+async def get_personalization_settings(board_id: str):
+    try:
+        settings = theme_manager.get_settings(board_id)
+        return settings
+    except Exception as e:
+        error(f"获取个性化设置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/personalization/wallpapers/default")
+async def upload_default_wallpaper(file: UploadFile = File(...)):
+    try:
+        wallpaper = theme_manager.save_default_wallpaper(file)
+        info("默认壁纸更新成功")
+        return {"message": "默认壁纸更新成功", "wallpaper": wallpaper}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        error(f"上传默认壁纸失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/personalization/wallpapers/default/image")
+async def serve_default_wallpaper():
+    path = theme_manager.get_default_wallpaper_path()
+    if not path:
+        raise HTTPException(status_code=404, detail="默认壁纸不存在")
+
+    media_type = mimetypes.guess_type(path.name)[0] or "image/png"
+    return FileResponse(path, media_type=media_type)
+
+
+@app.post("/api/boards/{board_id}/wallpapers")
+async def upload_board_wallpaper(board_id: str, file: UploadFile = File(...)):
+    try:
+        wallpaper = theme_manager.save_board_wallpaper(board_id, file)
+        info(f"展板壁纸上传成功: {board_id}")
+        return {"message": "壁纸上传成功", "wallpaper": wallpaper}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        error(f"上传展板壁纸失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/wallpapers")
+async def list_board_wallpapers(board_id: str):
+    try:
+        settings = theme_manager.get_settings(board_id)
+        return {
+            "defaultWallpaper": settings.get("defaultWallpaper"),
+            "boardWallpapers": settings.get("boardWallpapers", []),
+            "selectedBoardWallpaperId": settings.get("selectedBoardWallpaperId"),
+            "appliedWallpaper": settings.get("appliedWallpaper"),
+        }
+    except Exception as e:
+        error(f"获取展板壁纸列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/boards/{board_id}/wallpapers/selection")
+async def select_board_wallpaper(board_id: str, data: Dict):
+    wallpaper_id = data.get("wallpaperId")
+    display_mode = data.get("displayMode")
+    try:
+        settings = theme_manager.select_board_wallpaper(board_id, wallpaper_id, display_mode)
+        return {
+            "selectedBoardWallpaperId": settings.get("selectedBoardWallpaperId"),
+            "appliedWallpaper": settings.get("appliedWallpaper"),
+            "boardDisplayMode": settings.get("boardDisplayMode"),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        error(f"设置展板壁纸失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/personalization/wallpapers/default/display-mode")
+async def update_default_wallpaper_display_mode(data: Dict):
+    display_mode = data.get("displayMode")
+    try:
+        mode = theme_manager.set_default_display_mode(display_mode)
+        return {"defaultDisplayMode": mode}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        error(f"更新默认壁纸显示模式失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/wallpapers/{wallpaper_id}/image")
+async def serve_board_wallpaper(board_id: str, wallpaper_id: str):
+    path = theme_manager.get_board_wallpaper_path(board_id, wallpaper_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="壁纸不存在")
+
+    media_type = mimetypes.guess_type(path.name)[0] or "image/png"
+    return FileResponse(path, media_type=media_type)
+
 
 @app.get("/api/boards/{board_id}/windows")
 async def get_board_windows(board_id: str):
