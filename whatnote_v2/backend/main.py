@@ -3988,6 +3988,41 @@ async def llm_chat_completion(request: dict):
         error(f"LLM对话失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/llm/chat-with-tools")
+async def llm_chat_with_tools(request: dict):
+    """支持工具调用的LLM对话API"""
+    try:
+        messages = request.get('messages', [])
+        max_iterations = request.get('max_iterations', 5)
+        
+        if not messages:
+            raise HTTPException(status_code=400, detail="消息列表不能为空")
+        
+        info(f"[API] 开始工具调用对话，消息数: {len(messages)}")
+        
+        # 使用流式响应返回工具调用过程
+        async def generate_response():
+            async for event in llm_service.chat_with_tools(messages, max_iterations):
+                # 使用Server-Sent Events格式返回每个事件
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+        
+        return StreamingResponse(
+            generate_response(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"工具调用对话失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.websocket("/ws/logs")
 async def websocket_logs(websocket: WebSocket):
     """WebSocket日志端点"""

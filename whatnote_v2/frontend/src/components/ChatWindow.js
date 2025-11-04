@@ -404,7 +404,9 @@ const Toolbar = React.memo(({
   setApiConfigs,
   saveApiConfig,
   getModelOptions,
-  getProviderName
+  getProviderName,
+  useTools,
+  setUseTools
 }) => {
   return (
       <div style={{
@@ -462,6 +464,28 @@ const Toolbar = React.memo(({
           title="选择文件发送"
         >
           📎 文件
+        </button>
+        
+        <button
+          onClick={() => setUseTools(!useTools)}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: useTools ? '#0078d4' : '#c0c0c0',
+            color: useTools ? 'white' : 'black',
+            border: useTools ? '2px inset #c0c0c0' : '2px outset #c0c0c0',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '50px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          title={useTools ? "工具调用已启用（AI 可以创建窗口、查询任务等）" : "工具调用已禁用"}
+        >
+          🔧 工具{useTools ? ' ✓' : ''}
         </button>
       
       <button
@@ -852,6 +876,10 @@ function ChatWindow({
   const [boardFiles, setBoardFiles] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
   
+  // 工具调用状态
+  const [useTools, setUseTools] = useState(true);  // 默认启用工具调用
+  const [toolCallLogs, setToolCallLogs] = useState([]);  // 工具调用日志
+  
   // API配置状态
   const [apiProvider, setApiProvider] = useState('openai');
   const [apiConfigs, setApiConfigs] = useState({
@@ -1197,10 +1225,18 @@ function ChatWindow({
       
       conversationMessages.push(currentUserMessage);
       
-      const response = await fetch('http://localhost:8081/api/llm/chat', {
+      // 选择 API 端点：根据 useTools 决定是否使用工具调用
+      const apiUrl = useTools 
+        ? 'http://localhost:8081/api/llm/chat-with-tools'
+        : 'http://localhost:8081/api/llm/chat';
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversationMessages })
+        body: JSON.stringify({ 
+          messages: conversationMessages,
+          max_iterations: 5  // 最大工具调用轮数
+        })
       });
       
       if (!response.ok) {
@@ -1210,6 +1246,7 @@ function ChatWindow({
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullResponse = '';
+      let currentToolLogs = [];
       
       while (true) {
         const { done, value } = await reader.read();
@@ -1241,7 +1278,58 @@ function ChatWindow({
             
             try {
               const parsed = JSON.parse(data);
-              if (parsed.content) {
+              
+              // 处理工具调用事件
+              if (useTools && parsed.type) {
+                if (parsed.type === 'tool_call') {
+                  // 🔧 工具调用开始
+                  const toolLog = {
+                    type: 'tool_call',
+                    tool_name: parsed.tool_name,
+                    arguments: parsed.arguments,
+                    content: parsed.content
+                  };
+                  currentToolLogs.push(toolLog);
+                  setToolCallLogs(prev => [...prev, toolLog]);
+                  
+                  // 在消息中显示工具调用信息
+                  fullResponse += `\n\n🔧 ${parsed.content}\n`;
+                  
+                } else if (parsed.type === 'tool_result') {
+                  // ✅ 工具执行完成
+                  const resultLog = {
+                    type: 'tool_result',
+                    tool_name: parsed.tool_name,
+                    result: parsed.tool_result,
+                    content: parsed.content
+                  };
+                  currentToolLogs.push(resultLog);
+                  setToolCallLogs(prev => [...prev, resultLog]);
+                  
+                  fullResponse += `✅ ${parsed.content}\n`;
+                  
+                } else if (parsed.type === 'final') {
+                  // 💬 最终回复
+                  fullResponse += `\n${parsed.content}`;
+                  
+                } else if (parsed.type === 'error') {
+                  // ❌ 错误
+                  fullResponse += `\n\n❌ ${parsed.content}`;
+                  
+                } else if (parsed.type === 'warning') {
+                  // ⚠️ 警告
+                  fullResponse += `\n\n⚠️ ${parsed.content}`;
+                }
+                
+                // 更新显示
+                setMessages(prev => prev.map(msg => 
+                  msg.id === aiMessageId 
+                    ? { ...msg, content: fullResponse }
+                    : msg
+                ));
+                
+              } else if (parsed.content) {
+                // 普通流式响应（没有工具调用）
                 fullResponse += parsed.content;
                 
                 setMessages(prev => prev.map(msg => 
@@ -1251,6 +1339,7 @@ function ChatWindow({
                 ));
               }
             } catch (e) {
+              console.error('解析事件失败:', e, 'data:', data);
               // 忽略解析错误
             }
           }
@@ -1268,7 +1357,7 @@ function ChatWindow({
           : msg
       ));
     }
-  }, [messages, boardId, conversationId]);
+  }, [messages, boardId, conversationId, useTools]);
 
   // 初始化对话 - 支持分页加载
   const initializeConversation = useCallback(async () => {
@@ -1494,6 +1583,8 @@ function ChatWindow({
         saveApiConfig={saveApiConfig}
         getModelOptions={getModelOptions}
         getProviderName={getProviderName}
+        useTools={useTools}
+        setUseTools={setUseTools}
       />
 
       <div 

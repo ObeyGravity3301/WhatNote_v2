@@ -645,3 +645,174 @@ class LLMService:
                             
         except Exception as e:
             yield f"❌ 通义千问API调用异常: {str(e)}"
+    
+    async def chat_with_tools(self, messages: List[Dict], max_iterations: int = 5) -> AsyncGenerator[Dict, None]:
+        """
+        支持工具调用的对话方法
+        
+        Args:
+            messages: 对话消息列表
+            max_iterations: 最大工具调用轮数，防止死循环
+            
+        Yields:
+            Dict: 包含响应类型和内容的字典
+                {
+                    "type": "text" | "tool_call" | "tool_result" | "final",
+                    "content": "...",
+                    "tool_name": "...",  # type=tool_call时提供
+                    "tool_result": {...}  # type=tool_result时提供
+                }
+        """
+        try:
+            # 获取API配置
+            current_provider = self.api_config_manager.get_current_provider()
+            provider_config = self.api_config_manager.get_current_config()
+            
+            if not provider_config or not provider_config.get('apiKey'):
+                yield {
+                    "type": "error",
+                    "content": f"❌ 错误：{current_provider} API未配置"
+                }
+                return
+            
+            # 获取可用工具
+            from tools import tool_registry
+            tools_definitions = tool_registry.get_all_tools()
+            
+            info(f"[LLM Tools] 开始工具调用对话，可用工具: {len(tools_definitions)} 个")
+            
+            # 工具调用循环
+            for iteration in range(max_iterations):
+                info(f"[LLM Tools] 第 {iteration + 1} 轮对话")
+                
+                # 调用LLM（带工具定义）
+                response_data = await self._call_llm_with_tools(
+                    provider_config, 
+                    current_provider,
+                    messages, 
+                    tools_definitions
+                )
+                
+                if not response_data:
+                    yield {"type": "error", "content": "❌ LLM调用失败"}
+                    return
+                
+                message = response_data['choices'][0]['message']
+                finish_reason = response_data['choices'][0].get('finish_reason')
+                
+                # 检查是否有工具调用
+                if finish_reason == 'tool_calls' and message.get('tool_calls'):
+                    tool_calls = message['tool_calls']
+                    info(f"[LLM Tools] 检测到 {len(tool_calls)} 个工具调用")
+                    
+                    # 按照您的要求：截断，只处理第一个工具调用
+                    tool_call = tool_calls[0]
+                    function_name = tool_call['function']['name']
+                    function_args = json.loads(tool_call['function']['arguments'])
+                    
+                    yield {
+                        "type": "tool_call",
+                        "content": f"🔧 正在调用工具: {function_name}",
+                        "tool_name": function_name,
+                        "arguments": function_args
+                    }
+                    
+                    # 执行工具
+                    from tools import tool_executor
+                    from tools.schemas import ToolCall
+                    
+                    tool_call_obj = ToolCall(
+                        id=tool_call['id'],
+                        type="function",
+                        function={
+                            "name": function_name,
+                            "arguments": function_args
+                        }
+                    )
+                    
+                    result = await tool_executor.execute_tool_call(tool_call_obj, context={})
+                    
+                    yield {
+                        "type": "tool_result",
+                        "content": f"✅ 工具执行完成: {function_name}",
+                        "tool_name": function_name,
+                        "tool_result": result.data if result.status.value == "success" else {"error": result.error}
+                    }
+                    
+                    # 将LLM的消息和工具结果添加到对话历史
+                    messages.append({
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [tool_call]
+                    })
+                    
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call['id'],
+                        "name": function_name,
+                        "content": json.dumps(result.data if result.status.value == "success" else {"error": result.error}, ensure_ascii=False)
+                    })
+                    
+                    # 继续下一轮
+                    continue
+                    
+                else:
+                    # 没有工具调用，返回最终结果
+                    content = message.get('content', '')
+                    
+                    yield {
+                        "type": "final",
+                        "content": content
+                    }
+                    return
+            
+            # 达到最大迭代次数
+            yield {
+                "type": "warning",
+                "content": f"⚠️ 已达到最大工具调用次数 ({max_iterations})，停止执行"
+            }
+            
+        except Exception as e:
+            error(f"[LLM Tools] 工具调用失败: {e}")
+            yield {
+                "type": "error",
+                "content": f"❌ 工具调用失败: {str(e)}"
+            }
+    
+    async def _call_llm_with_tools(self, config: Dict, provider: str, messages: List[Dict], tools: List[Dict]) -> Optional[Dict]:
+        """
+        调用LLM API（带工具定义）
+        
+        Returns:
+            Dict: API响应数据，或 None 如果失败
+        """
+        try:
+            url = f"{config['baseUrl']}/chat/completions"
+            headers = {
+                'Authorization': f"Bearer {config['apiKey']}",
+                'Content-Type': 'application/json'
+            }
+            
+            payload = {
+                'model': config['model'],
+                'messages': messages,
+                'tools': tools,  # ⭐ 添加工具定义
+                'stream': False,  # 工具调用不使用流式
+                'temperature': 0.7
+            }
+            
+            info(f"[LLM Tools] 调用 {provider} API，工具数: {len(tools)}")
+            info(f"[LLM Tools] Payload: {json.dumps({'model': payload['model'], 'tools_count': len(payload['tools']), 'messages_count': len(payload['messages'])}, ensure_ascii=False)}")
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, headers=headers, json=payload) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        error(f"[LLM Tools] API错误 ({response.status}): {error_text}")
+                        return None
+                    
+                    return await response.json()
+                    
+        except Exception as e:
+            error(f"[LLM Tools] API调用异常: {e}")
+            return None
