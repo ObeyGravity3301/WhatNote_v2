@@ -664,6 +664,13 @@ class LLMService:
                 }
         """
         try:
+            # 创建 TodoTracker 实例（每个对话一个）
+            from tools.todo_tools import TodoTracker, register_todo_tools
+            from tools import tool_registry
+            
+            todo_tracker = TodoTracker()
+            register_todo_tools(tool_registry, todo_tracker)
+            
             # 获取API配置
             current_provider = self.api_config_manager.get_current_provider()
             provider_config = self.api_config_manager.get_current_config()
@@ -676,7 +683,6 @@ class LLMService:
                 return
             
             # 获取可用工具
-            from tools import tool_registry
             tools_definitions = tool_registry.get_all_tools()
             
             info(f"[LLM Tools] 开始工具调用对话，可用工具: {len(tools_definitions)} 个")
@@ -767,16 +773,13 @@ class LLMService:
                     content = message.get('content', '')
                     info(f"[LLM Tools] LLM 回复 (finish_reason={finish_reason}): {len(content)} 字符")
                     
-                    # 如果finish_reason是'stop'，说明LLM主动结束对话
-                    # 如果finish_reason是其他值，可能需要继续
-                    
                     if content:
                         # 有文本内容，流式输出
-                        info(f"[LLM Tools] 输出中间文本")
+                        info(f"[LLM Tools] 输出文本")
                         
-                        # 先发送一个标记，表示开始中间文本
+                        # 先发送一个标记，表示开始文本输出
                         yield {
-                            "type": "intermediate_text_start",
+                            "type": "text_start",
                             "content": ""
                         }
                         
@@ -785,7 +788,7 @@ class LLMService:
                         for i in range(0, len(content), chunk_size):
                             chunk = content[i:i+chunk_size]
                             yield {
-                                "type": "intermediate_text_chunk",
+                                "type": "text_chunk",
                                 "content": chunk
                             }
                             # 小延迟以确保流式效果
@@ -793,7 +796,7 @@ class LLMService:
                         
                         # 发送完成标记
                         yield {
-                            "type": "intermediate_text_complete",
+                            "type": "text_complete",
                             "content": ""
                         }
                         
@@ -803,20 +806,33 @@ class LLMService:
                             "content": content
                         })
                     
-                    # 检查是否应该结束
+                    # 🎯 关键：检查 todo 状态决定是否继续
                     if finish_reason == 'stop':
-                        # LLM 主动停止，结束对话
-                        info(f"[LLM Tools] LLM 主动停止，结束对话")
-                        if not content:
-                            # 如果没有输出内容，发送空结束标记
-                            yield {
-                                "type": "final",
-                                "content": ""
-                            }
-                        return
+                        # LLM 主动停止
+                        
+                        if todo_tracker.has_todos():
+                            # 有待办列表，检查是否全部完成
+                            if todo_tracker.is_all_completed():
+                                info(f"[LLM Tools] 所有待办项已完成，结束对话")
+                                return
+                            else:
+                                # 还有未完成的待办项
+                                remaining = todo_tracker.get_status()['remaining_count']
+                                info(f"[LLM Tools] 还有 {remaining} 项待办未完成，继续下一轮")
+                                
+                                # 发送 todo 状态给前端
+                                yield {
+                                    "type": "todo_status",
+                                    "content": todo_tracker.get_status()
+                                }
+                                
+                                continue
+                        else:
+                            # 没有创建待办列表，按原逻辑结束
+                            info(f"[LLM Tools] 无待办列表，LLM 停止，结束对话")
+                            return
                     else:
                         # finish_reason 不是 'stop'，继续下一轮
-                        # 这种情况比较少见，但为了安全起见继续
                         info(f"[LLM Tools] finish_reason={finish_reason}，继续下一轮")
                         continue
             

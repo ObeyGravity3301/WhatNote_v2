@@ -878,7 +878,8 @@ function ChatWindow({
   
   // 工具调用状态
   const [useTools, setUseTools] = useState(true);  // 默认启用工具调用
-  const [toolCallLogs, setToolCallLogs] = useState([]);  // 工具调用日志
+  const [toolCallLogs, setToolCallLogs] = useState([]);
+  const [todoStatus, setTodoStatus] = useState(null);  // Todo 追踪状态  // 工具调用日志
   
   // API配置状态
   const [apiProvider, setApiProvider] = useState('openai');
@@ -1234,12 +1235,43 @@ function ChatWindow({
 5. 时间格式必须使用 HH:MM（例如：${currentTime}）
 6. 添加任务时，如果用户说"今天"或未指定日期，使用当前日期：${currentDate}
 
-工具调用策略：
-- 你可以进行多轮工具调用（最多25轮）
-- 每次调用工具后，系统会自动将结果返回给你
-- 你可以根据工具执行结果决定下一步操作
-- 当所有任务完成后，输出一段总结文本
-- 如果需要边执行边说明，在完成所有工具调用后，用一段文本总结整个过程`
+📋 任务追踪系统（重要）：
+对于复杂的多步骤任务，强烈建议使用任务追踪系统：
+
+1. 在开始执行前，调用 create_todo_list 创建待办列表：
+   - 将任务分解为明确的步骤
+   - 包括工具调用和文本输出说明
+   - 按执行顺序排列
+
+2. 每完成一个步骤后，必须调用 complete_todo_item 标记完成：
+   - 调用工具后标记对应项
+   - 输出说明文本后也要标记
+   - 这样系统才知道何时继续、何时结束
+
+3. 示例流程：
+   用户: "添加任务A，说明进度，添加任务B，说明，创建窗口"
+   
+   你应该：
+   ① create_todo_list(["添加任务A", "输出说明1", "添加任务B", "输出说明2", "创建窗口"])
+   ② tool_call(add_task)
+   ③ complete_todo_item(0)
+   ④ 输出: "已添加任务A"
+   ⑤ complete_todo_item(1)
+   ⑥ tool_call(add_task)
+   ⑦ complete_todo_item(2)
+   ⑧ 输出: "已添加任务B"
+   ⑨ complete_todo_item(3)
+   ⑩ tool_call(create_window)
+   ⑪ complete_todo_item(4)
+   ⑫ 输出最终总结
+
+4. 系统会自动检查待办状态：
+   - 如果所有项已完成 → 结束对话
+   - 如果还有未完成项 → 自动继续下一轮
+
+⚠️ 关键：每个步骤完成后必须立即调用 complete_todo_item，否则系统会认为任务未完成而继续循环
+
+对于简单任务（1-2步），可以不使用 todo 系统，直接执行即可。`
       } : null;
       
       // 包含所有消息（包括system消息），让LLM了解用户的操作历史
@@ -1414,12 +1446,12 @@ function ChatWindow({
                     }
                   }
                   
-                } else if (parsed.type === 'intermediate_text_start') {
-                  // 💬 开始中间文本输出
-                  fullResponse += `\n\n💬 `;
+                } else if (parsed.type === 'text_start') {
+                  // 💬 开始文本输出
+                  fullResponse += `\n\n`;
                   
-                } else if (parsed.type === 'intermediate_text_chunk') {
-                  // 💬 流式输出中间文本
+                } else if (parsed.type === 'text_chunk') {
+                  // 💬 流式输出文本
                   fullResponse += parsed.content;
                   
                   // 立即更新显示
@@ -1429,10 +1461,8 @@ function ChatWindow({
                       : msg
                   ));
                   
-                } else if (parsed.type === 'intermediate_text_complete') {
-                  // 💬 中间文本输出完成
-                  fullResponse += `\n`;
-                  
+                } else if (parsed.type === 'text_complete') {
+                  // 💬 文本输出完成
                   // 立即更新显示
                   setMessages(prev => prev.map(msg => 
                     msg.id === aiMessageId 
@@ -1440,24 +1470,31 @@ function ChatWindow({
                       : msg
                   ));
                   
-                } else if (parsed.type === 'final_start') {
-                  // 💬 开始最终回复（兼容旧版本）
-                  fullResponse += `\n`;
+                } else if (parsed.type === 'todo_status') {
+                  // 📋 Todo 状态更新
+                  console.log('[ChatWindow] 收到 todo 状态:', parsed.content);
+                  setTodoStatus(parsed.content);
                   
-                } else if (parsed.type === 'final_chunk') {
-                  // 💬 流式输出内容（兼容旧版本）
+                } else if (parsed.type === 'intermediate_text_start' || parsed.type === 'final_start') {
+                  // 兼容旧版本
+                  fullResponse += `\n\n`;
+                  
+                } else if (parsed.type === 'intermediate_text_chunk' || parsed.type === 'final_chunk') {
+                  // 兼容旧版本
                   fullResponse += parsed.content;
-                  
-                  // 立即更新显示
                   setMessages(prev => prev.map(msg => 
                     msg.id === aiMessageId 
                       ? { ...msg, content: fullResponse }
                       : msg
                   ));
                   
-                } else if (parsed.type === 'final_complete') {
-                  // 💬 最终回复完成（兼容旧版本）
-                  // 不需要额外操作
+                } else if (parsed.type === 'intermediate_text_complete' || parsed.type === 'final_complete') {
+                  // 兼容旧版本
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
                   
                 } else if (parsed.type === 'final') {
                   // 💬 最终回复（兼容旧格式）
@@ -1892,6 +1929,67 @@ function ChatWindow({
               getFileIcon={getFileIcon}
             />
           ))
+        )}
+        
+        {/* Todo 追踪显示 */}
+        {todoStatus && todoStatus.has_todos && (
+          <div style={{
+            margin: '12px 8px',
+            padding: '8px',
+            background: '#f0f8ff',
+            border: '1px solid #c0c0c0',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            fontSize: '11px'
+          }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+              📋 任务进度 ({todoStatus.completed_count}/{todoStatus.total})
+            </div>
+            {todoStatus.description && (
+              <div style={{ color: '#666', marginBottom: '4px', fontSize: '10px' }}>
+                {todoStatus.description}
+              </div>
+            )}
+            <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
+              {todoStatus.items.map(item => (
+                <div key={item.index} style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  margin: '2px 0',
+                  padding: '2px',
+                  backgroundColor: item.completed ? '#e8f5e9' : '#fff',
+                  opacity: item.completed ? 0.7 : 1
+                }}>
+                  <span style={{ marginRight: '4px' }}>
+                    {item.completed ? '✅' : '⏳'}
+                  </span>
+                  <span style={{
+                    flex: 1,
+                    textDecoration: item.completed ? 'line-through' : 'none',
+                    color: item.skipped ? '#999' : '#000'
+                  }}>
+                    {item.task}
+                    {item.skip_reason && (
+                      <span style={{ color: '#666', fontSize: '10px' }}>
+                        {' '}(跳过: {item.skip_reason})
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{
+              marginTop: '4px',
+              paddingTop: '4px',
+              borderTop: '1px solid #ddd',
+              fontSize: '10px',
+              color: '#666'
+            }}>
+              {todoStatus.all_completed 
+                ? '🎉 所有任务已完成' 
+                : `⏳ 还有 ${todoStatus.remaining_count} 项待完成...`
+              }
+            </div>
+          </div>
         )}
         
         {isLoading && (
