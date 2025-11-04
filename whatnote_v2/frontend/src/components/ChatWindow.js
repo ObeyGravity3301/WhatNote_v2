@@ -1209,14 +1209,37 @@ function ChatWindow({
   // 流式AI回复函数
   const generateStreamingAIResponse = useCallback(async (userMessage, aiMessageId) => {
     try {
-      // 包含所有消息（包括system消息），让LLM了解用户的操作历史
-      const conversationMessages = messages.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-        files: msg.files
-      }));
+      // 添加上下文系统消息（如果启用了工具调用）
+      const contextMessage = useTools ? {
+        role: 'system',
+        content: `当前上下文信息：
+- 展板名称：${boardName || '未命名展板'}
+- 展板ID：${boardId}
+
+重要提示：
+1. 当需要操作窗口（创建、读取、编辑、搜索等）时，请使用上述 board_id
+2. 用户的所有窗口操作都应该在当前展板上进行
+3. 如果用户询问"这里"、"当前展板"等，指的就是上述展板`
+      } : null;
       
-      // 直接使用传入的userMessage对象
+      // 包含所有消息（包括system消息），让LLM了解用户的操作历史
+      const conversationMessages = [];
+      
+      // 首先添加上下文消息
+      if (contextMessage) {
+        conversationMessages.push(contextMessage);
+      }
+      
+      // 然后添加历史消息
+      messages.forEach(msg => {
+        conversationMessages.push({
+          role: msg.role,
+          content: msg.content,
+          files: msg.files
+        });
+      });
+      
+      // 最后添加当前用户消息
       const currentUserMessage = {
         role: userMessage.role,
         content: userMessage.content,
@@ -1357,7 +1380,7 @@ function ChatWindow({
           : msg
       ));
     }
-  }, [messages, boardId, conversationId, useTools]);
+  }, [messages, boardId, boardName, conversationId, useTools]);
 
   // 初始化对话 - 支持分页加载
   const initializeConversation = useCallback(async () => {
