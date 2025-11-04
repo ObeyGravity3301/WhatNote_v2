@@ -681,6 +681,12 @@ class LLMService:
             
             info(f"[LLM Tools] 开始工具调用对话，可用工具: {len(tools_definitions)} 个")
             
+            # 处理消息中的文件
+            processed_messages = []
+            for msg in messages:
+                processed_msg = self._process_message_files(msg)
+                processed_messages.append(processed_msg)
+            
             # 工具调用循环
             for iteration in range(max_iterations):
                 info(f"[LLM Tools] 第 {iteration + 1} 轮对话")
@@ -689,7 +695,7 @@ class LLMService:
                 response_data = await self._call_llm_with_tools(
                     provider_config, 
                     current_provider,
-                    messages, 
+                    processed_messages,  # 使用处理过的消息
                     tools_definitions
                 )
                 
@@ -740,13 +746,13 @@ class LLMService:
                     }
                     
                     # 将LLM的消息和工具结果添加到对话历史
-                    messages.append({
+                    processed_messages.append({
                         "role": "assistant",
                         "content": None,
                         "tool_calls": [tool_call]
                     })
                     
-                    messages.append({
+                    processed_messages.append({
                         "role": "tool",
                         "tool_call_id": tool_call['id'],
                         "name": function_name,
@@ -796,13 +802,16 @@ class LLMService:
             payload = {
                 'model': config['model'],
                 'messages': messages,
-                'tools': tools,  # ⭐ 添加工具定义
                 'stream': False,  # 工具调用不使用流式
                 'temperature': 0.7
             }
             
+            # 只在有工具时才添加 tools 参数（避免空数组错误）
+            if tools and len(tools) > 0:
+                payload['tools'] = tools
+            
             info(f"[LLM Tools] 调用 {provider} API，工具数: {len(tools)}")
-            info(f"[LLM Tools] Payload: {json.dumps({'model': payload['model'], 'tools_count': len(payload['tools']), 'messages_count': len(payload['messages'])}, ensure_ascii=False)}")
+            info(f"[LLM Tools] Payload: {json.dumps({'model': payload['model'], 'tools_count': len(tools), 'messages_count': len(payload['messages'])}, ensure_ascii=False)}")
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, headers=headers, json=payload) as response:
@@ -814,5 +823,7 @@ class LLMService:
                     return await response.json()
                     
         except Exception as e:
+            import traceback
             error(f"[LLM Tools] API调用异常: {e}")
+            error(f"[LLM Tools] 详细错误: {traceback.format_exc()}")
             return None

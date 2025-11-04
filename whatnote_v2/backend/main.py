@@ -129,9 +129,21 @@ def analyze_outline_page_coverage(outline_data, total_pages):
 # 应用启动和关闭事件
 @app.on_event("startup")
 async def startup_event():
-    """应用启动时启动文件监控服务"""
+    """应用启动时启动文件监控服务和注册工具"""
     info("启动文件监控服务...")
     file_watcher.start_watching()
+    
+    # 注册内置工具
+    try:
+        from tools import tool_registry, register_builtin_tools
+        if len(tool_registry.get_all_tools()) == 0:
+            info("注册内置工具...")
+            register_builtin_tools(tool_registry, content_manager, file_manager, DATA_DIR)
+            info(f"✅ 已注册 {len(tool_registry.get_all_tools())} 个工具")
+    except Exception as e:
+        error(f"❌ 注册工具失败: {e}")
+        import traceback
+        error(traceback.format_exc())
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -228,6 +240,15 @@ async def root():
 async def health_check():
     """健康检查端点"""
     return {"status": "ok", "service": "WhatNote V2"}
+
+@app.get("/api/tools/status")
+async def tools_status():
+    """工具状态检查端点"""
+    from tools import tool_registry
+    return {
+        "total_tools": len(tool_registry.get_all_tools()),
+        "tools": [t['function']['name'] for t in tool_registry.get_all_tools()]
+    }
 
 # 课程相关API
 @app.get("/api/courses")
