@@ -301,6 +301,32 @@ async def delete_board(board_id: str):
         error(f"删除展板失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# 日历任务API
+@app.get("/api/calendar/tasks")
+async def get_all_calendar_tasks():
+    """获取所有日历任务"""
+    try:
+        from tools.calendar_tools import CalendarToolHandlers
+        handler = CalendarToolHandlers(DATA_DIR)
+        calendar_data = handler._load_calendar_data()
+        return calendar_data
+    except Exception as e:
+        error(f"获取日历任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/calendar/tasks")
+async def save_calendar_tasks(tasks_data: Dict):
+    """保存所有日历任务"""
+    try:
+        from tools.calendar_tools import CalendarToolHandlers
+        handler = CalendarToolHandlers(DATA_DIR)
+        handler._save_calendar_data(tasks_data)
+        info(f"保存日历任务成功")
+        return {"message": "保存成功"}
+    except Exception as e:
+        error(f"保存日历任务失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # 窗口管理API
 @app.post("/api/boards/{board_id}/windows")
 async def create_window(board_id: str, window_data: Dict):
@@ -3986,6 +4012,56 @@ async def websocket_logs(websocket: WebSocket):
                 await websocket.send_text("无效的JSON格式")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+
+@app.websocket("/ws/console")
+async def websocket_console(websocket: WebSocket):
+    """WebSocket控制台端点"""
+    from tools.console_handler import ConsoleHandler
+    from tools import register_builtin_tools
+    
+    await websocket.accept()
+    
+    # 为每个连接创建独立的控制台处理器（带 file_manager）
+    session_handler = ConsoleHandler(file_manager)
+    
+    # 注册工具（如果还没注册）
+    try:
+        from tools import tool_registry
+        if len(tool_registry.get_all_tools()) == 0:
+            register_builtin_tools(tool_registry, content_manager, file_manager, DATA_DIR)
+    except Exception as e:
+        error(f"注册工具失败: {e}")
+    
+    try:
+        # 发送欢迎消息
+        welcome = {
+            "type": "welcome",
+            "content": "WhatNote Tool Console v1.0\n\n输入 'help' 查看帮助 | 输入 'courses' 开始导航"
+        }
+        await websocket.send_json(welcome)
+        
+        while True:
+            # 接收命令
+            data = await websocket.receive_text()
+            command = data.strip()
+            
+            if not command:
+                continue
+            
+            # 处理命令
+            try:
+                response = await session_handler.handle_command(command)
+                await websocket.send_json(response)
+            except Exception as e:
+                error(f"控制台命令执行失败: {e}")
+                await websocket.send_json({
+                    "type": "error",
+                    "content": f"命令执行失败: {str(e)}"
+                })
+                
+    except WebSocketDisconnect:
+        info("控制台连接断开")
 
 
 # 回收站相关API

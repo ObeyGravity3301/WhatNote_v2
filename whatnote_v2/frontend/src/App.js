@@ -14,6 +14,7 @@ function App() {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedBoard, setSelectedBoard] = useState(null);
   const [showConsole, setShowConsole] = useState(false);
+  const [consoleInitialPath, setConsoleInitialPath] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   
   // 开始菜单相关状态
@@ -559,6 +560,137 @@ function App() {
     return () => document.removeEventListener('keydown', handleKeyPress);
   }, [showConsole]);
 
+  // 提供全局方法供 BoardCanvas 调用
+  useEffect(() => {
+    window.openConsoleAtCurrentBoard = async (courseId, boardId) => {
+      console.log('[App] 打开控制台，定位到:', { courseId, boardId });
+      
+      try {
+        // 从当前状态中查找课程和展板信息
+        // 优先使用已加载的数据，避免不必要的 API 调用
+        const course = courses.find(c => c.id === courseId);
+        
+        if (course) {
+          console.log('[App] 找到课程:', course.name);
+          
+          // 获取展板列表
+          const boardsResponse = await fetch(`http://localhost:8081/api/courses/${courseId}/boards`);
+          if (boardsResponse.ok) {
+            const boardsData = await boardsResponse.json();
+            const board = boardsData.boards.find(b => b.id === boardId);
+            
+            if (board) {
+              // 设置初始路径
+              const initialPath = `${course.name}/${board.name}`;
+              console.log('[App] 设置初始路径:', initialPath);
+              setConsoleInitialPath(initialPath);
+              console.log('[App] 打开控制台');
+              setShowConsole(true);
+              
+              console.log('[App] 控制台已打开，路径:', initialPath);
+              return;
+            } else {
+              console.warn('[App] 未找到展板:', boardId);
+            }
+          } else {
+            console.error('[App] 获取展板列表失败');
+          }
+        } else {
+          console.warn('[App] 未找到课程:', courseId);
+        }
+        
+        // 如果获取失败，也打开控制台（不带初始路径）
+        console.warn('[App] 无法获取课程/展板信息，打开空白控制台');
+        setShowConsole(true);
+      } catch (error) {
+        console.error('[App] 获取课程/展板信息失败:', error);
+        // 即使失败也打开控制台
+        setShowConsole(true);
+      }
+    };
+    
+    return () => {
+      delete window.openConsoleAtCurrentBoard;
+    };
+  }, [courses]);
+
+  // 监听控制台的切换展板事件
+  useEffect(() => {
+    const handleSwitchBoard = async (event) => {
+      const { courseId, boardId } = event.detail;
+      console.log('[App] 控制台切换展板:', { courseId, boardId });
+      
+      // 查找课程对象
+      const course = courses.find(c => c.id === courseId);
+      if (course) {
+        setSelectedCourse(course);
+        
+        // 获取展板信息
+        try {
+          const response = await fetch(`http://localhost:8081/api/courses/${courseId}/boards`);
+          if (response.ok) {
+            const data = await response.json();
+            const board = data.boards.find(b => b.id === boardId);
+            if (board) {
+              setSelectedBoard(board);
+              console.log('[App] 已切换到展板:', board.name);
+            }
+          }
+        } catch (error) {
+          console.error('[App] 获取展板信息失败:', error);
+        }
+      }
+    };
+    
+    const handleSwitchCourse = (event) => {
+      const { courseId } = event.detail;
+      console.log('[App] 控制台切换课程:', { courseId });
+      
+      const course = courses.find(c => c.id === courseId);
+      if (course) {
+        setSelectedCourse(course);
+        console.log('[App] 已切换到课程:', course.name);
+      }
+    };
+    
+    const handleRefreshCourses = () => {
+      console.log('[App] 刷新课程列表');
+      fetchCourses();
+    };
+    
+    const handleRefreshBoards = async (event) => {
+      const { courseId } = event.detail;
+      console.log('[App] 刷新展板列表:', courseId);
+      
+      // 重新获取该课程的展板列表
+      try {
+        const response = await fetch(`http://localhost:8081/api/courses/${courseId}/boards`);
+        if (response.ok) {
+          const data = await response.json();
+          setCourseBoards(prev => ({
+            ...prev,
+            [courseId]: data.boards || []
+          }));
+          console.log('[App] 展板列表已刷新');
+        }
+      } catch (error) {
+        console.error('[App] 刷新展板列表失败:', error);
+      }
+    };
+    
+    window.addEventListener('switchBoard', handleSwitchBoard);
+    window.addEventListener('switchCourse', handleSwitchCourse);
+    window.addEventListener('refreshCourses', handleRefreshCourses);
+    window.addEventListener('refreshBoards', handleRefreshBoards);
+    
+    return () => {
+      window.removeEventListener('switchBoard', handleSwitchBoard);
+      window.removeEventListener('switchCourse', handleSwitchCourse);
+      window.removeEventListener('refreshCourses', handleRefreshCourses);
+      window.removeEventListener('refreshBoards', handleRefreshBoards);
+    };
+  }, [courses]);
+
   // 点击外部关闭开始菜单和任务栏右键菜单
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -607,6 +739,7 @@ function App() {
         <div className="content-area">
           {selectedBoard ? (
             <BoardCanvas 
+              courseId={selectedCourse?.id}
               boardId={selectedBoard.id} 
               boardName={selectedBoard.name}
               onWindowsChange={setCurrentBoardWindows}
@@ -624,7 +757,7 @@ function App() {
             />
           ) : (
             <div className="welcome-screen">
-              <h2>欢迎使用 WhatNote V2</h2>
+              <h2>WhatNote V2</h2>
               <p>请选择一个展板开始工作</p>
             </div>
           )}
@@ -864,6 +997,18 @@ function App() {
                 <span className="menu-icon win98-icon win98-icon-recycle"></span>
                 <span className="menu-text">回收站</span>
               </div>
+              
+              {/* 工具控制台 */}
+              <div 
+                className="start-menu-item"
+                onClick={() => {
+                  setShowConsole(true);
+                  setShowStartMenu(false);
+                }}
+              >
+                <span className="menu-icon win98-icon win98-icon-console"></span>
+                <span className="menu-text">工具控制台</span>
+              </div>
             </div>
             
           </div>
@@ -933,6 +1078,11 @@ function App() {
                       key={board.id}
                       className="submenu-item"
                       onClick={() => {
+                        // 找到对应的课程并设置
+                        const course = courses.find(c => c.id === activeCourseId);
+                        if (course) {
+                          setSelectedCourse(course);
+                        }
                         setSelectedBoard(board);
                         setShowStartMenu(false);
                         setActiveCourseId(null);
@@ -1028,7 +1178,13 @@ function App() {
       )}
       
       {showConsole && (
-        <Console onClose={() => setShowConsole(false)} />
+        <Console 
+          onClose={() => {
+            setShowConsole(false);
+            setConsoleInitialPath(null); // 关闭时清空初始路径
+          }} 
+          initialPath={consoleInitialPath}
+        />
       )}
 
       {confirmDialog && (

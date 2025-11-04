@@ -333,7 +333,7 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
       </div>
     );
   }
-  
+
   if (isUser) {
     return (
       <div className="message user-message">
@@ -843,6 +843,9 @@ function ChatWindow({
   const [isAtTop, setIsAtTop] = useState(false);
   const [shouldPreserveScrollPosition, setShouldPreserveScrollPosition] = useState(false);
   
+  // 自动滚动控制状态
+  const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true);
+  
   // UI状态
   const [showSettings, setShowSettings] = useState(false);
   const [showFileSelector, setShowFileSelector] = useState(false);
@@ -961,17 +964,32 @@ function ChatWindow({
     }
   }, [messages]);
 
-  // 滚动事件处理 - 检测是否在顶部
+  // 滚动事件处理 - 检测是否在顶部，并在用户手动滚动时禁用自动滚动
   const handleScroll = useCallback((e) => {
     // 阻止事件冒泡，防止桌面被滚动
     e.stopPropagation();
     
     const container = e.target;
     const scrollTop = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
     
     // 检测是否接近顶部（50px范围内）
     setIsAtTop(scrollTop < 50);
-  }, []);
+    
+    // 检测是否接近底部（50px范围内）
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+    
+    // 如果用户手动滚动离开底部，禁用自动滚动
+    if (!isNearBottom && isAutoScrollEnabled) {
+      console.log('🛑 用户手动滚动离开底部，停止自动滚动');
+      setIsAutoScrollEnabled(false);
+    } else if (isNearBottom && !isAutoScrollEnabled) {
+      // 如果用户滚动回底部附近，立即恢复自动滚动
+      console.log('✅ 用户滚动回底部，恢复自动滚动');
+      setIsAutoScrollEnabled(true);
+    }
+  }, [isAutoScrollEnabled]);
 
   // 优化的文件加载函数
   const loadBoardFiles = useCallback(async () => {
@@ -1115,6 +1133,9 @@ function ChatWindow({
     setInputText('');
     setSelectedFiles([]);
     setIsLoading(true);
+    
+    // 发送新消息时，重新启用自动滚动
+    setIsAutoScrollEnabled(true);
 
     try {
       await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${conversationId}/messages`, {
@@ -1351,9 +1372,9 @@ function ChatWindow({
     updateDisplayedMessages();
   }, [updateDisplayedMessages]);
 
-  // 当消息更新时，智能滚动
+  // 当消息更新时，智能滚动（仅当自动滚动启用时）
   useEffect(() => {
-    if (messages.length > 0 && !shouldPreserveScrollPosition) {
+    if (messages.length > 0 && !shouldPreserveScrollPosition && isAutoScrollEnabled) {
       // 只有在初次加载或新增消息时才滚动到底部
       // 加载历史消息时不自动滚动，保持用户位置
       if (messages.length <= 20) {
@@ -1368,7 +1389,7 @@ function ChatWindow({
         }, 100);
       }
     }
-  }, [messages, scrollToBottom, shouldPreserveScrollPosition]);
+  }, [messages, scrollToBottom, shouldPreserveScrollPosition, isAutoScrollEnabled]);
 
 
   useEffect(() => {
@@ -1487,10 +1508,29 @@ function ChatWindow({
         onWheel={(e) => {
           // 阻止滚轮事件冒泡到桌面
           e.stopPropagation();
+          
+          // 用户使用滚轮，禁用自动滚动
+          if (isAutoScrollEnabled) {
+            console.log('🛑 检测到滚轮事件，停止自动滚动');
+            setIsAutoScrollEnabled(false);
+          }
         }}
         onTouchMove={(e) => {
           // 阻止触摸滚动事件冒泡到桌面
           e.stopPropagation();
+          
+          // 用户触摸滚动，禁用自动滚动
+          if (isAutoScrollEnabled) {
+            console.log('🛑 检测到触摸滚动，停止自动滚动');
+            setIsAutoScrollEnabled(false);
+          }
+        }}
+        onClick={() => {
+          // 用户点击消息区域，禁用自动滚动
+          if (isAutoScrollEnabled) {
+            console.log('🛑 检测到点击事件，停止自动滚动');
+            setIsAutoScrollEnabled(false);
+          }
         }}
       >
         

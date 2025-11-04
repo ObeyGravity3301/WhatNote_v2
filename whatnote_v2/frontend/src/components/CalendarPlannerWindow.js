@@ -63,31 +63,17 @@ const formatDateKey = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-const loadInitialPlannerData = () => {
-  if (typeof window === 'undefined') {
-    return {};
-  }
-
-  try {
-    const stored = window.localStorage.getItem('whatnotePlannerTasks');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed && typeof parsed === 'object') {
-        return parsed;
-      }
-    }
-  } catch (error) {
-    console.warn('加载计划数据失败，使用默认数据', error);
-  }
-  return {};
-};
+// 已移除 loadInitialPlannerData，改为从后端加载
 
 function CalendarPlannerWindow({ initialDate }) {
   const [currentDate, setCurrentDate] = useState(() => initialDate ? new Date(initialDate) : new Date());
   const [selectedDate, setSelectedDate] = useState(() => initialDate ? new Date(initialDate) : new Date());
-  const [plannerData, setPlannerData] = useState(() => loadInitialPlannerData());
+  const [plannerData, setPlannerData] = useState({});
   const [newTaskName, setNewTaskName] = useState('');
   const [newTaskTime, setNewTaskTime] = useState('');
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editTaskTitle, setEditTaskTitle] = useState('');
+  const [editTaskTime, setEditTaskTime] = useState('');
 
   const today = useMemo(() => {
     const now = new Date();
@@ -107,14 +93,56 @@ function CalendarPlannerWindow({ initialDate }) {
     });
   }, [plannerData, selectedDateKey]);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.setItem('whatnotePlannerTasks', JSON.stringify(plannerData));
-      } catch (error) {
-        console.warn('保存计划数据失败', error);
+  // 从后端加载日历数据
+  const loadCalendarData = async () => {
+    try {
+      const response = await fetch('http://localhost:8081/api/calendar/tasks');
+      if (response.ok) {
+        const data = await response.json();
+        setPlannerData(data);
+        console.log('[Calendar] 已从后端加载日历数据');
       }
+    } catch (error) {
+      console.error('[Calendar] 加载日历数据失败:', error);
     }
+  };
+
+  useEffect(() => {
+    loadCalendarData();
+  }, []);
+
+  // 监听控制台刷新日历事件
+  useEffect(() => {
+    const handleRefreshCalendar = () => {
+      console.log('[Calendar] 收到刷新日历事件');
+      loadCalendarData();
+    };
+
+    window.addEventListener('refreshCalendar', handleRefreshCalendar);
+
+    return () => {
+      window.removeEventListener('refreshCalendar', handleRefreshCalendar);
+    };
+  }, []);
+
+  // 保存到后端（替代 localStorage）
+  useEffect(() => {
+    const saveCalendarData = async () => {
+      try {
+        await fetch('http://localhost:8081/api/calendar/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(plannerData)
+        });
+        console.log('[Calendar] 已保存日历数据到后端');
+      } catch (error) {
+        console.warn('[Calendar] 保存日历数据失败:', error);
+      }
+    };
+    
+    // 防止初始加载时立即保存
+    const timer = setTimeout(saveCalendarData, 500);
+    return () => clearTimeout(timer);
   }, [plannerData]);
 
   const isSameDay = (a, b) => {
@@ -184,10 +212,64 @@ function CalendarPlannerWindow({ initialDate }) {
     });
   };
 
+  const handleStartEdit = (task) => {
+    setEditingTaskId(task.id);
+    setEditTaskTitle(task.title);
+    setEditTaskTime(task.time);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editTaskTitle.trim() || !editTaskTime) {
+      return;
+    }
+
+    setPlannerData(prev => {
+      const existing = prev[selectedDateKey] || [];
+      const updatedTasks = existing.map(task =>
+        task.id === editingTaskId ? { ...task, title: editTaskTitle, time: editTaskTime } : task
+      );
+      return {
+        ...prev,
+        [selectedDateKey]: updatedTasks
+      };
+    });
+
+    setEditingTaskId(null);
+    setEditTaskTitle('');
+    setEditTaskTime('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTaskId(null);
+    setEditTaskTitle('');
+    setEditTaskTime('');
+  };
+
+  const handleDeleteTask = (taskId) => {
+    setPlannerData(prev => {
+      const existing = prev[selectedDateKey] || [];
+      const updatedTasks = existing.filter(task => task.id !== taskId);
+      return {
+        ...prev,
+        [selectedDateKey]: updatedTasks
+      };
+    });
+  };
+
   const handleFormKeyDown = (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
       handleAddTask();
+    }
+  };
+
+  const handleEditKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleSaveEdit();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      handleCancelEdit();
     }
   };
 
@@ -278,18 +360,74 @@ function CalendarPlannerWindow({ initialDate }) {
           ) : (
             <div className="planner-task-list">
               {tasksForSelectedDate.map(task => (
-                <label
+                <div
                   key={task.id}
-                  className={`planner-task ${task.completed ? 'completed' : ''}`}
+                  className={`planner-task ${task.completed ? 'completed' : ''} ${editingTaskId === task.id ? 'editing' : ''}`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={task.completed}
-                    onChange={() => handleToggleTask(task.id)}
-                  />
-                  <span className="planner-task-time">{task.time}</span>
-                  <span className="planner-task-title">{task.title}</span>
-                </label>
+                  {editingTaskId === task.id ? (
+                    // 编辑模式
+                    <div className="planner-task-edit">
+                      <input
+                        type="time"
+                        value={editTaskTime}
+                        onChange={(e) => setEditTaskTime(e.target.value)}
+                        onKeyDown={handleEditKeyDown}
+                        className="planner-edit-time"
+                      />
+                      <input
+                        type="text"
+                        value={editTaskTitle}
+                        onChange={(e) => setEditTaskTitle(e.target.value)}
+                        onKeyDown={handleEditKeyDown}
+                        className="planner-edit-title"
+                        autoFocus
+                      />
+                      <button 
+                        className="planner-btn planner-btn-save"
+                        onClick={handleSaveEdit}
+                        title="保存 (Enter)"
+                      >
+                        ✓
+                      </button>
+                      <button 
+                        className="planner-btn planner-btn-cancel"
+                        onClick={handleCancelEdit}
+                        title="取消 (Esc)"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    // 显示模式
+                    <>
+                      <label className="planner-task-content">
+                        <input
+                          type="checkbox"
+                          checked={task.completed}
+                          onChange={() => handleToggleTask(task.id)}
+                        />
+                        <span className="planner-task-time">{task.time}</span>
+                        <span className="planner-task-title">{task.title}</span>
+                      </label>
+                      <div className="planner-task-actions">
+                        <button 
+                          className="planner-btn planner-btn-edit"
+                          onClick={() => handleStartEdit(task)}
+                          title="编辑"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          className="planner-btn planner-btn-delete"
+                          onClick={() => handleDeleteTask(task.id)}
+                          title="删除"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               ))}
             </div>
           )}

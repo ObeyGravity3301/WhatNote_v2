@@ -334,6 +334,24 @@ html, body {
   background-image: url('./assets/icons/recycle_bin_full-3.png');
 }
 
+.win98-icon-console {
+  background: #000;
+  border: 1px solid #808080;
+  position: relative;
+}
+
+.win98-icon-console::before {
+  content: 'C:>';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #00ff00;
+  font-family: 'Courier New', monospace;
+  font-size: 8px;
+  font-weight: bold;
+}
+
 .win98-icon-palette {
   background-image: url('./assets/icons/windows-start.png');
 }

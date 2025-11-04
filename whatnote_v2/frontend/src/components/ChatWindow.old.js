@@ -1086,7 +1086,7 @@ function ChatWindow({
                                     } else {
                                       // 回退到打开新窗口查看大图
                                       if (typeof window !== 'undefined') {
-                                        window.open(file.url, '_blank');
+                                      window.open(file.url, '_blank');
                                       }
                                     }
                                   }}

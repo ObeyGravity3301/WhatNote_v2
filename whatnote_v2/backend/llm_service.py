@@ -160,7 +160,7 @@ class LLMService:
                             
                             text_content = ""
                             used_versions = []  # 记录使用的版本
-                            
+                                
                             # 读取所有页面内容（使用新的版本管理方法）
                             for page_num in range(1, total_pages + 1):
                                 # 获取该页使用的版本（新方法：直接从PDF路径）

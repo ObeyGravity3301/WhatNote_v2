@@ -6723,6 +6723,7 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
 }
 
 function BoardCanvas({ 
+  courseId,
   boardId, 
   boardName,
   onWindowsChange,
@@ -7442,6 +7443,20 @@ function BoardCanvas({
       loadNewBoardData();
     }
   }, [boardId]);
+
+  // 监听控制台的刷新展板事件
+  useEffect(() => {
+    const handleRefreshBoard = () => {
+      console.log('[BoardCanvas] 收到刷新展板请求');
+      fetchBoardWindows();
+    };
+    
+    window.addEventListener('refreshBoard', handleRefreshBoard);
+    
+    return () => {
+      window.removeEventListener('refreshBoard', handleRefreshBoard);
+    };
+  }, [fetchBoardWindows]);
 
   useEffect(() => {
     setPersonalizationSettings(null);
@@ -8736,6 +8751,20 @@ function BoardCanvas({
         // 创建新的打字机模式文本窗口
         handleCreateProject();
         break;
+      case 'open-console':
+        // 打开控制台并自动定位到当前展板
+        console.log('[BoardCanvas] 打开控制台:', { courseId, boardId });
+        if (window.openConsoleAtCurrentBoard) {
+          if (!courseId) {
+            console.error('[BoardCanvas] courseId 未定义！');
+            alert('无法打开控制台：课程信息缺失');
+            return;
+          }
+          window.openConsoleAtCurrentBoard(courseId, boardId);
+        } else {
+          console.error('[BoardCanvas] window.openConsoleAtCurrentBoard 不存在');
+        }
+        break;
       case 'rename':
         if (targetId) {
           // 开始重命名图标对应的窗口
@@ -9532,6 +9561,12 @@ function BoardCanvas({
         label: '新建项目', 
         action: 'new-project',
         icon: '📝'
+      },
+      { type: 'separator' },
+      { 
+        label: '打开控制台', 
+        action: 'open-console',
+        icon: '💻'
       }
     ];
 
@@ -9605,7 +9640,7 @@ function BoardCanvas({
     return (
       <div className="board-canvas">
         <div className="welcome-screen">
-          <h2>欢迎使用 WhatNote V2</h2>
+          <h2>WhatNote V2</h2>
           <p>请选择一个展板开始工作</p>
         </div>
       </div>
@@ -10122,7 +10157,7 @@ function BoardCanvas({
             onDrop={handleDrop}
           >
             <p>展板为空</p>
-            <p>点击"创建窗口"开始添加内容</p>
+            <p>点击右键菜单开始添加内容</p>
             <p>或拖拽文件到这里创建窗口</p>
           </div>
         )}
