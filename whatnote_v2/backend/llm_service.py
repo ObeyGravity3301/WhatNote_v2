@@ -763,15 +763,20 @@ class LLMService:
                     continue
                     
                 else:
-                    # 没有工具调用，使用流式返回最终结果
+                    # 没有工具调用，检查是否有文本输出
                     content = message.get('content', '')
-                    info(f"[LLM Tools] 最终回复长度: {len(content)} 字符")
+                    info(f"[LLM Tools] LLM 回复 (finish_reason={finish_reason}): {len(content)} 字符")
                     
-                    # 如果有内容，使用流式方式逐字输出
+                    # 如果finish_reason是'stop'，说明LLM主动结束对话
+                    # 如果finish_reason是其他值，可能需要继续
+                    
                     if content:
-                        # 先发送一个标记，表示开始最终回复
+                        # 有文本内容，流式输出
+                        info(f"[LLM Tools] 输出中间文本")
+                        
+                        # 先发送一个标记，表示开始中间文本
                         yield {
-                            "type": "final_start",
+                            "type": "intermediate_text_start",
                             "content": ""
                         }
                         
@@ -780,7 +785,7 @@ class LLMService:
                         for i in range(0, len(content), chunk_size):
                             chunk = content[i:i+chunk_size]
                             yield {
-                                "type": "final_chunk",
+                                "type": "intermediate_text_chunk",
                                 "content": chunk
                             }
                             # 小延迟以确保流式效果
@@ -788,16 +793,32 @@ class LLMService:
                         
                         # 发送完成标记
                         yield {
-                            "type": "final_complete",
+                            "type": "intermediate_text_complete",
                             "content": ""
                         }
+                        
+                        # 将文本添加到对话历史
+                        processed_messages.append({
+                            "role": "assistant",
+                            "content": content
+                        })
+                    
+                    # 检查是否应该结束
+                    if finish_reason == 'stop':
+                        # LLM 主动停止，结束对话
+                        info(f"[LLM Tools] LLM 主动停止，结束对话")
+                        if not content:
+                            # 如果没有输出内容，发送空结束标记
+                            yield {
+                                "type": "final",
+                                "content": ""
+                            }
+                        return
                     else:
-                        # 没有内容，直接返回
-                        yield {
-                            "type": "final",
-                            "content": ""
-                        }
-                    return
+                        # finish_reason 不是 'stop'，继续下一轮
+                        # 这种情况比较少见，但为了安全起见继续
+                        info(f"[LLM Tools] finish_reason={finish_reason}，继续下一轮")
+                        continue
             
             # 达到最大迭代次数
             yield {

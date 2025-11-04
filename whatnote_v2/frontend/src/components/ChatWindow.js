@@ -1232,7 +1232,14 @@ function ChatWindow({
 3. 如果用户询问"这里"、"当前展板"等，指的就是上述展板
 4. 日期格式必须使用 YYYY-MM-DD（例如：${currentDate}）
 5. 时间格式必须使用 HH:MM（例如：${currentTime}）
-6. 添加任务时，如果用户说"今天"或未指定日期，使用当前日期：${currentDate}`
+6. 添加任务时，如果用户说"今天"或未指定日期，使用当前日期：${currentDate}
+
+工具调用策略：
+- 你可以进行多轮工具调用（最多25轮）
+- 每次调用工具后，系统会自动将结果返回给你
+- 你可以根据工具执行结果决定下一步操作
+- 当所有任务完成后，输出一段总结文本
+- 如果需要边执行边说明，在完成所有工具调用后，用一段文本总结整个过程`
       } : null;
       
       // 包含所有消息（包括system消息），让LLM了解用户的操作历史
@@ -1407,12 +1414,38 @@ function ChatWindow({
                     }
                   }
                   
+                } else if (parsed.type === 'intermediate_text_start') {
+                  // 💬 开始中间文本输出
+                  fullResponse += `\n\n💬 `;
+                  
+                } else if (parsed.type === 'intermediate_text_chunk') {
+                  // 💬 流式输出中间文本
+                  fullResponse += parsed.content;
+                  
+                  // 立即更新显示
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
+                  
+                } else if (parsed.type === 'intermediate_text_complete') {
+                  // 💬 中间文本输出完成
+                  fullResponse += `\n`;
+                  
+                  // 立即更新显示
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
+                  
                 } else if (parsed.type === 'final_start') {
-                  // 💬 开始最终回复
+                  // 💬 开始最终回复（兼容旧版本）
                   fullResponse += `\n`;
                   
                 } else if (parsed.type === 'final_chunk') {
-                  // 💬 流式输出内容
+                  // 💬 流式输出内容（兼容旧版本）
                   fullResponse += parsed.content;
                   
                   // 立即更新显示
@@ -1423,7 +1456,7 @@ function ChatWindow({
                   ));
                   
                 } else if (parsed.type === 'final_complete') {
-                  // 💬 最终回复完成
+                  // 💬 最终回复完成（兼容旧版本）
                   // 不需要额外操作
                   
                 } else if (parsed.type === 'final') {
