@@ -1318,6 +1318,13 @@ function ChatWindow({
                   // 在消息中显示工具调用信息
                   fullResponse += `\n\n🔧 ${parsed.content}\n`;
                   
+                  // 立即更新显示
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
+                  
                 } else if (parsed.type === 'tool_result') {
                   // ✅ 工具执行完成
                   const resultLog = {
@@ -1331,25 +1338,65 @@ function ChatWindow({
                   
                   fullResponse += `✅ ${parsed.content}\n`;
                   
+                  // 立即更新显示
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
+                  
+                  // 如果是窗口操作，触发刷新
+                  const windowTools = ['create_window', 'delete_window', 'update_window', 'edit_window'];
+                  if (windowTools.includes(parsed.tool_name)) {
+                    console.log('[ChatWindow] 窗口操作完成，触发刷新展板');
+                    window.dispatchEvent(new CustomEvent('refreshBoard'));
+                  }
+                  
+                } else if (parsed.type === 'final_start') {
+                  // 💬 开始最终回复
+                  fullResponse += `\n`;
+                  
+                } else if (parsed.type === 'final_chunk') {
+                  // 💬 流式输出内容
+                  fullResponse += parsed.content;
+                  
+                  // 立即更新显示
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
+                  
+                } else if (parsed.type === 'final_complete') {
+                  // 💬 最终回复完成
+                  // 不需要额外操作
+                  
                 } else if (parsed.type === 'final') {
-                  // 💬 最终回复
+                  // 💬 最终回复（兼容旧格式）
                   fullResponse += `\n${parsed.content}`;
                   
                 } else if (parsed.type === 'error') {
                   // ❌ 错误
                   fullResponse += `\n\n❌ ${parsed.content}`;
                   
+                  // 立即更新显示
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
+                  
                 } else if (parsed.type === 'warning') {
                   // ⚠️ 警告
                   fullResponse += `\n\n⚠️ ${parsed.content}`;
+                  
+                  // 立即更新显示
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
                 }
-                
-                // 更新显示
-                setMessages(prev => prev.map(msg => 
-                  msg.id === aiMessageId 
-                    ? { ...msg, content: fullResponse }
-                    : msg
-                ));
                 
               } else if (parsed.content) {
                 // 普通流式响应（没有工具调用）

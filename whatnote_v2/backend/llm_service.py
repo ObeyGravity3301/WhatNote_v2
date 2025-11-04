@@ -763,13 +763,40 @@ class LLMService:
                     continue
                     
                 else:
-                    # 没有工具调用，返回最终结果
+                    # 没有工具调用，使用流式返回最终结果
                     content = message.get('content', '')
+                    info(f"[LLM Tools] 最终回复长度: {len(content)} 字符")
                     
-                    yield {
-                        "type": "final",
-                        "content": content
-                    }
+                    # 如果有内容，使用流式方式逐字输出
+                    if content:
+                        # 先发送一个标记，表示开始最终回复
+                        yield {
+                            "type": "final_start",
+                            "content": ""
+                        }
+                        
+                        # 流式输出内容（模拟打字效果）
+                        chunk_size = 10  # 每次输出的字符数
+                        for i in range(0, len(content), chunk_size):
+                            chunk = content[i:i+chunk_size]
+                            yield {
+                                "type": "final_chunk",
+                                "content": chunk
+                            }
+                            # 小延迟以确保流式效果
+                            await asyncio.sleep(0.01)
+                        
+                        # 发送完成标记
+                        yield {
+                            "type": "final_complete",
+                            "content": ""
+                        }
+                    else:
+                        # 没有内容，直接返回
+                        yield {
+                            "type": "final",
+                            "content": ""
+                        }
                     return
             
             # 达到最大迭代次数
