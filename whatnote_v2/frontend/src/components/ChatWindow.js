@@ -1271,7 +1271,7 @@ function ChatWindow({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           messages: conversationMessages,
-          max_iterations: 5  // 最大工具调用轮数
+          max_iterations: 25  // 最大工具调用轮数
         })
       });
       
@@ -1851,7 +1851,7 @@ function ChatWindow({
           /* 使用智能管理的消息列表 */
           displayedMessages.map((message, index) => (
             <MessageComponent
-              key={message.id || index}
+              key={`msg-${message.id}-${index}`}
               message={message}
               isStreaming={isStreaming}
               streamingMessageId={streamingMessageId}

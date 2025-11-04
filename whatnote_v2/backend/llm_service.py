@@ -646,7 +646,7 @@ class LLMService:
         except Exception as e:
             yield f"❌ 通义千问API调用异常: {str(e)}"
     
-    async def chat_with_tools(self, messages: List[Dict], max_iterations: int = 5) -> AsyncGenerator[Dict, None]:
+    async def chat_with_tools(self, messages: List[Dict], max_iterations: int = 25) -> AsyncGenerator[Dict, None]:
         """
         支持工具调用的对话方法
         

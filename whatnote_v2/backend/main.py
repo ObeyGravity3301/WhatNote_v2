@@ -4014,7 +4014,7 @@ async def llm_chat_with_tools(request: dict):
     """支持工具调用的LLM对话API"""
     try:
         messages = request.get('messages', [])
-        max_iterations = request.get('max_iterations', 5)
+        max_iterations = request.get('max_iterations', 25)
         
         if not messages:
             raise HTTPException(status_code=400, detail="消息列表不能为空")
