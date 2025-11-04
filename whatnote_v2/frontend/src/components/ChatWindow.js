@@ -1212,16 +1212,27 @@ function ChatWindow({
   const generateStreamingAIResponse = useCallback(async (userMessage, aiMessageId) => {
     try {
       // 添加上下文系统消息（如果启用了工具调用）
+      const now = new Date();
+      const currentDate = now.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+      const currentTime = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const currentDatetime = now.toISOString().slice(0, 19).replace('T', ' ');
+      
       const contextMessage = useTools ? {
         role: 'system',
         content: `当前上下文信息：
 - 展板名称：${boardName || '未命名展板'}
 - 展板ID：${boardId}
+- 当前日期：${currentDate}（格式：YYYY-MM-DD）
+- 当前时间：${currentTime}（格式：HH:MM）
+- 完整时间戳：${currentDatetime}
 
 重要提示：
 1. 当需要操作窗口（创建、读取、编辑、搜索等）时，请使用上述 board_id
 2. 用户的所有窗口操作都应该在当前展板上进行
-3. 如果用户询问"这里"、"当前展板"等，指的就是上述展板`
+3. 如果用户询问"这里"、"当前展板"等，指的就是上述展板
+4. 日期格式必须使用 YYYY-MM-DD（例如：${currentDate}）
+5. 时间格式必须使用 HH:MM（例如：${currentTime}）
+6. 添加任务时，如果用户说"今天"或未指定日期，使用当前日期：${currentDate}`
       } : null;
       
       // 包含所有消息（包括system消息），让LLM了解用户的操作历史
