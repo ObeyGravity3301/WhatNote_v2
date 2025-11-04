@@ -17,13 +17,13 @@ ADD_TASK_TOOL = ToolDefinition(
     type="function",
     function={
         "name": "add_task",
-        "description": "添加任务到指定日期的日历中",
+        "description": "添加任务到指定日期的日历中。如果用户未指定日期，默认使用今天",
         "parameters": {
             "type": "object",
             "properties": {
                 "date": {
                     "type": "string",
-                    "description": "日期，格式 YYYY-MM-DD，例如 '2024-11-05'"
+                    "description": "日期，格式 YYYY-MM-DD，例如 '2025-11-05'。如果不提供，默认为今天"
                 },
                 "title": {
                     "type": "string",
@@ -34,7 +34,7 @@ ADD_TASK_TOOL = ToolDefinition(
                     "description": "任务时间，格式 HH:MM，例如 '14:30'"
                 }
             },
-            "required": ["date", "title", "time"]
+            "required": ["title", "time"]
         }
     }
 )
@@ -230,7 +230,12 @@ class CalendarToolHandlers:
     async def add_task(self, arguments: Dict[str, Any], context: Dict[str, Any] = None) -> ToolResult:
         """添加任务"""
         try:
+            # 如果没有提供日期，使用今天
             date = arguments.get("date")
+            if not date:
+                date = datetime.now().strftime("%Y-%m-%d")
+                info(f"[工具] 未提供日期，使用今天: {date}")
+            
             title = arguments.get("title")
             time = arguments.get("time")
             
