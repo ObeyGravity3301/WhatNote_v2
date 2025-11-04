@@ -1012,12 +1012,14 @@ function ChatWindow({
     if (!isNearBottom && isAutoScrollEnabled) {
       console.log('🛑 用户手动滚动离开底部，停止自动滚动');
       setIsAutoScrollEnabled(false);
-    } else if (isNearBottom && !isAutoScrollEnabled) {
-      // 如果用户滚动回底部附近，立即恢复自动滚动
-      console.log('✅ 用户滚动回底部，恢复自动滚动');
+    } else if (isNearBottom && !isAutoScrollEnabled && isStreaming) {
+      // ⭐ 只有在模型正在输出时才恢复自动滚动
+      // 如果用户滚动回底部附近，且模型正在输出，立即恢复自动滚动
+      console.log('✅ 用户滚动回底部，恢复自动滚动（模型正在输出）');
       setIsAutoScrollEnabled(true);
     }
-  }, [isAutoScrollEnabled]);
+    // 如果模型不在输出，即使滚动到底部也不自动恢复滚动
+  }, [isAutoScrollEnabled, isStreaming]);
 
   // 优化的文件加载函数
   const loadBoardFiles = useCallback(async () => {
@@ -1285,6 +1287,10 @@ function ChatWindow({
               setIsStreaming(false);
               setStreamingMessageId(null);
               
+              // ⭐ 模型停止输出后，禁用自动滚动（除非用户手动滚动到底部）
+              // 这样用户可以自由浏览历史消息，不会被"吸"在底部
+              setIsAutoScrollEnabled(false);
+              
               const finalMessage = {
                 role: 'assistant',
                 content: fullResponse
@@ -1350,6 +1356,44 @@ function ChatWindow({
                   if (windowTools.includes(parsed.tool_name)) {
                     console.log('[ChatWindow] 窗口操作完成，触发刷新展板');
                     window.dispatchEvent(new CustomEvent('refreshBoard'));
+                  }
+                  
+                  // 如果是日历操作，触发刷新
+                  const calendarTools = ['add_task', 'list_tasks', 'toggle_task', 'update_task', 'delete_task', 'search_tasks', 'get_upcoming_tasks'];
+                  if (calendarTools.includes(parsed.tool_name)) {
+                    console.log('[ChatWindow] 日历操作完成，触发刷新日历');
+                    window.dispatchEvent(new CustomEvent('refreshCalendar'));
+                    
+                    // 显示工具结果数据
+                    if (parsed.tool_result && parsed.tool_result.data) {
+                      const resultData = parsed.tool_result.data;
+                      if (parsed.tool_name === 'list_tasks' && resultData.tasks) {
+                        // 列出任务时显示任务列表
+                        const tasksList = resultData.tasks.map((task, idx) => 
+                          `  ${idx + 1}. ${task.completed ? '✅' : '⭕'} ${task.title} ${task.time ? `(${task.time})` : ''}`
+                        ).join('\n');
+                        fullResponse += `\n\n${tasksList.length > 0 ? tasksList : '  暂无任务'}\n`;
+                      } else if (parsed.tool_name === 'add_task' && resultData.task_id) {
+                        fullResponse += `\n任务ID: ${resultData.task_id}\n`;
+                      } else if (parsed.tool_name === 'search_tasks' && resultData.tasks) {
+                        const tasksList = resultData.tasks.map((task, idx) => 
+                          `  ${idx + 1}. ${task.completed ? '✅' : '⭕'} ${task.title} ${task.date ? `(${task.date})` : ''} ${task.time ? `- ${task.time}` : ''}`
+                        ).join('\n');
+                        fullResponse += `\n\n${tasksList.length > 0 ? tasksList : '  未找到匹配的任务'}\n`;
+                      } else if (parsed.tool_name === 'get_upcoming_tasks' && resultData.tasks) {
+                        const tasksList = resultData.tasks.map((task, idx) => 
+                          `  ${idx + 1}. ${task.completed ? '✅' : '⭕'} ${task.title} ${task.date ? `(${task.date})` : ''} ${task.time ? `- ${task.time}` : ''}`
+                        ).join('\n');
+                        fullResponse += `\n\n${tasksList.length > 0 ? tasksList : '  未来几天暂无任务'}\n`;
+                      }
+                      
+                      // 更新显示
+                      setMessages(prev => prev.map(msg => 
+                        msg.id === aiMessageId 
+                          ? { ...msg, content: fullResponse }
+                          : msg
+                      ));
+                    }
                   }
                   
                 } else if (parsed.type === 'final_start') {
