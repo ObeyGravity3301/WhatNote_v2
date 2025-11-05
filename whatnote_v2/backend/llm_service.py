@@ -872,7 +872,7 @@ class LLMService:
             payload = {
                 'model': config['model'],
                 'messages': messages,
-                'stream': False,  # 工具调用不使用流式
+                'stream': True,  # ⭐ 改为流式
                 'temperature': 0.7
             }
             
@@ -890,7 +890,81 @@ class LLMService:
                         error(f"[LLM Tools] API错误 ({response.status}): {error_text}")
                         return None
                     
-                    return await response.json()
+                    # ⭐ 流式处理响应
+                    accumulated_response = {
+                        'choices': [{
+                            'message': {
+                                'role': 'assistant',
+                                'content': '',
+                                'tool_calls': []
+                            },
+                            'finish_reason': None
+                        }]
+                    }
+                    
+                    tool_calls_buffer = {}  # 累积工具调用 {index: {id, type, function: {name, arguments}}}
+                    
+                    async for line in response.content:
+                        line_str = line.decode('utf-8').strip()
+                        if not line_str or not line_str.startswith('data: '):
+                            continue
+                        
+                        data = line_str[6:]
+                        if data == '[DONE]':
+                            break
+                        
+                        try:
+                            chunk = json.loads(data)
+                            if 'choices' not in chunk or not chunk['choices']:
+                                continue
+                            
+                            choice = chunk['choices'][0]
+                            delta = choice.get('delta', {})
+                            finish_reason = choice.get('finish_reason')
+                            
+                            # 累积 content
+                            if 'content' in delta and delta['content']:
+                                accumulated_response['choices'][0]['message']['content'] += delta['content']
+                            
+                            # 累积 tool_calls
+                            if 'tool_calls' in delta:
+                                for tool_call_delta in delta['tool_calls']:
+                                    idx = tool_call_delta.get('index', 0)
+                                    
+                                    if idx not in tool_calls_buffer:
+                                        tool_calls_buffer[idx] = {
+                                            'id': tool_call_delta.get('id', ''),
+                                            'type': tool_call_delta.get('type', 'function'),
+                                            'function': {
+                                                'name': '',
+                                                'arguments': ''
+                                            }
+                                        }
+                                    
+                                    if 'id' in tool_call_delta:
+                                        tool_calls_buffer[idx]['id'] = tool_call_delta['id']
+                                    
+                                    if 'function' in tool_call_delta:
+                                        func_delta = tool_call_delta['function']
+                                        if 'name' in func_delta:
+                                            tool_calls_buffer[idx]['function']['name'] += func_delta['name']
+                                        if 'arguments' in func_delta:
+                                            tool_calls_buffer[idx]['function']['arguments'] += func_delta['arguments']
+                            
+                            # 更新 finish_reason
+                            if finish_reason:
+                                accumulated_response['choices'][0]['finish_reason'] = finish_reason
+                                
+                        except json.JSONDecodeError:
+                            continue
+                    
+                    # 将累积的 tool_calls 添加到响应
+                    if tool_calls_buffer:
+                        accumulated_response['choices'][0]['message']['tool_calls'] = [
+                            tool_calls_buffer[i] for i in sorted(tool_calls_buffer.keys())
+                        ]
+                    
+                    return accumulated_response
                     
         except Exception as e:
             import traceback
