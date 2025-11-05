@@ -741,6 +741,7 @@ class LLMService:
                             yield {"type": "error", "content": f"❌ API错误: {error_text}"}
                             return
                         
+                        chunk_count = 0
                         async for line in response.content:
                             line_str = line.decode('utf-8').strip()
                             if not line_str or not line_str.startswith('data: '):
@@ -748,7 +749,12 @@ class LLMService:
                             
                             data = line_str[6:]
                             if data == '[DONE]':
+                                info(f"[LLM Tools] 流式接收完成，共 {chunk_count} 个chunk")
                                 break
+                            
+                            chunk_count += 1
+                            if chunk_count % 10 == 0:
+                                info(f"[LLM Tools] 已接收 {chunk_count} 个chunk")
                             
                             try:
                                 chunk = json.loads(data)
@@ -768,6 +774,7 @@ class LLMService:
                                     if not is_outputting_text:
                                         # 第一次输出文本
                                         is_outputting_text = True
+                                        info(f"[LLM Tools] 开始流式输出文本")
                                         yield {"type": "text_start", "content": ""}
                                     
                                     # 立即发送文本块（真正的流式）
