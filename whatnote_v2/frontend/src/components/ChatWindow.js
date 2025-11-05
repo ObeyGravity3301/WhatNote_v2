@@ -1488,17 +1488,6 @@ ${argsStr}
                     }
                   }
                   
-                  // ⭐ 添加工具结果调试信息
-                  const resultStr = JSON.stringify(parsed.tool_result, null, 2);
-                  fullResponse += `\n<details><summary>📊 执行结果</summary>\n\n\`\`\`json\n${resultStr}\n\`\`\`\n</details>\n`;
-                  
-                  // 更新显示
-                  setMessages(prev => prev.map(msg => 
-                    msg.id === aiMessageId 
-                      ? { ...msg, content: fullResponse }
-                      : msg
-                  ));
-                  
                 } else if (parsed.type === 'text_start') {
                   // 💬 开始文本输出
                   // 将最后一个"等待中"的工具标记为"已完成"
