@@ -799,9 +799,9 @@ class LLMService:
                                         
                                         if 'function' in tool_call_delta:
                                             func = tool_call_delta['function']
-                                            if 'name' in func:
+                                            if 'name' in func and func['name']:
                                                 tool_calls_buffer[idx]['function']['name'] += func['name']
-                                            if 'arguments' in func:
+                                            if 'arguments' in func and func['arguments']:
                                                 tool_calls_buffer[idx]['function']['arguments'] += func['arguments']
                                 
                                 # 更新 finish_reason
