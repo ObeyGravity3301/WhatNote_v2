@@ -831,7 +831,49 @@ class LLMService:
                     # 按照您的要求：截断，只处理第一个工具调用
                     tool_call = tool_calls[0]
                     function_name = tool_call['function']['name']
-                    function_args = json.loads(tool_call['function']['arguments'])
+                    arguments_str = tool_call['function']['arguments']
+                    
+                    # ⭐ 清理 arguments 字符串（移除可能的额外内容）
+                    arguments_str = arguments_str.strip()
+                    
+                    # 尝试找到完整的 JSON 对象
+                    try:
+                        # 尝试直接解析
+                        function_args = json.loads(arguments_str)
+                    except json.JSONDecodeError as e:
+                        # JSON 解析失败，尝试修复
+                        error(f"[LLM Tools] JSON解析失败: {e}")
+                        error(f"[LLM Tools] 原始 arguments: {repr(arguments_str)}")
+                        
+                        # 尝试提取第一个完整的 JSON 对象
+                        brace_count = 0
+                        json_end = -1
+                        for i, char in enumerate(arguments_str):
+                            if char == '{':
+                                brace_count += 1
+                            elif char == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    json_end = i + 1
+                                    break
+                        
+                        if json_end > 0:
+                            clean_json = arguments_str[:json_end]
+                            info(f"[LLM Tools] 尝试使用截断的 JSON: {repr(clean_json)}")
+                            try:
+                                function_args = json.loads(clean_json)
+                            except:
+                                yield {
+                                    "type": "error",
+                                    "content": f"❌ 工具参数解析失败:\n```\n{arguments_str}\n```"
+                                }
+                                continue
+                        else:
+                            yield {
+                                "type": "error",
+                                "content": f"❌ 工具参数格式错误:\n```\n{arguments_str}\n```"
+                            }
+                            continue
                     
                     yield {
                         "type": "tool_call",

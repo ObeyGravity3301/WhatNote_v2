@@ -1369,7 +1369,7 @@ function ChatWindow({
                   // 显示思考动画（可选）
                   console.log('[ChatWindow] LLM 正在推理...');
                   
-                } else if (parsed.type === 'tool_call') {
+                } else                 if (parsed.type === 'tool_call') {
                   // 🔧 工具调用开始
                   const toolLog = {
                     type: 'tool_call',
@@ -1394,6 +1394,10 @@ function ChatWindow({
                   
                   // 在消息中显示工具标签（执行中）
                   fullResponse += `\n🔧 \`${parsed.tool_name}\` [执行中...]`;
+                  
+                  // ⭐ 添加调试信息框（显示完整的工具调用）
+                  const argsStr = JSON.stringify(parsed.arguments, null, 2);
+                  fullResponse += `\n<details><summary>📋 调用详情</summary>\n\n\`\`\`json\n${argsStr}\n\`\`\`\n</details>\n`;
                   
                   // 立即更新显示
                   setMessages(prev => prev.map(msg => 
@@ -1477,6 +1481,17 @@ function ChatWindow({
                       ));
                     }
                   }
+                  
+                  // ⭐ 添加工具结果调试信息
+                  const resultStr = JSON.stringify(parsed.tool_result, null, 2);
+                  fullResponse += `\n<details><summary>📊 执行结果</summary>\n\n\`\`\`json\n${resultStr}\n\`\`\`\n</details>\n`;
+                  
+                  // 更新显示
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
                   
                 } else if (parsed.type === 'text_start') {
                   // 💬 开始文本输出
