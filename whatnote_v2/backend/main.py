@@ -1355,9 +1355,23 @@ async def generate_pdf_annotation_visual(
         if custom_prompt_template:
             task_prompt = custom_prompt_template.replace('{page}', str(page))
         else:
-            task_prompt = f"请根据这张PDF页面的图像生成注释。这是第{page}页的内容。\n\n请生成：\n1. 页面主要内容概要\n2. 重要知识点\n3. 图表、公式的说明（如果有）\n4. 需要注意的细节\n\n请用Markdown格式输出。"
+            task_prompt = f"""请仔细识别这张PDF页面图像中的所有文本内容。这是第{page}页。
+
+**任务要求**：
+1. 提取页面中所有可见的文字（包括标题、正文、列表、标注等）
+2. 保持原文的语言（英文就用英文，中文就用中文）
+3. 保持原文的结构和格式
+4. 如果有公式、图表，请描述它们的内容和作用
+5. 如果有表格，请用Markdown表格格式呈现
+
+**重要提示**：
+- 不要编造或添加原文中没有的内容
+- 不要用你自己的话概括，要逐字提取原文
+- 保持专业术语的准确性
+- 如果有不确定的字符，用 [?] 标记
+
+请直接输出提取的文本内容，使用Markdown格式，不要包裹在代码框中。"""
         
-        task_prompt += "\n**重要：请直接输出Markdown文本，不要在外面包裹```markdown```代码框。**"
         
         # 创建或获取该PDF的注释对话上下文
         pdf_filename = target_window.get('title', 'unknown')
