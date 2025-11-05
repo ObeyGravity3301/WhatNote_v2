@@ -323,13 +323,14 @@ class LLMService:
         
         return processed_message
     
-    async def chat_completion(self, messages: List[Dict], stream: bool = True) -> AsyncGenerator[str, None]:
+    async def chat_completion(self, messages: List[Dict], stream: bool = True, override_model: str = None) -> AsyncGenerator[str, None]:
         """
         调用LLM API进行对话补全
         
         Args:
             messages: 对话消息列表，支持多模态内容（文本+文件）
             stream: 是否使用流式响应
+            override_model: 临时覆盖使用的模型（用于视觉任务等特殊场景）
             
         Yields:
             str: 流式响应的文本片段
@@ -337,7 +338,12 @@ class LLMService:
         try:
             # 获取当前API配置
             current_provider = self.api_config_manager.get_current_provider()
-            provider_config = self.api_config_manager.get_current_config()
+            provider_config = self.api_config_manager.get_current_config().copy()  # 复制避免修改原配置
+            
+            # 如果指定了 override_model，临时覆盖
+            if override_model:
+                info(f"[LLM] 临时使用模型: {override_model} (原模型: {provider_config.get('model')})")
+                provider_config['model'] = override_model
             
             if not provider_config or not provider_config.get('apiKey'):
                 yield f"❌ 错误：{current_provider} API未配置或密钥为空"
