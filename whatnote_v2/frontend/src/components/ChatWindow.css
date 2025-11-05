@@ -331,6 +331,56 @@
   cursor: not-allowed;
 }
 
+/* 工具调用块样式 */
+.tool-call-block {
+  margin: 8px 0;
+  padding: 8px;
+  background: #f5f5f5;
+  border-left: 3px solid #0078d4;
+  border-radius: 2px;
+}
+
+.tool-call-block summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 4px;
+  font-size: 11px;
+  font-family: 'MS Sans Serif', sans-serif;
+  list-style: none;
+}
+
+.tool-call-block summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-call-block summary:hover {
+  background: #e8e8e8;
+}
+
+.tool-call-block summary code {
+  background: #e0e0e0;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+}
+
+.tool-call-block .tool-status {
+  color: #666;
+  font-size: 10px;
+}
+
+.tool-call-block[open] {
+  background: #fff;
+  border-left-color: #28a745;
+}
+
+.tool-call-block[open] summary {
+  margin-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 4px;
+}
+
 /* 滚动条样式 */
 .messages-container::-webkit-scrollbar {
   width: 16px;

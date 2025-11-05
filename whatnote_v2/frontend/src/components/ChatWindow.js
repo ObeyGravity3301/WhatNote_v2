@@ -879,7 +879,8 @@ function ChatWindow({
   // 工具调用状态
   const [useTools, setUseTools] = useState(true);  // 默认启用工具调用
   const [toolCallLogs, setToolCallLogs] = useState([]);
-  const [todoStatus, setTodoStatus] = useState(null);  // Todo 追踪状态  // 工具调用日志
+  const [todoStatus, setTodoStatus] = useState(null);  // Todo 追踪状态
+  const [expandedTools, setExpandedTools] = useState({});  // 展开的工具调用 {messageId-toolName-index: boolean}
   
   // API配置状态
   const [apiProvider, setApiProvider] = useState('openai');
@@ -1392,17 +1393,23 @@ function ChatWindow({
                                    fullResponse.substring(lastWaitingIndex + lastMatch[0].length);
                   }
                   
-                  // 在消息中显示工具标签（执行中）
-                  fullResponse += `\n🔧 \`${parsed.tool_name}\` [执行中...]`;
-                  
-                  // ⭐ 添加调试信息框（显示完整的工具调用）
+                  // 在消息中显示工具标签（执行中）- 使用 details 标签实现点击展开
+                  const toolCallId = `tool-${Date.now()}-${parsed.tool_name}`;
                   const argsStr = JSON.stringify(parsed.arguments, null, 2);
-                  fullResponse += `\n<details><summary>📋 调用详情</summary>\n\n\`\`\`json\n${argsStr}\n\`\`\`\n</details>\n`;
+                  
+                  fullResponse += `\n<details class="tool-call-block" data-tool-id="${toolCallId}">
+<summary>🔧 <code>${parsed.tool_name}</code> <span class="tool-status">[执行中...]</span></summary>
+
+**调用参数**：
+\`\`\`json
+${argsStr}
+\`\`\`
+</details>\n`;
                   
                   // 立即更新显示
                   setMessages(prev => prev.map(msg => 
                     msg.id === aiMessageId 
-                      ? { ...msg, content: fullResponse }
+                      ? { ...msg, content: fullResponse, toolCallId }
                       : msg
                   ));
                   
@@ -1417,17 +1424,16 @@ function ChatWindow({
                   currentToolLogs.push(resultLog);
                   setToolCallLogs(prev => [...prev, resultLog]);
                   
-                  // ⭐ 不立即改为"已完成"，而是改为"等待中..."
-                  // 这样用户知道工具执行完了，正在等待 LLM 下一步决策
-                  const executingPattern = `🔧 \`${parsed.tool_name}\` [执行中...]`;
-                  const lastIndex = fullResponse.lastIndexOf(executingPattern);
-                  if (lastIndex !== -1) {
-                    fullResponse = fullResponse.substring(0, lastIndex) + 
-                                   `⏳ \`${parsed.tool_name}\` [等待中...]\n` +
-                                   fullResponse.substring(lastIndex + executingPattern.length);
-                  } else {
-                    // 如果没找到执行中标记，直接追加（兼容旧格式）
-                    fullResponse += `\n⏳ \`${parsed.tool_name}\` [等待中...]\n`;
+                  // ⭐ 替换最后一个工具的状态为"等待中"，并添加执行结果
+                  const resultStr = JSON.stringify(parsed.tool_result, null, 2);
+                  
+                  // 使用更简单的方法：找到最后一个 [执行中...] 并替换
+                  const lastExecutingIndex = fullResponse.lastIndexOf('[执行中...]');
+                  if (lastExecutingIndex !== -1) {
+                    // 替换状态
+                    fullResponse = fullResponse.substring(0, lastExecutingIndex) + 
+                                   `[等待中...]</span>\n\n**执行结果**：\n\`\`\`json\n${resultStr}\n\`\`\`` +
+                                   fullResponse.substring(lastExecutingIndex + '[执行中...]'.length);
                   }
                   
                   // 立即更新显示
