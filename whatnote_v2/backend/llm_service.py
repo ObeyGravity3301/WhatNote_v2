@@ -734,7 +734,9 @@ class LLMService:
                 info(f"[LLM Tools] 开始流式接收 LLM 响应...")
                 
                 import aiohttp
-                async with aiohttp.ClientSession() as session:
+                # ⭐ 设置超时（总共120秒，读取超时60秒）
+                timeout = aiohttp.ClientTimeout(total=120, sock_read=60)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.post(url, headers=headers, json=payload) as response:
                         if response.status != 200:
                             error_text = await response.text()
