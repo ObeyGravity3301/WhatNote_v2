@@ -18,7 +18,7 @@
     },
     "qwen": {
       "apiKey": "sk-e6d7a8de91f24365a15a88c7f5f05471",
-      "model": "qwen-plus",
+      "model": "qwen-vl-plus",
       "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
     }
   },
