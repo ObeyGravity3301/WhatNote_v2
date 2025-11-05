@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
 import 'katex/dist/katex.min.css';
 
 // LaTeX 分隔符标准化函数
@@ -341,7 +342,7 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
         <div className="message-bubble user-bubble">
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeKatex]}
+            rehypePlugins={[rehypeKatex, rehypeRaw]}
             components={markdownComponents}
           >
             {normalizeLatexDelimiters(message.content)}
@@ -368,7 +369,7 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
       <div className="message-content">
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
-          rehypePlugins={[rehypeKatex]}
+          rehypePlugins={[rehypeKatex, rehypeRaw]}
           components={markdownComponents}
         >
           {normalizeLatexDelimiters(message.content)}
@@ -1370,7 +1371,7 @@ function ChatWindow({
                   // 显示思考动画（可选）
                   console.log('[ChatWindow] LLM 正在推理...');
                   
-                } else                 if (parsed.type === 'tool_call') {
+                } else if (parsed.type === 'tool_call') {
                   // 🔧 工具调用开始
                   const toolLog = {
                     type: 'tool_call',
@@ -1382,16 +1383,10 @@ function ChatWindow({
                   setToolCallLogs(prev => [...prev, toolLog]);
                   
                   // ⭐ 如果有"等待中"的工具，先标记为"已完成"
-                  const waitingPattern = /⏳ `([^`]+)` \[等待中\.\.\.\]/g;
-                  const matches = [...fullResponse.matchAll(waitingPattern)];
-                  if (matches.length > 0) {
-                    const lastMatch = matches[matches.length - 1];
-                    const toolName = lastMatch[1];
-                    const lastWaitingIndex = lastMatch.index;
-                    fullResponse = fullResponse.substring(0, lastWaitingIndex) + 
-                                   `✅ \`${toolName}\` [已完成]\n` +
-                                   fullResponse.substring(lastWaitingIndex + lastMatch[0].length);
-                  }
+                  fullResponse = fullResponse.replace(
+                    /(<span class="tool-status">)\[等待中\.\.\.\](<\/span>)/g,
+                    '$1[已完成]$2'
+                  );
                   
                   // 在消息中显示工具标签（执行中）- 使用 details 标签实现点击展开
                   const toolCallId = `tool-${Date.now()}-${parsed.tool_name}`;
@@ -1409,7 +1404,7 @@ ${argsStr}
                   // 立即更新显示
                   setMessages(prev => prev.map(msg => 
                     msg.id === aiMessageId 
-                      ? { ...msg, content: fullResponse, toolCallId }
+                      ? { ...msg, content: fullResponse }
                       : msg
                   ));
                   
@@ -1424,16 +1419,23 @@ ${argsStr}
                   currentToolLogs.push(resultLog);
                   setToolCallLogs(prev => [...prev, resultLog]);
                   
-                  // ⭐ 替换最后一个工具的状态为"等待中"，并添加执行结果
+                  // ⭐ 将最后一个 [执行中...] 的工具状态改为 [等待中...]，并添加执行结果
                   const resultStr = JSON.stringify(parsed.tool_result, null, 2);
                   
-                  // 使用更简单的方法：找到最后一个 [执行中...] 并替换
-                  const lastExecutingIndex = fullResponse.lastIndexOf('[执行中...]');
-                  if (lastExecutingIndex !== -1) {
-                    // 替换状态
-                    fullResponse = fullResponse.substring(0, lastExecutingIndex) + 
-                                   `[等待中...]</span>\n\n**执行结果**：\n\`\`\`json\n${resultStr}\n\`\`\`` +
-                                   fullResponse.substring(lastExecutingIndex + '[执行中...]'.length);
+                  // 找到最后一个 </details> 的位置
+                  const lastDetailsEndIndex = fullResponse.lastIndexOf('</details>');
+                  if (lastDetailsEndIndex !== -1) {
+                    // 在 </details> 之前插入执行结果
+                    const beforeDetails = fullResponse.substring(0, lastDetailsEndIndex);
+                    const afterDetails = fullResponse.substring(lastDetailsEndIndex);
+                    
+                    // 替换状态：[执行中...] -> [等待中...]
+                    const updatedBefore = beforeDetails.replace(
+                      /(<span class="tool-status">)\[执行中\.\.\.\](<\/span>)(?![\s\S]*\[执行中\.\.\.\])/,
+                      '$1[等待中...]$2'
+                    );
+                    
+                    fullResponse = updatedBefore + `\n\n**执行结果**：\n\`\`\`json\n${resultStr}\n\`\`\`\n` + afterDetails;
                   }
                   
                   // 立即更新显示
@@ -1455,52 +1457,15 @@ ${argsStr}
                   if (calendarTools.includes(parsed.tool_name)) {
                     console.log('[ChatWindow] 日历操作完成，触发刷新日历');
                     window.dispatchEvent(new CustomEvent('refreshCalendar'));
-                    
-                    // 显示工具结果数据
-                    if (parsed.tool_result && parsed.tool_result.data) {
-                      const resultData = parsed.tool_result.data;
-                      if (parsed.tool_name === 'list_tasks' && resultData.tasks) {
-                        // 列出任务时显示任务列表
-                        const tasksList = resultData.tasks.map((task, idx) => 
-                          `  ${idx + 1}. ${task.completed ? '✅' : '⭕'} ${task.title} ${task.time ? `(${task.time})` : ''}`
-                        ).join('\n');
-                        fullResponse += `\n${tasksList.length > 0 ? tasksList : '  暂无任务'}\n`;
-                      } else if (parsed.tool_name === 'add_task' && resultData.task_id) {
-                        fullResponse += `任务ID: ${resultData.task_id}\n`;
-                      } else if (parsed.tool_name === 'search_tasks' && resultData.tasks) {
-                        const tasksList = resultData.tasks.map((task, idx) => 
-                          `  ${idx + 1}. ${task.completed ? '✅' : '⭕'} ${task.title} ${task.date ? `(${task.date})` : ''} ${task.time ? `- ${task.time}` : ''}`
-                        ).join('\n');
-                        fullResponse += `\n${tasksList.length > 0 ? tasksList : '  未找到匹配的任务'}\n`;
-                      } else if (parsed.tool_name === 'get_upcoming_tasks' && resultData.tasks) {
-                        const tasksList = resultData.tasks.map((task, idx) => 
-                          `  ${idx + 1}. ${task.completed ? '✅' : '⭕'} ${task.title} ${task.date ? `(${task.date})` : ''} ${task.time ? `- ${task.time}` : ''}`
-                        ).join('\n');
-                        fullResponse += `\n${tasksList.length > 0 ? tasksList : '  未来几天暂无任务'}\n`;
-                      }
-                      
-                      // 更新显示
-                      setMessages(prev => prev.map(msg => 
-                        msg.id === aiMessageId 
-                          ? { ...msg, content: fullResponse }
-                          : msg
-                      ));
-                    }
                   }
                   
                 } else if (parsed.type === 'text_start') {
                   // 💬 开始文本输出
                   // 将最后一个"等待中"的工具标记为"已完成"
-                  const waitingPattern = /⏳ `([^`]+)` \[等待中\.\.\.\]/g;
-                  const matches = [...fullResponse.matchAll(waitingPattern)];
-                  if (matches.length > 0) {
-                    const lastMatch = matches[matches.length - 1];
-                    const toolName = lastMatch[1];
-                    const lastWaitingIndex = lastMatch.index;
-                    fullResponse = fullResponse.substring(0, lastWaitingIndex) + 
-                                   `✅ \`${toolName}\` [已完成]\n` +
-                                   fullResponse.substring(lastWaitingIndex + lastMatch[0].length);
-                  }
+                  fullResponse = fullResponse.replace(
+                    /(<span class="tool-status">)\[等待中\.\.\.\](<\/span>)(?![\s\S]*\[等待中\.\.\.\])/,
+                    '$1[已完成]$2'
+                  );
                   
                   fullResponse += `\n`;
                   
