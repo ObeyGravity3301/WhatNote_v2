@@ -1417,6 +1417,7 @@ async def generate_pdf_annotation_visual(
         }
         
         # 调用LLM生成注释（独立上下文）
+        # ⚠️ 视觉任务需要使用支持多模态的模型
         messages = [user_message]
         
         # 准备SSE流式响应
@@ -1424,10 +1425,40 @@ async def generate_pdf_annotation_visual(
             accumulated_content = ""
             
             try:
+                # 强制使用视觉模型（覆盖当前配置）
+                original_provider = llm_service.api_config_manager.get_current_provider()
+                original_config = llm_service.api_config_manager.get_current_config()
+                
+                # 检查当前模型是否支持视觉
+                current_model = original_config.get('model', '')
+                visual_capable_models = ['qwen-vl-plus', 'qwen-vl-max', 'qwen-long', 
+                                        'gpt-4o', 'gpt-4-turbo', 'gpt-4-vision-preview',
+                                        'claude-3-5-sonnet', 'claude-3-opus', 'claude-3-sonnet',
+                                        'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro-vision']
+                
+                if not any(model in current_model for model in visual_capable_models):
+                    # 当前模型不支持视觉，临时切换
+                    info(f"[视觉提取] 当前模型 {current_model} 不支持视觉，临时切换为 qwen-vl-plus")
+                    
+                    # 临时修改配置
+                    if original_provider == 'qwen':
+                        temp_config = original_config.copy()
+                        temp_config['model'] = 'qwen-vl-plus'
+                        llm_service.api_config_manager.providers['qwen'] = temp_config
+                    elif original_provider == 'openai':
+                        temp_config = original_config.copy()
+                        temp_config['model'] = 'gpt-4o'
+                        llm_service.api_config_manager.providers['openai'] = temp_config
+                
                 async for chunk in llm_service.chat_completion(messages, stream=True):
                     if chunk:
                         accumulated_content += chunk
                         yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
+                
+                # 恢复原始配置
+                if not any(model in current_model for model in visual_capable_models):
+                    info(f"[视觉提取] 恢复原始模型配置: {current_model}")
+                    llm_service.api_config_manager.providers[original_provider] = original_config
                 
                 # 保存LLM响应到对话历史
                 assistant_message = {
@@ -1437,7 +1468,8 @@ async def generate_pdf_annotation_visual(
                     "metadata": {
                         "content_length": len(accumulated_content),
                         "generated_at": datetime.now().isoformat(),
-                        "method": "visual"
+                        "method": "visual",
+                        "model_used": llm_service.api_config_manager.get_current_config().get('model', 'unknown')
                     }
                 }
                 conversation_manager.add_message(board_id, annotation_conv_id, user_message)
