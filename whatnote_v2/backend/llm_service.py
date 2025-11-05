@@ -703,26 +703,116 @@ class LLMService:
             for iteration in range(max_iterations):
                 info(f"[LLM Tools] 第 {iteration + 1} 轮对话")
                 
-                # 发送"思考中"提示（让用户知道 LLM 正在推理）
-                yield {
-                    "type": "thinking",
-                    "content": "🤔"
+                # ⭐ 真正的流式处理：边接收边判断类型
+                accumulated_message = {
+                    'role': 'assistant',
+                    'content': '',
+                    'tool_calls': []
+                }
+                finish_reason = None
+                tool_calls_buffer = {}
+                text_buffer = ""
+                is_outputting_text = False  # 标记是否正在输出文本
+                
+                # 调用LLM（流式）
+                url = f"{provider_config['baseUrl']}/chat/completions"
+                headers = {
+                    'Authorization': f"Bearer {provider_config['apiKey']}",
+                    'Content-Type': 'application/json'
                 }
                 
-                # 调用LLM（带工具定义）
-                response_data = await self._call_llm_with_tools(
-                    provider_config, 
-                    current_provider,
-                    processed_messages,  # 使用处理过的消息
-                    tools_definitions
-                )
+                payload = {
+                    'model': provider_config['model'],
+                    'messages': processed_messages,
+                    'stream': True,
+                    'temperature': 0.7
+                }
                 
-                if not response_data:
-                    yield {"type": "error", "content": "❌ LLM调用失败"}
-                    return
+                if tools_definitions and len(tools_definitions) > 0:
+                    payload['tools'] = tools_definitions
                 
-                message = response_data['choices'][0]['message']
-                finish_reason = response_data['choices'][0].get('finish_reason')
+                info(f"[LLM Tools] 开始流式接收 LLM 响应...")
+                
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, headers=headers, json=payload) as response:
+                        if response.status != 200:
+                            error_text = await response.text()
+                            yield {"type": "error", "content": f"❌ API错误: {error_text}"}
+                            return
+                        
+                        async for line in response.content:
+                            line_str = line.decode('utf-8').strip()
+                            if not line_str or not line_str.startswith('data: '):
+                                continue
+                            
+                            data = line_str[6:]
+                            if data == '[DONE]':
+                                break
+                            
+                            try:
+                                chunk = json.loads(data)
+                                if 'choices' not in chunk or not chunk['choices']:
+                                    continue
+                                
+                                choice = chunk['choices'][0]
+                                delta = choice.get('delta', {})
+                                chunk_finish_reason = choice.get('finish_reason')
+                                
+                                # 🔍 检测内容类型并处理
+                                if 'content' in delta and delta['content']:
+                                    # 📝 文本内容 → 立即流式输出
+                                    content_chunk = delta['content']
+                                    accumulated_message['content'] += content_chunk
+                                    
+                                    if not is_outputting_text:
+                                        # 第一次输出文本
+                                        is_outputting_text = True
+                                        yield {"type": "text_start", "content": ""}
+                                    
+                                    # 立即发送文本块（真正的流式）
+                                    yield {"type": "text_chunk", "content": content_chunk}
+                                
+                                elif 'tool_calls' in delta:
+                                    # 🔧 工具调用 → 累积到 buffer
+                                    for tool_call_delta in delta['tool_calls']:
+                                        idx = tool_call_delta.get('index', 0)
+                                        
+                                        if idx not in tool_calls_buffer:
+                                            tool_calls_buffer[idx] = {
+                                                'id': '',
+                                                'type': 'function',
+                                                'function': {'name': '', 'arguments': ''}
+                                            }
+                                        
+                                        if 'id' in tool_call_delta:
+                                            tool_calls_buffer[idx]['id'] = tool_call_delta['id']
+                                        
+                                        if 'function' in tool_call_delta:
+                                            func = tool_call_delta['function']
+                                            if 'name' in func:
+                                                tool_calls_buffer[idx]['function']['name'] += func['name']
+                                            if 'arguments' in func:
+                                                tool_calls_buffer[idx]['function']['arguments'] += func['arguments']
+                                
+                                # 更新 finish_reason
+                                if chunk_finish_reason:
+                                    finish_reason = chunk_finish_reason
+                                    
+                            except json.JSONDecodeError:
+                                continue
+                
+                # 文本输出完成
+                if is_outputting_text:
+                    yield {"type": "text_complete", "content": ""}
+                
+                # 构建完整消息
+                if tool_calls_buffer:
+                    accumulated_message['tool_calls'] = [
+                        tool_calls_buffer[i] for i in sorted(tool_calls_buffer.keys())
+                    ]
+                
+                message = accumulated_message
                 
                 # 检查是否有工具调用
                 if finish_reason == 'tool_calls' and message.get('tool_calls'):
@@ -781,37 +871,12 @@ class LLMService:
                     continue
                     
                 else:
-                    # 没有工具调用，检查是否有文本输出
+                    # 没有工具调用，只有文本输出
                     content = message.get('content', '')
                     info(f"[LLM Tools] LLM 回复 (finish_reason={finish_reason}): {len(content)} 字符")
                     
+                    # ⭐ 文本已经在流式循环中输出了，这里只需处理历史
                     if content:
-                        # 有文本内容，流式输出
-                        info(f"[LLM Tools] 输出文本")
-                        
-                        # 先发送一个标记，表示开始文本输出
-                        yield {
-                            "type": "text_start",
-                            "content": ""
-                        }
-                        
-                        # 流式输出内容（模拟打字效果）
-                        chunk_size = 10  # 每次输出的字符数
-                        for i in range(0, len(content), chunk_size):
-                            chunk = content[i:i+chunk_size]
-                            yield {
-                                "type": "text_chunk",
-                                "content": chunk
-                            }
-                            # 小延迟以确保流式效果
-                            await asyncio.sleep(0.01)
-                        
-                        # 发送完成标记
-                        yield {
-                            "type": "text_complete",
-                            "content": ""
-                        }
-                        
                         # 将文本添加到对话历史
                         processed_messages.append({
                             "role": "assistant",
