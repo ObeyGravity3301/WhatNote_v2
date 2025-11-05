@@ -3426,6 +3426,30 @@ async def extract_pages_content(
         
         info(f"🚀 开始并行提取 {len(pages_to_extract)} 个页面")
         
+        # 检测并确定使用的模型（批量提取使用视觉模型）
+        current_provider = llm_service.api_config_manager.get_current_provider()
+        current_config = llm_service.api_config_manager.get_current_config()
+        current_model = current_config.get('model', '')
+        
+        vision_model_map = {
+            'qwen': 'qwen-vl-plus',
+            'openai': 'gpt-4o',
+            'anthropic': 'claude-3-5-sonnet-20241022',
+            'gemini': 'gemini-1.5-pro'
+        }
+        
+        visual_capable_models = ['qwen-vl-plus', 'qwen-vl-max', 'qwen-long', 
+                                'gpt-4o', 'gpt-4-turbo', 'gpt-4-vision-preview',
+                                'claude-3-5-sonnet', 'claude-3-opus', 'claude-3-sonnet',
+                                'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro-vision']
+        
+        if any(model in current_model for model in visual_capable_models):
+            use_model = None
+            info(f"[批量提取] 使用当前模型: {current_model}")
+        else:
+            use_model = vision_model_map.get(current_provider, 'qwen-vl-plus')
+            info(f"[批量提取] 当前模型 {current_model} 不支持视觉，临时使用: {use_model}")
+        
         # 定义单个页面的提取任务（返回结果而不是yield）
         async def extract_single_page(page_num: int):
             """提取单个页面的内容（独立任务，不依赖其他页面）"""
@@ -3507,8 +3531,9 @@ async def extract_pages_content(
                     ]
                 
                 # 非流式调用LLM（并行任务不使用流式）
+                # 使用视觉模型
                 accumulated_content = ""
-                async for chunk in llm_service.chat_completion(messages, stream=False):
+                async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
                     accumulated_content += chunk
                 
                 info(f"✅ [任务{page_num}] LLM提取完成: {len(accumulated_content)} 字")
