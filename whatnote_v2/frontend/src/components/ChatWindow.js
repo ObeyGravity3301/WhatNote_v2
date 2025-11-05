@@ -1364,7 +1364,12 @@ function ChatWindow({
               
               // 处理工具调用事件
               if (useTools && parsed.type) {
-                if (parsed.type === 'tool_call') {
+                if (parsed.type === 'thinking') {
+                  // 🤔 LLM 正在思考
+                  // 显示思考动画（可选）
+                  console.log('[ChatWindow] LLM 正在推理...');
+                  
+                } else if (parsed.type === 'tool_call') {
                   // 🔧 工具调用开始
                   const toolLog = {
                     type: 'tool_call',

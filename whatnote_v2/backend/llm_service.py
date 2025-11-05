@@ -703,6 +703,12 @@ class LLMService:
             for iteration in range(max_iterations):
                 info(f"[LLM Tools] 第 {iteration + 1} 轮对话")
                 
+                # 发送"思考中"提示（让用户知道 LLM 正在推理）
+                yield {
+                    "type": "thinking",
+                    "content": "🤔"
+                }
+                
                 # 调用LLM（带工具定义）
                 response_data = await self._call_llm_with_tools(
                     provider_config, 
