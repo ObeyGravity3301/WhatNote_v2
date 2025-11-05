@@ -1365,8 +1365,8 @@ function ChatWindow({
                   currentToolLogs.push(toolLog);
                   setToolCallLogs(prev => [...prev, toolLog]);
                   
-                  // 在消息中显示工具调用信息
-                  fullResponse += `\n\n🔧 ${parsed.content}\n`;
+                  // 在消息中显示工具标签（执行中）
+                  fullResponse += `\n🔧 \`${parsed.tool_name}\` [执行中...]`;
                   
                   // 立即更新显示
                   setMessages(prev => prev.map(msg => 
@@ -1386,7 +1386,17 @@ function ChatWindow({
                   currentToolLogs.push(resultLog);
                   setToolCallLogs(prev => [...prev, resultLog]);
                   
-                  fullResponse += `✅ ${parsed.content}\n`;
+                  // 找到最后一个该工具的"执行中"标记，替换为"已完成"
+                  const executingPattern = `🔧 \`${parsed.tool_name}\` [执行中...]`;
+                  const lastIndex = fullResponse.lastIndexOf(executingPattern);
+                  if (lastIndex !== -1) {
+                    fullResponse = fullResponse.substring(0, lastIndex) + 
+                                   `✅ \`${parsed.tool_name}\` [已完成]\n` +
+                                   fullResponse.substring(lastIndex + executingPattern.length);
+                  } else {
+                    // 如果没找到执行中标记，直接追加（兼容旧格式）
+                    fullResponse += `\n✅ \`${parsed.tool_name}\` [已完成]\n`;
+                  }
                   
                   // 立即更新显示
                   setMessages(prev => prev.map(msg => 
@@ -1416,19 +1426,19 @@ function ChatWindow({
                         const tasksList = resultData.tasks.map((task, idx) => 
                           `  ${idx + 1}. ${task.completed ? '✅' : '⭕'} ${task.title} ${task.time ? `(${task.time})` : ''}`
                         ).join('\n');
-                        fullResponse += `\n\n${tasksList.length > 0 ? tasksList : '  暂无任务'}\n`;
+                        fullResponse += `\n${tasksList.length > 0 ? tasksList : '  暂无任务'}\n`;
                       } else if (parsed.tool_name === 'add_task' && resultData.task_id) {
-                        fullResponse += `\n任务ID: ${resultData.task_id}\n`;
+                        fullResponse += `任务ID: ${resultData.task_id}\n`;
                       } else if (parsed.tool_name === 'search_tasks' && resultData.tasks) {
                         const tasksList = resultData.tasks.map((task, idx) => 
                           `  ${idx + 1}. ${task.completed ? '✅' : '⭕'} ${task.title} ${task.date ? `(${task.date})` : ''} ${task.time ? `- ${task.time}` : ''}`
                         ).join('\n');
-                        fullResponse += `\n\n${tasksList.length > 0 ? tasksList : '  未找到匹配的任务'}\n`;
+                        fullResponse += `\n${tasksList.length > 0 ? tasksList : '  未找到匹配的任务'}\n`;
                       } else if (parsed.tool_name === 'get_upcoming_tasks' && resultData.tasks) {
                         const tasksList = resultData.tasks.map((task, idx) => 
                           `  ${idx + 1}. ${task.completed ? '✅' : '⭕'} ${task.title} ${task.date ? `(${task.date})` : ''} ${task.time ? `- ${task.time}` : ''}`
                         ).join('\n');
-                        fullResponse += `\n\n${tasksList.length > 0 ? tasksList : '  未来几天暂无任务'}\n`;
+                        fullResponse += `\n${tasksList.length > 0 ? tasksList : '  未来几天暂无任务'}\n`;
                       }
                       
                       // 更新显示
