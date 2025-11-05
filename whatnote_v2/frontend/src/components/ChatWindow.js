@@ -1331,6 +1331,16 @@ function ChatWindow({
               setIsStreaming(false);
               setStreamingMessageId(null);
               
+              // ⭐ 将所有剩余的"等待中"标记改为"已完成"（对话结束时）
+              fullResponse = fullResponse.replace(/⏳ `([^`]+)` \[等待中\.\.\.\]/g, '✅ `$1` [已完成]');
+              
+              // 最后更新一次显示
+              setMessages(prev => prev.map(msg => 
+                msg.id === aiMessageId 
+                  ? { ...msg, content: fullResponse }
+                  : msg
+              ));
+              
               // ⭐ 模型停止输出后，禁用自动滚动（除非用户手动滚动到底部）
               // 这样用户可以自由浏览历史消息，不会被"吸"在底部
               setIsAutoScrollEnabled(false);
@@ -1365,6 +1375,18 @@ function ChatWindow({
                   currentToolLogs.push(toolLog);
                   setToolCallLogs(prev => [...prev, toolLog]);
                   
+                  // ⭐ 如果有"等待中"的工具，先标记为"已完成"
+                  const waitingPattern = /⏳ `([^`]+)` \[等待中\.\.\.\]/g;
+                  const matches = [...fullResponse.matchAll(waitingPattern)];
+                  if (matches.length > 0) {
+                    const lastMatch = matches[matches.length - 1];
+                    const toolName = lastMatch[1];
+                    const lastWaitingIndex = lastMatch.index;
+                    fullResponse = fullResponse.substring(0, lastWaitingIndex) + 
+                                   `✅ \`${toolName}\` [已完成]\n` +
+                                   fullResponse.substring(lastWaitingIndex + lastMatch[0].length);
+                  }
+                  
                   // 在消息中显示工具标签（执行中）
                   fullResponse += `\n🔧 \`${parsed.tool_name}\` [执行中...]`;
                   
@@ -1386,16 +1408,17 @@ function ChatWindow({
                   currentToolLogs.push(resultLog);
                   setToolCallLogs(prev => [...prev, resultLog]);
                   
-                  // 找到最后一个该工具的"执行中"标记，替换为"已完成"
+                  // ⭐ 不立即改为"已完成"，而是改为"等待中..."
+                  // 这样用户知道工具执行完了，正在等待 LLM 下一步决策
                   const executingPattern = `🔧 \`${parsed.tool_name}\` [执行中...]`;
                   const lastIndex = fullResponse.lastIndexOf(executingPattern);
                   if (lastIndex !== -1) {
                     fullResponse = fullResponse.substring(0, lastIndex) + 
-                                   `✅ \`${parsed.tool_name}\` [已完成]\n` +
+                                   `⏳ \`${parsed.tool_name}\` [等待中...]\n` +
                                    fullResponse.substring(lastIndex + executingPattern.length);
                   } else {
                     // 如果没找到执行中标记，直接追加（兼容旧格式）
-                    fullResponse += `\n✅ \`${parsed.tool_name}\` [已完成]\n`;
+                    fullResponse += `\n⏳ \`${parsed.tool_name}\` [等待中...]\n`;
                   }
                   
                   // 立即更新显示
@@ -1452,7 +1475,19 @@ function ChatWindow({
                   
                 } else if (parsed.type === 'text_start') {
                   // 💬 开始文本输出
-                  fullResponse += `\n\n`;
+                  // 将最后一个"等待中"的工具标记为"已完成"
+                  const waitingPattern = /⏳ `([^`]+)` \[等待中\.\.\.\]/g;
+                  const matches = [...fullResponse.matchAll(waitingPattern)];
+                  if (matches.length > 0) {
+                    const lastMatch = matches[matches.length - 1];
+                    const toolName = lastMatch[1];
+                    const lastWaitingIndex = lastMatch.index;
+                    fullResponse = fullResponse.substring(0, lastWaitingIndex) + 
+                                   `✅ \`${toolName}\` [已完成]\n` +
+                                   fullResponse.substring(lastWaitingIndex + lastMatch[0].length);
+                  }
+                  
+                  fullResponse += `\n`;
                   
                 } else if (parsed.type === 'text_chunk') {
                   // 💬 流式输出文本
