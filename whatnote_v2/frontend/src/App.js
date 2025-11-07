@@ -28,6 +28,7 @@ function App() {
   const [newBoardName, setNewBoardName] = useState('');
   const [isComposing, setIsComposing] = useState(false);
   const [courseBoards, setCourseBoards] = useState({});
+  const courseBoardsRef = useRef({});
 
   // 系统提示状态
   const [toast, setToast] = useState({ visible: false, message: '', type: 'info' });
@@ -49,6 +50,10 @@ function App() {
     error: { icon: '⚠️', title: '操作失败' },
     info: { icon: 'ℹ️', title: '提示' }
   };
+
+  useEffect(() => {
+    courseBoardsRef.current = courseBoards;
+  }, [courseBoards]);
   
   // 计算子菜单位置
   const calculateSubmenuPosition = (element) => {
@@ -246,26 +251,61 @@ function App() {
 
   // 获取课程的展板列表
   useEffect(() => {
-    const fetchCourseBoards = async () => {
-      if (!courses || courses.length === 0) return;
-      
+    if (!courses || courses.length === 0) return;
+
+    let cancelled = false;
+    let retryTimer = null;
+
+    const fetchCourseBoards = async (attempt = 1) => {
       const boardsData = {};
+      let hasFailure = false;
+
       for (const course of courses) {
+        const previousBoards = courseBoardsRef.current[course.id] || [];
         try {
           const response = await fetch(`http://localhost:8081/api/courses/${course.id}/boards`);
           if (response.ok) {
             const data = await response.json();
             boardsData[course.id] = data.boards || [];
+          } else {
+            console.warn(`[App] 获取课程 ${course.id} 的展板失败 (HTTP ${response.status})`);
+            boardsData[course.id] = previousBoards;
+            hasFailure = true;
           }
         } catch (error) {
           console.error(`获取课程 ${course.id} 的展板失败:`, error);
-          boardsData[course.id] = [];
+          boardsData[course.id] = previousBoards;
+          hasFailure = true;
         }
       }
+
+      if (cancelled) return;
+
       setCourseBoards(boardsData);
+
+      if (hasFailure && attempt < 3) {
+        const delay = 1500 * attempt;
+        console.log(`[App] 展板列表获取部分失败，${delay}ms 后重试 (第 ${attempt + 1} 次)`);
+        if (retryTimer) {
+          clearTimeout(retryTimer);
+        }
+        retryTimer = setTimeout(() => {
+          if (!cancelled) {
+            retryTimer = null;
+            fetchCourseBoards(attempt + 1);
+          }
+        }, delay);
+      }
     };
 
     fetchCourseBoards();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
   }, [courses]);
 
   const fetchCourses = async () => {
