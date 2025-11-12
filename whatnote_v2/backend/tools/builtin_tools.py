@@ -8,8 +8,10 @@ from storage.content_manager import ContentManager
 from storage.file_manager import FileSystemManager
 from logger import info, error
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
+import json
+import aiohttp
 
 
 # ==================== 工具定义 ====================
@@ -257,6 +259,98 @@ SEARCH_WINDOWS_TOOL = ToolDefinition(
                 }
             },
             "required": ["board_id", "query"]
+        }
+    }
+)
+
+# 7. 读取PDF文本内容
+READ_PDF_TEXT_TOOL = ToolDefinition(
+    type="function",
+    function={
+        "name": "read_pdf_text",
+        "description": "读取PDF窗口的文本内容，可选PyPDF原始文本或LLM提取结果，支持按页或整本读取。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "board_id": {
+                    "type": "string",
+                    "description": "展板ID"
+                },
+                "window_id": {
+                    "type": "string",
+                    "description": "PDF窗口ID"
+                },
+                "source": {
+                    "type": "string",
+                    "enum": ["auto", "pypdf", "llm"],
+                    "description": "内容来源：auto=根据当前版本自动选择；pypdf=使用原始文本提取；llm=使用多模态提取结果",
+                    "default": "auto"
+                },
+                "page": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "要读取的起始页码（可选，未提供时默认读取整本）"
+                },
+                "end_page": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "要读取的结束页码（可选，仅在指定page时有效）"
+                }
+            },
+            "required": ["board_id", "window_id"]
+        }
+    }
+)
+
+# 8. 生成PDF注释
+GENERATE_PDF_ANNOTATION_TOOL = ToolDefinition(
+    type="function",
+    function={
+        "name": "generate_pdf_annotation",
+        "description": "为PDF窗口生成注释。支持单页、多页或批量注释。可以指定注释风格或使用自定义提示词。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "board_id": {
+                    "type": "string",
+                    "description": "展板ID"
+                },
+                "window_id": {
+                    "type": "string",
+                    "description": "PDF窗口ID"
+                },
+                "pages": {
+                    "oneOf": [
+                        {
+                            "type": "array",
+                            "items": {"type": "integer", "minimum": 1},
+                            "description": "要注释的页码列表，例如 [1, 2, 3]"
+                        },
+                        {
+                            "type": "string",
+                            "enum": ["all"],
+                            "description": "注释所有页面"
+                        },
+                        {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "单个页码"
+                        }
+                    ],
+                    "description": "要注释的页码：可以是单个数字、数字数组，或 'all' 表示全部页面"
+                },
+                "style": {
+                    "type": "string",
+                    "enum": ["detailed", "simple", "academic", "qanda", "custom"],
+                    "description": "注释风格：detailed=详细注释；simple=简洁注释；academic=学术注释；qanda=问答式注释；custom=自定义提示词",
+                    "default": "detailed"
+                },
+                "custom_prompt": {
+                    "type": "string",
+                    "description": "自定义提示词模板（当style为custom时使用）。可以使用 {page} 作为页码占位符。例如：'请为第{page}页生成注释，重点关注...'"
+                }
+            },
+            "required": ["board_id", "window_id", "pages"]
         }
     }
 )
@@ -836,6 +930,679 @@ class WindowToolHandlers:
             )
 
 
+class PDFToolHandlers:
+    """PDF内容读取相关工具处理器"""
+
+    def __init__(self, content_manager: ContentManager):
+        self.content_manager = content_manager
+
+    async def read_pdf_text(self, args: Dict[str, Any], context: Dict[str, Any]) -> ToolResult:
+        try:
+            board_id = args["board_id"]
+            window_id = args["window_id"]
+            source = args.get("source", "auto")
+            page = args.get("page")
+            end_page = args.get("end_page")
+
+            result = self.content_manager.get_pdf_text(
+                board_id=board_id,
+                window_id=window_id,
+                page=page,
+                end_page=end_page,
+                source=source
+            )
+
+            if not result.get("success"):
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="read_pdf_text",
+                    status=ToolStatus.ERROR,
+                    error=result.get("error", "读取PDF内容失败"),
+                    data={
+                        "board_id": board_id,
+                        "window_id": window_id,
+                        "details": result
+                    }
+                )
+
+            info(
+                f"[工具] 读取PDF内容成功: board={board_id}, window={window_id}, "
+                f"mode={result.get('mode')}, pages={result.get('start_page')}-{result.get('end_page')}, "
+                f"source={result.get('sources_used')}"
+            )
+
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="read_pdf_text",
+                status=ToolStatus.SUCCESS,
+                data=result
+            )
+
+        except KeyError as e:
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="read_pdf_text",
+                status=ToolStatus.ERROR,
+                error=f"缺少必需参数: {e}"
+            )
+        except Exception as e:
+            error(f"[工具] 读取PDF内容失败: {e}")
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="read_pdf_text",
+                status=ToolStatus.ERROR,
+                error=f"读取PDF内容时发生错误: {str(e)}"
+            )
+    
+    async def generate_pdf_annotation(self, args: Dict[str, Any], context: Dict[str, Any]) -> ToolResult:
+        """生成PDF注释"""
+        try:
+            
+            board_id = args.get("board_id")
+            window_id = args.get("window_id")
+            pages = args.get("pages")
+            style = args.get("style", "detailed")
+            custom_prompt = args.get("custom_prompt", "")
+            
+            # 注释风格提示词映射
+            style_prompts = {
+                "detailed": "请为第{page}页生成详细的注释，包括：\n1. 页面主要内容概要\n2. 重要知识点详解\n3. 需要注意的细节\n4. 相关概念说明\n\n请用Markdown格式输出。",
+                "simple": "请为第{page}页生成简洁的注释，只包括：\n1. 核心内容概括（1-2句话）\n2. 关键知识点（列表形式）\n\n请用Markdown格式输出。",
+                "academic": "请为第{page}页生成学术风格的注释，包括：\n1. 内容摘要\n2. 主要论点和证据\n3. 方法论说明\n4. 关键术语解释\n\n请用Markdown格式输出。",
+                "qanda": "请为第{page}页生成问答式注释：\n1. 这页讲了什么？\n2. 核心概念是什么？\n3. 需要记住什么？\n4. 如何应用？\n\n请用Markdown格式输出。"
+            }
+            
+            # 确定使用的提示词模板
+            if style == "custom":
+                if not custom_prompt:
+                    return ToolResult(
+                        tool_call_id=context.get("call_id", ""),
+                        tool_name="generate_pdf_annotation",
+                        status=ToolStatus.ERROR,
+                        error="当style为custom时，必须提供custom_prompt参数"
+                    )
+                prompt_template = custom_prompt
+            else:
+                prompt_template = style_prompts.get(style, style_prompts["detailed"])
+            
+            # 获取窗口信息以确定PDF总页数
+            windows = self.content_manager.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if not target_window:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="generate_pdf_annotation",
+                    status=ToolStatus.ERROR,
+                    error=f"窗口不存在: {window_id}"
+                )
+            
+            if target_window.get('type') != 'pdf':
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="generate_pdf_annotation",
+                    status=ToolStatus.ERROR,
+                    error=f"窗口类型不是PDF: {target_window.get('type')}"
+                )
+            
+            is_full_batch = isinstance(pages, str) and pages.lower() == "all"
+            
+            # 全流程批量注释（大纲 -> 细分 -> 逐页注释 -> 融合）
+            if is_full_batch:
+                batch_result = await self._run_full_annotation_pipeline(
+                    board_id=board_id,
+                    window_id=window_id,
+                    style=style,
+                    prompt_template=prompt_template,
+                    tool_call_id=context.get("call_id", "")
+                )
+                
+                if not batch_result["success"]:
+                    return ToolResult(
+                        tool_call_id=context.get("call_id", ""),
+                        tool_name="generate_pdf_annotation",
+                        status=ToolStatus.ERROR,
+                        error=batch_result["error"],
+                        data=batch_result.get("data")
+                    )
+                
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="generate_pdf_annotation",
+                    status=ToolStatus.SUCCESS,
+                    data=batch_result["data"]
+                )
+            
+            # 确定要注释的页码列表（非全流程时）
+            if isinstance(pages, int):
+                page_list = [pages]
+            elif isinstance(pages, list):
+                page_list = pages
+            else:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="generate_pdf_annotation",
+                    status=ToolStatus.ERROR,
+                    error=f"无效的pages参数: {pages}"
+                )
+            
+            # 调用后端API生成注释
+            results = []
+            errors = []
+            
+            timeout = aiohttp.ClientTimeout(total=120, sock_connect=30, sock_read=110)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                for page_num in page_list:
+                    try:
+                        url = f"http://localhost:8081/api/boards/{board_id}/windows/{window_id}/annotations/{page_num}/generate"
+                        payload = {
+                            "promptTemplate": prompt_template.replace("{page}", str(page_num))
+                        }
+                        
+                        async with session.post(url, json=payload) as response:
+                            if response.status == 200:
+                                # 检查响应类型
+                                content_type = response.headers.get('Content-Type', '')
+                                
+                                if 'text/event-stream' in content_type:
+                                    # SSE流式响应，需要累积所有chunk
+                                    accumulated_content = ""
+                                    
+                                    # 使用aiohttp的iter_lines方法逐行读取SSE流
+                                    async for line_bytes in response.content:
+                                        if not line_bytes:
+                                            continue
+                                        
+                                        line = line_bytes.decode('utf-8', errors='ignore').strip()
+                                        
+                                        # SSE格式: data: {...}\n\n
+                                        if line.startswith('data: '):
+                                            data_str = line[6:]  # 移除 "data: " 前缀
+                                            
+                                            # 检查结束标记
+                                            if data_str == '[DONE]':
+                                                break
+                                            
+                                            try:
+                                                chunk_data = json.loads(data_str)
+                                                
+                                                # 累积content类型的chunk
+                                                if chunk_data.get('type') == 'content':
+                                                    chunk_content = chunk_data.get('content', '')
+                                                    if chunk_content:
+                                                        accumulated_content += chunk_content
+                                                
+                                                # 检查done标记
+                                                elif chunk_data.get('type') == 'done':
+                                                    break
+                                                
+                                                # 忽略其他类型的消息（如status, notification等）
+                                                
+                                            except json.JSONDecodeError as e:
+                                                # 如果JSON解析失败，可能是纯文本数据
+                                                # 尝试直接使用
+                                                if data_str and data_str != '[DONE]':
+                                                    info(f"[工具] SSE数据不是JSON格式，尝试直接使用: {data_str[:50]}...")
+                                                    accumulated_content += data_str
+                                    
+                                    if accumulated_content:
+                                        results.append({
+                                            "page": page_num,
+                                            "status": "success",
+                                            "annotation": accumulated_content
+                                        })
+                                        info(f"[工具] PDF注释生成成功: 第{page_num}页 (流式响应，长度: {len(accumulated_content)} 字符)")
+                                    else:
+                                        errors.append(f"第{page_num}页: 流式响应未收到任何内容")
+                                        info(f"[工具] PDF注释生成失败: 第{page_num}页 - 未收到内容")
+                                else:
+                                    # 标准JSON响应
+                                    result_data = await response.json(content_type=None)
+                                    results.append({
+                                        "page": page_num,
+                                        "status": "success",
+                                        "annotation": result_data.get("annotation", "")
+                                    })
+                                    info(f"[工具] PDF注释生成成功: 第{page_num}页")
+                            else:
+                                error_text = await response.text()
+                                errors.append(f"第{page_num}页: HTTP {response.status} - {error_text}")
+                                info(f"[工具] PDF注释生成失败: 第{page_num}页 - {error_text}")
+                    except Exception as e:
+                        errors.append(f"第{page_num}页: {str(e)}")
+                        error(f"[工具] PDF注释生成异常: 第{page_num}页 - {e}")
+                        import traceback
+                        error(traceback.format_exc())
+            
+            if errors:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="generate_pdf_annotation",
+                    status=ToolStatus.ERROR,
+                    error=f"部分页面注释生成失败:\n" + "\n".join(errors),
+                    data={
+                        "successful": results,
+                        "failed": errors
+                    }
+                )
+            
+            info(f"[工具] PDF注释生成完成: 共{len(results)}页")
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="generate_pdf_annotation",
+                status=ToolStatus.SUCCESS,
+                data={
+                    "total_pages": len(page_list),
+                    "completed": len(results),
+                    "style": style,
+                    "results": results
+                }
+            )
+            
+        except Exception as e:
+            error(f"[工具] 生成PDF注释失败: {e}")
+            import traceback
+            error(traceback.format_exc())
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="generate_pdf_annotation",
+                status=ToolStatus.ERROR,
+                error=f"生成PDF注释时发生错误: {str(e)}"
+            )
+
+    async def _collect_sse_events(self, response) -> List[Dict[str, Any]]:
+        """从SSE响应中收集事件"""
+        events: List[Dict[str, Any]] = []
+        buffer = ""
+        
+        async for chunk in response.content.iter_any():
+            buffer += chunk.decode("utf-8", errors="ignore")
+            
+            while "\n\n" in buffer:
+                segment, buffer = buffer.split("\n\n", 1)
+                segment = segment.strip()
+                if not segment:
+                    continue
+                
+                for line in segment.splitlines():
+                    line = line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    
+                    data_str = line[5:].strip()
+                    if not data_str:
+                        continue
+                    if data_str == "[DONE]":
+                        return events
+                    
+                    try:
+                        event = json.loads(data_str)
+                        events.append(event)
+                        if event.get("type") == "done":
+                            return events
+                    except json.JSONDecodeError:
+                        info(f"[工具] SSE事件JSON解析失败，原始数据: {data_str[:100]}")
+                        events.append({"type": "raw", "data": data_str})
+        
+        # 处理剩余缓冲
+        if buffer.strip():
+            for line in buffer.splitlines():
+                line = line.strip()
+                if line.startswith("data:"):
+                    data_str = line[5:].strip()
+                    if data_str and data_str != "[DONE]":
+                        try:
+                            events.append(json.loads(data_str))
+                        except json.JSONDecodeError:
+                            events.append({"type": "raw", "data": data_str})
+        
+        return events
+
+    async def _post_sse_request(
+        self,
+        session: "aiohttp.ClientSession",
+        url: str,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """发送POST请求并解析SSE事件"""
+        try:
+            async with session.post(url, json=payload) as response:
+                if response.status >= 400:
+                    text = await response.text()
+                    return {
+                        "success": False,
+                        "error": f"HTTP {response.status}: {text}"
+                    }
+                
+                content_type = (response.headers.get("Content-Type") or "").lower()
+                if "text/event-stream" in content_type:
+                    events = await self._collect_sse_events(response)
+                    return {"success": True, "mode": "sse", "events": events}
+                
+                # 尝试解析JSON
+                try:
+                    data = await response.json(content_type=None)
+                except Exception:
+                    data = await response.text()
+                
+                return {"success": True, "mode": "json", "data": data}
+        except Exception as e:
+            import traceback
+            error(f"[工具] SSE请求失败 ({url}): {e}")
+            error(traceback.format_exc())
+            return {"success": False, "error": str(e)}
+
+    def _extract_event(self, events: List[Dict[str, Any]], event_type: str) -> Optional[Dict[str, Any]]:
+        """从事件列表中提取指定类型的事件"""
+        for event in events:
+            if event.get("type") == event_type:
+                return event
+        return None
+
+    async def _run_outline_stage(
+        self,
+        session: "aiohttp.ClientSession",
+        board_id: str,
+        window_id: str,
+    ) -> Dict[str, Any]:
+        """执行批量注释第一阶段：生成大纲"""
+        url = f"http://localhost:8081/api/boards/{board_id}/windows/{window_id}/annotations/batch/outline"
+        result = await self._post_sse_request(session, url)
+        if not result["success"]:
+            return {"success": False, "error": f"生成大纲失败: {result.get('error')}"}
+        
+        outline_data = None
+        status_log: List[str] = []
+        events = result.get("events", [])
+        
+        for event in events:
+            event_type = event.get("type")
+            if event_type in {"status", "info"} and event.get("message"):
+                status_log.append(event["message"])
+            elif event_type == "outline":
+                outline_data = event.get("outline")
+            elif event_type == "error":
+                return {"success": False, "error": event.get("error", "生成大纲时发生错误")}
+        
+        if not outline_data:
+            return {"success": False, "error": "生成大纲失败，未收到outline数据"}
+        
+        return {"success": True, "outline": outline_data, "status_log": status_log, "events": events}
+
+    async def _run_subdivide_stage(
+        self,
+        session: "aiohttp.ClientSession",
+        board_id: str,
+        window_id: str,
+    ) -> Dict[str, Any]:
+        """执行批量注释第二阶段：细分大纲"""
+        url = f"http://localhost:8081/api/boards/{board_id}/windows/{window_id}/annotations/batch/subdivide"
+        result = await self._post_sse_request(session, url)
+        if not result["success"]:
+            return {"success": False, "error": f"细分大纲失败: {result.get('error')}"}
+        
+        subdivision_data = None
+        status_log: List[str] = []
+        events = result.get("events", [])
+        
+        for event in events:
+            event_type = event.get("type")
+            if event_type == "status" and event.get("message"):
+                status_log.append(event["message"])
+            elif event_type == "error":
+                return {"success": False, "error": event.get("message", "细分大纲时发生错误")}
+            elif event_type == "complete":
+                subdivision_data = event.get("data")
+        
+        if not subdivision_data:
+            return {"success": False, "error": "细分大纲失败，未收到完整数据"}
+        
+        return {"success": True, "subdivisions": subdivision_data, "status_log": status_log, "events": events}
+
+    async def _run_section_generation_stage(
+        self,
+        session: "aiohttp.ClientSession",
+        board_id: str,
+        window_id: str,
+        section_index: int,
+        section_data: Dict[str, Any],
+        subdivision_data: Dict[str, Any],
+        annotation_style: str,
+        prompt_template: str,
+    ) -> Dict[str, Any]:
+        """执行批量注释第三阶段：逐分段生成注释"""
+        url = f"http://localhost:8081/api/boards/{board_id}/windows/{window_id}/annotations/batch/generate-section"
+        payload = {
+            "section_index": section_index,
+            "section_data": section_data,
+            "subdivision_data": subdivision_data,
+            "annotation_style": annotation_style,
+            "promptTemplate": prompt_template
+        }
+        
+        result = await self._post_sse_request(session, url, payload)
+        if not result["success"]:
+            return {"success": False, "error": f"分段{section_index}注释失败: {result.get('error')}"}
+        
+        events = result.get("events", [])
+        page_annotations: Dict[int, str] = {}
+        status_log: List[str] = []
+        completed_pages = 0
+        total_pages = (section_data.get("page_end", 0) - section_data.get("page_start", 0) + 1) or 0
+        
+        for event in events:
+            event_type = event.get("type")
+            if event_type == "status" and event.get("message"):
+                status_log.append(event["message"])
+            elif event_type == "page_done":
+                page = event.get("page")
+                annotation = event.get("annotation")
+                if page and annotation:
+                    page_annotations[int(page)] = annotation
+                completed_pages = event.get("completed", completed_pages)
+            elif event_type == "error":
+                return {"success": False, "error": event.get("error", f"分段{section_index}注释失败")}
+            elif event_type == "complete":
+                completed_pages = event.get("completed_pages", completed_pages)
+                total_pages = event.get("total_pages", total_pages)
+        
+        return {
+            "success": True,
+            "page_annotations": page_annotations,
+            "status_log": status_log,
+            "completed_pages": completed_pages,
+            "total_pages": total_pages,
+            "events": events
+        }
+
+    async def _run_merge_stage(
+        self,
+        session: "aiohttp.ClientSession",
+        board_id: str,
+        window_id: str,
+    ) -> Dict[str, Any]:
+        """执行批量注释第四阶段：融合重叠页"""
+        url = f"http://localhost:8081/api/boards/{board_id}/windows/{window_id}/annotations/batch/merge-overlapping"
+        result = await self._post_sse_request(session, url)
+        if not result["success"]:
+            return {"success": False, "error": f"融合重叠页失败: {result.get('error')}"}
+        
+        events = result.get("events", [])
+        status_log: List[str] = []
+        merged_pages = 0
+        total_pages = 0
+        
+        for event in events:
+            event_type = event.get("type")
+            if event_type in {"status", "info"} and event.get("message"):
+                status_log.append(event["message"])
+            elif event_type in {"merge_done", "merge_skip"}:
+                merged_pages = event.get("completed", merged_pages)
+                total_pages = event.get("total", total_pages)
+            elif event_type == "complete":
+                total_pages = event.get("total_pages", total_pages)
+            elif event_type == "error":
+                return {"success": False, "error": event.get("error", "融合重叠页失败")}
+        
+        return {
+            "success": True,
+            "merged_pages": merged_pages,
+            "total_pages": total_pages,
+            "status_log": status_log,
+            "events": events
+        }
+
+    async def _run_full_annotation_pipeline(
+        self,
+        board_id: str,
+        window_id: str,
+        style: str,
+        prompt_template: str,
+        tool_call_id: str
+    ) -> Dict[str, Any]:
+        """执行完整的批量注释流程"""
+        
+        status_log: List[str] = []
+        
+        try:
+            timeout = aiohttp.ClientTimeout(total=120, sock_connect=30, sock_read=110)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                # 阶段1：生成大纲
+                outline_result = await self._run_outline_stage(session, board_id, window_id)
+                if not outline_result["success"]:
+                    return outline_result
+                
+                outline_data = outline_result["outline"]
+                status_log.extend(outline_result.get("status_log", []))
+                
+                sections = outline_data.get("outline", [])
+                if not sections:
+                    return {"success": False, "error": "生成的大纲为空，无法继续批量注释"}
+                
+                page_analysis = outline_data.get("page_analysis", {})
+                overlapping_pages = page_analysis.get("statistics", {}).get("multi_annotated_pages", [])
+                
+                # 阶段2：细分大纲
+                subdivision_result = await self._run_subdivide_stage(session, board_id, window_id)
+                if not subdivision_result["success"]:
+                    return subdivision_result
+                
+                subdivision_data = subdivision_result["subdivisions"]
+                status_log.extend(subdivision_result.get("status_log", []))
+                subdivisions_list = subdivision_data.get("subdivisions", [])
+                if not subdivisions_list or len(subdivisions_list) != len(sections):
+                    return {"success": False, "error": "细分数据不完整，请重试批量注释"}
+                
+                # 阶段3：逐分段生成注释
+                all_page_annotations: Dict[int, str] = {}
+                section_summaries: List[Dict[str, Any]] = []
+                for idx, section in enumerate(sections):
+                    subdivision = subdivisions_list[idx]
+                    if subdivision is None:
+                        status_log.append(f"分段 {idx + 1} 缺少细分数据，已跳过")
+                        continue
+                    section_result = await self._run_section_generation_stage(
+                        session=session,
+                        board_id=board_id,
+                        window_id=window_id,
+                        section_index=idx,
+                        section_data=section,
+                        subdivision_data=subdivision,
+                        annotation_style=style,
+                        prompt_template=prompt_template
+                    )
+                    if not section_result["success"]:
+                        return section_result
+                    status_log.extend(section_result.get("status_log", []))
+                    for page, annotation in section_result["page_annotations"].items():
+                        all_page_annotations[page] = annotation
+                    section_summaries.append({
+                        "section_index": idx,
+                        "title": section.get("title") or section.get("section_title") or f"分段{idx + 1}",
+                        "page_start": section.get("page_start"),
+                        "page_end": section.get("page_end"),
+                        "generated_pages": section_result.get("completed_pages"),
+                        "total_pages": section_result.get("total_pages")
+                    })
+                
+                # 阶段4：融合重叠页（如有需要）
+                merge_info = None
+                if overlapping_pages:
+                    merge_result = await self._run_merge_stage(session, board_id, window_id)
+                    if not merge_result["success"]:
+                        return merge_result
+                    status_log.extend(merge_result.get("status_log", []))
+                    merge_info = {
+                        "merged_pages": merge_result.get("merged_pages"),
+                        "total_pages": merge_result.get("total_pages")
+                    }
+                
+                # 汇总全部页码
+                all_pages: List[int] = []
+                for section in sections:
+                    start = section.get("page_start")
+                    end = section.get("page_end")
+                    if start is not None and end is not None:
+                        all_pages.extend(range(start, end + 1))
+                unique_pages = sorted(set(all_pages))
+                
+                # 读取最终注释内容（文件系统已保存最新结果）
+                final_annotations: Dict[int, str] = {}
+                for page in unique_pages:
+                    try:
+                        annotation_text = self.content_manager.get_pdf_annotation(board_id, window_id, page)
+                    except Exception:
+                        annotation_text = ""
+                    if annotation_text:
+                        final_annotations[page] = annotation_text
+                    elif page in all_page_annotations:
+                        final_annotations[page] = all_page_annotations[page]
+                    else:
+                        final_annotations[page] = ""
+                
+                data = {
+                    "mode": "batch_full",
+                    "total_sections": len(sections),
+                    "total_pages": len(unique_pages),
+                    "style": style,
+                    "outline_sections": [
+                        {
+                            "section_number": section.get("section_number", idx + 1),
+                            "title": section.get("title") or section.get("section_title") or f"分段{idx + 1}",
+                            "page_start": section.get("page_start"),
+                            "page_end": section.get("page_end")
+                        }
+                        for idx, section in enumerate(sections)
+                    ],
+                    "subdivision_summary": [
+                        {
+                            "section_index": idx,
+                            "section_number": (sections[idx] or {}).get("section_number", idx + 1),
+                            "section_title": (sections[idx] or {}).get("title") or (sections[idx] or {}).get("section_title") or f"分段{idx + 1}",
+                            "has_data": subdivisions_list[idx] is not None,
+                            "subdivision_count": len((subdivisions_list[idx] or {}).get("subdivisions", [])) if subdivisions_list[idx] else 0
+                        }
+                        for idx in range(len(sections))
+                    ],
+                    "overlapping_pages": overlapping_pages,
+                    "merge_info": merge_info,
+                    "annotations": final_annotations,
+                    "section_results": section_summaries,
+                    "status_log": status_log
+                }
+                
+                return {"success": True, "data": data}
+        except Exception as e:
+            import traceback
+            error(f"[工具] 全流程批量注释失败: {e}")
+            error(traceback.format_exc())
+            return {"success": False, "error": f"批量注释流程失败: {str(e)}"}
+
+
 # ==================== 课程和展板工具定义 ====================
 
 # 创建课程
@@ -996,6 +1763,18 @@ def register_builtin_tools(tool_registry, content_manager: ContentManager, file_
         tool_registry.register_tool(tool_def, handler, category="window")
     
     info(f"✅ 已注册 {len(window_tools)} 个窗口工具")
+    
+    # PDF工具
+    pdf_handlers = PDFToolHandlers(content_manager)
+    pdf_tools = [
+        (READ_PDF_TEXT_TOOL, ToolHandler(executor=pdf_handlers.read_pdf_text)),
+        (GENERATE_PDF_ANNOTATION_TOOL, ToolHandler(executor=pdf_handlers.generate_pdf_annotation)),
+    ]
+    
+    for tool_def, handler in pdf_tools:
+        tool_registry.register_tool(tool_def, handler, category="pdf")
+    
+    info(f"✅ 已注册 {len(pdf_tools)} 个PDF工具")
     
     # 课程和展板工具
     if file_manager:

@@ -3,8 +3,8 @@
   "language": "zh-CN",
   "default_wallpaper": {
     "filename": "default_wallpaper.png",
-    "original_name": "window xp bliss original.png",
-    "uploaded_at": "2025-11-02T01:54:29.584058",
+    "original_name": "83019878_p0.png",
+    "uploaded_at": "2025-11-09T23:44:23.202076",
     "content_type": "image/png"
   },
   "boards": {
@@ -21,6 +21,10 @@
       "display_mode": null
     },
     "board-1758755083149": {
+      "selected_wallpaper_id": null,
+      "display_mode": "cover"
+    },
+    "board-1761810918553": {
       "selected_wallpaper_id": null,
       "display_mode": "cover"
     }

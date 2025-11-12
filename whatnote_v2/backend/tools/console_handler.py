@@ -61,7 +61,13 @@ class ConsoleHandler:
             'new': 'create',
             'cat': 'read',
             'rm': 'delete',
-            'find': 'search'
+            'find': 'search',
+            'pdf': 'window',
+            'pdfread': 'window',
+            'view': 'window',
+            'win': 'window',
+            'annotate': 'generate_pdf_annotation',
+            'annot': 'generate_pdf_annotation'
         }
         
         # 应用别名
@@ -123,12 +129,20 @@ class ConsoleHandler:
                 "  board \"名称\"             - 创建新展板(需在课程中)",
                 "  create \"标题\" [\"内容\"]  - 创建窗口(需在展板中)",
                 "",
-                "编辑命令 (需在展板中):",
+                "窗口命令 (需在展板中):",
                 "  ls (或 dir)         - 列出所有窗口",
-                "  read \"标题或ID\"    - 读取窗口内容",
+                "  window \"标题或ID\" - 自动查看窗口内容（文本/PDF/其他）",
+                "    ▸ 支持选项: page=2 end=3 source=llm meta raw all",
+                "    ▸ 别名: pdf, pdfread, view, win",
+                "  read \"标题或ID\"    - 快速读取文本窗口内容",
                 "  edit \"标题\" \"内容\" - 编辑窗口(追加/替换/插入等)",
                 "  delete \"标题或ID\"  - 删除窗口",
                 "  search \"关键词\"    - 搜索窗口",
+                "  annotate \"窗口ID\" pages=1 style=detailed  - 生成PDF注释",
+                "    ▸ pages: 页码(数字/数组/all), style: detailed/simple/academic/qanda/custom",
+                "    ▸ 别名: annot",
+                "    ▸ 示例: annotate \"window_123\" pages=[1,2,3] style=simple",
+                "    ▸ 示例: annotate \"window_123\" pages=all style=custom custom_prompt=\"请为第{page}页生成注释...\"",
                 "",
                 "日历命令:",
                 "  task \"标题\" \"时间\" [\"日期\"]    - 添加任务(默认今日)",
@@ -204,7 +218,10 @@ class ConsoleHandler:
                 'read_window': 'read_window board_id="board-1234567890" window_id="window_1234567890"',
                 'update_window': 'update_window board_id="board-1234567890" window_id="window_1234567890" content="新内容" mode="append"',
                 'delete_window': 'delete_window board_id="board-1234567890" window_id="window_1234567890"',
-                'search_windows': 'search_windows board_id="board-1234567890" query="搜索词" limit=10'
+                'search_windows': 'search_windows board_id="board-1234567890" query="搜索词" limit=10',
+                'read_pdf_text': 'read_pdf_text board_id="board-1234567890" window_id="window_1234567890" source="auto" page=1 end_page=2',
+                'generate_pdf_annotation': 'generate_pdf_annotation board_id="board-1234567890" window_id="window_1234567890" pages=[1,2,3] style="detailed"',
+                'annotate': 'annotate board_id="board-1234567890" window_id="window_1234567890" pages=all style="simple"'
             }
             
             if func['name'] in tool_examples:
@@ -623,11 +640,15 @@ class ConsoleHandler:
                     'board': 'boards',
                     'tool': 'tools',
                     'window': 'get_windows',
+                    'pdf': 'window',
+                    'pdfread': 'window',
                     'create': 'create_window',
                     'delete': 'delete_window',
                     'search': 'search_windows',
                     'read': 'read_window',
-                    'update': 'update_window'
+                    'update': 'update_window',
+                    'annotate': 'generate_pdf_annotation',
+                    'annot': 'generate_pdf_annotation'
                 }
                 
                 if tool_name in similar_commands:
@@ -847,6 +868,91 @@ class ConsoleHandler:
                         "data": result.data
                     }
                 
+                elif tool_name == "read_pdf_text":
+                    data = result.data or {}
+                    lines = [
+                        "PDF内容读取成功",
+                        "=" * 60,
+                        ""
+                    ]
+                    
+                    if data.get('mode') == 'single':
+                        lines.append(f"页码: {data.get('start_page', 'N/A')}")
+                        lines.append(f"来源: {', '.join(data.get('sources_used', []))}")
+                        lines.append("")
+                        lines.append("内容:")
+                        lines.append("-" * 60)
+                        content = data.get('content', '')
+                        if len(content) > 1000:
+                            lines.append(content[:1000] + f"\n\n... (内容已截断，总长度: {len(content)} 字符)")
+                        else:
+                            lines.append(content)
+                    elif data.get('mode') == 'range':
+                        lines.append(f"页码范围: {data.get('start_page', 'N/A')} - {data.get('end_page', 'N/A')}")
+                        lines.append(f"来源: {', '.join(data.get('sources_used', []))}")
+                        lines.append("")
+                        lines.append("内容:")
+                        lines.append("-" * 60)
+                        content = data.get('content', '')
+                        if len(content) > 2000:
+                            lines.append(content[:2000] + f"\n\n... (内容已截断，总长度: {len(content)} 字符)")
+                        else:
+                            lines.append(content)
+                    else:
+                        lines.append(json.dumps(data, indent=2, ensure_ascii=False))
+                    
+                    return {
+                        "type": "success",
+                        "content": "\n".join(lines),
+                        "data": result.data
+                    }
+                
+                elif tool_name == "generate_pdf_annotation":
+                    data = result.data or {}
+                    lines = [
+                        "PDF注释生成完成",
+                        "=" * 60,
+                        ""
+                    ]
+                    
+                    total = data.get('total_pages', 0)
+                    completed = data.get('completed', 0)
+                    style = data.get('style', 'detailed')
+                    results = data.get('results', [])
+                    
+                    lines.append(f"注释风格: {style}")
+                    lines.append(f"总页数: {total}")
+                    lines.append(f"已完成: {completed}")
+                    lines.append("")
+                    
+                    if results:
+                        lines.append("生成结果:")
+                        lines.append("-" * 60)
+                        for r in results[:10]:  # 只显示前10页
+                            page = r.get('page', 'N/A')
+                            status = r.get('status', 'unknown')
+                            annotation = r.get('annotation', '')
+                            if annotation:
+                                preview = annotation[:200] + "..." if len(annotation) > 200 else annotation
+                                lines.append(f"第{page}页 ({status}):")
+                                lines.append(f"  {preview}")
+                                lines.append("")
+                        
+                        if len(results) > 10:
+                            lines.append(f"... 还有 {len(results) - 10} 页注释已生成")
+                    
+                    lines.append("")
+                    lines.append("提示: 在PDF窗口中查看生成的注释")
+                    
+                    return {
+                        "type": "success",
+                        "content": "\n".join(lines),
+                        "data": result.data,
+                        "action": {
+                            "type": "refresh_board"
+                        }
+                    }
+                
                 # 默认格式（JSON）
                 else:
                     lines = [
@@ -879,24 +985,48 @@ class ConsoleHandler:
     def _parse_arguments(self, args_str: str) -> Dict[str, Any]:
         """
         解析参数字符串
-        支持格式: param1="value1" param2=123 param3=true
+        支持格式: param1="value1" param2=123 param3=true param4=[1,2,3] param5="all"
         """
         arguments = {}
         
         if not args_str.strip():
             return arguments
         
-        # 简单的参数解析（支持引号包裹的值）
+        # 简单的参数解析（支持引号包裹的值和数组）
         import re
+        import json
+        
+        # 先处理数组格式 [1,2,3] 或 ["a","b"]
+        array_pattern = r'(\w+)=\[([^\]]+)\]'
+        array_matches = re.findall(array_pattern, args_str)
+        for key, array_content in array_matches:
+            try:
+                # 尝试解析为JSON数组
+                array_value = json.loads(f"[{array_content}]")
+                arguments[key] = array_value
+                # 从原始字符串中移除已处理的数组
+                args_str = re.sub(rf'{re.escape(key)}=\[[^\]]+\]', '', args_str)
+            except:
+                # 如果JSON解析失败，尝试按逗号分割
+                try:
+                    array_value = [int(x.strip()) if x.strip().isdigit() else x.strip().strip('"\'') 
+                                 for x in array_content.split(',')]
+                    arguments[key] = array_value
+                    args_str = re.sub(rf'{re.escape(key)}=\[[^\]]+\]', '', args_str)
+                except:
+                    pass
         
         # 匹配 key="value" 或 key=value
-        # 使用 (?:\\.|[^"])* 来匹配：要么是转义序列 \. ，要么是非引号字符
         pattern = r'(\w+)=(?:"((?:\\.|[^"])*)"|\'((?:\\.|[^\'])*)\'|([^\s]+))'
         matches = re.findall(pattern, args_str)
         
         for match in matches:
             key = match[0]
             value = match[1] or match[2] or match[3]
+            
+            # 跳过已处理的数组参数
+            if key in arguments:
+                continue
             
             # 处理转义字符（将 \n, \t 等转换为实际的换行、制表符）
             if isinstance(value, str):
@@ -913,6 +1043,8 @@ class ConsoleHandler:
                 arguments[key] = True
             elif value.lower() == 'false':
                 arguments[key] = False
+            elif value.lower() == 'all':
+                arguments[key] = 'all'  # 特殊值，保持字符串
             elif value.isdigit():
                 arguments[key] = int(value)
             else:
@@ -961,6 +1093,352 @@ class ConsoleHandler:
         except Exception as e:
             error(f"解析窗口标识符失败: {e}")
             return None
+    
+    def _get_window_data(self, window_id: str) -> Optional[Dict[str, Any]]:
+        """获取当前展板指定窗口的完整数据"""
+        if not self.current_board:
+            return None
+        
+        try:
+            from storage.content_manager import ContentManager
+            from storage.file_manager import FileSystemManager
+            from config import DATA_DIR
+            
+            file_manager = FileSystemManager(DATA_DIR)
+            content_manager = ContentManager(file_manager)
+            
+            windows = content_manager.get_board_windows(self.current_board)
+            for window in windows:
+                if window.get('id') == window_id:
+                    return window
+        except Exception as e:
+            error(f"获取窗口数据失败: {e}")
+        
+        return None
+    
+    def _parse_positive_int(self, value: str) -> Optional[int]:
+        """解析正整数，失败时返回 None"""
+        try:
+            number = int(value)
+            return number if number > 0 else None
+        except ValueError:
+            return None
+    
+    def _parse_window_view_options(self, tokens: List[str]) -> Dict[str, Any]:
+        """
+        解析 window 命令的可选参数
+        返回包含解析结果或错误信息的字典
+        """
+        options = {
+            "source": "auto",
+            "page": None,
+            "end_page": None,
+            "all": False,
+            "meta": False,
+            "raw": False,
+            "explicit_page": False,
+            "error": None
+        }
+        
+        for token in tokens:
+            lower = token.lower()
+            
+            if lower in {"meta", "info"}:
+                options["meta"] = True
+                continue
+            if lower == "raw":
+                options["raw"] = True
+                continue
+            if lower in {"all", "full"}:
+                options["all"] = True
+                continue
+            if lower.startswith("source="):
+                value = lower.split("=", 1)[1] or "auto"
+                options["source"] = value
+                continue
+            if lower in {"auto", "pypdf", "llm"}:
+                options["source"] = lower
+                continue
+            if lower.startswith("page="):
+                parsed = self._parse_positive_int(lower.split("=", 1)[1])
+                if parsed is None:
+                    options["error"] = f"页码无效: {token}"
+                    return options
+                options["page"] = parsed
+                options["explicit_page"] = True
+                continue
+            if lower.startswith("end_page=") or lower.startswith("end="):
+                parsed = self._parse_positive_int(lower.split("=", 1)[1])
+                if parsed is None:
+                    options["error"] = f"结束页无效: {token}"
+                    return options
+                options["end_page"] = parsed
+                options["explicit_page"] = True
+                continue
+            
+            parsed = self._parse_positive_int(lower)
+            if parsed is not None:
+                if options["page"] is None:
+                    options["page"] = parsed
+                    options["explicit_page"] = True
+                    continue
+                if options["end_page"] is None:
+                    options["end_page"] = parsed
+                    options["explicit_page"] = True
+                    continue
+            
+            options["error"] = f"无法识别的参数: {token}"
+            return options
+        
+        return options
+    
+    def _format_window_metadata(self, window_data: Dict[str, Any]) -> List[str]:
+        """格式化窗口通用元数据"""
+        lines = [
+            f"窗口ID: {window_data.get('id', 'N/A')}",
+            f"标题: {window_data.get('title', 'N/A')}",
+            f"类型: {window_data.get('type', 'N/A')}",
+            f"创建时间: {window_data.get('created_at', '未知')}",
+            f"更新时间: {window_data.get('updated_at', '未知')}",
+        ]
+        
+        file_path = window_data.get('file_path')
+        if file_path:
+            lines.append(f"文件路径: {file_path}")
+        content = window_data.get('content')
+        if isinstance(content, str) and content and window_data.get('type') != 'text':
+            lines.append(f"内容字段: {content}")
+        
+        return lines
+    
+    def _format_text_window_output(self, window_data: Dict[str, Any], content: str, raw: bool = False, include_meta: bool = False) -> str:
+        """格式化文本窗口的输出"""
+        lines = [
+            "窗口内容",
+            "=" * 60,
+            ""
+        ]
+        
+        if include_meta:
+            lines.extend(self._format_window_metadata(window_data))
+            lines.append("")
+        
+        content_length = len(content)
+        lines.append(f"内容长度: {content_length} 字符")
+        lines.append("")
+        lines.append("内容预览:")
+        lines.append("-" * 60)
+        
+        if not content:
+            lines.append("(空内容)")
+        else:
+            preview_limit = None if raw else 800
+            if preview_limit and content_length > preview_limit:
+                lines.append(content[:preview_limit])
+                lines.append("")
+                lines.append(f"... (还有 {content_length - preview_limit} 个字符)")
+            else:
+                lines.append(content)
+        
+        return "\n".join(lines)
+    
+    def _format_pdf_output(
+        self,
+        window_id: str,
+        window_title: str,
+        source: str,
+        options: Dict[str, Any],
+        result: Dict[str, Any]
+    ) -> str:
+        """格式化 PDF 窗口的输出"""
+        pages = result.get("pages", [])
+        sources_used = result.get("sources_used", [])
+        combined_text = result.get("combined_text")
+        partial_errors = result.get("partial_errors", [])
+        
+        lines = [
+            "PDF内容预览",
+            "=" * 60,
+            "",
+            f"窗口ID: {window_id}",
+            f"标题: {window_title}",
+            f"请求来源: {source}",
+            f"实际来源: {', '.join(sources_used) if sources_used else 'N/A'}",
+            f"页码范围: 第 {result.get('start_page')} - 第 {result.get('end_page')} 页 (模式: {result.get('mode')})",
+            f"PDF总页数: {result.get('total_pages', '未知')}",
+        ]
+        
+        if options.get("meta"):
+            window_data = result.get("window_data")
+            if isinstance(window_data, dict):
+                lines.append("")
+                lines.append("窗口信息:")
+                lines.append("-" * 60)
+                lines.extend(self._format_window_metadata(window_data))
+        
+        if options.get("all") and combined_text:
+            preview = combined_text if len(combined_text) <= 800 else combined_text[:800] + f"... (剩余 {len(combined_text) - 800} 字符)"
+            lines.extend([
+                "",
+                "合并文本预览:",
+                "-" * 60,
+                preview
+            ])
+        
+        for page_info in pages:
+            page_num = page_info.get("page")
+            page_source = page_info.get("source", "未知")
+            content_type = page_info.get("content_type", "text")
+            heading = page_info.get("heading")
+            metadata = page_info.get("metadata", [])
+            content = page_info.get("content")
+            
+            lines.extend([
+                "",
+                f"- 第 {page_num} 页 | 来源: {page_source} | 类型: {content_type}"
+            ])
+            
+            if heading:
+                lines.append(f"  标题: {heading}")
+            for meta in metadata:
+                lines.append(f"  {meta}")
+            
+            if isinstance(content, dict):
+                content_str = json.dumps(content, ensure_ascii=False, indent=2)
+            else:
+                content_str = str(content or "")
+            
+            if content_str:
+                preview_text = content_str
+                preview_limit = None if options.get("raw") else 800
+                if preview_limit and len(content_str) > preview_limit:
+                    preview_text = content_str[:preview_limit] + f"... (剩余 {len(content_str) - preview_limit} 字符)"
+                
+                lines.append("  内容预览:")
+                for line in preview_text.splitlines():
+                    lines.append(f"    {line}")
+            else:
+                lines.append("  内容为空")
+        
+        if partial_errors:
+            lines.extend([
+                "",
+                "⚠️ 部分页面出现错误:",
+                "-" * 60
+            ])
+            lines.extend([f"- {err}" for err in partial_errors])
+        
+        lines.append("")
+        lines.append("提示: 使用 'window <ID> page=2 source=llm' 可读取其他页面或来源")
+        
+        return "\n".join(lines)
+    
+    async def _handle_window_text(self, window_id: str, window_data: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
+        """处理文本窗口查看"""
+        tool_call = ToolCall(
+            id=f"console_{int(datetime.now().timestamp() * 1000)}",
+            type="function",
+            function={
+                "name": "read_window",
+                "arguments": {
+                    "board_id": self.current_board,
+                    "window_id": window_id
+                }
+            }
+        )
+        
+        result = await tool_executor.execute_tool_call(tool_call, context={})
+        if result.status != ToolStatus.SUCCESS:
+            return {
+                "type": "error",
+                "content": f"读取窗口失败: {result.error}"
+            }
+        
+        data = result.data or {}
+        content = data.get("content", "")
+        output = self._format_text_window_output(window_data or data, content, raw=options.get("raw", False), include_meta=options.get("meta", False))
+        return {
+            "type": "success",
+            "content": output
+        }
+    
+    async def _handle_window_pdf(self, window_id: str, window_data: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
+        """处理 PDF 窗口查看"""
+        source = options.get("source", "auto").lower()
+        if source not in {"auto", "pypdf", "llm"}:
+            return {
+                "type": "error",
+                "content": f"来源无效: {source}\n可选: auto, pypdf, llm"
+            }
+        
+        page = options.get("page")
+        end_page = options.get("end_page")
+        
+        if not options.get("explicit_page") and not options.get("all"):
+            page = page or 1
+            end_page = end_page or page
+        elif options.get("explicit_page") and page and end_page and end_page < page:
+            page, end_page = end_page, page
+        
+        tool_args = {
+            "board_id": self.current_board,
+            "window_id": window_id,
+            "source": source
+        }
+        
+        if options.get("all"):
+            pass  # 不指定页码，获取整本
+        else:
+            if page:
+                tool_args["page"] = page
+            if end_page:
+                tool_args["end_page"] = end_page
+        
+        tool_call = ToolCall(
+            id=f"console_{int(datetime.now().timestamp() * 1000)}",
+            type="function",
+            function={
+                "name": "read_pdf_text",
+                "arguments": tool_args
+            }
+        )
+        
+        result = await tool_executor.execute_tool_call(tool_call, context={})
+        if result.status != ToolStatus.SUCCESS:
+            return {
+                "type": "error",
+                "content": f"读取PDF失败: {result.error}"
+            }
+        
+        data = result.data or {}
+        data["window_data"] = window_data
+        output = self._format_pdf_output(window_id, window_data.get("title", window_id), source, options, data)
+        return {
+            "type": "success",
+            "content": output
+        }
+    
+    def _handle_window_other(self, window_id: str, window_data: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
+        """处理非文本/非PDF窗口查看"""
+        lines = [
+            "窗口信息",
+            "=" * 60,
+            ""
+        ]
+        lines.extend(self._format_window_metadata(window_data))
+        
+        window_type = window_data.get("type", "unknown")
+        content = window_data.get("content", "")
+        lines.append("")
+        lines.append(f"当前暂未支持直接预览 {window_type} 类型的窗口内容。")
+        if content:
+            lines.append(f"相关资源: {content}")
+        lines.append("请在前端界面查看该窗口，或等待后续指令扩展。")
+        
+        return {
+            "type": "info",
+            "content": "\n".join(lines)
+        }
     
     async def _try_simplified_command(self, cmd: str, args: str) -> Optional[Dict[str, Any]]:
         """
@@ -1150,6 +1628,74 @@ class ConsoleHandler:
                     "content": f"参数解析错误: {str(e)}\n提示: 使用引号包裹包含空格的参数"
                 }
         
+        # window <窗口ID或标题> [参数]
+        elif cmd == "window":
+            if not self.current_board:
+                return {
+                    "type": "error",
+                    "content": "请先进入展板"
+                }
+            
+            import shlex
+            try:
+                parts = shlex.split(args)
+            except ValueError as e:
+                return {
+                    "type": "error",
+                    "content": f"参数解析错误: {str(e)}\n提示: 使用引号包裹包含空格的参数"
+                }
+            
+            if not parts:
+                usage = [
+                    "用法: window <窗口ID或标题> [选项]",
+                    "示例:",
+                    "  window window_1234567890",
+                    "  window \"课程讲义\" page=2 source=llm",
+                    "  window \"课程讲义\" all",
+                    "",
+                    "可选参数:",
+                    "  page=<数字>      指定起始页（适用于PDF）",
+                    "  end=<数字>       指定结束页（适用于PDF）",
+                    "  source=auto|pypdf|llm  指定PDF读取来源",
+                    "  all               读取整个PDF（可能较长）",
+                    "  meta / info       显示窗口元信息",
+                    "  raw               取消内容截断，输出完整内容"
+                ]
+                return {
+                    "type": "error",
+                    "content": "\n".join(usage)
+                }
+            
+            identifier = parts[0]
+            options = self._parse_window_view_options(parts[1:])
+            if options.get("error"):
+                return {
+                    "type": "error",
+                    "content": options["error"]
+                }
+            
+            window_id = self._resolve_window_id(identifier)
+            if not window_id:
+                return {
+                    "type": "error",
+                    "content": f"未找到窗口: {identifier}\n提示: 使用 'ls' 查看所有窗口"
+                }
+            
+            window_data = self._get_window_data(window_id)
+            if not window_data:
+                return {
+                    "type": "error",
+                    "content": f"未能加载窗口数据: {window_id}\n提示: 先执行 'ls' 或 'get_windows' 更新缓存"
+                }
+            
+            window_type = (window_data.get("type") or "text").lower()
+            if window_type in {"text", "document", "markdown"}:
+                return await self._handle_window_text(window_id, window_data, options)
+            elif window_type == "pdf":
+                return await self._handle_window_pdf(window_id, window_data, options)
+            else:
+                return self._handle_window_other(window_id, window_data, options)
+        
         # read <window_id_or_title>
         elif cmd == "read":
             if not self.current_board:
@@ -1219,7 +1765,6 @@ class ConsoleHandler:
                     "type": "error",
                     "content": f"读取失败: {result.error}"
                 }
-        
         # edit <window_id> "新内容" [操作] ["目标"] [选项]
         # 文本操作:
         #   edit window_xxx "新内容"  -> append

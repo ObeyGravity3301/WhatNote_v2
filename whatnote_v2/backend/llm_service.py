@@ -40,15 +40,6 @@ class LLMService:
                 text_content = text_content.replace('\n\n\n', '\n\n')
                 text_content = text_content.replace('  ', ' ')
                 
-                # 限制文本长度
-                max_chars = 50000
-                original_length = len(text_content)
-                if original_length > max_chars:
-                    total_pages = len(pdf_reader.pages)
-                    estimated_page = int((max_chars / original_length) * total_pages)
-                    text_content = text_content[:max_chars] + f"\n\n... (内容已截断，完整文档共{total_pages}页，已发送约前{estimated_page}页)"
-                    info(f"PDF文本过长，已截断: 原始{original_length}字符 -> {max_chars}字符")
-                
                 content_array.append({
                     'type': 'text',
                     'text': f"[PDF文件内容: {file_info.get('name', 'unknown')} - 共{len(pdf_reader.pages)}页]\n\n{text_content}"
@@ -186,14 +177,6 @@ class LLMService:
                                 text_content = text_content.replace('\n\n\n', '\n\n')
                                 text_content = text_content.replace('  ', ' ')
                                 
-                                # 限制文本长度
-                                max_chars = 50000
-                                original_length = len(text_content)
-                                if original_length > max_chars:
-                                    estimated_page = int((max_chars / original_length) * total_pages)
-                                    text_content = text_content[:max_chars] + f"\n\n... (内容已截断，完整文档共{total_pages}页，已发送约前{estimated_page}页)"
-                                    info(f"PDF文本过长，已截断: 原始{original_length}字符 -> {max_chars}字符")
-                                
                                 content_array.append({
                                     'type': 'text',
                                     'text': f"[PDF文件内容: {file_info.get('name', 'unknown')} - 共{total_pages}页]\n\n{text_content}"
@@ -262,9 +245,6 @@ class LLMService:
                     # 其他文件类型：尝试读取文本内容，如果失败则发送base64
                     try:
                         text_content = file_data.decode('utf-8')
-                        # 限制文本长度，避免发送过长的内容
-                        if len(text_content) > 5000:
-                            text_content = text_content[:5000] + "\n... (内容已截断)"
                         
                         content_array.append({
                             'type': 'text',
@@ -274,8 +254,6 @@ class LLMService:
                         # 尝试其他编码
                         try:
                             text_content = file_data.decode('gbk')
-                            if len(text_content) > 5000:
-                                text_content = text_content[:5000] + "\n... (内容已截断)"
                             content_array.append({
                                 'type': 'text',
                                 'text': f"[文件内容: {file_info.get('name', 'unknown')}]\n{text_content}"
@@ -904,6 +882,73 @@ class LLMService:
                         "tool_result": result.data if result.status.value == "success" else {"error": result.error}
                     }
                     
+                    # ⭐ 如果执行了 todo 相关工具，立即发送 todo 状态更新
+                    if function_name in ['create_todo_list', 'complete_todo_item', 'add_todo_item', 'skip_todo_item']:
+                        if todo_tracker.has_todos():
+                            yield {
+                                "type": "todo_status",
+                                "content": todo_tracker.get_status()
+                            }
+                    
+                    # ⭐ 如果调用了 pause_execution 工具，立即暂停执行
+                    if function_name == 'pause_execution':
+                        pause_reason = result.data.get('reason', '') if result.status.value == "success" else ""
+                        remaining = todo_tracker.get_status()['remaining_count'] if todo_tracker.has_todos() else 0
+                        
+                        info(f"[LLM Tools] 模型调用 pause_execution 工具，暂停执行。原因: {pause_reason}")
+                        
+                        # 发送 todo 状态给前端（如果有）
+                        if todo_tracker.has_todos():
+                            yield {
+                                "type": "todo_status",
+                                "content": todo_tracker.get_status()
+                            }
+                        
+                        # 将工具调用和结果添加到对话历史
+                        processed_messages.append({
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [tool_call]
+                        })
+                        
+                        processed_messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call['id'],
+                            "name": function_name,
+                            "content": json.dumps(result.data if result.status.value == "success" else {"error": result.error}, ensure_ascii=False)
+                        })
+                        
+                        # ⭐ 将暂停原因作为模型的文本回复发送，让前端显示在对话中
+                        pause_text = ""
+                        if pause_reason:
+                            pause_text = pause_reason
+                        else:
+                            pause_text = "执行已暂停"
+                        
+                        if remaining > 0:
+                            pause_text += f"\n\n还有 {remaining} 项待办未完成，可以稍后继续。"
+                        
+                        # 先发送 text_start，确保工具调用状态更新为"已完成"
+                        yield {
+                            "type": "text_start",
+                            "content": ""
+                        }
+                        
+                        # 发送文本内容，让前端将其作为模型的自然回复显示
+                        yield {
+                            "type": "text_chunk",
+                            "content": pause_text
+                        }
+                        
+                        # 发送暂停提示（作为系统信息）
+                        yield {
+                            "type": "info",
+                            "content": "⏸️ 执行已暂停"
+                        }
+                        
+                        # 暂停执行，结束对话
+                        return
+                    
                     # 将LLM的消息和工具结果添加到对话历史
                     processed_messages.append({
                         "role": "assistant",
@@ -944,7 +989,7 @@ class LLMService:
                                 info(f"[LLM Tools] 所有待办项已完成，结束对话")
                                 return
                             else:
-                                # 还有未完成的待办项
+                                # 还有未完成的待办项，继续下一轮
                                 remaining = todo_tracker.get_status()['remaining_count']
                                 info(f"[LLM Tools] 还有 {remaining} 项待办未完成，继续下一轮")
                                 

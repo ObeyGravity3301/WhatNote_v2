@@ -127,14 +127,27 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
   // 注释设置状态
-  const [annotationSettings, setAnnotationSettings] = useState(() => {
-    // 从localStorage加载设置
-    const saved = localStorage.getItem('annotationSettings');
-    return saved ? JSON.parse(saved) : {
-      style: 'detailed', // 默认风格: detailed, simple, academic
-      customPrompt: ''
-    };
-  });
+  const defaultAnnotationSettings = {
+    style: 'detailed', // 默认风格: detailed, simple, academic
+    customPrompt: ''
+  };
+
+  const [annotationSettings, setAnnotationSettings] = useState(defaultAnnotationSettings);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+
+    try {
+      const saved = window.localStorage.getItem('annotationSettings');
+      if (saved) {
+        setAnnotationSettings(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.warn('[BoardCanvas] 加载 annotationSettings 失败:', error);
+    }
+  }, []);
   
   // 搜索功能状态
   const [showSearchPanel, setShowSearchPanel] = useState(false); // 显示搜索面板
@@ -175,7 +188,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   // 保存注释设置
   const saveAnnotationSettings = (newSettings) => {
     setAnnotationSettings(newSettings);
-    localStorage.setItem('annotationSettings', JSON.stringify(newSettings));
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem('annotationSettings', JSON.stringify(newSettings));
+    } catch (error) {
+      console.warn('[BoardCanvas] 保存 annotationSettings 失败:', error);
+    }
   };
   
   // 包装addMessage，自动添加windowId
@@ -3971,7 +3992,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           }
 
                           const confirmStart = await showConfirmDialog({
-                            title: '确认批量生成',
+                              title: '确认批量生成',
                             message: `即将并行生成所有 ${batchOutline.outline.length} 个分段的注释，这可能需要较长时间。\n\n确认开始？`
                           });
                           
@@ -4605,12 +4626,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                         
                                         // 使用自定义确认对话框
                                         const userConfirm = await showConfirmDialog({
-                                          title: '⚠️ 检测到大纲变化',
-                                          message: {
-                                            oldSections: oldOutline.outline.length,
-                                            newSections: newOutline.outline.length,
-                                            completedSubdivisions: validSubdivCount
-                                          },
+                                            title: '⚠️ 检测到大纲变化',
+                                            message: {
+                                              oldSections: oldOutline.outline.length,
+                                              newSections: newOutline.outline.length,
+                                              completedSubdivisions: validSubdivCount
+                                            },
                                           confirmText: '使用新大纲',
                                           cancelText: '保留原大纲'
                                         });
@@ -4729,7 +4750,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                               message: `检测到文档共约 ${estimatedTotalPages} 页。\n\n逐页注释功能将自动执行以下操作：\n  1. 生成文档大纲\n  2. 细分各个分段\n  3. 为所有页面生成注释\n\n此操作将消耗大量 Token 和时间。\n估算耗时：${Math.ceil(estimatedTotalPages / 2)} - ${estimatedTotalPages} 分钟\n\n是否继续？`,
                               icon: '⚠️'
                             });
-
+                            
                             if (!userConfirm) {
                               console.log('用户取消逐页注释');
                               return;
@@ -6745,6 +6766,7 @@ function BoardCanvas({
   const [isMessageCenterOpen, setIsMessageCenterOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [calendarTasksSnapshot, setCalendarTasksSnapshot] = useState({});
   const [personalizationSettings, setPersonalizationSettings] = useState(null);
   const [appliedWallpaper, setAppliedWallpaper] = useState(null);
   
@@ -6828,7 +6850,7 @@ function BoardCanvas({
     return {
       id: MESSAGE_CENTER_WINDOW_ID,
       type: 'message-center',
-      title: `📬 消息中心`,
+      title: `消息中心`,
       position: { x: 200, y: 150 },
       size: { width: 500, height: 600 },
       content: '',
@@ -6856,7 +6878,7 @@ function BoardCanvas({
     return {
       id: PLANNER_WINDOW_ID,
       type: 'planner',
-      title: '📅 日历与计划',
+      title: '日历与计划',
       position: { x: 240, y: 140 },
       size: { width: 560, height: 520 },
       content: '',
@@ -6866,7 +6888,7 @@ function BoardCanvas({
   };
   
   // 消息中心辅助函数
-  const addMessage = (title, details, type = 'info', sourceWindowId = null) => {
+  const addMessage = useCallback((title, details, type = 'info', sourceWindowId = null) => {
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     
@@ -6892,7 +6914,7 @@ function BoardCanvas({
     
     setMessages(prev => [newMessage, ...prev]);
     setUnreadCount(prev => prev + 1);
-  };
+  }, [boardName, windows]);
   
   const clearAllMessages = () => {
     setMessages([]);
@@ -6907,6 +6929,100 @@ function BoardCanvas({
       window.dispatchEvent(event);
     }
   };
+
+  const reminderTrackerRef = useRef(new Map());
+
+  const loadCalendarTasks = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:8081/api/calendar/tasks');
+      if (response.ok) {
+        const data = await response.json();
+        setCalendarTasksSnapshot(data || {});
+      }
+    } catch (err) {
+      console.warn('[BoardCanvas] 加载日历任务失败:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCalendarTasks();
+
+    const intervalId = setInterval(loadCalendarTasks, 60 * 1000);
+    const handleRefresh = () => loadCalendarTasks();
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('refreshCalendar', handleRefresh);
+    }
+
+    return () => {
+      clearInterval(intervalId);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('refreshCalendar', handleRefresh);
+      }
+    };
+  }, [loadCalendarTasks]);
+
+  const checkTaskReminders = useCallback(() => {
+    const now = new Date();
+    const nowMs = now.getTime();
+
+    const activeKeys = new Set();
+
+    Object.entries(calendarTasksSnapshot || {}).forEach(([dateStr, tasks]) => {
+      if (!Array.isArray(tasks)) {
+        return;
+      }
+
+      tasks.forEach(task => {
+        if (!task || !task.id) {
+          return;
+        }
+
+        const key = `${dateStr}|${task.id}`;
+        activeKeys.add(key);
+
+        if (task.completed || !task.time) {
+          reminderTrackerRef.current.delete(key);
+          return;
+        }
+
+        const due = new Date(`${dateStr}T${task.time}:00`);
+        if (Number.isNaN(due.getTime())) {
+          reminderTrackerRef.current.delete(key);
+          return;
+        }
+
+        const diffMinutes = (due.getTime() - nowMs) / 60000;
+        const recordedDue = reminderTrackerRef.current.get(key);
+
+        if (diffMinutes <= 30 && diffMinutes >= 0) {
+          if (recordedDue !== due.getTime()) {
+            const rounded = Math.max(1, Math.ceil(diffMinutes));
+            const details = `还有大约 ${rounded} 分钟开始：\n- 日期：${dateStr}\n- 时间：${task.time}\n- 待办：${task.title || '未命名待办'}`;
+            addMessage('⏰ 待办提醒', details, 'warning');
+            reminderTrackerRef.current.set(key, due.getTime());
+          }
+        } else {
+          if (recordedDue === due.getTime()) {
+            reminderTrackerRef.current.delete(key);
+          }
+        }
+      });
+    });
+
+    // 清理已经不存在的任务
+    Array.from(reminderTrackerRef.current.keys()).forEach(storedKey => {
+      if (!activeKeys.has(storedKey)) {
+        reminderTrackerRef.current.delete(storedKey);
+      }
+    });
+  }, [calendarTasksSnapshot, addMessage]);
+
+  useEffect(() => {
+    checkTaskReminders();
+    const timerId = setInterval(checkTaskReminders, 60 * 1000);
+    return () => clearInterval(timerId);
+  }, [checkTaskReminders]);
   
   // 包装setWindows来跟踪调用来源
   const setWindowsWithTrace = (newWindows) => {
@@ -7274,7 +7390,7 @@ function BoardCanvas({
         setWindows(prev => {
           console.log('🔍 检查需要保留的窗口:', prev.map(w => ({ id: w.id, type: w.type, title: w.title })));
           
-        const specialWindows = prev.filter(w => 
+          const specialWindows = prev.filter(w => 
           w.id === CHAT_WINDOW_ID || 
           w.id === MESSAGE_CENTER_WINDOW_ID || 
           w.id === PERSONALIZATION_WINDOW_ID ||
@@ -7305,7 +7421,7 @@ function BoardCanvas({
             if (w.title !== expectedTitle) {
               return { ...w, title: expectedTitle };
             }
-          }
+            }
             return w;
           });
           
@@ -7625,13 +7741,13 @@ function BoardCanvas({
     });
     
     // 先清理掉现有的特殊窗口图标（如果存在）
-      const cleanedDesktopIcons = desktopIcons.filter(icon => {
-        const isSpecialIcon = 
-          icon.windowId === CHAT_WINDOW_ID || 
-          icon.windowId === MESSAGE_CENTER_WINDOW_ID ||
+    const cleanedDesktopIcons = desktopIcons.filter(icon => {
+      const isSpecialIcon = 
+        icon.windowId === CHAT_WINDOW_ID || 
+        icon.windowId === MESSAGE_CENTER_WINDOW_ID ||
           icon.windowId === PERSONALIZATION_WINDOW_ID ||
           icon.windowId === PLANNER_WINDOW_ID ||
-          icon.id === CHAT_WINDOW_ID || 
+        icon.id === CHAT_WINDOW_ID || 
           icon.id === MESSAGE_CENTER_WINDOW_ID ||
           icon.id === PERSONALIZATION_WINDOW_ID ||
           icon.id === PLANNER_WINDOW_ID;
@@ -8477,7 +8593,7 @@ function BoardCanvas({
       }
       return;
     }
-
+    
     if (onWindowClose) {
       onWindowClose(windowId);
       // 立即保存隐藏状态到后端，明确设置hidden为true
@@ -8497,34 +8613,34 @@ function BoardCanvas({
       return;
     }
 
-    try {
-      // 在删除前记录图标位置，供新图标重用
-      const iconToDelete = desktopIcons.find(icon => icon.windowId === windowId);
-      if (iconToDelete && iconToDelete.gridPosition) {
-        deletedIconPositionsRef.current.push(iconToDelete.gridPosition);
-        console.log(`🎯 记录被删除图标的位置: (${iconToDelete.gridPosition.gridX},${iconToDelete.gridPosition.gridY})`);
-      }
-      
-      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        console.log('开始移动窗口到回收站:', windowId);
-        // 从本地窗口列表中移除
-        setWindows(prev => {
-          const filtered = prev.filter(w => w.id !== windowId);
-          console.log('从窗口列表移除窗口:', windowId, '剩余窗口数:', filtered.length);
-          return filtered;
-        });
-        // 通知App组件处理状态更新（App组件会处理隐藏状态的清理）
-        if (onWindowDelete) {
-          onWindowDelete(windowId);
+      try {
+        // 在删除前记录图标位置，供新图标重用
+        const iconToDelete = desktopIcons.find(icon => icon.windowId === windowId);
+        if (iconToDelete && iconToDelete.gridPosition) {
+          deletedIconPositionsRef.current.push(iconToDelete.gridPosition);
+          console.log(`🎯 记录被删除图标的位置: (${iconToDelete.gridPosition.gridX},${iconToDelete.gridPosition.gridY})`);
         }
-        console.log('✅ 窗口已移动到回收站:', windowId);
-      }
-    } catch (error) {
-      console.error('移动窗口到回收站失败:', error);
+        
+        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          console.log('开始移动窗口到回收站:', windowId);
+          // 从本地窗口列表中移除
+          setWindows(prev => {
+            const filtered = prev.filter(w => w.id !== windowId);
+            console.log('从窗口列表移除窗口:', windowId, '剩余窗口数:', filtered.length);
+            return filtered;
+          });
+          // 通知App组件处理状态更新（App组件会处理隐藏状态的清理）
+          if (onWindowDelete) {
+            onWindowDelete(windowId);
+          }
+          console.log('✅ 窗口已移动到回收站:', windowId);
+        }
+      } catch (error) {
+        console.error('移动窗口到回收站失败:', error);
     }
   };
   
@@ -8540,27 +8656,27 @@ function BoardCanvas({
       return;
     }
 
-    try {
-      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}?permanent=true`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        console.log('开始永久删除窗口:', windowId);
-        // 从本地窗口列表中移除
-        setWindows(prev => {
-          const filtered = prev.filter(w => w.id !== windowId);
-          console.log('从窗口列表移除窗口:', windowId, '剩余窗口数:', filtered.length);
-          return filtered;
+      try {
+        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}?permanent=true`, {
+          method: 'DELETE',
         });
-        // 通知App组件处理状态更新（App组件会处理隐藏状态的清理）
-        if (onWindowDelete) {
-          onWindowDelete(windowId);
+
+        if (response.ok) {
+          console.log('开始永久删除窗口:', windowId);
+          // 从本地窗口列表中移除
+          setWindows(prev => {
+            const filtered = prev.filter(w => w.id !== windowId);
+            console.log('从窗口列表移除窗口:', windowId, '剩余窗口数:', filtered.length);
+            return filtered;
+          });
+          // 通知App组件处理状态更新（App组件会处理隐藏状态的清理）
+          if (onWindowDelete) {
+            onWindowDelete(windowId);
+          }
+          console.log('✅ 窗口永久删除成功:', windowId);
         }
-        console.log('✅ 窗口永久删除成功:', windowId);
-      }
-    } catch (error) {
-      console.error('永久删除窗口失败:', error);
+      } catch (error) {
+        console.error('永久删除窗口失败:', error);
     }
   };
 
@@ -9753,7 +9869,9 @@ function BoardCanvas({
             }
             return true; // 显示非最小化且非隐藏的窗口
           })
-          .map(window => (
+          .map(window => {
+            const iconClass = getWindowIconClass(window.type);
+            return (
             <div
               key={window.id}
               className={`canvas-window ${window.type} ${isDragging && dragState.current.windowId === window.id ? 'dragging' : ''} ${focusedWindowId === window.id ? 'focused' : ''}`}
@@ -9810,7 +9928,8 @@ function BoardCanvas({
                   }}
                   title="双击编辑标题"
                 >
-                  {window.title}
+                  {iconClass && <span className={`window-title-icon ${iconClass}`}></span>}
+                  <span className="window-title-text">{window.title}</span>
                 </span>
               )}
               <div className="window-controls">
@@ -9917,7 +10036,7 @@ function BoardCanvas({
                       textAlign: 'center',
                       fontSize: '14px'
                     }}>
-                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+                      <span className="message-center-empty-icon"></span>
                       <div style={{ color: '#808080' }}>暂无消息</div>
                     </div>
                   ) : (
@@ -10145,7 +10264,8 @@ function BoardCanvas({
 
             <div className="resize-handle" onMouseDown={(e) => startResize(e, window)} />
           </div>
-        ))}
+        );
+          })}
         
         {windows.length === 0 && (
           <div 
@@ -10218,14 +10338,14 @@ function BoardCanvas({
             </div>
             <div className="win98-dialog-content">
               {renderConfirmDialogMessage()}
-            </div>
+                </div>
             <div className="win98-dialog-actions">
               <button className="win98-btn primary" onClick={confirmDialog.onConfirm}>
                 {confirmDialog.confirmText || '确定'}
-              </button>
+                </button>
               <button className="win98-btn" onClick={confirmDialog.onCancel}>
                 {confirmDialog.cancelText || '取消'}
-              </button>
+                </button>
             </div>
           </div>
         </div>
@@ -10233,6 +10353,14 @@ function BoardCanvas({
     </div>
   );
 }
+
+const getWindowIconClass = (type) => {
+  const typeIconClass = {
+    'message-center': 'win98-icon win98-icon-mail',
+    'planner': 'win98-icon win98-icon-calendar'
+  };
+  return typeIconClass[type] || null;
+};
 
 const getWindowIcon = (type) => {
   const typeIcons = {

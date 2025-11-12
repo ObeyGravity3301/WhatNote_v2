@@ -1,0 +1,73 @@
+// craco.config.js
+
+(() => {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    const needsPolyfill = !descriptor || typeof descriptor.get === 'function';
+
+    if (needsPolyfill) {
+      const storageData = {};
+      const memoryStorage = {
+        getItem: key => (Object.prototype.hasOwnProperty.call(storageData, key) ? storageData[key] : null),
+        setItem: (key, value) => {
+          storageData[key] = String(value);
+        },
+        removeItem: key => {
+          delete storageData[key];
+        },
+        clear: () => {
+          Object.keys(storageData).forEach(k => {
+            delete storageData[k];
+          });
+        },
+        key: index => {
+          const keys = Object.keys(storageData);
+          return index >= 0 && index < keys.length ? keys[index] : null;
+        },
+        get length() {
+          return Object.keys(storageData).length;
+        }
+      };
+
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        enumerable: true,
+        writable: false,
+        value: memoryStorage
+      });
+
+      if (typeof globalThis.window === 'undefined') {
+        globalThis.window = {};
+      }
+      if (typeof globalThis.window.localStorage === 'undefined') {
+        globalThis.window.localStorage = memoryStorage;
+      }
+    }
+  } catch (error) {
+    // 记录失败但不阻断构建流程
+    console.warn('[craco] 初始化 localStorage polyfill 失败:', error);
+  }
+})();
+
+module.exports = {
+  webpack: {
+    configure: (webpackConfig, { env, paths }) => {
+      // 解决localStorage问题
+      webpackConfig.plugins.forEach(plugin => {
+        if (plugin.constructor.name === 'HtmlWebpackPlugin') {
+          plugin.options.templateParameters = {
+            ...plugin.options.templateParameters,
+            localStorage: {
+              getItem: () => null,
+              setItem: () => null,
+              removeItem: () => null,
+              clear: () => null
+            }
+          };
+        }
+      });
+      
+      return webpackConfig;
+    }
+  }
+};

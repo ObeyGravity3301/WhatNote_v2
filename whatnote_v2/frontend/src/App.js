@@ -36,6 +36,13 @@ function App() {
 
   // 全局确认弹窗状态
   const [confirmDialog, setConfirmDialog] = useState(null);
+  const [startMenuContextMenu, setStartMenuContextMenu] = useState({
+    visible: false,
+    x: 0,
+    y: 0,
+    targetType: null,
+    targetData: null
+  });
   
   // 任务栏右键菜单状态
   const [showTaskbarContextMenu, setShowTaskbarContextMenu] = useState(false);
@@ -44,7 +51,7 @@ function App() {
   // 子菜单激活状态
   const [activeCourseId, setActiveCourseId] = useState(null);
   const [submenuPosition, setSubmenuPosition] = useState({ top: 0 });
-
+  
   const toastTypeConfig = {
     success: { icon: '✅', title: '操作成功' },
     error: { icon: '⚠️', title: '操作失败' },
@@ -123,7 +130,7 @@ function App() {
   
   const handleCourseClick = (courseId, event) => {
     const targetElement = event.currentTarget;
-
+    
     if (activeCourseId === courseId) {
       setActiveCourseId(null);
       setShowCreateBoardInput(false);
@@ -134,7 +141,7 @@ function App() {
     setShowCreateBoardInput(false);
     setNewBoardName('');
     setActiveCourseId(courseId);
-
+    
     setTimeout(() => {
       const position = calculateSubmenuPosition(targetElement);
       setSubmenuPosition(position);
@@ -146,6 +153,31 @@ function App() {
     e.preventDefault();
     setTaskbarMenuPosition({ x: e.clientX, y: e.clientY });
     setShowTaskbarContextMenu(true);
+  };
+
+  const handleStartMenuContextMenuOpen = (event, targetType, targetData) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setStartMenuContextMenu({
+      visible: true,
+      x: event.clientX,
+      y: event.clientY,
+      targetType,
+      targetData,
+    });
+  };
+
+  const handleStartMenuContextMenuAction = (action) => {
+    if (startMenuContextMenu.targetData) {
+      console.log('[StartMenu ContextMenu]', action, startMenuContextMenu.targetType, startMenuContextMenu.targetData);
+    }
+    setStartMenuContextMenu({
+      visible: false,
+      x: 0,
+      y: 0,
+      targetType: null,
+      targetData: null,
+    });
   };
 
   const showToast = (message, type = 'info') => {
@@ -168,7 +200,7 @@ function App() {
     }
     setToast(prev => ({ ...prev, visible: false }));
   };
-
+  
   const openConfirmDialog = ({ title, message, confirmText = '确定', cancelText = '取消', icon = '⚠️' }) => {
     return new Promise((resolve) => {
       setConfirmDialog({
@@ -236,9 +268,84 @@ function App() {
     };
   }, []);
 
-  // 加载课程列表
+  // 加载课程列表（带重试机制）
   useEffect(() => {
-    fetchCourses();
+    let cancelled = false;
+    let retryTimer = null;
+
+    const fetchCoursesWithRetry = async (attempt = 1) => {
+      if (cancelled) return;
+
+      try {
+        // 先检查后端健康状态
+        try {
+          const healthResponse = await fetch('http://localhost:8081/api/health');
+          if (!healthResponse.ok) {
+            throw new Error(`健康检查失败: HTTP ${healthResponse.status}`);
+          }
+        } catch (healthError) {
+          console.log(`[App] 后端未就绪 (尝试 ${attempt}/5)，等待重试...`);
+          if (attempt < 5 && !cancelled) {
+            const delay = 1000 * attempt; // 1s, 2s, 3s, 4s
+            retryTimer = setTimeout(() => {
+              if (!cancelled) {
+                retryTimer = null;
+                fetchCoursesWithRetry(attempt + 1);
+              }
+            }, delay);
+          } else {
+            console.error('[App] 后端连接失败，已重试5次');
+            showToast('无法连接到后端服务器，请检查后端是否已启动', 'error');
+          }
+          return;
+        }
+
+        // 后端就绪，获取课程列表
+        const response = await fetch('http://localhost:8081/api/courses');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('[App] 课程API响应:', data);
+          const coursesList = data.courses || [];
+          console.log(`[App] 解析后的课程列表:`, coursesList);
+          console.log(`[App] 课程数量: ${coursesList.length}`);
+          if (!cancelled) {
+            setCourses(coursesList);
+            console.log(`[App] ✅ 成功加载 ${coursesList.length} 个课程到状态`);
+            if (coursesList.length === 0) {
+              console.warn('[App] ⚠️ 课程列表为空，可能是后端没有课程数据');
+            }
+          }
+        } else {
+          const errorText = await response.text();
+          console.error(`[App] 获取课程失败: HTTP ${response.status}`, errorText);
+          throw new Error(`获取课程失败: HTTP ${response.status} - ${errorText}`);
+        }
+      } catch (error) {
+        console.error(`[App] 获取课程失败 (尝试 ${attempt}/5):`, error);
+        if (attempt < 5 && !cancelled) {
+          const delay = 1000 * attempt;
+          console.log(`[App] ${delay}ms 后重试获取课程列表...`);
+          retryTimer = setTimeout(() => {
+            if (!cancelled) {
+              retryTimer = null;
+              fetchCoursesWithRetry(attempt + 1);
+            }
+          }, delay);
+        } else {
+          console.error('[App] 获取课程列表失败，已重试5次');
+          showToast('无法加载课程列表，请检查后端服务', 'error');
+        }
+      }
+    };
+
+    fetchCoursesWithRetry();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -251,8 +358,8 @@ function App() {
 
   // 获取课程的展板列表
   useEffect(() => {
-    if (!courses || courses.length === 0) return;
-
+      if (!courses || courses.length === 0) return;
+      
     let cancelled = false;
     let retryTimer = null;
 
@@ -311,10 +418,17 @@ function App() {
   const fetchCourses = async () => {
     try {
       const response = await fetch('http://localhost:8081/api/courses');
+      if (response.ok) {
       const data = await response.json();
       setCourses(data.courses || []);
+        console.log(`[App] 手动刷新：成功加载 ${(data.courses || []).length} 个课程`);
+      } else {
+        console.error(`[App] 获取课程失败: HTTP ${response.status}`);
+        showToast('获取课程列表失败', 'error');
+      }
     } catch (error) {
       console.error('获取课程失败:', error);
+      showToast('无法连接到后端服务器', 'error');
     }
   };
 
@@ -356,7 +470,6 @@ function App() {
       await handleCreateCourse(newCourseName.trim(), '');
       setNewCourseName('');
       setShowCreateCourseInput(false);
-      setShowStartMenu(false);
       setActiveCourseId(null);
       setShowCreateBoardInput(false);
     }
@@ -367,7 +480,6 @@ function App() {
       await handleCreateBoard(selectedCourse.id, newBoardName.trim());
       setNewBoardName('');
       setShowCreateBoardInput(false);
-      setShowStartMenu(false);
       setActiveCourseId(null);
     }
   };
@@ -505,19 +617,19 @@ function App() {
       return;
     }
 
-    try {
-      const response = await fetch(`http://localhost:8081/api/trash/${trashId}`, {
-        method: 'DELETE'
-      });
-      if (response.ok) {
-        await loadTrashItems();
-        await loadTrashSize();
+      try {
+        const response = await fetch(`http://localhost:8081/api/trash/${trashId}`, {
+          method: 'DELETE'
+        });
+        if (response.ok) {
+          await loadTrashItems();
+          await loadTrashSize();
         showToast('文件已永久删除！', 'success');
-      } else {
+        } else {
         showToast('删除失败！', 'error');
-      }
-    } catch (error) {
-      console.error('永久删除失败:', error);
+        }
+      } catch (error) {
+        console.error('永久删除失败:', error);
       showToast('删除失败！', 'error');
     }
   };
@@ -533,19 +645,19 @@ function App() {
       return;
     }
 
-    try {
-      const response = await fetch('http://localhost:8081/api/trash', {
-        method: 'DELETE'
-      });
-      if (response.ok) {
-        await loadTrashItems();
-        await loadTrashSize();
+      try {
+        const response = await fetch('http://localhost:8081/api/trash', {
+          method: 'DELETE'
+        });
+        if (response.ok) {
+          await loadTrashItems();
+          await loadTrashSize();
         showToast('回收站已清空！', 'success');
-      } else {
+        } else {
         showToast('清空回收站失败！', 'error');
-      }
-    } catch (error) {
-      console.error('清空回收站失败:', error);
+        }
+      } catch (error) {
+        console.error('清空回收站失败:', error);
       showToast('清空回收站失败！', 'error');
     }
   };
@@ -734,13 +846,20 @@ function App() {
   // 点击外部关闭开始菜单和任务栏右键菜单
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (showStartMenu && !event.target.closest('.start-menu-container') && !event.target.closest('.start-button')) {
+      const clickedInsideStartMenu = event.target.closest('.start-menu-container');
+      const clickedStartButton = event.target.closest('.start-button');
+      const clickedContextMenu = event.target.closest('.start-menu-context-menu');
+
+      if (showStartMenu && !clickedInsideStartMenu && !clickedStartButton) {
         setShowStartMenu(false);
         setShowCreateCourseInput(false); // 重置输入框状态
         setNewCourseName(''); // 清空输入内容
         setShowCreateBoardInput(false); // 重置新建展板输入框状态
         setNewBoardName(''); // 清空展板输入内容
         setActiveCourseId(null);
+        setStartMenuContextMenu({ visible: false, x: 0, y: 0, targetType: null, targetData: null });
+      } else if (startMenuContextMenu.visible && !clickedContextMenu) {
+        setStartMenuContextMenu({ visible: false, x: 0, y: 0, targetType: null, targetData: null });
       }
       
       // 关闭任务栏右键菜单
@@ -749,17 +868,18 @@ function App() {
       }
     };
 
-    if (showStartMenu || showTaskbarContextMenu) {
+    if (showStartMenu || showTaskbarContextMenu || startMenuContextMenu.visible) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [showStartMenu, showTaskbarContextMenu]);
+  }, [showStartMenu, showTaskbarContextMenu, startMenuContextMenu.visible]);
 
   useEffect(() => {
     if (!showStartMenu) {
       setActiveCourseId(null);
       setShowCreateBoardInput(false);
       setNewBoardName('');
+      setStartMenuContextMenu({ visible: false, x: 0, y: 0, targetType: null, targetData: null });
     }
   }, [showStartMenu]);
 
@@ -812,7 +932,7 @@ function App() {
             className="start-button"
             onClick={() => setShowStartMenu(!showStartMenu)}
           >
-            <span className="start-icon">🏠</span>
+            <span className="start-icon win98-icon win98-icon-start"></span>
             <span className="start-text">开始</span>
           </button>
           
@@ -836,6 +956,7 @@ function App() {
                   ).map(window => {
                     const isMinimized = minimizedWindows.has(window.id);
                     const isFocused = focusedWindowId === window.id;
+                    const iconClass = getWindowIconClass(window.type);
                     return (
                       <button
                         key={window.id}
@@ -849,7 +970,9 @@ function App() {
                         }}
                         title={isMinimized ? `恢复: ${window.title}` : `聚焦: ${window.title}`}
                       >
-                        <span className="taskbar-icon">{getWindowIcon(window.type)}</span>
+                        <span className={`taskbar-icon${iconClass ? ` ${iconClass}` : ''}`}>
+                          {iconClass ? null : getWindowIcon(window.type)}
+                        </span>
                         <span className="taskbar-text">{window.title}</span>
                       </button>
                     );
@@ -895,7 +1018,7 @@ function App() {
                   title="消息中心"
                   style={{ minWidth: 'auto', width: '80px', position: 'relative' }}
                 >
-                  <span className="taskbar-icon">📬</span>
+                  <span className="taskbar-icon win98-icon win98-icon-mail"></span>
                   <span className="taskbar-text">消息</span>
                 </button>
 
@@ -910,7 +1033,7 @@ function App() {
                   title="日历与计划"
                   style={{ minWidth: 'auto', width: '90px' }}
                 >
-                  <span className="taskbar-icon">📅</span>
+                  <span className="taskbar-icon win98-icon win98-icon-calendar"></span>
                   <span className="taskbar-text">日历</span>
                 </button>
               </>
@@ -948,7 +1071,7 @@ function App() {
       
       {/* Win98风格开始菜单 */}
       {showStartMenu && (
-        <div className="start-menu-container">
+        <div className="start-menu-container" onContextMenu={(e) => e.preventDefault()}>
           <div className="start-menu">
             <div className="start-menu-vertical-title">WhatNote</div>
             <div className="start-menu-content">
@@ -1009,18 +1132,30 @@ function App() {
               <div className="menu-separator"></div>
               
               {/* 课程列表 */}
+              {(() => {
+                console.log('[App] 渲染课程列表，courses状态:', courses);
+                console.log('[App] courses类型:', typeof courses, '是否为数组:', Array.isArray(courses));
+                console.log('[App] courses长度:', courses?.length);
+                return null;
+              })()}
               {courses && courses.length > 0 && (
                 courses.map(course => (
                   <div 
                     key={course.id} 
                     className={`start-menu-item ${activeCourseId === course.id ? 'active' : ''}`}
                     onClick={(e) => handleCourseClick(course.id, e)}
+                    onContextMenu={(e) => handleStartMenuContextMenuOpen(e, 'course', course)}
                   >
                     <span className="menu-icon win98-icon win98-icon-folder"></span>
                     <span className="menu-text">{course.name || '未命名课程'}</span>
                     <span className="menu-arrow">▶</span>
                   </div>
                 ))
+              )}
+              {(!courses || courses.length === 0) && (
+                <div className="start-menu-item" style={{ color: '#999', fontStyle: 'italic' }}>
+                  <span className="menu-text">暂无课程（调试：courses={JSON.stringify(courses)}）</span>
+                </div>
               )}
               
               {/* 分界线 */}
@@ -1129,6 +1264,7 @@ function App() {
                         setShowCreateBoardInput(false);
                         setNewBoardName('');
                       }}
+                      onContextMenu={(e) => handleStartMenuContextMenuOpen(e, 'board', { course: courses.find(c => c.id === activeCourseId), board })}
                     >
                       <span className="submenu-icon win98-icon win98-icon-clipboard"></span>
                       <span className="submenu-text">{board.name || '未命名展板'}</span>
@@ -1148,7 +1284,22 @@ function App() {
         </div>
       )}
       
-      
+      {startMenuContextMenu.visible && showStartMenu && (
+        <div
+          className="start-menu-context-menu"
+          style={{ left: `${startMenuContextMenu.x}px`, top: `${startMenuContextMenu.y}px` }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('rename')}>
+            <span className="menu-icon">✏️</span>
+            <span className="menu-text">重命名</span>
+          </div>
+          <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('delete')}>
+            <span className="menu-icon">🗑️</span>
+            <span className="menu-text">删除</span>
+          </div>
+        </div>
+      )}
       
       {/* 回收站弹窗 */}
       {showTrash && (
@@ -1287,6 +1438,14 @@ const getWindowIcon = (type) => {
     'planner': '📅'
   };
   return typeIcons[type] || '🪟';
+};
+
+const getWindowIconClass = (type) => {
+  const typeIconClass = {
+    'message-center': 'win98-icon win98-icon-mail',
+    'planner': 'win98-icon win98-icon-calendar'
+  };
+  return typeIconClass[type] || null;
 };
 
 export default App; 

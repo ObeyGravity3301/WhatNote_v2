@@ -2,9 +2,10 @@ import os
 import json
 import shutil
 import time
+import re
 from pathlib import Path
 from config import DATA_DIR
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 from .trash_manager import TrashManager
 import pypdf
@@ -18,6 +19,7 @@ class ContentManager:
         """保存窗口内容到展板文件夹（新存储结构：内容存储到.md文件，配置存储到.json文件）"""
         board_info = self.file_manager.get_board_info(board_id)
         if not board_info:
+            print(f"❌ 保存窗口失败: 展板不存在 {board_id}")
             return False
         
         # 找到展板目录
@@ -30,41 +32,90 @@ class ContentManager:
                     break
         
         if not board_dir:
+            print(f"❌ 保存窗口失败: 展板目录不存在 {board_id}")
             return False
         
         # 统一使用files目录存储所有文件（JSON和实际文件）
         files_dir = board_dir / "files"
         files_dir.mkdir(exist_ok=True)
         
+        window_id = window_data.get("id")
+        if not window_id:
+            print(f"❌ 保存窗口失败: 窗口数据缺少id字段")
+            return False
+        
         window_type = window_data.get("type", "text")
         window_title = window_data.get("title", "新建项目")
         safe_name = self._sanitize_filename(window_title)
         
+        # 检查是否已存在相同 window_id 的窗口，如果存在则更新
+        existing_json_file = None
+        for json_file in files_dir.glob("*.json"):
+            try:
+                with open(json_file, "r", encoding="utf-8") as f:
+                    existing_data = json.load(f)
+                if existing_data.get("id") == window_id:
+                    existing_json_file = json_file
+                    print(f"📝 发现已存在的窗口，将更新: {window_id} @ {json_file.name}")
+                    break
+            except Exception as e:
+                print(f"⚠️ 读取JSON文件失败: {json_file}, 错误: {e}")
+                continue
+        
         # 新存储逻辑：文本类型窗口
         if window_type == "text":
-            # 1. 保存内容到.md文件
-            md_file_name = f"{safe_name}.md"
+            # 如果已存在窗口，使用相同的文件名；否则生成新文件名
+            if existing_json_file:
+                # 从现有文件名推导出 .md 文件名
+                existing_name = existing_json_file.stem  # 移除 .json
+                if existing_name.endswith('.md'):
+                    md_file_name = existing_name
+                else:
+                    # 如果格式不对，使用标题生成新文件名
+                    md_file_name = f"{safe_name}.md"
+            else:
+                # 生成唯一的文件名（使用 window_id 的一部分确保唯一性）
+                # 如果标题相同，使用 window_id 的后缀来区分
+                md_file_name = f"{safe_name}.md"
+                md_file_path = files_dir / md_file_name
+                
+                # 检查文件名冲突，如果冲突则添加 window_id 后缀
+                if md_file_path.exists() and not existing_json_file:
+                    # 使用 window_id 的后8位作为后缀
+                    window_id_suffix = window_id[-8:] if len(window_id) >= 8 else window_id
+                    md_file_name = f"{safe_name}_{window_id_suffix}.md"
+                    md_file_path = files_dir / md_file_name
+            
             md_file_path = files_dir / md_file_name
             
-            # 获取内容并保存到.md文件
+            # 1. 保存内容到.md文件
             content = window_data.get("content", "")
-            with open(md_file_path, "w", encoding="utf-8") as f:
-                f.write(content)
+            try:
+                with open(md_file_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                print(f"✅ 保存窗口内容文件: {md_file_name}")
+            except Exception as e:
+                print(f"❌ 保存内容文件失败: {md_file_name}, 错误: {e}")
+                return False
             
             # 2. 保存配置到.json文件（不包含content）
-            json_file_name = f"{safe_name}.md.json"
+            json_file_name = f"{md_file_name}.json"
             json_file_path = files_dir / json_file_name
             
             # 准备存储的窗口数据（移除content，设置file_path指向.md文件）
             storage_data = {k: v for k, v in window_data.items() if k != 'content'}
             storage_data['file_path'] = f"files/{md_file_name}"
             
-            with open(json_file_path, "w", encoding="utf-8") as f:
-                json.dump(storage_data, f, ensure_ascii=False, indent=2)
-            
-            print(f"保存窗口内容: {window_title}")
-            print(f"  内容文件: {md_file_name}")
-            print(f"  配置文件: {json_file_name}")
+            try:
+                with open(json_file_path, "w", encoding="utf-8") as f:
+                    json.dump(storage_data, f, ensure_ascii=False, indent=2)
+                print(f"✅ 保存窗口配置文件: {json_file_name}")
+                print(f"   窗口ID: {window_id}")
+                print(f"   窗口标题: {window_title}")
+                print(f"   窗口类型: {window_type}")
+            except Exception as e:
+                print(f"❌ 保存配置文件失败: {json_file_name}, 错误: {e}")
+                return False
             
             return True
         
@@ -532,8 +583,10 @@ class ContentManager:
     
     def get_board_windows(self, board_id: str) -> List[Dict]:
         """获取展板的所有窗口"""
+        print(f"🔍 开始获取展板窗口: {board_id}")
         board_info = self.file_manager.get_board_info(board_id)
         if not board_info:
+            print(f"❌ 展板不存在: {board_id}")
             return []
         
         # 找到展板目录
@@ -546,78 +599,89 @@ class ContentManager:
                     break
         
         if not board_dir:
+            print(f"❌ 展板目录不存在: {board_id}")
             return []
         
         files_dir = board_dir / "files"
         if not files_dir.exists():
+            print(f"⚠️ 文件目录不存在: {files_dir}")
             return []
         
+        print(f"📁 扫描文件目录: {files_dir}")
         windows = []
         seen_window_ids = set()  # 用于去重
         
         # 扫描files目录，查找所有JSON配置文件（新命名规则：xxx.ext.json）
-        for file_path in files_dir.iterdir():
-            if file_path.is_file() and file_path.suffix == ".json":
-                # 排除特殊JSON文件（版本配置、图标位置等）
-                special_json_files = ['page_versions.json', 'icon_positions.json', 'board_info.json']
-                if file_path.name in special_json_files or file_path.name.endswith('.versions.json'):
+        json_files = list(files_dir.glob("*.json"))
+        print(f"📄 找到 {len(json_files)} 个JSON文件")
+        
+        for file_path in json_files:
+            # 排除特殊JSON文件（版本配置、图标位置等）
+            special_json_files = ['page_versions.json', 'icon_positions.json', 'board_info.json']
+            if file_path.name in special_json_files or file_path.name.endswith('.versions.json'):
+                continue
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    window_data = json.load(f)
+                
+                # 检查窗口ID是否重复
+                window_id = window_data.get('id')
+                if not window_id:
+                    print(f"⚠️ JSON文件缺少窗口ID，跳过: {file_path.name}")
                     continue
-                try:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        window_data = json.load(f)
                     
-                    # 检查窗口ID是否重复
-                    window_id = window_data.get('id')
-                    if window_id in seen_window_ids:
-                        print(f"警告: 发现重复的窗口ID，跳过文件: {file_path.name} (ID: {window_id})")
-                        continue
-                    
-                    seen_window_ids.add(window_id)
-                    
-                    # 从对应的文件中加载内容
-                    window_type = window_data.get('type', 'text')
-                    
-                    if window_type == 'generic':
-                        # 通用窗口没有内容文件，content为空
-                        window_data['content'] = ''
-                    elif 'file_path' in window_data and window_data['file_path'] is not None:
-                        content_file_path = board_dir / window_data['file_path']
-                        if content_file_path.exists():
-                            try:
-                                # 根据文件类型决定如何加载内容
-                                if window_type == 'text':
-                                    # 文本类型：从文件读取内容，尝试多种编码
+                if window_id in seen_window_ids:
+                    print(f"⚠️ 发现重复的窗口ID，跳过文件: {file_path.name} (ID: {window_id})")
+                    continue
+                
+                seen_window_ids.add(window_id)
+                print(f"✅ 加载窗口: {window_id} ({window_data.get('title', '无标题')}) @ {file_path.name}")
+                
+                # 从对应的文件中加载内容
+                window_type = window_data.get('type', 'text')
+                
+                if window_type == 'generic':
+                    # 通用窗口没有内容文件，content为空
+                    window_data['content'] = ''
+                elif 'file_path' in window_data and window_data['file_path'] is not None:
+                    content_file_path = board_dir / window_data['file_path']
+                    if content_file_path.exists():
+                        try:
+                            # 根据文件类型决定如何加载内容
+                            if window_type == 'text':
+                                # 文本类型：从文件读取内容，尝试多种编码
+                                try:
+                                    with open(content_file_path, "r", encoding="utf-8") as f:
+                                        window_data['content'] = f.read()
+                                except UnicodeDecodeError:
                                     try:
-                                        with open(content_file_path, "r", encoding="utf-8") as f:
+                                        with open(content_file_path, "r", encoding="gbk") as f:
                                             window_data['content'] = f.read()
                                     except UnicodeDecodeError:
                                         try:
-                                            with open(content_file_path, "r", encoding="gbk") as f:
+                                            with open(content_file_path, "r", encoding="gb2312") as f:
                                                 window_data['content'] = f.read()
                                         except UnicodeDecodeError:
-                                            try:
-                                                with open(content_file_path, "r", encoding="gb2312") as f:
-                                                    window_data['content'] = f.read()
-                                            except UnicodeDecodeError:
-                                                # 如果所有编码都失败，使用二进制模式读取并忽略错误
-                                                with open(content_file_path, "r", encoding="utf-8", errors="ignore") as f:
-                                                    window_data['content'] = f.read()
-                                else:
-                                    # 对于媒体文件，content存储文件路径或URL
-                                    window_data['content'] = str(content_file_path)
-                            except Exception as e:
-                                print(f"读取内容文件失败: {content_file_path}, 错误: {e}")
-                                window_data['content'] = ""
-                        else:
+                                            # 如果所有编码都失败，使用二进制模式读取并忽略错误
+                                            with open(content_file_path, "r", encoding="utf-8", errors="ignore") as f:
+                                                window_data['content'] = f.read()
+                            else:
+                                # 对于媒体文件，content存储文件路径或URL
+                                window_data['content'] = str(content_file_path)
+                        except Exception as e:
+                            print(f"⚠️ 读取内容文件失败: {content_file_path}, 错误: {e}")
                             window_data['content'] = ""
                     else:
-                        # 兼容旧数据或没有file_path的情况
-                        window_data['content'] = window_data.get('content', '')
-                    
-                    windows.append(window_data)
-                except Exception as e:
-                    print(f"读取窗口配置文件失败: {file_path}, 错误: {e}")
-                    continue
+                        print(f"⚠️ 内容文件不存在: {content_file_path}")
+                        window_data['content'] = ""
+                else:
+                    # 兼容旧数据或没有file_path的情况
+                    window_data['content'] = window_data.get('content', '')
+                
+                windows.append(window_data)
+            except Exception as e:
+                print(f"❌ 读取窗口配置文件失败: {file_path}, 错误: {e}")
+                continue
         
         # 扫描files目录，为没有JSON配置的文件创建窗口配置
         self._auto_create_windows_for_orphaned_files(board_id, files_dir, windows)
@@ -641,6 +705,7 @@ class ContentManager:
         if len(valid_windows) != len(windows):
             print(f"⚠️ 过滤了 {len(windows) - len(valid_windows)} 个无效窗口")
         
+        print(f"✅ 获取窗口列表完成: {board_id}, 共 {len(valid_windows)} 个有效窗口")
         return valid_windows
     
     def _auto_create_windows_for_orphaned_files(self, board_id: str, files_dir: Path, existing_windows: List[Dict]):
@@ -2396,6 +2461,371 @@ class ContentManager:
             print(f"❌ 保存PDF版本配置失败: {e}")
             return False
     
+    def _locate_board_directory(self, board_id: str) -> Optional[Path]:
+        """找到展板目录"""
+        for course_dir in self.file_manager.courses_dir.iterdir():
+            if course_dir.is_dir():
+                potential_board_dir = course_dir / board_id
+                if potential_board_dir.exists():
+                    return potential_board_dir
+        return None
+
+    def _resolve_pdf_context(
+        self,
+        board_id: str,
+        window_id: str
+    ) -> Tuple[Optional[Dict], Optional[Path], Optional[Path], Optional[str]]:
+        """
+        解析PDF窗口的基础路径信息
+        
+        Returns:
+            (window_data, pdf_path, pages_dir, pdf_name)
+        """
+        windows = self.get_board_windows(board_id)
+        window_data = next((w for w in windows if w.get('id') == window_id), None)
+        if not window_data:
+            return None, None, None, None
+        
+        if window_data.get('type') != 'pdf':
+            return window_data, None, None, None
+        
+        board_dir = self._locate_board_directory(board_id)
+        if not board_dir:
+            return window_data, None, None, None
+        
+        window_content = window_data.get('content', '')
+        if not window_content:
+            return window_data, None, None, None
+        
+        pdf_path = Path(window_content)
+        if not pdf_path.is_absolute():
+            pdf_path = board_dir / window_content
+        
+        pdf_name = pdf_path.stem if pdf_path else None
+        pages_dir = None
+        if pdf_path:
+            pages_dir = pdf_path.parent / "pages" / pdf_name
+        
+        return window_data, pdf_path, pages_dir, pdf_name
+
+    def _split_pdf_markdown_sections(self, content: str) -> Tuple[str, List[str], str]:
+        """拆分PDF Markdown为标题、元数据和正文"""
+        if not content:
+            return "", [], ""
+        
+        normalized = content.lstrip("\ufeff")
+        parts = normalized.split('---', 1)
+        header_section = parts[0].strip()
+        body = parts[1].strip() if len(parts) > 1 else ""
+        
+        header_lines = [line.strip() for line in header_section.splitlines() if line.strip()]
+        if not header_lines:
+            return "", [], body
+        
+        title = header_lines[0]
+        metadata = header_lines[1:] if len(header_lines) > 1 else []
+        return title, metadata, body
+
+    def _parse_llm_markdown_payload(self, body: str) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+        """
+        解析LLM提取Markdown正文，提取JSON内容
+        
+        Returns:
+            (content_type, normalized_body, parsed_json or None)
+        """
+        if not body:
+            return "text", "", None
+        
+        stripped = body.strip()
+        code_block_match = re.search(r"```(?:json)?\s*(.*?)\s*```", stripped, re.DOTALL)
+        
+        if code_block_match:
+            json_text = code_block_match.group(1).strip()
+        else:
+            json_text = stripped
+        
+        try:
+            parsed = json.loads(json_text)
+            return "json", stripped, parsed
+        except json.JSONDecodeError:
+            return "text", stripped, None
+
+    def _select_pdf_page_source(
+        self,
+        board_id: str,
+        window_id: str,
+        page: int,
+        preferred: str,
+        pages_dir: Optional[Path],
+        pdf_name: Optional[str]
+    ) -> Tuple[Optional[Path], str]:
+        """根据偏好与可用性选择页面内容来源"""
+        preferred = (preferred or "auto").lower()
+        candidates: List[str] = []
+        
+        if preferred == "llm":
+            candidates = ["llm", "pypdf"]
+        elif preferred == "pypdf":
+            candidates = ["pypdf", "llm"]
+        else:
+            auto_version = self.get_page_version(board_id, window_id, page)
+            candidates = [auto_version, "llm" if auto_version != "llm" else "pypdf"]
+        
+        # 去重保持顺序
+        seen = set()
+        ordered_candidates = []
+        for candidate in candidates:
+            if candidate not in seen:
+                ordered_candidates.append(candidate)
+                seen.add(candidate)
+        
+        if not ordered_candidates:
+            ordered_candidates = ["pypdf", "llm"]
+        
+        if not pages_dir or not pdf_name:
+            return None, ordered_candidates[0]
+        
+        for candidate in ordered_candidates:
+            if candidate == "llm":
+                file_path = pages_dir / f"{pdf_name}_page_{page:03d}_llm.md"
+            else:
+                file_path = pages_dir / f"{pdf_name}_page_{page:03d}.md"
+            
+            if file_path.exists():
+                return file_path, candidate
+        
+        return None, ordered_candidates[0]
+
+    def _get_pdf_text_for_page(
+        self,
+        board_id: str,
+        window_id: str,
+        page: int,
+        preferred_source: str,
+        pdf_path: Optional[Path],
+        pages_dir: Optional[Path],
+        pdf_name: Optional[str],
+        pdf_reader: Optional[pypdf.PdfReader] = None
+    ) -> Dict[str, Any]:
+        """读取单页PDF内容"""
+        page_info: Dict[str, Any] = {
+            "page": page,
+            "source": None,
+            "content": "",
+            "content_type": "text",
+            "heading": "",
+            "metadata": [],
+            "raw_markdown": "",
+            "file_path": None,
+        }
+        
+        page_file, resolved_source = self._select_pdf_page_source(
+            board_id,
+            window_id,
+            page,
+            preferred_source,
+            pages_dir,
+            pdf_name
+        )
+        
+        if page_file and page_file.exists():
+            try:
+                raw_markdown = page_file.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                raw_markdown = page_file.read_text(encoding="utf-8", errors="replace")
+            
+            heading, metadata, body = self._split_pdf_markdown_sections(raw_markdown)
+            
+            if resolved_source == "llm":
+                content_type, normalized_body, parsed_json = self._parse_llm_markdown_payload(body)
+                page_info["content_type"] = content_type
+                page_info["content"] = parsed_json if parsed_json is not None else normalized_body
+            else:
+                page_info["content_type"] = "text"
+                page_info["content"] = body.strip()
+            
+            page_info["raw_markdown"] = raw_markdown
+            page_info["heading"] = heading
+            page_info["metadata"] = metadata
+            page_info["source"] = resolved_source
+            page_info["file_path"] = str(page_file)
+            page_info["success"] = True
+            return page_info
+        
+        # 如果未找到文件但可回退到PyPDF
+        if resolved_source == "llm" and preferred_source == "llm":
+            page_info["success"] = False
+            page_info["error"] = "该页面尚未生成LLM提取内容。"
+            page_info["source"] = "llm"
+            return page_info
+        
+        if not pdf_path or not pdf_path.exists():
+            page_info["success"] = False
+            page_info["error"] = "PDF文件不存在，无法提取内容。"
+            page_info["source"] = resolved_source or "pypdf"
+            return page_info
+        
+        try:
+            reader = pdf_reader or pypdf.PdfReader(str(pdf_path))
+            if page < 1 or page > len(reader.pages):
+                page_info["success"] = False
+                page_info["error"] = "页码超出范围。"
+                page_info["source"] = "pypdf"
+                return page_info
+            
+            extracted_text = reader.pages[page - 1].extract_text() or ""
+            page_info["content"] = extracted_text.strip()
+            page_info["content_type"] = "text"
+            page_info["source"] = "pypdf"
+            page_info["heading"] = f"# Page {page}"
+            page_info["metadata"] = []
+            page_info["raw_markdown"] = extracted_text
+            page_info["success"] = True
+            return page_info
+        except Exception as e:
+            page_info["success"] = False
+            page_info["error"] = f"PyPDF提取失败: {e}"
+            page_info["source"] = "pypdf"
+            return page_info
+
+    def get_pdf_text(
+        self,
+        board_id: str,
+        window_id: str,
+        page: Optional[int] = None,
+        end_page: Optional[int] = None,
+        source: str = "auto"
+    ) -> Dict[str, Any]:
+        """
+        获取PDF文本内容，可按页或整本返回
+        """
+        window_data, pdf_path, pages_dir, pdf_name = self._resolve_pdf_context(board_id, window_id)
+        
+        if not window_data:
+            return {
+                "success": False,
+                "error": "窗口不存在或无法访问。",
+                "board_id": board_id,
+                "window_id": window_id
+            }
+        
+        if window_data.get('type') != 'pdf':
+            return {
+                "success": False,
+                "error": "指定窗口并非PDF类型。",
+                "board_id": board_id,
+                "window_id": window_id,
+                "window_type": window_data.get('type')
+            }
+        
+        if not pdf_path or not pdf_path.exists():
+            return {
+                "success": False,
+                "error": "PDF文件不存在，可能尚未上传成功。",
+                "board_id": board_id,
+                "window_id": window_id
+            }
+        
+        try:
+            pdf_reader = pypdf.PdfReader(str(pdf_path))
+            total_pages = len(pdf_reader.pages)
+        except Exception as e:
+            pdf_reader = None
+            total_pages = 0
+            base_error = f"无法读取PDF文件: {e}"
+        
+        if total_pages == 0 and not pdf_reader:
+            return {
+                "success": False,
+                "error": base_error,
+                "board_id": board_id,
+                "window_id": window_id
+            }
+        
+        if total_pages == 0:
+            total_pages = end_page or page or 0
+        
+        if page is not None:
+            if page < 1 or (total_pages and page > total_pages):
+                return {
+                    "success": False,
+                    "error": "页码超出范围。",
+                    "board_id": board_id,
+                    "window_id": window_id,
+                    "total_pages": total_pages
+                }
+            start_page = page
+            end_page = end_page or page
+        else:
+            start_page = 1
+            end_page = total_pages or 1
+        
+        if end_page < start_page:
+            end_page = start_page
+        
+        pages_payload: List[Dict[str, Any]] = []
+        errors: List[str] = []
+        sources_used: List[str] = []
+        
+        for page_num in range(start_page, end_page + 1):
+            page_data = self._get_pdf_text_for_page(
+                board_id,
+                window_id,
+                page_num,
+                source,
+                pdf_path,
+                pages_dir,
+                pdf_name,
+                pdf_reader
+            )
+            
+            if page_data.get("success"):
+                pages_payload.append(page_data)
+                if page_data.get("source"):
+                    sources_used.append(page_data["source"])
+            else:
+                errors.append(f"第{page_num}页: {page_data.get('error', '未知错误')}")
+        
+        if not pages_payload:
+            return {
+                "success": False,
+                "error": "；".join(errors) if errors else "未能获取到任何页面内容。",
+                "board_id": board_id,
+                "window_id": window_id,
+                "total_pages": total_pages
+            }
+        
+        mode = "page" if page is not None and end_page == start_page else "range"
+        if page is None:
+            mode = "full"
+        
+        combined_texts: List[str] = []
+        for item in pages_payload:
+            if item.get("content_type") == "text" and item.get("content"):
+                combined_texts.append(f"{item.get('heading') or f'# Page {item['page']}'}\n{item['content']}")
+        
+        result: Dict[str, Any] = {
+            "success": True,
+            "board_id": board_id,
+            "window_id": window_id,
+            "window_title": window_data.get("title"),
+            "mode": mode,
+            "requested_source": source,
+            "sources_used": sorted(set(sources_used)),
+            "total_pages": total_pages,
+            "start_page": start_page,
+            "end_page": end_page,
+            "pages": pages_payload
+        }
+        
+        if combined_texts:
+            result["combined_text"] = "\n\n".join(combined_texts).strip()
+        
+        if errors:
+            result["partial_errors"] = errors
+        
+        return result
+
     def get_pdf_page_contents(self, board_id: str, window_id: str, page: int) -> dict:
         """
         获取PDF页面内容（前一页、当前页、下一页）

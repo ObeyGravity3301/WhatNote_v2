@@ -269,6 +269,30 @@
   font-family: 'MS Sans Serif', sans-serif;
 }
 
+.window-title-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  image-rendering: pixelated;
+}
+
+.message-center-empty-icon {
+  display: inline-block;
+  width: 48px;
+  height: 48px;
+  background-image: url('../assets/icons/envelope_closed-0.png');
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  image-rendering: pixelated;
+  margin-bottom: 16px;
+}
+
 .window-title-input {
   background: #ffffff;
   border: 1px inset #c0c0c0;

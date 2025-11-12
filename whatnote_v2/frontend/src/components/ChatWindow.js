@@ -407,7 +407,13 @@ const Toolbar = React.memo(({
   getModelOptions,
   getProviderName,
   useTools,
-  setUseTools
+  setUseTools,
+  onClearMessages,
+  todoStatus,
+  showTodoList,
+  setShowTodoList,
+  isStreaming,
+  onStopGeneration
 }) => {
   return (
       <div style={{
@@ -467,6 +473,30 @@ const Toolbar = React.memo(({
           📎 文件
         </button>
         
+        {todoStatus && todoStatus.has_todos && (
+          <button
+            onClick={() => setShowTodoList(!showTodoList)}
+            style={{
+              padding: '1px 8px',
+              fontSize: '11px',
+              backgroundColor: showTodoList ? '#0078d4' : '#c0c0c0',
+              color: showTodoList ? 'white' : 'black',
+              border: showTodoList ? '2px inset #c0c0c0' : '2px outset #c0c0c0',
+              borderRadius: '0px',
+              cursor: 'pointer',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              height: '20px',
+              minWidth: '50px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title="显示/隐藏任务列表"
+          >
+            📋 Todo
+          </button>
+        )}
+        
         <button
           onClick={() => setUseTools(!useTools)}
           style={{
@@ -508,6 +538,51 @@ const Toolbar = React.memo(({
         title="滚动到最底部"
       >
         ⬇️ 底部
+      </button>
+      
+      {isStreaming && (
+        <button
+          onClick={onStopGeneration}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: '#ff4444',
+            color: 'white',
+            border: '2px outset #ff4444',
+            borderRadius: '0px',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '50px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          title="停止生成"
+        >
+          ⏸️ 停止
+        </button>
+      )}
+      
+      <button
+        onClick={onClearMessages}
+        style={{
+          padding: '1px 8px',
+          fontSize: '11px',
+          backgroundColor: '#c0c0c0',
+          border: '2px outset #c0c0c0',
+          borderRadius: '0px',
+          cursor: 'pointer',
+          fontFamily: 'MS Sans Serif, sans-serif',
+          height: '20px',
+          minWidth: '50px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+        title="清空聊天记录"
+      >
+        🗑️ 清空
       </button>
         
         {showSettings && (
@@ -679,6 +754,162 @@ const Toolbar = React.memo(({
           </div>
         )}
       </div>
+  );
+});
+
+// Todo List 选择器组件
+const TodoListSelector = React.memo(({ 
+  showTodoList, 
+  setShowTodoList, 
+  todoStatus 
+}) => {
+  if (!showTodoList || !todoStatus || !todoStatus.has_todos) return null;
+
+  const completedCount = todoStatus.completed_count ?? 0;
+  const totalCount = todoStatus.total ?? 0;
+  const remainingCount = todoStatus.remaining_count ?? 0;
+
+  return (
+    <div style={{
+      backgroundColor: '#f0f0f0',
+      border: '1px inset #c0c0c0',
+      maxHeight: '200px',
+      margin: '4px 8px',
+      fontSize: '11px',
+      fontFamily: 'MS Sans Serif, sans-serif',
+      position: 'relative'
+    }}>
+      <div style={{ 
+        fontWeight: 'bold', 
+        padding: '8px 8px 4px 8px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#f0f0f0',
+        borderBottom: '1px solid #c0c0c0',
+        position: 'sticky',
+        top: '0',
+        zIndex: 10
+      }}>
+        <span>📋 任务进度 ({completedCount}/{totalCount})</span>
+        <button
+          onClick={() => setShowTodoList(false)}
+          style={{
+            backgroundColor: '#c0c0c0',
+            border: '1px outset #c0c0c0',
+            cursor: 'pointer',
+            fontSize: '10px',
+            padding: '1px 4px'
+          }}
+        >
+          ✕
+        </button>
+      </div>
+      
+      <div style={{
+        maxHeight: '160px',
+        overflowY: 'auto',
+        padding: '4px 8px 8px 8px'
+      }}>
+        {todoStatus.description && (
+          <div style={{ 
+            color: '#555', 
+            marginBottom: '6px', 
+            fontSize: '10px',
+            fontStyle: 'italic',
+            padding: '4px',
+            backgroundColor: '#fff',
+            border: '1px solid #e0e0e0',
+            borderRadius: '2px'
+          }}>
+            {todoStatus.description}
+          </div>
+        )}
+        
+        {todoStatus.items && todoStatus.items.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {todoStatus.items.map(item => (
+              <div
+                key={item.index}
+                style={{
+                  border: item.completed ? '1px solid #c8e6c9' : '2px solid #ffe0b2',
+                  backgroundColor: item.completed ? '#e8f5e9' : '#fff3e0',
+                  padding: '8px',
+                  borderRadius: '2px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px',
+                  minHeight: '40px',
+                  opacity: item.completed ? 0.8 : 1
+                }}
+              >
+                <div style={{ fontSize: '16px', flexShrink: 0, marginTop: '2px' }}>
+                  {item.completed ? '✅' : '⏳'}
+                </div>
+                
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ 
+                    fontSize: '11px', 
+                    fontWeight: 'bold',
+                    marginBottom: '2px',
+                    textDecoration: item.completed ? 'line-through' : 'none',
+                    color: item.skipped ? '#999' : '#000'
+                  }}>
+                    {item.task}
+                  </div>
+                  
+                  {(item.skip_reason || item.note) && (
+                    <div style={{ 
+                      fontSize: '9px', 
+                      color: '#666',
+                      marginTop: '2px'
+                    }}>
+                      {item.skip_reason && (
+                        <span style={{ color: '#999' }}>
+                          跳过: {item.skip_reason}
+                        </span>
+                      )}
+                      {item.note && (
+                        <span style={{ color: '#4caf50', fontStyle: 'italic', marginLeft: item.skip_reason ? '8px' : '0' }}>
+                          {item.skip_reason ? ' | ' : ''}备注: {item.note}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: '#808080', textAlign: 'center', padding: '16px' }}>
+            暂无任务项
+          </div>
+        )}
+        
+        <div style={{
+          marginTop: '8px',
+          paddingTop: '8px',
+          borderTop: '1px solid #c0c0c0',
+          fontSize: '10px',
+          color: '#666',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span>
+            {todoStatus.all_completed 
+              ? '🎉 所有任务已完成' 
+              : `进度：已完成 ${completedCount}/${totalCount}，剩余 ${remainingCount}`
+            }
+          </span>
+          {todoStatus.all_completed && (
+            <span style={{ color: '#4caf50', fontWeight: 'bold' }}>
+              ✓ 完成
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
   );
 });
 
@@ -874,6 +1105,7 @@ function ChatWindow({
   // UI状态
   const [showSettings, setShowSettings] = useState(false);
   const [showFileSelector, setShowFileSelector] = useState(false);
+  const [showTodoList, setShowTodoList] = useState(false);
   const [boardFiles, setBoardFiles] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
   
@@ -895,6 +1127,10 @@ function ChatWindow({
   // 引用 - 最小化引用数量
   const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
+  const currentAIMessageIdRef = useRef(null);
+  const skipToolCallsRef = useRef({});
+  const streamingContentRef = useRef('');
+  const abortControllerRef = useRef(null);  // 用于中断流式请求
   const ITEMS_PER_PAGE = 20; // 每页加载20条消息
 
   // 加载更多历史消息 - 手动触发版本，保持滚动位置
@@ -1178,6 +1414,9 @@ function ChatWindow({
       });
 
       const aiMessageId = Date.now();
+      currentAIMessageIdRef.current = aiMessageId;
+      skipToolCallsRef.current = {};
+      streamingContentRef.current = '';
       const aiMessage = {
         id: aiMessageId,
         role: 'assistant',
@@ -1214,6 +1453,9 @@ function ChatWindow({
   // 流式AI回复函数
   const generateStreamingAIResponse = useCallback(async (userMessage, aiMessageId) => {
     try {
+      streamingContentRef.current = '';
+      skipToolCallsRef.current = {};
+
       // 添加上下文系统消息（如果启用了工具调用）
       const now = new Date();
       const currentDate = now.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
@@ -1257,6 +1499,11 @@ function ChatWindow({
 2. 每完成一步：complete_todo_item(索引)
 3. 系统自动根据完成状态决定继续或结束
 
+暂停机制：
+- 如果你在执行长任务中途需要暂停，请调用 pause_execution 工具，可以传递暂停原因（可选）
+  - 例如：pause_execution(reason="已完成部分工作，先展示给用户")
+- 暂停后，待办列表会保留，用户可以稍后继续
+
 示例：
 用户: "添加任务A，告诉我结果，再添加任务B，再告诉我，创建窗口"
 → 使用 todo（需要中间输出）
@@ -1267,7 +1514,10 @@ function ChatWindow({
 用户: "介绍一下你的功能"
 → 不用 todo（纯文本回复）
 
-⚠️ 如果使用了 todo，每个步骤完成后必须调用 complete_todo_item，否则会陷入循环。`
+⚠️ 重要提示：
+- 如果使用了 todo，每个步骤完成后必须调用 complete_todo_item，否则会陷入循环
+- 如果需要在任务中途暂停，请调用 pause_execution 工具
+- 系统会自动识别暂停意图，不会强制继续执行未完成的待办项`
       } : null;
       
       // 包含所有消息（包括system消息），让LLM了解用户的操作历史
@@ -1281,9 +1531,9 @@ function ChatWindow({
       // 然后添加历史消息
       messages.forEach(msg => {
         conversationMessages.push({
-          role: msg.role,
-          content: msg.content,
-          files: msg.files
+        role: msg.role,
+        content: msg.content,
+        files: msg.files
         });
       });
       
@@ -1301,13 +1551,17 @@ function ChatWindow({
         ? 'http://localhost:8081/api/llm/chat-with-tools'
         : 'http://localhost:8081/api/llm/chat';
       
+      // 创建 AbortController 用于中断请求
+      abortControllerRef.current = new AbortController();
+      
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           messages: conversationMessages,
           max_iterations: 25  // 最大工具调用轮数
-        })
+        }),
+        signal: abortControllerRef.current.signal  // 添加中断信号
       });
       
       if (!response.ok) {
@@ -1332,9 +1586,10 @@ function ChatWindow({
             if (data === '[DONE]') {
               setIsStreaming(false);
               setStreamingMessageId(null);
+              fullResponse = streamingContentRef.current || fullResponse;
               
               // ⭐ 将所有剩余的"等待中"标记改为"已完成"（对话结束时）
-              fullResponse = fullResponse.replace(/⏳ `([^`]+)` \[等待中\.\.\.\]/g, '✅ `$1` [已完成]');
+              fullResponse = fullResponse.replace(/⏳ `([^`]+)` \[(?:等待中\.\.\.|已跳过等待)\]/g, '✅ `$1` [已完成]');
               
               // 最后更新一次显示
               setMessages(prev => prev.map(msg => 
@@ -1358,11 +1613,16 @@ function ChatWindow({
                 body: JSON.stringify(finalMessage)
               });
               
+              currentAIMessageIdRef.current = null;
+              skipToolCallsRef.current = {};
+              streamingContentRef.current = '';
+              
               return;
             }
             
             try {
               const parsed = JSON.parse(data);
+              fullResponse = streamingContentRef.current || fullResponse;
               
               // 处理工具调用事件
               if (useTools && parsed.type) {
@@ -1387,19 +1647,25 @@ function ChatWindow({
                     /(<span class="tool-status">)\[等待中\.\.\.\](<\/span>)/g,
                     '$1[已完成]$2'
                   );
+                  streamingContentRef.current = fullResponse;
                   
                   // 在消息中显示工具标签（执行中）- 使用 details 标签实现点击展开
                   const toolCallId = `tool-${Date.now()}-${parsed.tool_name}`;
                   const argsStr = JSON.stringify(parsed.arguments, null, 2);
+                  skipToolCallsRef.current[toolCallId] = false;
                   
-                  fullResponse += `\n<details class="tool-call-block" data-tool-id="${toolCallId}">
+                  fullResponse += `\n<details class="tool-call-block" data-tool-id="${toolCallId}" data-skipped="false">
 <summary>🔧 <code>${parsed.tool_name}</code> <span class="tool-status">[执行中...]</span></summary>
+<div class="tool-call-actions">
+  <button type="button" class="tool-skip-button" data-tool-id="${toolCallId}" data-tool-name="${parsed.tool_name}">跳过等待</button>
+</div>
 
 **调用参数**：
 \`\`\`json
 ${argsStr}
 \`\`\`
 </details>\n`;
+                  streamingContentRef.current = fullResponse;
                   
                   // 立即更新显示
                   setMessages(prev => prev.map(msg => 
@@ -1419,6 +1685,12 @@ ${argsStr}
                   currentToolLogs.push(resultLog);
                   setToolCallLogs(prev => [...prev, resultLog]);
                   
+                  console.log('[ChatWindow] 收到工具执行结果:', {
+                    tool_name: parsed.tool_name,
+                    result: parsed.tool_result,
+                    success: parsed.tool_result?.status === 'success' || parsed.tool_result?.window_id
+                  });
+                  
                   // ⭐ 将最后一个 [执行中...] 的工具状态改为 [等待中...]，并添加执行结果
                   const resultStr = JSON.stringify(parsed.tool_result, null, 2);
                   
@@ -1436,6 +1708,7 @@ ${argsStr}
                     );
                     
                     fullResponse = updatedBefore + `\n\n**执行结果**：\n\`\`\`json\n${resultStr}\n\`\`\`\n` + afterDetails;
+                    streamingContentRef.current = fullResponse;
                   }
                   
                   // 立即更新显示
@@ -1448,8 +1721,15 @@ ${argsStr}
                   // 如果是窗口操作，触发刷新
                   const windowTools = ['create_window', 'delete_window', 'update_window', 'edit_window'];
                   if (windowTools.includes(parsed.tool_name)) {
-                    console.log('[ChatWindow] 窗口操作完成，触发刷新展板');
-                    window.dispatchEvent(new CustomEvent('refreshBoard'));
+                    const isSuccess = parsed.tool_result?.status === 'success' || parsed.tool_result?.window_id || parsed.tool_result?.message;
+                    console.log(`[ChatWindow] 窗口操作完成 (${parsed.tool_name}), 成功: ${isSuccess}, 触发刷新展板`);
+                    if (isSuccess) {
+                      // 延迟一点触发，确保后端已保存完成
+                      setTimeout(() => {
+                        console.log('[ChatWindow] 触发 refreshBoard 事件');
+                        window.dispatchEvent(new CustomEvent('refreshBoard'));
+                      }, 300);
+                    }
                   }
                   
                   // 如果是日历操作，触发刷新
@@ -1463,15 +1743,16 @@ ${argsStr}
                   // 💬 开始文本输出
                   // 将最后一个"等待中"的工具标记为"已完成"
                   fullResponse = fullResponse.replace(
-                    /(<span class="tool-status">)\[等待中\.\.\.\](<\/span>)(?![\s\S]*\[等待中\.\.\.\])/,
+                    /(<span class="tool-status">)\[(?:等待中\.\.\.|已跳过等待)\](<\/span>)/g,
                     '$1[已完成]$2'
                   );
-                  
                   fullResponse += `\n`;
+                  streamingContentRef.current = fullResponse;
                   
                 } else if (parsed.type === 'text_chunk') {
                   // 💬 流式输出文本
                   fullResponse += parsed.content;
+                  streamingContentRef.current = fullResponse;
                   
                   // 立即更新显示
                   setMessages(prev => prev.map(msg => 
@@ -1482,6 +1763,7 @@ ${argsStr}
                   
                 } else if (parsed.type === 'text_complete') {
                   // 💬 文本输出完成
+                  streamingContentRef.current = fullResponse;
                   // 立即更新显示
                   setMessages(prev => prev.map(msg => 
                     msg.id === aiMessageId 
@@ -1540,6 +1822,16 @@ ${argsStr}
                       ? { ...msg, content: fullResponse }
                       : msg
                   ));
+                } else if (parsed.type === 'info') {
+                  // ℹ️ 信息提示（如暂停提示）
+                  fullResponse += `\n\n${parsed.content}`;
+                  
+                  // 立即更新显示
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
                 }
                 
               } else if (parsed.content) {
@@ -1565,11 +1857,22 @@ ${argsStr}
       setIsStreaming(false);
       setStreamingMessageId(null);
       
-      setMessages(prev => prev.map(msg => 
-        msg.id === aiMessageId 
-          ? { ...msg, content: `❌ API调用失败: ${error.message}\n\n请检查:\n1. API配置是否正确\n2. 网络连接是否正常\n3. API密钥是否有效` }
-          : msg
-      ));
+      // 如果是用户主动中断，显示不同的消息
+      if (error.name === 'AbortError') {
+        const finalContent = streamingContentRef.current || '';
+        setMessages(prev => prev.map(msg => 
+          msg.id === aiMessageId 
+            ? { ...msg, content: finalContent + '\n\n⏸️ **用户已停止生成**' }
+            : msg
+        ));
+        console.log('⏸️ 用户已停止生成');
+      } else {
+        setMessages(prev => prev.map(msg => 
+          msg.id === aiMessageId 
+            ? { ...msg, content: `❌ API调用失败: ${error.message}\n\n请检查:\n1. API配置是否正确\n2. 网络连接是否正常\n3. API密钥是否有效` }
+            : msg
+        ));
+      }
     }
   }, [messages, boardId, boardName, conversationId, useTools]);
 
@@ -1779,6 +2082,157 @@ ${argsStr}
     };
   }, [conversationId, boardId, scrollToBottom]);
 
+  const applyToolUpdateToCurrentMessage = useCallback((updateFn) => {
+    if (!currentAIMessageIdRef.current) {
+      return;
+    }
+    setMessages(prev => prev.map(msg => {
+      if (msg.id !== currentAIMessageIdRef.current) {
+        return msg;
+      }
+      const updatedContent = updateFn(msg.content);
+      if (!updatedContent || updatedContent === msg.content) {
+        return msg;
+      }
+      streamingContentRef.current = updatedContent;
+      return { ...msg, content: updatedContent };
+    }));
+  }, [setMessages]);
+
+  const handleSkipToolCall = useCallback(async (toolCallId, toolName) => {
+    if (!toolCallId) return;
+    if (skipToolCallsRef.current[toolCallId]) return;
+
+    skipToolCallsRef.current[toolCallId] = true;
+
+    applyToolUpdateToCurrentMessage((content) => {
+      if (!content) return content;
+      let updated = content;
+      const detailAttrRegex = new RegExp(`(<details class="tool-call-block" data-tool-id="${toolCallId}"[^>]*)data-skipped="false"`, 'i');
+      if (detailAttrRegex.test(updated)) {
+        updated = updated.replace(detailAttrRegex, `$1data-skipped="true"`);
+      }
+      const statusRegex = new RegExp(`(<details class="tool-call-block" data-tool-id="${toolCallId}"[\s\S]*?<span class="tool-status">)\[[^\]]+\]`);
+      updated = updated.replace(statusRegex, `$1[已跳过等待]`);
+      const buttonRegex = new RegExp(`(<button[^>]*class="tool-skip-button"[^>]*data-tool-id="${toolCallId}"[^>]*)(>)([\s\S]*?</button>)`);
+      updated = updated.replace(buttonRegex, `$1 data-skipped="true" disabled>$2已跳过等待</button>`);
+      if (!new RegExp(`tool-skip-note"[^>]*data-tool-id="${toolCallId}"`).test(updated)) {
+        const actionsRegex = new RegExp(`(<div class="tool-call-actions">[\s\S]*?data-tool-id="${toolCallId}"[\s\S]*?</div>)`);
+        if (actionsRegex.test(updated)) {
+          updated = updated.replace(actionsRegex, `$1\n<div class="tool-skip-note" data-tool-id="${toolCallId}">⚠️ 用户已选择跳过等待工具结果，后续若有结果将自动更新。</div>`);
+        } else {
+          updated += `\n<div class="tool-skip-note" data-tool-id="${toolCallId}">⚠️ 用户已选择跳过等待工具结果，后续若有结果将自动更新。</div>`;
+        }
+      }
+      return updated;
+    });
+
+    const timestamp = new Date().toISOString();
+    setToolCallLogs(prev => [...prev, {
+      type: 'tool_skip',
+      tool_name: toolName,
+      tool_call_id: toolCallId,
+      timestamp
+    }]);
+
+    if (boardId && conversationId) {
+      try {
+        const skipMessage = {
+          role: 'system',
+          content: `⚠️ 用户在等待工具 ${toolName || toolCallId} 的执行结果时选择跳过等待，请继续后续响应。`,
+          metadata: {
+            type: 'tool_skip',
+            tool_name: toolName || '',
+            tool_call_id: toolCallId,
+            skipped_at: timestamp
+          }
+        };
+        await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${conversationId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(skipMessage)
+        });
+      } catch (error) {
+        console.error('上报跳过等待动作失败:', error);
+      }
+    }
+  }, [applyToolUpdateToCurrentMessage, boardId, conversationId, setToolCallLogs]);
+
+  // 停止生成
+  const handleStopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsStreaming(false);
+      setStreamingMessageId(null);
+      console.log('⏸️ 用户点击停止按钮，中断生成');
+    }
+  }, []);
+
+  // 清空聊天记录
+  const handleClearMessages = useCallback(async () => {
+    if (!conversationId || !boardId) {
+      console.warn('无法清空：缺少对话ID或展板ID');
+      return;
+    }
+
+    // 确认对话框
+    if (!window.confirm('确定要清空当前展板的所有聊天记录吗？此操作不可恢复。')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${conversationId}/messages`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        // 清空前端状态
+        setMessages([]);
+        setCurrentPage(0);
+        setHasMoreHistory(false);
+        setTodoStatus(null);
+        setToolCallLogs([]);
+        streamingContentRef.current = '';
+        currentAIMessageIdRef.current = null;
+        skipToolCallsRef.current = {};
+        
+        console.log('✅ 聊天记录已清空');
+      } else {
+        const errorText = await response.text();
+        console.error('清空聊天记录失败:', response.status, errorText);
+        alert('清空聊天记录失败，请稍后重试');
+      }
+    } catch (error) {
+      console.error('清空聊天记录失败:', error);
+      alert('清空聊天记录失败，请稍后重试');
+    }
+  }, [conversationId, boardId]);
+
+  useEffect(() => {
+    const handleGlobalClick = (event) => {
+      const button = event.target.closest('.tool-skip-button');
+      if (!button) return;
+      const detail = button.closest('.tool-call-block');
+      const toolId = button.getAttribute('data-tool-id');
+      if (!toolId || skipToolCallsRef.current[toolId]) return;
+      if (detail) {
+        const statusText = detail.querySelector('.tool-status')?.textContent || '';
+        if (statusText.includes('已完成')) {
+          return;
+        }
+      }
+      event.preventDefault();
+      const toolName = button.getAttribute('data-tool-name') || '';
+      handleSkipToolCall(toolId, toolName);
+    };
+
+    document.addEventListener('click', handleGlobalClick);
+    return () => {
+      document.removeEventListener('click', handleGlobalClick);
+    };
+  }, [handleSkipToolCall]);
+
   if (!isVisible) return null;
 
   return (
@@ -1799,6 +2253,12 @@ ${argsStr}
         getProviderName={getProviderName}
         useTools={useTools}
         setUseTools={setUseTools}
+        onClearMessages={handleClearMessages}
+        todoStatus={todoStatus}
+        showTodoList={showTodoList}
+        setShowTodoList={setShowTodoList}
+        isStreaming={isStreaming}
+        onStopGeneration={handleStopGeneration}
       />
 
       <div 
@@ -1937,93 +2397,19 @@ ${argsStr}
             </div>
           </div>
         ) : (
-          /* 使用智能管理的消息列表 */
-          displayedMessages.map((message, index) => (
-            <MessageComponent
-              key={`msg-${message.id}-${index}`}
-              message={message}
-              isStreaming={isStreaming}
-              streamingMessageId={streamingMessageId}
-              onOpenWindow={onOpenWindow}
-              getFileIcon={getFileIcon}
-            />
-          ))
-        )}
-        
-        {/* Todo 追踪显示 */}
-        {todoStatus && todoStatus.has_todos && (
-          <div style={{
-            margin: '12px 8px',
-            padding: '8px',
-            background: '#f0f8ff',
-            border: '1px solid #c0c0c0',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            fontSize: '11px'
-          }}>
-            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-              📋 任务进度 ({todoStatus.completed_count}/{todoStatus.total})
-            </div>
-            {todoStatus.description && (
-              <div style={{ color: '#666', marginBottom: '4px', fontSize: '10px' }}>
-                {todoStatus.description}
-              </div>
-            )}
-            <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
-              {todoStatus.items.map(item => (
-                <div key={item.index} style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  margin: '2px 0',
-                  padding: '2px',
-                  backgroundColor: item.completed ? '#e8f5e9' : '#fff',
-                  opacity: item.completed ? 0.7 : 1
-                }}>
-                  <span style={{ marginRight: '4px' }}>
-                    {item.completed ? '✅' : '⏳'}
-                  </span>
-                  <span style={{
-                    flex: 1,
-                    textDecoration: item.completed ? 'line-through' : 'none',
-                    color: item.skipped ? '#999' : '#000'
-                  }}>
-                    {item.task}
-                    {item.skip_reason && (
-                      <span style={{ color: '#666', fontSize: '10px' }}>
-                        {' '}(跳过: {item.skip_reason})
-                      </span>
-                    )}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div style={{
-              marginTop: '4px',
-              paddingTop: '4px',
-              borderTop: '1px solid #ddd',
-              fontSize: '10px',
-              color: '#666'
-            }}>
-              {todoStatus.all_completed 
-                ? '🎉 所有任务已完成' 
-                : `⏳ 还有 ${todoStatus.remaining_count} 项待完成...`
-              }
-            </div>
-          </div>
-        )}
-        
-        {isLoading && (
-          <div className="ai-message-block">
-            <div className="message-header">
-              <div className="message-avatar">🤖</div>
-              <div className="message-sender">AI助手</div>
-            </div>
-            <div className="message-content typing">
-              <span className="typing-indicator">
-                <span></span><span></span><span></span>
-              </span>
-              正在思考...
-            </div>
-          </div>
+          <>
+            {/* 消息列表 */}
+            {displayedMessages.map((message, index) => (
+              <MessageComponent
+                key={`msg-${message.id}-${index}`}
+                message={message}
+                isStreaming={isStreaming}
+                streamingMessageId={streamingMessageId}
+                onOpenWindow={onOpenWindow}
+                getFileIcon={getFileIcon}
+              />
+            ))}
+          </>
         )}
       </div>
 
@@ -2036,65 +2422,99 @@ ${argsStr}
         getFileIcon={getFileIcon}
       />
 
-        <div className="input-container">
-          {selectedFiles.length > 0 && (
-            <div style={{
+      <TodoListSelector
+        showTodoList={showTodoList}
+        setShowTodoList={setShowTodoList}
+        todoStatus={todoStatus}
+      />
+
+      <div className="input-container">
+        {/* 折叠的 Todo 显示 */}
+        {todoStatus && todoStatus.has_todos && !showTodoList && (
+          <div 
+            onClick={() => setShowTodoList(true)}
+            style={{
               fontSize: '10px',
               color: '#0078d4',
-              padding: '2px 4px',
+              padding: '4px 8px',
               backgroundColor: '#f0f8ff',
               border: '1px solid #0078d4',
               borderRadius: '2px',
               margin: '0 4px 4px 4px',
               display: 'flex',
               alignItems: 'center',
-              gap: '4px'
-            }}>
-              <span>📎 已选择 {selectedFiles.length} 个文件</span>
-              <button
-                onClick={() => setSelectedFiles([])}
-                style={{
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '10px',
-                  color: '#0078d4',
-                  padding: '0 2px'
-                }}
-                title="清空选择"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-          
-          <div className="input-box">
-            <textarea
-              ref={inputRef}
-              value={inputText}
-              onChange={handleInputChange}
-              onKeyPress={handleKeyPress}
-              placeholder="输入消息... (Enter发送，Shift+Enter换行)"
-              rows="1"
-              disabled={isLoading}
+              gap: '4px',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}
+            title="点击展开任务列表"
+          >
+            <span>📋</span>
+            <span>[{todoStatus.completed_count ?? 0}/{todoStatus.total ?? 0} todo]</span>
+            {todoStatus.all_completed && (
+              <span style={{ color: '#4caf50', fontWeight: 'bold' }}>✓</span>
+            )}
+          </div>
+        )}
+        
+        {selectedFiles.length > 0 && (
+          <div style={{
+            fontSize: '10px',
+            color: '#0078d4',
+            padding: '2px 4px',
+            backgroundColor: '#f0f8ff',
+            border: '1px solid #0078d4',
+            borderRadius: '2px',
+            margin: '0 4px 4px 4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px'
+          }}>
+            <span>📎 已选择 {selectedFiles.length} 个文件</span>
+            <button
+              onClick={() => setSelectedFiles([])}
               style={{
-                resize: 'none',
-                minHeight: '16px',
-              maxHeight: '96px',
-                overflowY: 'hidden',
-                transition: 'height 0.1s ease'
+                backgroundColor: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '10px',
+                color: '#0078d4',
+                padding: '0 2px'
               }}
-            />
-            <button 
-              className="send-button"
-              onClick={sendMessage}
-              disabled={isLoading || !inputText.trim()}
-              title="发送消息"
+              title="清空选择"
             >
-              {isLoading ? '⏳' : '📤'}
+              ✕
             </button>
           </div>
+        )}
+
+        <div className="input-box">
+          <textarea
+            ref={inputRef}
+            value={inputText}
+            onChange={handleInputChange}
+            onKeyPress={handleKeyPress}
+            placeholder="输入消息... (Enter发送，Shift+Enter换行)"
+            rows="1"
+            disabled={isLoading}
+            style={{
+              resize: 'none',
+              minHeight: '16px',
+              maxHeight: '96px',
+              overflowY: 'hidden',
+              transition: 'height 0.1s ease'
+            }}
+          />
+          <button
+            className="send-button"
+            onClick={sendMessage}
+            disabled={isLoading || (!inputText.trim() && selectedFiles.length === 0)}
+            title="发送消息"
+          >
+            {isLoading ? '⏳' : '📤'}
+          </button>
         </div>
+      </div>
     </div>
   );
 }

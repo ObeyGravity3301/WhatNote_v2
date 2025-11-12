@@ -114,7 +114,13 @@ html, body {
 }
 
 .start-icon {
-  font-size: 12px;
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  image-rendering: pixelated;
 }
 
 .taskbar-separator {
@@ -334,22 +340,24 @@ html, body {
   background-image: url('./assets/icons/recycle_bin_full-3.png');
 }
 
+.win98-icon-mail {
+  background-image: url('./assets/icons/mail_small.png');
+}
+
+.win98-icon-calendar {
+  background-image: url('./assets/icons/calendar-small.png');
+}
+
+.win98-icon-start {
+  background-image: url('./assets/icons/windows-start.png');
+}
+
 .win98-icon-console {
-  background: #000;
-  border: 1px solid #808080;
-  position: relative;
+  background-image: url('./assets/icons/console_prompt-small.png');
 }
 
 .win98-icon-console::before {
-  content: 'C:>';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #00ff00;
-  font-family: 'Courier New', monospace;
-  font-size: 8px;
-  font-weight: bold;
+  content: none;
 }
 
 .win98-icon-palette {
@@ -476,6 +484,20 @@ html, body {
   background: #316ac5;
   color: white;
   border: 1px solid #316ac5;
+}
+
+.start-menu-context-menu {
+  position: fixed;
+  background: #c0c0c0;
+  border-top: 2px solid #dfdfdf;
+  border-left: 2px solid #dfdfdf;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  min-width: 140px;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 11px;
+  z-index: 20050;
 }
 
 .win98-toast-container {

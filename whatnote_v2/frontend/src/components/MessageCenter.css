@@ -83,6 +83,18 @@
   font-size: 14px;
 }
 
+.message-center-empty-icon {
+  display: inline-block;
+  width: 48px;
+  height: 48px;
+  background-image: url('../assets/icons/envelope_closed-0.png');
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  image-rendering: pixelated;
+  margin-bottom: 16px;
+}
+
 /* 消息列表 */
 .message-center-list {
   flex: 1;

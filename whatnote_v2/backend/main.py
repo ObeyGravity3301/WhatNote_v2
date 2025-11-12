@@ -4355,6 +4355,21 @@ async def delete_conversation(board_id: str, conversation_id: str):
         error(f"删除对话失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/api/boards/{board_id}/conversations/{conversation_id}/messages")
+async def clear_conversation_messages(board_id: str, conversation_id: str):
+    """清空对话的所有消息（保留对话记录）"""
+    try:
+        success = conversation_manager.clear_conversation_messages(board_id, conversation_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="对话不存在")
+        info(f"清空对话消息成功: {conversation_id}")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"清空对话消息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/boards/{board_id}/conversations/{conversation_id}/context")
 async def get_conversation_context(board_id: str, conversation_id: str, limit: int = 50):
     """获取对话上下文（用于LLM调用）"""

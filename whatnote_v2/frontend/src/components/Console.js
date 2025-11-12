@@ -27,7 +27,7 @@ const Console = ({ onClose, initialPath }) => {
       console.log('控制台 WebSocket 已连接');
       setConnected(true);
     };
-    
+
     websocket.onmessage = (event) => {
       const response = JSON.parse(event.data);
       handleResponse(response);
@@ -37,15 +37,15 @@ const Console = ({ onClose, initialPath }) => {
       console.error('控制台 WebSocket 错误:', error);
       addOutput('错误: 无法连接到后端服务', 'error');
     };
-    
+
     websocket.onclose = () => {
       console.log('控制台 WebSocket 已断开');
       setConnected(false);
       addOutput('连接已断开', 'error');
     };
-    
+
     wsRef.current = websocket;
-    
+
     return () => {
       if (websocket.readyState === WebSocket.OPEN) {
         websocket.close();
@@ -278,7 +278,7 @@ const Console = ({ onClose, initialPath }) => {
         const newIndex = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
         setHistoryIndex(newIndex);
         setInput(history[newIndex]);
-      }
+    }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (historyIndex !== -1) {
@@ -344,23 +344,23 @@ const Console = ({ onClose, initialPath }) => {
           </button>
         </div>
       </div>
-
+      
       {/* 控制台内容 */}
       {!isMinimized && (
         <div className="console-content">
           {/* 输出区域 */}
           <div className="console-output" ref={outputRef}>
             {renderOutput()}
-          </div>
-
+      </div>
+      
           {/* 输入区域 */}
           <form className="console-input-form" onSubmit={handleSubmit}>
             <span className="console-prompt">
               {currentPath === '/' ? 'C:\\WHATNOTE>' : `${currentPath}>`}
             </span>
-            <input
+        <input
               ref={inputRef}
-              type="text"
+          type="text"
               className="console-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -368,7 +368,7 @@ const Console = ({ onClose, initialPath }) => {
               placeholder={connected ? "输入命令..." : "连接中..."}
               disabled={!connected}
               autoFocus
-            />
+        />
           </form>
 
           {/* 状态栏 */}
@@ -380,10 +380,10 @@ const Console = ({ onClose, initialPath }) => {
               历史: {history.length} | 使用方向键浏览历史
             </span>
           </div>
-        </div>
+      </div>
       )}
     </div>
   );
 };
 
-export default Console;
+export default Console; 

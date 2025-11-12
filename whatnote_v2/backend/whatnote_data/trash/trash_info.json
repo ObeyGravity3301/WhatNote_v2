@@ -261,5 +261,608 @@
     "deleted_at": "2025-11-04T17:11:28.912476",
     "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762246911131/board-1762246930716/files",
     "file_size": 439
+  },
+  {
+    "id": "trash_1762701254142",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md",
+    "trash_filename": "1762701254142_PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md",
+    "window_data": {
+      "id": "window_1762700948799",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望",
+      "type": "text",
+      "created_at": "2025-11-09T23:09:08.799079",
+      "updated_at": "2025-11-09T23:14:05.918345",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:14.172457",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 0
+  },
+  {
+    "id": "trash_1762701254174",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md.json",
+    "trash_filename": "1762701254174_PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md.json",
+    "window_data": {
+      "id": "window_1762700948799",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望",
+      "type": "text",
+      "created_at": "2025-11-09T23:09:08.799079",
+      "updated_at": "2025-11-09T23:14:05.918345",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:14.175011",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 552
+  },
+  {
+    "id": "trash_1762701256402",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md",
+    "trash_filename": "1762701256402_PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md",
+    "window_data": {
+      "id": "window_1762700947503",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）",
+      "type": "text",
+      "created_at": "2025-11-09T23:09:07.503219",
+      "updated_at": "2025-11-09T23:14:03.975491",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:16.403155",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 0
+  },
+  {
+    "id": "trash_1762701256404",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md.json",
+    "trash_filename": "1762701256404_PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md.json",
+    "window_data": {
+      "id": "window_1762700947503",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）",
+      "type": "text",
+      "created_at": "2025-11-09T23:09:07.503219",
+      "updated_at": "2025-11-09T23:14:03.975491",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:16.404738",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 600
+  },
+  {
+    "id": "trash_1762701258313",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md",
+    "trash_filename": "1762701258313_PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md",
+    "window_data": {
+      "id": "window_1762700940055",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）",
+      "type": "text",
+      "created_at": "2025-11-09T23:09:00.055949",
+      "updated_at": "2025-11-09T23:14:01.895512",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:18.314478",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 1403
+  },
+  {
+    "id": "trash_1762701258315",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md.json",
+    "trash_filename": "1762701258315_PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md.json",
+    "window_data": {
+      "id": "window_1762700940055",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）",
+      "type": "text",
+      "created_at": "2025-11-09T23:09:00.055949",
+      "updated_at": "2025-11-09T23:14:01.895512",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:18.316101",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 582
+  },
+  {
+    "id": "trash_1762701260266",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md",
+    "trash_filename": "1762701260266_PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md",
+    "window_data": {
+      "id": "window_1762700938390",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:58.390225",
+      "updated_at": "2025-11-09T23:13:54.320209",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:20.267241",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 1180
+  },
+  {
+    "id": "trash_1762701260268",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md.json",
+    "trash_filename": "1762701260268_PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md.json",
+    "window_data": {
+      "id": "window_1762700938390",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:58.390225",
+      "updated_at": "2025-11-09T23:13:54.320209",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:20.269203",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 570
+  },
+  {
+    "id": "trash_1762701263749",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md",
+    "trash_filename": "1762701263749_PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md",
+    "window_data": {
+      "id": "window_1762700937169",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:57.169923",
+      "updated_at": "2025-11-09T23:13:54.484849",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:23.750528",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 929
+  },
+  {
+    "id": "trash_1762701263754",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md.json",
+    "trash_filename": "1762701263754_PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md.json",
+    "window_data": {
+      "id": "window_1762700937169",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:57.169923",
+      "updated_at": "2025-11-09T23:13:54.484849",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:23.755488",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 576
+  },
+  {
+    "id": "trash_1762701265707",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md",
+    "trash_filename": "1762701265707_PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md",
+    "window_data": {
+      "id": "window_1762700935753",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:55.753069",
+      "updated_at": "2025-11-09T23:13:54.678511",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:25.708343",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 1049
+  },
+  {
+    "id": "trash_1762701265712",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md.json",
+    "trash_filename": "1762701265712_PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md.json",
+    "window_data": {
+      "id": "window_1762700935753",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:55.753069",
+      "updated_at": "2025-11-09T23:13:54.678511",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:25.712802",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 546
+  },
+  {
+    "id": "trash_1762701267809",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md",
+    "trash_filename": "1762701267809_PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md",
+    "window_data": {
+      "id": "window_1762700934216",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 3. 机械性能",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:54.216834",
+      "updated_at": "2025-11-09T23:13:53.842626",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:27.810206",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 1090
+  },
+  {
+    "id": "trash_1762701267814",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md.json",
+    "trash_filename": "1762701267814_PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md.json",
+    "window_data": {
+      "id": "window_1762700934216",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 3. 机械性能",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:54.216834",
+      "updated_at": "2025-11-09T23:13:53.842626",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:27.815017",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 546
+  },
+  {
+    "id": "trash_1762701269747",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md",
+    "trash_filename": "1762701269747_PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md",
+    "window_data": {
+      "id": "window_1762700926274",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:46.274976",
+      "updated_at": "2025-11-09T23:13:54.101276",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:29.748667",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 1118
+  },
+  {
+    "id": "trash_1762701269753",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md.json",
+    "trash_filename": "1762701269753_PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md.json",
+    "window_data": {
+      "id": "window_1762700926274",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:46.274976",
+      "updated_at": "2025-11-09T23:13:54.101276",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:29.754047",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 552
+  },
+  {
+    "id": "trash_1762701272062",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md",
+    "trash_filename": "1762701272062_PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md",
+    "window_data": {
+      "id": "window_1762700924859",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 1. 标题页",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:44.859987",
+      "updated_at": "2025-11-09T23:13:54.915199",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:32.063312",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 264
+  },
+  {
+    "id": "trash_1762701272092",
+    "original_name": "PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md.json",
+    "trash_filename": "1762701272092_PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md.json",
+    "window_data": {
+      "id": "window_1762700924859",
+      "title": "PPT - 镁合金生物医用植入物介绍 - 1. 标题页",
+      "type": "text",
+      "created_at": "2025-11-09T23:08:44.859987",
+      "updated_at": "2025-11-09T23:13:54.915199",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 600,
+        "height": 400
+      },
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1762682292623",
+    "deleted_at": "2025-11-09T23:14:32.093652",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "file_size": 540
   }
 ]

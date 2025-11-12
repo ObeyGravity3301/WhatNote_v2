@@ -24,7 +24,7 @@ const MessageCenter = ({ isOpen, onClose, messages, onClearAll }) => {
         <div className="message-center-content">
           {messages.length === 0 ? (
             <div className="message-center-empty">
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+              <span className="message-center-empty-icon"></span>
               <div style={{ color: '#808080' }}>暂无消息</div>
             </div>
           ) : (

@@ -381,6 +381,37 @@
   padding-bottom: 4px;
 }
 
+.tool-call-actions {
+  margin: 6px 0 4px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tool-skip-button {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid #666;
+  background-color: #f5f5f5;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.tool-skip-button:hover:not([disabled]) {
+  background-color: #e0e0e0;
+}
+
+.tool-skip-button[disabled] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.tool-skip-note {
+  font-size: 10px;
+  color: #b36b00;
+  margin: 4px 0;
+}
+
 /* 滚动条样式 */
 .messages-container::-webkit-scrollbar {
   width: 16px;

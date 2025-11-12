@@ -95,6 +95,25 @@ ADD_TODO_ITEM_TOOL = ToolDefinition(
     }
 )
 
+# 6. 暂停执行
+PAUSE_EXECUTION_TOOL = ToolDefinition(
+    type="function",
+    function={
+        "name": "pause_execution",
+        "description": "暂停当前任务的执行。当你需要中途暂停执行（例如：等待用户确认、需要更多信息、或已完成部分工作想先展示给用户），可以调用此工具。暂停后，待办列表会保留，用户可以稍后继续。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "暂停的原因（可选），例如：'等待用户确认'、'已完成部分工作，先展示给用户'、'需要更多信息'等"
+                }
+            },
+            "required": []
+        }
+    }
+)
+
 # 5. 跳过待办项
 SKIP_TODO_ITEM_TOOL = ToolDefinition(
     type="function",
@@ -440,6 +459,35 @@ class TodoToolHandlers:
                 status=ToolStatus.ERROR,
                 error=str(e)
             )
+    
+    async def pause_execution(self, arguments: Dict[str, Any], context: Dict[str, Any] = None) -> ToolResult:
+        """暂停执行"""
+        try:
+            reason = arguments.get("reason", "")
+            
+            info(f"[工具] 暂停执行，原因: {reason if reason else '未指定'}")
+            
+            # 返回特殊标记，让 llm_service 知道要暂停
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="pause_execution",
+                status=ToolStatus.SUCCESS,
+                data={
+                    "success": True,
+                    "paused": True,
+                    "reason": reason,
+                    "message": "执行已暂停"
+                }
+            )
+            
+        except Exception as e:
+            error(f"[工具] 暂停执行失败: {e}")
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="pause_execution",
+                status=ToolStatus.ERROR,
+                error=str(e)
+            )
 
 
 # ==================== 工具注册函数 ====================
@@ -455,6 +503,7 @@ def register_todo_tools(tool_registry, tracker: TodoTracker):
         (GET_TODO_STATUS_TOOL, ToolHandler(executor=handlers.get_todo_status)),
         (ADD_TODO_ITEM_TOOL, ToolHandler(executor=handlers.add_todo_item)),
         (SKIP_TODO_ITEM_TOOL, ToolHandler(executor=handlers.skip_todo_item)),
+        (PAUSE_EXECUTION_TOOL, ToolHandler(executor=handlers.pause_execution)),
     ]
     
     for tool_def, handler in todo_tools:
