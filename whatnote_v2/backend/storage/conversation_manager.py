@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
+from logger import info
 
 class ConversationManager:
     """LLM对话记录管理器"""
@@ -42,7 +43,9 @@ class ConversationManager:
             "board_id": board_id,
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
-            "messages": []
+            "messages": [],
+            "todo_state": None,
+            "todo_status": None
         }
         
         # 保存到文件
@@ -87,7 +90,8 @@ class ConversationManager:
                     "total_messages": total_messages,
                     "page": page,
                     "limit": limit,
-                    "has_more": start_index > 0
+                    "has_more": start_index > 0,
+                    "todo_status": conversation_data.get("todo_status")
                 }
             else:
                 # 如果不分页，返回完整对话
@@ -127,7 +131,7 @@ class ConversationManager:
     
     def add_message(self, board_id: str, conversation_id: str, message: Dict) -> bool:
         """向对话中添加消息"""
-        conversation = self.get_conversation(board_id, conversation_id)
+        conversation = self.get_conversation(board_id, conversation_id, page=None, limit=None)
         if not conversation:
             return False
         
@@ -195,12 +199,15 @@ class ConversationManager:
     
     def clear_conversation_messages(self, board_id: str, conversation_id: str) -> bool:
         """清空对话的所有消息（保留对话记录）"""
-        conversation = self.get_conversation(board_id, conversation_id)
+        conversation = self.get_conversation(board_id, conversation_id, page=None, limit=None)
         if not conversation:
+            info(f"[ConversationManager] 清空对话失败，未找到对话: board_id={board_id}, conversation_id={conversation_id}")
             return False
         
         # 清空消息数组，保留其他元数据
         conversation["messages"] = []
+        conversation["todo_state"] = None
+        conversation["todo_status"] = None
         conversation["updated_at"] = datetime.now().isoformat()
         
         conversations_dir = self.get_board_conversations_dir(board_id)
@@ -209,6 +216,7 @@ class ConversationManager:
         try:
             with open(conversation_file, "w", encoding="utf-8") as f:
                 json.dump(conversation, f, ensure_ascii=False, indent=2)
+            info(f"[ConversationManager] 已清空对话消息并重置待办状态: board_id={board_id}, conversation_id={conversation_id}")
             return True
         except Exception as e:
             print(f"清空对话消息失败: {e}")
@@ -223,3 +231,52 @@ class ConversationManager:
         messages = conversation.get("messages", [])
         # 返回最近的limit条消息
         return messages[-limit:] if len(messages) > limit else messages
+
+    def get_todo_state(self, board_id: str, conversation_id: str) -> Optional[Dict]:
+        """获取对话的todo状态"""
+        conversation = self.get_conversation(board_id, conversation_id, page=None, limit=None)
+        if not conversation:
+            info(f"[ConversationManager] 获取待办状态失败，未找到对话: board_id={board_id}, conversation_id={conversation_id}")
+            return None
+        status = conversation.get("todo_status")
+        info(
+            f"[ConversationManager] 读取待办状态: board_id={board_id}, conversation_id={conversation_id}, "
+            f"has_todos={status.get('has_todos') if status else False}, "
+            f"completed={status.get('completed_count') if status else 0}, "
+            f"total={status.get('total') if status else 0}"
+        )
+        return {
+            "state": conversation.get("todo_state"),
+            "status": conversation.get("todo_status")
+        }
+
+    def save_todo_state(self, board_id: str, conversation_id: str, todo_state: Optional[Dict], todo_status: Optional[Dict]) -> bool:
+        """保存对话的todo状态"""
+        conversation = self.get_conversation(board_id, conversation_id, page=None, limit=None)
+        if not conversation:
+            return False
+
+        conversation["todo_state"] = todo_state
+        conversation["todo_status"] = todo_status
+        conversation["updated_at"] = datetime.now().isoformat()
+
+        conversations_dir = self.get_board_conversations_dir(board_id)
+        conversation_file = conversations_dir / f"{conversation_id}.json"
+
+        try:
+            with open(conversation_file, "w", encoding="utf-8") as f:
+                json.dump(conversation, f, ensure_ascii=False, indent=2)
+            if todo_status:
+                info(
+                    f"[ConversationManager] 已保存待办状态: board_id={board_id}, conversation_id={conversation_id}, "
+                    f"completed={todo_status.get('completed_count')}, total={todo_status.get('total')}, "
+                    f"remaining={todo_status.get('remaining_count')}"
+                )
+            else:
+                info(
+                    f"[ConversationManager] 已保存待办状态（无活跃待办）: board_id={board_id}, conversation_id={conversation_id}"
+                )
+            return True
+        except Exception as e:
+            print(f"保存todo状态失败: {e}")
+            return False

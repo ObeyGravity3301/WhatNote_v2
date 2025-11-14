@@ -1163,6 +1163,10 @@ function ChatWindow({
         const newMessages = data.messages || [];
         console.log('📨 收到新消息:', newMessages.length, '条');
         console.log('📊 数据详情:', data);
+        if (Object.prototype.hasOwnProperty.call(data, 'todo_status')) {
+          setTodoStatus(data.todo_status);
+          console.info('[ChatWindow][TodoDebug] 加载历史后同步待办状态', data.todo_status);
+        }
         
         if (newMessages.length === 0) {
           console.log('📭 没有更多历史消息');
@@ -1559,7 +1563,9 @@ function ChatWindow({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           messages: conversationMessages,
-          max_iterations: 25  // 最大工具调用轮数
+          max_iterations: 25,  // 最大工具调用轮数
+          board_id: boardId,
+          conversation_id: conversationId
         }),
         signal: abortControllerRef.current.signal  // 添加中断信号
       });
@@ -1685,11 +1691,31 @@ ${argsStr}
                   currentToolLogs.push(resultLog);
                   setToolCallLogs(prev => [...prev, resultLog]);
                   
-                  console.log('[ChatWindow] 收到工具执行结果:', {
+                  const toolSuccess = parsed.tool_result?.status === 'success' || parsed.tool_result?.window_id;
+                  const toolDebugPayload = {
                     tool_name: parsed.tool_name,
                     result: parsed.tool_result,
-                    success: parsed.tool_result?.status === 'success' || parsed.tool_result?.window_id
-                  });
+                    success: toolSuccess
+                  };
+                  if (toolSuccess) {
+                    console.info('[ChatWindow][ToolDebug] 工具执行成功', toolDebugPayload);
+                  } else {
+                    console.warn('[ChatWindow][ToolDebug] 工具执行失败或返回异常', toolDebugPayload);
+                  }
+                  
+                  // 特殊处理：create_todo_list 的结果不应该直接更新 todo 状态
+                  // 应该等待 todo_status 事件来更新状态
+                  if (parsed.tool_name === 'create_todo_list' && toolSuccess) {
+                    const resultData = parsed.tool_result;
+                    console.info(
+                      '[ChatWindow][TodoDebug] 收到 create_todo_list 工具结果，但不直接更新状态，等待 todo_status 事件',
+                      { 
+                        resultTotal: resultData?.total,
+                        resultHasTodos: resultData?.has_todos,
+                        currentTodoStatus: todoStatus ? `${todoStatus.completed_count}/${todoStatus.total}` : 'null'
+                      }
+                    );
+                  }
                   
                   // ⭐ 将最后一个 [执行中...] 的工具状态改为 [等待中...]，并添加执行结果
                   const resultStr = JSON.stringify(parsed.tool_result, null, 2);
@@ -1722,11 +1748,15 @@ ${argsStr}
                   const windowTools = ['create_window', 'delete_window', 'update_window', 'edit_window'];
                   if (windowTools.includes(parsed.tool_name)) {
                     const isSuccess = parsed.tool_result?.status === 'success' || parsed.tool_result?.window_id || parsed.tool_result?.message;
-                    console.log(`[ChatWindow] 窗口操作完成 (${parsed.tool_name}), 成功: ${isSuccess}, 触发刷新展板`);
+                    if (isSuccess) {
+                      console.info(`[ChatWindow][WindowDebug] 窗口操作成功 (${parsed.tool_name})`, parsed.tool_result);
+                    } else {
+                      console.warn(`[ChatWindow][WindowDebug] 窗口操作失败或返回空结果 (${parsed.tool_name})`, parsed.tool_result);
+                    }
                     if (isSuccess) {
                       // 延迟一点触发，确保后端已保存完成
                       setTimeout(() => {
-                        console.log('[ChatWindow] 触发 refreshBoard 事件');
+                        console.info('[ChatWindow][WindowDebug] 触发 refreshBoard 事件');
                         window.dispatchEvent(new CustomEvent('refreshBoard'));
                       }, 300);
                     }
@@ -1773,8 +1803,30 @@ ${argsStr}
                   
                 } else if (parsed.type === 'todo_status') {
                   // 📋 Todo 状态更新
-                  console.log('[ChatWindow] 收到 todo 状态:', parsed.content);
-                  setTodoStatus(parsed.content);
+                  const status = parsed.content;
+                  const oldStatus = todoStatus;
+                  
+                  if (status?.has_todos) {
+                    const remainingItems = (status.items || []).filter(item => !item.completed).map(item => item.task);
+                    console.info(
+                      `[ChatWindow][TodoDebug] 收到待办进度更新: ${status.completed_count}/${status.total} 完成，剩余 ${status.remaining_count} 项`,
+                      { 
+                        oldStatus: oldStatus ? `${oldStatus.completed_count}/${oldStatus.total}` : 'null',
+                        newStatus: `${status.completed_count}/${status.total}`,
+                        remainingItems, 
+                        fullStatus: status 
+                      }
+                    );
+                  } else {
+                    console.info(
+                      '[ChatWindow][TodoDebug] 收到待办进度更新：当前无活跃待办',
+                      { oldStatus, newStatus: status }
+                    );
+                  }
+                  
+                  // 强制更新状态
+                  setTodoStatus(status);
+                  console.info('[ChatWindow][TodoDebug] 已调用 setTodoStatus，状态应已更新', status);
                   
                 } else if (parsed.type === 'intermediate_text_start' || parsed.type === 'final_start') {
                   // 兼容旧版本
@@ -1903,6 +1955,14 @@ ${argsStr}
             
             setMessages(messages);
             setCurrentPage(0);
+            if (Object.prototype.hasOwnProperty.call(conversation, 'todo_status')) {
+              setTodoStatus(conversation.todo_status);
+              if (conversation.todo_status?.has_todos) {
+                console.info('[ChatWindow][TodoDebug] 初始化同步待办状态', conversation.todo_status);
+              } else {
+                console.info('[ChatWindow][TodoDebug] 初始化待办状态为空或无待办', conversation.todo_status);
+              }
+            }
             // 根据后端返回的has_more字段或消息数量判断是否有更多历史
             const hasMore = conversation.has_more !== false && totalMessages > messages.length;
             console.log('📊 设置hasMoreHistory:', hasMore, { has_more: conversation.has_more, totalMessages, loadedMessages: messages.length });
@@ -1921,6 +1981,8 @@ ${argsStr}
             setMessages([]);
             setCurrentPage(0);
             setHasMoreHistory(false);
+            setTodoStatus(null);
+            console.info('[ChatWindow][TodoDebug] 新对话创建，待办状态已重置');
           }
         }
       }
@@ -1951,6 +2013,10 @@ ${argsStr}
             const newMessages = conversation.messages || [];
             console.log('✅ 对话已刷新，新消息数:', newMessages.length);
             setMessages(newMessages);
+            if (Object.prototype.hasOwnProperty.call(conversation, 'todo_status')) {
+              setTodoStatus(conversation.todo_status);
+              console.info('[ChatWindow][TodoDebug] 刷新对话后同步待办状态', conversation.todo_status);
+            }
             setCurrentPage(0);
             // 刷新后滚动到底部查看新消息
             setTimeout(() => {
@@ -2060,6 +2126,10 @@ ${argsStr}
             
             // 更新消息列表
             setMessages(newMessages);
+            if (Object.prototype.hasOwnProperty.call(conversation, 'todo_status')) {
+              setTodoStatus(conversation.todo_status);
+              console.info('[ChatWindow][TodoDebug] 批量刷新事件后同步待办状态', conversation.todo_status);
+            }
             
             // 滚动到底部以显示新的系统通知
             setTimeout(() => {

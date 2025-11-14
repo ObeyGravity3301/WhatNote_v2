@@ -12,13 +12,19 @@ from pathlib import Path
 from typing import Dict, List, Optional, AsyncGenerator
 from logger import info, error
 import pypdf
+from tools import tool_registry
+from tools.todo_tools import TodoTracker, register_todo_tools
 
 class LLMService:
     """LLM API调用服务"""
     
-    def __init__(self, api_config_manager, content_manager=None):
+    def __init__(self, api_config_manager, content_manager=None, conversation_manager=None):
         self.api_config_manager = api_config_manager
         self.content_manager = content_manager
+        self.conversation_manager = conversation_manager
+        
+        # 确保待办工具已注册（只注册一次）
+        register_todo_tools(tool_registry)
     
     def _extract_pdf_with_pypdf(self, file_path: str, file_info: Dict, content_array: List, pdf_reader=None) -> None:
         """使用PyPDF直接提取PDF文本（回退方案）"""
@@ -630,7 +636,13 @@ class LLMService:
         except Exception as e:
             yield f"❌ 通义千问API调用异常: {str(e)}"
     
-    async def chat_with_tools(self, messages: List[Dict], max_iterations: int = 25) -> AsyncGenerator[Dict, None]:
+    async def chat_with_tools(
+        self,
+        messages: List[Dict],
+        max_iterations: int = 25,
+        board_id: Optional[str] = None,
+        conversation_id: Optional[str] = None
+    ) -> AsyncGenerator[Dict, None]:
         """
         支持工具调用的对话方法
         
@@ -649,11 +661,48 @@ class LLMService:
         """
         try:
             # 创建 TodoTracker 实例（每个对话一个）
-            from tools.todo_tools import TodoTracker, register_todo_tools
-            from tools import tool_registry
-            
             todo_tracker = TodoTracker()
-            register_todo_tools(tool_registry, todo_tracker)
+
+            def log_todo_status(stage: str):
+                if todo_tracker.has_todos():
+                    status = todo_tracker.get_status()
+                    remaining_titles = [
+                        item.get('task')
+                        for item in status.get('items', [])
+                        if not item.get('completed')
+                    ]
+                    info(
+                        f"[LLM Tools][Todo] {stage}: {status['completed_count']}/{status['total']} 完成，剩余 {status['remaining_count']} 项 -> {remaining_titles}"
+                    )
+                else:
+                    info(f"[LLM Tools][Todo] {stage}: 当前无待办列表")
+
+            def persist_todo_state(reason: str = "状态更新"):
+                if board_id and conversation_id and self.conversation_manager:
+                    state = todo_tracker.get_state()
+                    status = todo_tracker.get_status()
+                    self.conversation_manager.save_todo_state(board_id, conversation_id, state, status)
+                    log_todo_status(f"{reason}（已持久化）")
+                else:
+                    log_todo_status(f"{reason}（未持久化，缺少对话信息）")
+
+            # 如果提供了对话信息，尝试加载持久化的待办状态
+            if board_id and conversation_id and self.conversation_manager:
+                persisted = self.conversation_manager.get_todo_state(board_id, conversation_id)
+                if persisted:
+                    todo_tracker.load_state(persisted.get("state"))
+                    persisted_status = persisted.get("status")
+                    # 如果保存的状态为空但Tracker仍有数据，重新计算状态
+                    if not persisted_status and todo_tracker.has_todos():
+                        persisted_status = todo_tracker.get_status()
+                    if persisted_status and persisted_status.get("has_todos"):
+                        log_todo_status("载入持久化状态后")
+                        yield {
+                            "type": "todo_status",
+                            "content": persisted_status
+                        }
+                # 每次请求开始时同步一次持久化状态，确保todo_status字段最新
+                persist_todo_state("请求开始时同步")
             
             # 获取API配置
             current_provider = self.api_config_manager.get_current_provider()
@@ -873,22 +922,73 @@ class LLMService:
                         }
                     )
                     
-                    result = await tool_executor.execute_tool_call(tool_call_obj, context={})
+                    tool_context = {
+                        "todo_tracker": todo_tracker,
+                        "board_id": board_id,
+                        "conversation_id": conversation_id
+                    }
+                    result = await tool_executor.execute_tool_call(tool_call_obj, context=tool_context)
+
+                    tool_success = result.status.value == "success"
+                    try:
+                        parsed_arguments = json.loads(function_args) if isinstance(function_args, str) else function_args
+                    except json.JSONDecodeError:
+                        parsed_arguments = {}
+
+                    debug_payload = result.data if tool_success else {"error": result.error}
+                    try:
+                        payload_preview = json.dumps(debug_payload, ensure_ascii=False)
+                    except TypeError:
+                        payload_preview = str(debug_payload)
+                    if len(payload_preview) > 500:
+                        payload_preview = payload_preview[:500] + "...(truncated)"
+
+                    info(
+                        f"[LLM Tools] 工具执行{'成功' if tool_success else '失败'}: {function_name} | 参数: {parsed_arguments} | 结果: {payload_preview}"
+                    )
+
+                    window_related_tools = {
+                        'create_window',
+                        'update_window',
+                        'edit_window',
+                        'delete_window',
+                        'move_window',
+                        'read_window'
+                    }
+                    if function_name in window_related_tools:
+                        window_id = debug_payload.get('window_id') if isinstance(debug_payload, dict) else None
+                        if not window_id and isinstance(parsed_arguments, dict):
+                            window_id = parsed_arguments.get('window_id')
+                        board_for_log = None
+                        if isinstance(debug_payload, dict):
+                            board_for_log = debug_payload.get('board_id')
+                        if not board_for_log and isinstance(parsed_arguments, dict):
+                            board_for_log = parsed_arguments.get('board_id')
+                        info(
+                            f"[LLM Tools][Window] 操作 {function_name} -> board_id={board_for_log}, window_id={window_id}, success={tool_success}"
+                        )
                     
                     yield {
                         "type": "tool_result",
                         "content": f"✅ 工具执行完成: {function_name}",
                         "tool_name": function_name,
-                        "tool_result": result.data if result.status.value == "success" else {"error": result.error}
+                        "tool_result": result.data if tool_success else {"error": result.error}
                     }
                     
                     # ⭐ 如果执行了 todo 相关工具，立即发送 todo 状态更新
-                    if function_name in ['create_todo_list', 'complete_todo_item', 'add_todo_item', 'skip_todo_item']:
-                        if todo_tracker.has_todos():
-                            yield {
-                                "type": "todo_status",
-                                "content": todo_tracker.get_status()
-                            }
+                    if function_name in [
+                        'create_todo_list',
+                        'complete_todo_item',
+                        'add_todo_item',
+                        'skip_todo_item',
+                        'get_todo_status'
+                    ]:
+                        log_todo_status("执行待办工具后")
+                        yield {
+                            "type": "todo_status",
+                            "content": todo_tracker.get_status()
+                        }
+                        persist_todo_state("执行待办工具后")
                     
                     # ⭐ 如果调用了 pause_execution 工具，立即暂停执行
                     if function_name == 'pause_execution':
@@ -899,10 +999,12 @@ class LLMService:
                         
                         # 发送 todo 状态给前端（如果有）
                         if todo_tracker.has_todos():
+                            log_todo_status("pause_execution 调用时")
                             yield {
                                 "type": "todo_status",
                                 "content": todo_tracker.get_status()
                             }
+                            persist_todo_state("pause_execution 后")
                         
                         # 将工具调用和结果添加到对话历史
                         processed_messages.append({
@@ -945,6 +1047,8 @@ class LLMService:
                             "type": "info",
                             "content": "⏸️ 执行已暂停"
                         }
+
+                        persist_todo_state("pause_execution 完成后")
                         
                         # 暂停执行，结束对话
                         return
@@ -986,22 +1090,40 @@ class LLMService:
                         if todo_tracker.has_todos():
                             # 有待办列表，检查是否全部完成
                             if todo_tracker.is_all_completed():
+                                status = todo_tracker.get_status()
+                                log_todo_status("所有待办项完成")
+                                yield {
+                                    "type": "todo_status",
+                                    "content": status
+                                }
+                                persist_todo_state("所有待办项完成")
                                 info(f"[LLM Tools] 所有待办项已完成，结束对话")
                                 return
                             else:
-                                # 还有未完成的待办项，继续下一轮
-                                remaining = todo_tracker.get_status()['remaining_count']
-                                info(f"[LLM Tools] 还有 {remaining} 项待办未完成，继续下一轮")
-                                
+                                # 还有未完成的待办项，结束当前对话，让用户决定是否继续
+                                status = todo_tracker.get_status()
+                                remaining = status['remaining_count']
+                                info(f"[LLM Tools] 还有 {remaining} 项待办未完成，结束本轮对话，等待用户下一步指令")
+                                log_todo_status("主动停止但仍有待办")
                                 # 发送 todo 状态给前端
                                 yield {
                                     "type": "todo_status",
-                                    "content": todo_tracker.get_status()
+                                    "content": status
                                 }
                                 
-                                continue
+                                # 告知用户还有待办项未完成，可稍后继续
+                                message = f"⏹️ 对话已结束，还有 {remaining} 项待办未完成。如需继续，请重新发送指令或让助手调用 pause_execution 后再继续。"
+                                yield {
+                                    "type": "info",
+                                    "content": message
+                                }
+
+                                persist_todo_state("主动停止但仍有待办")
+                                
+                                return
                         else:
                             # 没有创建待办列表，按原逻辑结束
+                            persist_todo_state("无待办时结束对话")
                             info(f"[LLM Tools] 无待办列表，LLM 停止，结束对话")
                             return
                     else:

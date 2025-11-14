@@ -207,7 +207,7 @@ file_manager = FileSystemManager(DATA_DIR)
 content_manager = ContentManager(file_manager)
 conversation_manager = ConversationManager(file_manager)
 api_config_manager = APIConfigManager(DATA_DIR)
-llm_service = LLMService(api_config_manager, content_manager)
+llm_service = LLMService(api_config_manager, content_manager, conversation_manager)
 theme_manager = ThemeManager()
 
 # 初始化WebSocket连接管理器
@@ -4101,6 +4101,8 @@ async def llm_chat_with_tools(request: dict):
     try:
         messages = request.get('messages', [])
         max_iterations = request.get('max_iterations', 25)
+        board_id = request.get('board_id')
+        conversation_id = request.get('conversation_id')
         
         if not messages:
             raise HTTPException(status_code=400, detail="消息列表不能为空")
@@ -4109,7 +4111,7 @@ async def llm_chat_with_tools(request: dict):
         
         # 使用流式响应返回工具调用过程
         async def generate_response():
-            async for event in llm_service.chat_with_tools(messages, max_iterations):
+            async for event in llm_service.chat_with_tools(messages, max_iterations, board_id, conversation_id):
                 # 使用Server-Sent Events格式返回每个事件
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
