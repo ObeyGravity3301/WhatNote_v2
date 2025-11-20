@@ -1,10 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createRoot } from 'react-dom/client';
 import './BoardCanvas.css';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import PptxGenJS from 'pptxgenjs';
+import matter from 'gray-matter';
+import { Buffer } from 'buffer';
+
+if (typeof globalThis !== 'undefined' && typeof globalThis.Buffer === 'undefined') {
+  globalThis.Buffer = Buffer;
+}
 import * as pdfjsLib from 'pdfjs-dist';
 import ChatWindow from './ChatWindow';
 import RadialMindMap from './RadialMindMap';
@@ -35,6 +45,77 @@ const debounce = (func, wait) => {
     timeout = setTimeout(later, wait);
   };
 };
+
+const WIN98_BUTTON_STYLE = {
+  padding: '2px 10px',
+  fontSize: '11px',
+  fontFamily: 'MS Sans Serif, sans-serif',
+  backgroundColor: '#c0c0c0',
+  borderLeft: '2px solid #ffffff',
+  borderTop: '2px solid #ffffff',
+  borderRight: '2px solid #808080',
+  borderBottom: '2px solid #808080',
+  boxShadow: 'inset -1px -1px #808080, inset 1px 1px #ffffff',
+  cursor: 'pointer',
+  height: '22px',
+  color: '#000000'
+};
+
+const WIN98_BUTTON_ACTIVE_STYLE = {
+  borderLeft: '2px solid #808080',
+  borderTop: '2px solid #808080',
+  borderRight: '2px solid #ffffff',
+  borderBottom: '2px solid #ffffff',
+  boxShadow: 'inset 1px 1px #808080, inset -1px -1px #ffffff',
+  backgroundColor: '#b3b3b3'
+};
+
+const WIN98_PANEL_STYLE = {
+  backgroundColor: '#dcdcdc',
+  borderLeft: '2px solid #ffffff',
+  borderTop: '2px solid #ffffff',
+  borderRight: '2px solid #808080',
+  borderBottom: '2px solid #808080',
+  boxShadow: '2px 2px #000000',
+  padding: '6px'
+};
+
+const WIN98_MENU_BUTTON_STYLE = {
+  ...WIN98_BUTTON_STYLE,
+  width: '100%',
+  height: 'auto',
+  textAlign: 'left',
+  marginBottom: '6px'
+};
+
+const WIN98_SUNKEN_PANEL_STYLE = {
+  backgroundColor: '#ffffff',
+  borderLeft: '2px solid #808080',
+  borderTop: '2px solid #808080',
+  borderRight: '2px solid #ffffff',
+  borderBottom: '2px solid #ffffff',
+  padding: '6px'
+};
+
+const MARP_THEME_OPTIONS = [
+  {
+    id: 'default',
+    label: 'Default 经典',
+    description: 'Marp 默认浅色主题，适合大多数场景。'
+  },
+  {
+    id: 'gaia',
+    label: 'Gaia',
+    description: '大字号、视觉冲击更强的展示主题。'
+  },
+  {
+    id: 'uncover',
+    label: 'Uncover',
+    description: '暗色背景，适合舞台演示的主题。'
+  }
+];
+
+const AVAILABLE_MARP_THEME_IDS = MARP_THEME_OPTIONS.map((theme) => theme.id);
 
 // PDF分页组件
 function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter, setConfirmDialog }) {
@@ -5975,6 +6056,16 @@ const hasRealMediaContent = (window) => {
   return false;
 };
 
+const ensureHttpUrl = (input) => {
+  if (!input) return '';
+  let normalized = input.trim();
+  if (!normalized) return '';
+  if (!/^https?:\/\//i.test(normalized)) {
+    normalized = `https://${normalized}`;
+  }
+  return normalized;
+};
+
 // toMediaUrl 函数
 const toMediaUrl = (windowOrContent, boardId) => {
   console.log('🔗 toMediaUrl 被调用:', { windowOrContent, boardId });
@@ -6073,6 +6164,124 @@ const toMediaUrl = (windowOrContent, boardId) => {
   console.log('🔗 无法生成有效URL，返回空字符串');
   return '';
 };
+
+function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter }) {
+  const hasContent = hasRealMediaContent(windowData);
+  const imageUrl = hasContent ? toMediaUrl(windowData, boardId) : null;
+
+  const triggerImageAction = (action) => {
+    const actionLabels = {
+      'text-extract': '文字提取',
+      'image-translate': '图片翻译'
+    };
+
+    if (!hasContent) {
+      if (addMessage) {
+        addMessage('请先上传图片', `${actionLabels[action]}需要有效的图片内容`, 'warning', windowData.id);
+      }
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      const event = new CustomEvent('imageWindowAction', {
+        detail: {
+          windowId: windowData.id,
+          action,
+          imageUrl,
+          boardId
+        }
+      });
+      window.dispatchEvent(event);
+    }
+
+    if (addMessage) {
+      addMessage(`已触发${actionLabels[action]}`, '请在AI助手或相关工具中查看执行状态', 'info', windowData.id);
+    }
+
+    if (openMessageCenter) {
+      openMessageCenter();
+    }
+  };
+
+  const toolbarButtonStyle = {
+    padding: '1px 8px',
+    fontSize: '11px',
+    backgroundColor: '#c0c0c0',
+    border: '2px outset #c0c0c0',
+    borderRadius: '0px',
+    cursor: 'pointer',
+    fontFamily: 'MS Sans Serif, sans-serif',
+    height: '20px',
+    minWidth: '60px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  };
+
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{
+        backgroundColor: '#c0c0c0',
+        borderBottom: '2px outset #c0c0c0',
+        padding: '2px 4px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        height: '24px',
+        flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <button
+            style={toolbarButtonStyle}
+            onClick={() => triggerImageAction('text-extract')}
+            onMouseDown={(e) => { e.currentTarget.style.border = '2px inset #c0c0c0'; e.currentTarget.style.backgroundColor = '#a0a0a0'; }}
+            onMouseUp={(e) => { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
+          >
+            文字提取
+          </button>
+          <button
+            style={toolbarButtonStyle}
+            onClick={() => triggerImageAction('image-translate')}
+            onMouseDown={(e) => { e.currentTarget.style.border = '2px inset #c0c0c0'; e.currentTarget.style.backgroundColor = '#a0a0a0'; }}
+            onMouseUp={(e) => { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
+          >
+            图片翻译
+          </button>
+        </div>
+      </div>
+      <div style={{ flex: 1, display: 'flex' }}>
+        <label className="image-placeholder" title={windowData.content || '点击上传图片'} style={{ width: '100%', height: '100%' }}>
+          {hasContent ? (
+            <img
+              src={imageUrl}
+              alt="img"
+              style={{ maxWidth: '100%', maxHeight: '100%' }}
+            />
+          ) : (
+            <>
+              🖼️ 图片内容
+              <p>点击上传图片</p>
+            </>
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const files = e.target.files;
+              if (onUpload) {
+                onUpload(files);
+              }
+              e.target.value = '';
+            }}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
 
 // 文档窗口渲染器组件（Word文档等）
 function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter, setConfirmDialog }) {
@@ -6299,8 +6508,266 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, 
   );
 }
 
+function WebWindowRenderer({ window: windowData, onUrlChange }) {
+  const [addressBar, setAddressBar] = useState(windowData.content || '');
+  const [currentUrl, setCurrentUrl] = useState(windowData.content || '');
+  const [frameKey, setFrameKey] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const blockedTimerRef = useRef(null);
+
+  useEffect(() => {
+    const incomingUrl = windowData.content || '';
+    setAddressBar(incomingUrl);
+    setCurrentUrl(incomingUrl);
+    setLoadError(null);
+  }, [windowData.content, windowData.id]);
+
+  useEffect(() => {
+    return () => {
+      if (blockedTimerRef.current) {
+        clearTimeout(blockedTimerRef.current);
+      }
+    };
+  }, []);
+
+  const scheduleBlockedFallback = () => {
+    if (blockedTimerRef.current) {
+      clearTimeout(blockedTimerRef.current);
+    }
+    blockedTimerRef.current = setTimeout(() => {
+      setIsLoading(false);
+      setLoadError('该站点禁止在窗口中打开，请改用浏览器访问或复制链接到新标签。');
+    }, 3500);
+  };
+
+  const clearBlockedFallback = () => {
+    if (blockedTimerRef.current) {
+      clearTimeout(blockedTimerRef.current);
+      blockedTimerRef.current = null;
+    }
+  };
+
+  const handleNavigate = () => {
+    if (!onUrlChange) return;
+    const normalized = ensureHttpUrl(addressBar);
+    if (!normalized) return;
+    setAddressBar(normalized);
+    setCurrentUrl(normalized);
+    onUrlChange(normalized);
+    setFrameKey(prev => prev + 1);
+  };
+
+  const handleReload = () => {
+    if (!currentUrl) return;
+    setFrameKey(prev => prev + 1);
+  };
+
+  useEffect(() => {
+    if (currentUrl) {
+      setIsLoading(true);
+      setLoadError(null);
+      scheduleBlockedFallback();
+    } else {
+      setIsLoading(false);
+      setLoadError(null);
+      clearBlockedFallback();
+    }
+  }, [currentUrl, frameKey]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{
+        backgroundColor: '#c0c0c0',
+        borderBottom: '2px outset #c0c0c0',
+        padding: '2px 4px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        flexShrink: 0,
+        height: '26px'
+      }}>
+        <span style={{ fontFamily: 'MS Sans Serif, sans-serif', fontSize: '11px' }}>地址:</span>
+        <input
+          type="text"
+          value={addressBar}
+          onChange={(e) => setAddressBar(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleNavigate();
+            }
+          }}
+          placeholder="输入网页链接，例如 https://example.com"
+          style={{
+            flex: 1,
+            border: '2px inset #ffffff',
+            padding: '2px 4px',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            fontSize: '11px',
+            backgroundColor: '#ffffff'
+          }}
+        />
+        <button
+          onClick={handleNavigate}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            cursor: addressBar.trim() ? 'pointer' : 'not-allowed',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '50px'
+          }}
+          disabled={!addressBar.trim()}
+          onMouseDown={(e) => {
+            if (addressBar.trim()) {
+              e.target.style.border = '2px inset #c0c0c0';
+              e.target.style.backgroundColor = '#a0a0a0';
+            }
+          }}
+          onMouseUp={(e) => {
+            e.target.style.border = '2px outset #c0c0c0';
+            e.target.style.backgroundColor = '#c0c0c0';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.border = '2px outset #c0c0c0';
+            e.target.style.backgroundColor = '#c0c0c0';
+          }}
+        >
+          前往
+        </button>
+        <button
+          onClick={handleReload}
+          style={{
+            padding: '1px 8px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            cursor: currentUrl ? 'pointer' : 'not-allowed',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            minWidth: '50px'
+          }}
+          disabled={!currentUrl}
+          onMouseDown={(e) => {
+            if (currentUrl) {
+              e.target.style.border = '2px inset #c0c0c0';
+              e.target.style.backgroundColor = '#a0a0a0';
+            }
+          }}
+          onMouseUp={(e) => {
+            e.target.style.border = '2px outset #c0c0c0';
+            e.target.style.backgroundColor = '#c0c0c0';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.border = '2px outset #c0c0c0';
+            e.target.style.backgroundColor = '#c0c0c0';
+          }}
+        >
+          刷新
+        </button>
+      </div>
+      <div style={{ flex: 1, border: '2px inset #ffffff', backgroundColor: '#ffffff', position: 'relative' }}>
+        {currentUrl && !loadError ? (
+          <>
+            {isLoading && (
+              <div style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                background: '#ffffe1',
+                border: '1px solid #b5b500',
+                padding: '2px 8px',
+                fontSize: '11px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                zIndex: 2
+              }}>
+                正在加载…
+              </div>
+            )}
+            <iframe
+              key={`${windowData.id}-${frameKey}`}
+              title={`${windowData.title || 'web-window'}-iframe`}
+              src={currentUrl}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+              onLoad={() => {
+                clearBlockedFallback();
+                setIsLoading(false);
+                setLoadError(null);
+              }}
+              onError={() => {
+                clearBlockedFallback();
+                setIsLoading(false);
+                setLoadError('该站点禁止在窗口中打开，请改用浏览器访问或复制链接到新标签。');
+              }}
+            />
+          </>
+        ) : (
+          <div
+            className="web-placeholder"
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'column',
+              color: '#555',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              fontSize: '12px',
+              gap: '8px',
+              padding: '16px',
+              textAlign: 'center'
+            }}
+          >
+            <span role="img" aria-label="web">🌐</span>
+            <p style={{ margin: 0 }}>{loadError ? '无法嵌入该站点' : '尚未设置网页地址'}</p>
+            <p style={{ margin: 0 }}>
+              {loadError
+                ? '请改用浏览器打开此链接。'
+                : '在上方输入框填写 URL，点击“前往”即可加载网页'}
+            </p>
+            {loadError && currentUrl && (
+              <button
+                style={{
+                  marginTop: '8px',
+                  padding: '2px 12px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px outset #c0c0c0',
+                  cursor: 'pointer'
+                }}
+                onMouseDown={(e) => {
+                  e.target.style.border = '2px inset #c0c0c0';
+                  e.target.style.backgroundColor = '#a0a0a0';
+                }}
+                onMouseUp={(e) => {
+                  e.target.style.border = '2px outset #c0c0c0';
+                  e.target.style.backgroundColor = '#c0c0c0';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.border = '2px outset #c0c0c0';
+                  e.target.style.backgroundColor = '#c0c0c0';
+                }}
+                onClick={() => {
+                  window.open(currentUrl, '_blank', 'noopener,noreferrer');
+                }}
+              >
+                在浏览器中打开
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // 简单的文本编辑器组件，支持实时预览和打字机模式
-function TextEditorWithPreview({ window: windowData, onContentChange }) {
+function TextEditorWithPreview({ window: windowData, onContentChange, onConvertToWeb }) {
   // 调试模式检测 - 必须在所有其他代码之前定义
   const isDebugMode = typeof window !== 'undefined' && 
     (window.location.search.includes('debug=true') || window.location.hash.includes('debug'));
@@ -6309,6 +6776,7 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
   const [isTypewriterMode, setIsTypewriterMode] = useState(true); // 默认开启打字机模式
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
   const [localContent, setLocalContent] = useState(windowData.content || '');
+  const [webUrlInput, setWebUrlInput] = useState('');
   const textareaRef = useRef(null);
   const previewRef = useRef(null);
   const saveTimeoutRef = useRef(null);
@@ -6321,6 +6789,18 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
   const hasContent = useMemo(() => {
     return localContent && localContent.trim().length > 0;
   }, [localContent]);
+
+  useEffect(() => {
+    setWebUrlInput('');
+  }, [windowData.id]);
+
+  const handleConvertToWeb = () => {
+    if (!onConvertToWeb) return;
+    const normalized = ensureHttpUrl(webUrlInput);
+    if (!normalized) return;
+    onConvertToWeb(normalized);
+    setWebUrlInput('');
+  };
 
   // 处理文件上传
   const handleFileUpload = () => {
@@ -6548,6 +7028,410 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
     // 可以在这里添加自定义的markdown组件样式
   };
 
+  // Marp 预览开关与渲染状态
+  const [useMarpPreview, setUseMarpPreview] = useState(false);
+  const marpRef = useRef(null);
+  const marpLoadPromiseRef = useRef(null);
+  const [marpRenderResult, setMarpRenderResult] = useState({ html: '', css: '' });
+  const [marpTheme, setMarpTheme] = useState('default');
+  const [showMarpMenu, setShowMarpMenu] = useState(false);
+  const [showThemePanel, setShowThemePanel] = useState(false);
+  const [showMarpGuide, setShowMarpGuide] = useState(false);
+  const marpMenuRef = useRef(null);
+
+  const parseFrontMatter = useCallback((contentText) => {
+    try {
+      return matter(contentText || '');
+    } catch (err) {
+      console.warn('[BoardCanvas] 解析 front-matter 失败:', err);
+      return { data: {}, content: contentText || '' };
+    }
+  }, []);
+
+  const updateFrontMatter = useCallback((contentText, updater) => {
+    const parsed = parseFrontMatter(contentText);
+    const nextData = { ...(parsed.data || {}) };
+    updater(nextData);
+    return matter.stringify(parsed.content ?? '', nextData);
+  }, [parseFrontMatter]);
+
+  const applyContentUpdate = useCallback((updater) => {
+    setLocalContent((prevContent) => {
+      const current = prevContent ?? '';
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      if (next === current) {
+        return current;
+      }
+      if (onContentChange) {
+        onContentChange(next);
+      }
+      return next;
+    });
+  }, [onContentChange]);
+
+  const buildMarpReadyContent = useCallback((contentText, themeOverride) => {
+    return updateFrontMatter(contentText || '', (data) => {
+      if (data.marp === undefined || data.marp === null || data.marp === false) {
+        data.marp = true;
+      }
+      const nextTheme = themeOverride || data.theme || marpTheme || 'default';
+      data.theme = nextTheme;
+    });
+  }, [marpTheme, updateFrontMatter]);
+
+  const handleThemeSelection = useCallback((nextTheme) => {
+    setMarpTheme(nextTheme);
+    applyContentUpdate((prevContent) => buildMarpReadyContent(prevContent, nextTheme));
+  }, [applyContentUpdate, buildMarpReadyContent]);
+
+  useEffect(() => {
+    const parsed = parseFrontMatter(localContent || '');
+    const detectedTheme = parsed.data?.theme ? String(parsed.data.theme) : 'default';
+    if (detectedTheme && detectedTheme !== marpTheme) {
+      setMarpTheme(detectedTheme);
+    }
+  }, [localContent, marpTheme, parseFrontMatter]);
+
+  const marpMeta = useMemo(() => {
+    const parsed = parseFrontMatter(localContent || '');
+    const hasMarp = parsed.data?.marp === true || parsed.data?.marp === 'true';
+    const themeName = parsed.data?.theme ? String(parsed.data.theme) : '';
+    return {
+      hasMarp,
+      themeName
+    };
+  }, [localContent, parseFrontMatter]);
+
+  const knownThemeEntry = useMemo(
+    () => MARP_THEME_OPTIONS.find((theme) => theme.id === marpTheme),
+    [marpTheme]
+  );
+  const marpThemeDisplayName = knownThemeEntry ? knownThemeEntry.label : (marpTheme || 'default');
+
+  const marpMenuContainerStyle = useMemo(() => ({
+    position: 'absolute',
+    left: 0,
+    top: '22px',
+    minWidth: '240px',
+    backgroundColor: '#c0c0c0',
+    border: '2px outset #c0c0c0',
+    boxShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+    zIndex: 1000,
+    padding: '6px',
+    fontFamily: 'MS Sans Serif, sans-serif'
+  }), []);
+
+  const closeMarpMenu = useCallback(() => {
+    setShowMarpMenu(false);
+    setShowThemePanel(false);
+    setShowMarpGuide(false);
+  }, []);
+
+  useEffect(() => {
+    if (!showMarpMenu) {
+      setShowThemePanel(false);
+      setShowMarpGuide(false);
+      return;
+    }
+
+    const handleClickOutside = (event) => {
+      if (marpMenuRef.current && !marpMenuRef.current.contains(event.target)) {
+        closeMarpMenu();
+      }
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        closeMarpMenu();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showMarpMenu, closeMarpMenu]);
+
+  const handleMarpPreviewToggle = useCallback(() => {
+    if (useMarpPreview) {
+      setUseMarpPreview(false);
+    } else {
+      applyContentUpdate((prevContent) => buildMarpReadyContent(prevContent, marpTheme || 'default'));
+      setUseMarpPreview(true);
+    }
+    closeMarpMenu();
+  }, [useMarpPreview, applyContentUpdate, buildMarpReadyContent, marpTheme, closeMarpMenu]);
+
+  const ensureMarpRenderer = useCallback(async () => {
+    if (marpRef.current) return marpRef.current;
+    if (marpLoadPromiseRef.current) return marpLoadPromiseRef.current;
+
+    const loadPromise = import('@marp-team/marp-core')
+      .then((mod) => {
+        const MarpCtor = mod?.Marp || mod?.default || null;
+        if (!MarpCtor) {
+          throw new Error('未能从 @marp-team/marp-core 解析到 Marp 构造函数');
+        }
+        const instance = new MarpCtor({ html: true, math: 'katex' });
+        marpRef.current = instance;
+        return instance;
+      })
+      .catch((err) => {
+        console.error('加载 Marp 失败：', err);
+        throw err;
+      })
+      .finally(() => {
+        marpLoadPromiseRef.current = null;
+      });
+
+    marpLoadPromiseRef.current = loadPromise;
+    return loadPromise;
+  }, []);
+
+  const renderMarpContent = useCallback(async () => {
+    const marp = await ensureMarpRenderer();
+    const normalizedTheme = AVAILABLE_MARP_THEME_IDS.includes(marpTheme)
+      ? marpTheme
+      : (marpMeta.themeName || 'default');
+    const sourceContent = String(localContent || '');
+    const marpReadyContent = buildMarpReadyContent(sourceContent, normalizedTheme);
+    return marp.render(marpReadyContent, { theme: normalizedTheme });
+  }, [ensureMarpRenderer, localContent, buildMarpReadyContent, marpTheme, marpMeta.themeName]);
+
+  useEffect(() => {
+    if (!useMarpPreview) return;
+    let cancelled = false;
+    renderMarpContent()
+      .then((result) => {
+        if (!cancelled) setMarpRenderResult(result);
+      })
+      .catch((err) => console.error('Marp 渲染失败：', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [useMarpPreview, renderMarpContent]);
+
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const exportFileBaseName = useMemo(() => {
+    const title = windowData?.title?.trim() || 'text-window';
+    return title.replace(/[\\/:*?"<>|]/g, '_');
+  }, [windowData?.title]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!exportMenuRef.current) return;
+      if (!exportMenuRef.current.contains(event.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const waitForRenderFrame = () =>
+    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  const saveCanvasAsPDF = async (canvas, fileName) => {
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pdfWidth;
+    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pdfHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+    }
+
+    pdf.save(fileName);
+  };
+
+  const renderMarkdownCanvas = async () => {
+    const temp = document.createElement('div');
+    temp.style.position = 'fixed';
+    temp.style.left = '-10000px';
+    temp.style.top = '0';
+    temp.style.width = '1120px';
+    temp.style.minHeight = '1584px';
+    temp.style.backgroundColor = '#ffffff';
+    temp.style.padding = '16px';
+    temp.className = 'markdown-preview markdown-export-preview';
+    document.body.appendChild(temp);
+
+    const root = createRoot(temp);
+    try {
+      root.render(
+        <div className="markdown-preview">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+            components={markdownComponents}
+          >
+            {normalizeLatexDelimiters(String(localContent || ''))}
+          </ReactMarkdown>
+        </div>
+      );
+
+      await waitForRenderFrame();
+      return await html2canvas(temp, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+    } finally {
+      root.unmount();
+      document.body.removeChild(temp);
+    }
+  };
+
+  const renderMarpCanvas = async () => {
+    const result = await renderMarpContent();
+    if (!result?.html) {
+      throw new Error('当前内容为空，无法导出 Marp 幻灯片');
+    }
+
+    const temp = document.createElement('div');
+    temp.style.position = 'fixed';
+    temp.style.left = '-10000px';
+    temp.style.top = '0';
+    temp.style.width = '1280px';
+    temp.style.minHeight = '720px';
+    temp.style.backgroundColor = '#ffffff';
+    temp.className = 'marp-preview marp-export-preview';
+    temp.innerHTML = `<style>${result.css || ''}</style>${result.html}`;
+    document.body.appendChild(temp);
+
+    try {
+      await waitForRenderFrame();
+      return await html2canvas(temp, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+    } finally {
+      document.body.removeChild(temp);
+    }
+  };
+
+  const getMarpSlides = () => {
+    const raw = String(localContent || '').replace(/\r\n/g, '\n');
+    if (!raw.trim()) return [];
+
+    let body = raw;
+    if (body.startsWith('---\n')) {
+      const closingIndex = body.indexOf('\n---', 3);
+      if (closingIndex !== -1) {
+        body = body.slice(closingIndex + 4);
+      }
+    }
+
+    return body
+      .split(/\n-{3}\n/g)
+      .map((slide) => slide.trim())
+      .filter((slide) => slide.length > 0);
+  };
+
+  const markdownToPlainText = (text = '') => {
+    return text
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/[*_~>#-]/g, '')
+      .replace(/\r/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
+  const handleExportMarkdownPDF = async () => {
+    setShowExportMenu(false);
+    if (!localContent || !localContent.trim()) {
+      alert('当前没有可导出的 Markdown 内容。');
+      return;
+    }
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const canvas = await renderMarkdownCanvas();
+      await saveCanvasAsPDF(canvas, `${exportFileBaseName || 'markdown-notes'}.pdf`);
+    } catch (error) {
+      console.error('导出 Markdown PDF 失败:', error);
+      alert('导出 Markdown PDF 失败：' + (error?.message || '未知错误'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportMarpPDF = async () => {
+    setShowExportMenu(false);
+    if (!localContent || !localContent.trim()) {
+      alert('当前没有可导出的内容。');
+      return;
+    }
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const canvas = await renderMarpCanvas();
+      await saveCanvasAsPDF(canvas, `${exportFileBaseName || 'marp-slides'}.pdf`);
+    } catch (error) {
+      console.error('导出 Marp PDF 失败:', error);
+      alert('导出 Marp PDF 失败：' + (error?.message || '未知错误'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportMarpPPT = async () => {
+    setShowExportMenu(false);
+    if (!localContent || !localContent.trim()) {
+      alert('当前没有可导出的内容。');
+      return;
+    }
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const slides = getMarpSlides();
+      if (!slides.length) {
+        throw new Error('未找到可导出的 Marp 幻灯片。');
+      }
+      const pptx = new PptxGenJS();
+      slides.forEach((slideContent, index) => {
+        const slide = pptx.addSlide();
+        slide.addText(markdownToPlainText(slideContent) || `Slide ${index + 1}`, {
+          x: 0.5,
+          y: 0.5,
+          w: 9,
+          h: 5,
+          fontSize: 20,
+          color: '1F1F1F',
+          valign: 'top',
+          bold: false,
+          wrap: true
+        });
+      });
+      await pptx.writeFile({ fileName: `${exportFileBaseName || 'marp-slides'}.pptx` });
+    } catch (error) {
+      console.error('导出 Marp PPT 失败:', error);
+      alert('导出 Marp PPT 失败：' + (error?.message || '未知错误'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // 默认实时模式：左右分屏布局，无工具栏
   return (
     <div style={{ 
@@ -6615,6 +7499,318 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
             编辑模式
           </div>
         )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ position: 'relative' }} ref={marpMenuRef}>
+            <button
+              onClick={() => setShowMarpMenu((prev) => !prev)}
+              title="Marp 幻灯片相关功能"
+              style={{
+                padding: '1px 10px',
+                fontSize: '11px',
+                backgroundColor: showMarpMenu ? '#a0a0a0' : (useMarpPreview ? '#cfe8c0' : '#c0c0c0'),
+                border: '2px outset #c0c0c0',
+                borderRadius: '0px',
+                cursor: 'pointer',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                height: '20px',
+                minWidth: '90px'
+              }}
+              onMouseDown={(e) => {
+                e.target.style.border = '2px inset #c0c0c0';
+                e.target.style.backgroundColor = '#a0a0a0';
+              }}
+              onMouseUp={(e) => {
+                e.target.style.border = '2px outset #c0c0c0';
+                e.target.style.backgroundColor = showMarpMenu ? '#a0a0a0' : (useMarpPreview ? '#cfe8c0' : '#c0c0c0');
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.border = '2px outset #c0c0c0';
+                e.target.style.backgroundColor = showMarpMenu ? '#a0a0a0' : (useMarpPreview ? '#cfe8c0' : '#c0c0c0');
+              }}
+            >
+              {useMarpPreview ? 'Marp 预览中' : 'Marp 预览'}
+            </button>
+
+            {showMarpMenu && (
+              <div data-marp-menu style={marpMenuContainerStyle}>
+                <button
+                  onClick={handleMarpPreviewToggle}
+                  style={{
+                    ...WIN98_MENU_BUTTON_STYLE,
+                    backgroundColor: '#e9e9e9'
+                  }}
+                >
+                  {useMarpPreview ? '切换回 Markdown 预览' : '切换到 Marp 预览'}
+                </button>
+
+                <div style={{ borderTop: '1px solid #b4b4b4', paddingTop: '6px' }}>
+                  <button
+                    onClick={() => setShowThemePanel((prev) => !prev)}
+                    style={{
+                      ...WIN98_MENU_BUTTON_STYLE,
+                      backgroundColor: showThemePanel ? '#d7e2ff' : '#e9e9e9'
+                    }}
+                  >
+                    选择主题（当前：{marpThemeDisplayName})
+                  </button>
+                  {showThemePanel && (
+                    <div
+                      style={{
+                        ...WIN98_SUNKEN_PANEL_STYLE,
+                        marginTop: '6px',
+                        maxHeight: '200px',
+                        overflowY: 'auto'
+                      }}
+                    >
+                      {MARP_THEME_OPTIONS.map((theme) => (
+                        <label
+                          key={theme.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '6px',
+                            fontSize: '11px',
+                            marginBottom: '6px',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            border: theme.id === marpTheme ? '1px dotted #000000' : '1px solid transparent'
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="marp-theme"
+                            value={theme.id}
+                            checked={marpTheme === theme.id}
+                            onChange={() => handleThemeSelection(theme.id)}
+                            style={{ marginTop: '3px' }}
+                          />
+                          <div>
+                            <div style={{ fontWeight: 'bold' }}>{theme.label}</div>
+                            <div style={{ fontSize: '10px', color: '#555' }}>{theme.description}</div>
+                          </div>
+                        </label>
+                      ))}
+                      {!knownThemeEntry && marpTheme && (
+                        <div style={{ fontSize: '10px', color: '#a00' }}>
+                          当前正在使用自定义主题：<strong>{marpTheme}</strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ borderTop: '1px solid #b4b4b4', paddingTop: '6px', marginTop: '6px' }}>
+                  <button
+                    onClick={() => setShowMarpGuide((prev) => !prev)}
+                    style={{
+                      ...WIN98_MENU_BUTTON_STYLE,
+                      marginBottom: 0,
+                      backgroundColor: showMarpGuide ? '#ffe9c6' : '#e9e9e9'
+                    }}
+                  >
+                    Marp 使用说明
+                  </button>
+                  {showMarpGuide && (
+                    <div
+                      style={{
+                        ...WIN98_SUNKEN_PANEL_STYLE,
+                        marginTop: '6px',
+                        fontSize: '10px',
+                        lineHeight: 1.5,
+                        color: '#333'
+                      }}
+                    >
+                      <p style={{ margin: '0 0 6px 0' }}>
+                        Marp 能将 Markdown 转换成幻灯片。开启预览会自动插入需要的 front-matter（`marp: true`、`theme: ...`），也可以手动编辑。
+                      </p>
+                      <ul style={{ paddingLeft: '18px', margin: '0 0 6px 0' }}>
+                        <li>使用 `---` 分隔每一页。</li>
+                        <li>在 front-matter 中设置 `theme:` 即可指定主题。</li>
+                        <li>导出按钮可生成 PDF / PPT。导出前用预览检查样式。</li>
+                      </ul>
+                      <p style={{ margin: 0, color: marpMeta.hasMarp ? '#2e7d32' : '#a00' }}>
+                        {marpMeta.hasMarp ? '已检测到 marp front-matter。' : '尚未检测到 marp front-matter，切换到预览后会自动添加。'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {!hasContent && onConvertToWeb && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                fontSize: '11px'
+              }}>
+                <span style={{ color: '#000000' }}>或输入网址:</span>
+                <input
+                  type="text"
+                  value={webUrlInput}
+                  onChange={(e) => setWebUrlInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleConvertToWeb();
+                    }
+                  }}
+                  placeholder="例如 https://example.com"
+                  style={{
+                    padding: '2px 4px',
+                    width: '200px',
+                    border: '2px inset #ffffff',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    fontSize: '11px',
+                    backgroundColor: '#ffffff',
+                    color: '#000000'
+                  }}
+                />
+                <button
+                  onClick={handleConvertToWeb}
+                  style={{
+                    padding: '1px 8px',
+                    fontSize: '11px',
+                    backgroundColor: '#c0c0c0',
+                    border: '2px outset #c0c0c0',
+                    borderRadius: '0px',
+                    cursor: webUrlInput.trim() ? 'pointer' : 'not-allowed',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    height: '20px',
+                    minWidth: '70px'
+                  }}
+                  disabled={!webUrlInput.trim()}
+                  onMouseDown={(e) => {
+                    if (webUrlInput.trim()) {
+                      e.target.style.border = '2px inset #c0c0c0';
+                      e.target.style.backgroundColor = '#a0a0a0';
+                    }
+                  }}
+                  onMouseUp={(e) => {
+                    e.target.style.border = '2px outset #c0c0c0';
+                    e.target.style.backgroundColor = '#c0c0c0';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.border = '2px outset #c0c0c0';
+                    e.target.style.backgroundColor = '#c0c0c0';
+                  }}
+                  title="将当前文本窗口转换为网页窗口"
+                >
+                  打开网页
+                </button>
+              </div>
+            )}
+
+            <div style={{ position: 'relative' }} ref={exportMenuRef}>
+              <button
+                onClick={() => setShowExportMenu((prev) => !prev)}
+                disabled={isExporting}
+                style={{
+                  padding: '1px 10px',
+                  fontSize: '11px',
+                  backgroundColor: showExportMenu ? '#a0a0a0' : '#c0c0c0',
+                  border: '2px outset #c0c0c0',
+                  borderRadius: '0px',
+                  cursor: isExporting ? 'not-allowed' : 'pointer',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  height: '20px',
+                  minWidth: '80px'
+                }}
+                onMouseDown={(e) => {
+                  if (!isExporting) {
+                    e.target.style.border = '2px inset #c0c0c0';
+                    e.target.style.backgroundColor = '#a0a0a0';
+                  }
+                }}
+                onMouseUp={(e) => {
+                  e.target.style.border = '2px outset #c0c0c0';
+                  e.target.style.backgroundColor = showExportMenu ? '#a0a0a0' : '#c0c0c0';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.border = '2px outset #c0c0c0';
+                  e.target.style.backgroundColor = showExportMenu ? '#a0a0a0' : '#c0c0c0';
+                }}
+              >
+                {isExporting ? '导出中...' : '导出'}
+              </button>
+
+              {showExportMenu && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: '24px',
+                    width: '160px',
+                    backgroundColor: '#f0f0f0',
+                    border: '2px outset #c0c0c0',
+                    boxShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                    zIndex: 1000,
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}
+                >
+                  <button
+                    onClick={handleExportMarkdownPDF}
+                    disabled={isExporting}
+                    style={{
+                      padding: '6px 8px',
+                      fontSize: '11px',
+                      textAlign: 'left',
+                      backgroundColor: '#f0f0f0',
+                      border: 'none',
+                      borderBottom: '1px solid #d0d0d0',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif'
+                    }}
+                    onMouseEnter={(e) => (e.target.style.backgroundColor = '#e0e0e0')}
+                    onMouseLeave={(e) => (e.target.style.backgroundColor = '#f0f0f0')}
+                  >
+                    导出 Markdown PDF
+                  </button>
+                  <button
+                    onClick={handleExportMarpPDF}
+                    disabled={isExporting}
+                    style={{
+                      padding: '6px 8px',
+                      fontSize: '11px',
+                      textAlign: 'left',
+                      backgroundColor: '#f0f0f0',
+                      border: 'none',
+                      borderBottom: '1px solid #d0d0d0',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif'
+                    }}
+                    onMouseEnter={(e) => (e.target.style.backgroundColor = '#e0e0e0')}
+                    onMouseLeave={(e) => (e.target.style.backgroundColor = '#f0f0f0')}
+                  >
+                    导出 Marp PDF
+                  </button>
+                  <button
+                    onClick={handleExportMarpPPT}
+                    disabled={isExporting}
+                    style={{
+                      padding: '6px 8px',
+                      fontSize: '11px',
+                      textAlign: 'left',
+                      backgroundColor: '#f0f0f0',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif'
+                    }}
+                    onMouseEnter={(e) => (e.target.style.backgroundColor = '#e0e0e0')}
+                    onMouseLeave={(e) => (e.target.style.backgroundColor = '#f0f0f0')}
+                  >
+                    导出 Marp PPT
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
       </div>
 
       {/* 简化的调试面板 */}
@@ -6728,6 +7924,25 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
               lineHeight: '1.6'
             }}
           >
+          {useMarpPreview ? (
+            marpRef.current ? (
+              <div className="marp-preview">
+                <style>{marpRenderResult.css || ''}</style>
+                <div
+                  dangerouslySetInnerHTML={{ __html: marpRenderResult.html || '' }}
+                />
+                {!marpRenderResult.html && (
+                  <div style={{ fontSize: '12px', color: '#666' }}>
+                    内容为空或尚未渲染
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '12px', color: '#666' }}>
+                正在加载 Marp 组件...
+              </div>
+            )
+          ) : (
             <ReactMarkdown 
               key={`markdown-${localContent.length}`}
               remarkPlugins={[remarkGfm, remarkMath]} 
@@ -6736,6 +7951,7 @@ function TextEditorWithPreview({ window: windowData, onContentChange }) {
             >
               {normalizeLatexDelimiters(String(localContent || ''))}
             </ReactMarkdown>
+          )}
           </div>
         </div>
       </div>
@@ -8013,6 +9229,7 @@ function BoardCanvas({
   const getWindowTypeName = (type) => {
     const typeNames = {
       text: '文本',
+      web: '网页',
       image: '图片',
       video: '视频',
       audio: '音频',
@@ -8266,6 +9483,11 @@ function BoardCanvas({
     try {
       const baseTitle = `新建${getWindowTypeName(type)}`;
       const uniqueTitle = generateUniqueWindowName(baseTitle);
+      const defaultSize = type === 'web'
+        ? { width: 900, height: 600 }
+        : (type === 'text'
+            ? { width: 800, height: 600 }
+            : { width: 300, height: 200 });
       
       const windowData = {
         type,
@@ -8275,8 +9497,13 @@ function BoardCanvas({
           x: Math.round(100 + Math.random() * 200), 
           y: Math.round(100 + Math.random() * 200) 
         },
-        size: { width: 300, height: 200 }
+        size: defaultSize
       };
+
+      if (type === 'web') {
+        windowData.web_url = '';
+        windowData.file_path = null;
+      }
 
       const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows`, {
         method: 'POST',
@@ -8442,9 +9669,19 @@ function BoardCanvas({
             ? updates.hidden 
           : (hiddenWindows && hiddenWindows.has(windowId) ? true : false),
         // 确保位置和大小数据格式正确
-        position: updates.position || window.position || { x: 100, y: 100 },
-        size: updates.size || window.size || { width: 400, height: 300 }
+        position: updates.position || window.position || { x: window.x ?? 100, y: window.y ?? 100 },
+        size: updates.size || window.size || { width: window.width ?? 400, height: window.height ?? 300 }
       };
+
+      if (updatedWindow.position) {
+        updatedWindow.x = updatedWindow.position.x;
+        updatedWindow.y = updatedWindow.position.y;
+      }
+
+      if (updatedWindow.size) {
+        updatedWindow.width = updatedWindow.size.width;
+        updatedWindow.height = updatedWindow.size.height;
+      }
       
       // 只在非内容更新时输出详细日志
       if (!updates.hasOwnProperty('content')) {
@@ -8503,6 +9740,103 @@ function BoardCanvas({
       }
     } catch (error) {
       console.error('❌ 窗口内容保存失败:', error);
+    }
+  };
+
+  const persistWindowUpdate = async (windowId, payload, successMessage) => {
+    const payloadWithTimestamp = {
+      ...payload,
+      id: windowId,
+      updated_at: new Date().toISOString()
+    };
+
+    if (payloadWithTimestamp.position) {
+      payloadWithTimestamp.x = payloadWithTimestamp.position.x;
+      payloadWithTimestamp.y = payloadWithTimestamp.position.y;
+    }
+
+    if (payloadWithTimestamp.size) {
+      payloadWithTimestamp.width = payloadWithTimestamp.size.width;
+      payloadWithTimestamp.height = payloadWithTimestamp.size.height;
+    }
+
+    const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payloadWithTimestamp),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `更新失败 (HTTP ${response.status})`);
+    }
+
+    const updatedWindow = await response.json();
+    setWindows(prev =>
+      prev.map(w =>
+        w.id === windowId ? { ...w, ...updatedWindow } : w
+      )
+    );
+
+    if (successMessage) {
+      addMessage('🌐 网页窗口', successMessage, 'success');
+    }
+  };
+
+  const handleConvertWindowToWeb = async (windowId, rawUrl) => {
+    const normalizedUrl = ensureHttpUrl(rawUrl);
+    if (!normalizedUrl) {
+      addMessage('⚠️ 无效的地址', '请输入正确的URL，例如 https://example.com', 'warning');
+      return;
+    }
+
+    const targetWindow = windows.find(w => w.id === windowId);
+    if (!targetWindow) {
+      console.warn('[BoardCanvas] 未找到要转换的窗口:', windowId);
+      return;
+    }
+
+    const payload = {
+      ...targetWindow,
+      type: 'web',
+      content: normalizedUrl,
+      web_url: normalizedUrl,
+      file_path: null
+    };
+
+    try {
+      await persistWindowUpdate(windowId, payload, `已打开 ${normalizedUrl}`);
+    } catch (error) {
+      console.error('❌ 转换为网页窗口失败:', error);
+      addMessage('✗ 转换为网页窗口失败', error.message, 'error');
+    }
+  };
+
+  const handleWebUrlUpdate = async (windowId, rawUrl) => {
+    const normalizedUrl = ensureHttpUrl(rawUrl);
+    if (!normalizedUrl) {
+      addMessage('⚠️ 无效的地址', '请输入正确的URL，例如 https://example.com', 'warning');
+      return;
+    }
+
+    const targetWindow = windows.find(w => w.id === windowId);
+    if (!targetWindow) return;
+
+    const payload = {
+      ...targetWindow,
+      type: 'web',
+      content: normalizedUrl,
+      web_url: normalizedUrl,
+      file_path: null
+    };
+
+    try {
+      await persistWindowUpdate(windowId, payload, `已更新为 ${normalizedUrl}`);
+    } catch (error) {
+      console.error('❌ 更新网页URL失败:', error);
+      addMessage('✗ 更新网页地址失败', error.message, 'error');
     }
   };
 
@@ -8867,6 +10201,9 @@ function BoardCanvas({
         // 创建新的打字机模式文本窗口
         handleCreateProject();
         break;
+      case 'new-web-window':
+        handleCreateWindow('web');
+        break;
       case 'open-console':
         // 打开控制台并自动定位到当前展板
         console.log('[BoardCanvas] 打开控制台:', { courseId, boardId });
@@ -9025,12 +10362,14 @@ function BoardCanvas({
     const deltaX = e.clientX - ds.startX;
     const deltaY = e.clientY - ds.startY;
     
+    const nextX = Math.max(0, ds.initialX + deltaX);
+    const nextY = Math.max(0, ds.initialY + deltaY);
+    
     setWindows(prev => prev.map(w => w.id === ds.windowId ? ({
       ...w,
-      position: { 
-        x: Math.max(0, ds.initialX + deltaX), 
-        y: Math.max(0, ds.initialY + deltaY) 
-      }
+      position: { x: nextX, y: nextY },
+      x: nextX,
+      y: nextY
     }) : w));
   };
 
@@ -9081,7 +10420,7 @@ function BoardCanvas({
     setWindows(prevWindows => {
       const target = prevWindows.find(w => w.id === ds.windowId);
       if (target) {
-        const updatedTarget = { ...target, position: finalPosition };
+        const updatedTarget = { ...target, position: finalPosition, x: finalPosition.x, y: finalPosition.y };
         
         // 使用原始位置进行比较，而不是当前状态
         const positionChanged = ds.originalX !== finalPosition.x || ds.originalY !== finalPosition.y;
@@ -9193,7 +10532,9 @@ function BoardCanvas({
     
     setWindows(prev => prev.map(w => w.id === rs.windowId ? ({
       ...w,
-      size: { width: newWidth, height: newHeight }
+      size: { width: newWidth, height: newHeight },
+      width: newWidth,
+      height: newHeight
     }) : w));
   };
 
@@ -9244,7 +10585,7 @@ function BoardCanvas({
     setWindows(prevWindows => {
       const target = prevWindows.find(w => w.id === rs.windowId);
       if (target) {
-        const updatedTarget = { ...target, size: finalSize };
+        const updatedTarget = { ...target, size: finalSize, width: finalSize.width, height: finalSize.height };
         
         // 使用原始大小进行比较，而不是当前状态
         const sizeChanged = rs.originalW !== finalSize.width || rs.originalH !== finalSize.height;
@@ -9678,6 +11019,11 @@ function BoardCanvas({
         action: 'new-project',
         icon: '📝'
       },
+      {
+        label: '新建网页窗口',
+        action: 'new-web-window',
+        icon: '🌐'
+      },
       { type: 'separator' },
       { 
         label: '打开控制台', 
@@ -9987,6 +11333,7 @@ function BoardCanvas({
                 <TextEditorWithPreview
                   window={window}
                   onContentChange={(content, mode) => handleWindowContentChange(window.id, content, mode)}
+                  onConvertToWeb={(url) => handleConvertWindowToWeb(window.id, url)}
                 />
               )}
               {window.type === 'chat' && (
@@ -10175,26 +11522,13 @@ function BoardCanvas({
                 <CalendarPlannerWindow />
               )}
               {window.type === 'image' && (
-                <label className="image-placeholder" title={window.content || '点击上传图片'}>
-                  {hasRealMediaContent(window) ? (
-                    <img
-                      src={toMediaUrl(window, boardId)}
-                      alt="img"
-                      style={{ maxWidth: '100%', maxHeight: '100%' }}
-                    />
-                  ) : (
-                    <>
-                      🖼️ 图片内容
-                      <p>点击上传图片</p>
-                    </>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    onChange={(e) => handleUpload(window.id, 'images', e.target.files)}
-                  />
-                </label>
+                <ImageWindowRenderer
+                  window={window}
+                  onUpload={(files) => handleUpload(window.id, 'images', files)}
+                  boardId={boardId}
+                  addMessage={addMessage}
+                  openMessageCenter={openMessageCenter}
+                />
               )}
               {window.type === 'video' && (
                 <label className="video-placeholder" title={window.content || '点击上传视频'}>
@@ -10258,6 +11592,12 @@ function BoardCanvas({
                   addMessage={addMessage}
                   openMessageCenter={openMessageCenter}
                   setConfirmDialog={setConfirmDialog}
+                />
+              )}
+              {window.type === 'web' && (
+                <WebWindowRenderer 
+                  window={window}
+                  onUrlChange={(url) => handleWebUrlUpdate(window.id, url)}
                 />
               )}
             </div>
@@ -10365,6 +11705,7 @@ const getWindowIconClass = (type) => {
 const getWindowIcon = (type) => {
   const typeIcons = {
     'text': '📝',
+    'web': '🌐',
     'image': '🖼️',
     'video': '🎥',
     'audio': '🎵',

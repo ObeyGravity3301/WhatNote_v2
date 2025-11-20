@@ -16,6 +16,20 @@ const normalizeLatexDelimiters = (text) => {
     .replace(/\\\]/g, '$$');
 };
 
+const hasActiveTodos = (status) => {
+  if (!status) return false;
+  if (typeof status.has_todos === 'boolean') {
+    return status.has_todos;
+  }
+  if (Array.isArray(status.items) && status.items.length > 0) {
+    return true;
+  }
+  if (typeof status.total === 'number' && status.total > 0) {
+    return true;
+  }
+  return false;
+};
+
 // 优化的消息组件 - 使用React.memo减少重渲染
 const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId, onOpenWindow, getFileIcon }) => {
   const isUser = message.role === 'user';
@@ -415,6 +429,8 @@ const Toolbar = React.memo(({
   isStreaming,
   onStopGeneration
 }) => {
+  const hasTodos = hasActiveTodos(todoStatus);
+
   return (
       <div style={{
         backgroundColor: '#c0c0c0',
@@ -473,7 +489,7 @@ const Toolbar = React.memo(({
           📎 文件
         </button>
         
-        {todoStatus && todoStatus.has_todos && (
+        {hasTodos && (
           <button
             onClick={() => setShowTodoList(!showTodoList)}
             style={{
@@ -763,7 +779,8 @@ const TodoListSelector = React.memo(({
   setShowTodoList, 
   todoStatus 
 }) => {
-  if (!showTodoList || !todoStatus || !todoStatus.has_todos) return null;
+  const hasTodos = hasActiveTodos(todoStatus);
+  if (!showTodoList || !hasTodos) return null;
 
   const completedCount = todoStatus.completed_count ?? 0;
   const totalCount = todoStatus.total ?? 0;
@@ -1113,6 +1130,8 @@ function ChatWindow({
   const [useTools, setUseTools] = useState(true);  // 默认启用工具调用
   const [toolCallLogs, setToolCallLogs] = useState([]);
   const [todoStatus, setTodoStatus] = useState(null);  // Todo 追踪状态
+  const hasTodos = hasActiveTodos(todoStatus);
+
   const [expandedTools, setExpandedTools] = useState({});  // 展开的工具调用 {messageId-toolName-index: boolean}
   
   // API配置状态
@@ -1208,6 +1227,28 @@ function ChatWindow({
       console.log('✅ 加载历史消息完成');
     }
   }, [isLoadingHistory, hasMoreHistory, conversationId, currentPage, boardId, messages, shouldPreserveScrollPosition]);
+
+  const fetchTodoStatusFromServer = useCallback(async (targetConversationId) => {
+    if (!boardId || !targetConversationId) return;
+    try {
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${targetConversationId}/todo-status`);
+      if (response.ok) {
+        const data = await response.json();
+        if (Object.prototype.hasOwnProperty.call(data, 'todo_status')) {
+          console.info('[ChatWindow][TodoDebug] 从服务器同步待办状态', data.todo_status);
+          setTodoStatus(data.todo_status);
+        } else {
+          console.info('[ChatWindow][TodoDebug] 服务器返回空待办状态');
+          setTodoStatus(null);
+        }
+      } else if (response.status === 404) {
+        console.info('[ChatWindow][TodoDebug] 服务器无待办状态记录，重置为空');
+        setTodoStatus(null);
+      }
+    } catch (error) {
+      console.error('从服务器获取待办状态失败:', error);
+    }
+  }, [boardId]);
 
   // 优化的滚动函数 - 使用useCallback避免重复创建
   const scrollToBottom = useCallback((smooth = false) => {
@@ -1745,7 +1786,14 @@ ${argsStr}
                   ));
                   
                   // 如果是窗口操作，触发刷新
-                  const windowTools = ['create_window', 'delete_window', 'update_window', 'edit_window'];
+                  const windowTools = [
+                    'create_window',
+                    'create_web_window',
+                    'delete_window',
+                    'update_window',
+                    'update_web_window',
+                    'edit_window'
+                  ];
                   if (windowTools.includes(parsed.tool_name)) {
                     const isSuccess = parsed.tool_result?.status === 'success' || parsed.tool_result?.window_id || parsed.tool_result?.message;
                     if (isSuccess) {
@@ -1806,7 +1854,7 @@ ${argsStr}
                   const status = parsed.content;
                   const oldStatus = todoStatus;
                   
-                  if (status?.has_todos) {
+                  if (hasActiveTodos(status)) {
                     const remainingItems = (status.items || []).filter(item => !item.completed).map(item => item.task);
                     console.info(
                       `[ChatWindow][TodoDebug] 收到待办进度更新: ${status.completed_count}/${status.total} 完成，剩余 ${status.remaining_count} 项`,
@@ -1939,6 +1987,7 @@ ${argsStr}
         if (conversations.length > 0) {
           const latestConv = conversations[0];
           setConversationId(latestConv.id);
+          fetchTodoStatusFromServer(latestConv.id);
           
           // 只加载最新的消息（第一页）
           const historyResponse = await fetch(`http://localhost:8081/api/boards/${boardId}/conversations/${latestConv.id}?page=0&limit=${ITEMS_PER_PAGE}`);
@@ -1957,7 +2006,7 @@ ${argsStr}
             setCurrentPage(0);
             if (Object.prototype.hasOwnProperty.call(conversation, 'todo_status')) {
               setTodoStatus(conversation.todo_status);
-              if (conversation.todo_status?.has_todos) {
+              if (hasActiveTodos(conversation.todo_status)) {
                 console.info('[ChatWindow][TodoDebug] 初始化同步待办状态', conversation.todo_status);
               } else {
                 console.info('[ChatWindow][TodoDebug] 初始化待办状态为空或无待办', conversation.todo_status);
@@ -1983,13 +2032,14 @@ ${argsStr}
             setHasMoreHistory(false);
             setTodoStatus(null);
             console.info('[ChatWindow][TodoDebug] 新对话创建，待办状态已重置');
+            fetchTodoStatusFromServer(conversation.id);
           }
         }
       }
     } catch (error) {
       console.error('初始化对话失败:', error);
     }
-  }, [boardId]);
+  }, [boardId, fetchTodoStatusFromServer]);
 
   // 效果钩子 - 最小化数量
   useEffect(() => {
@@ -2018,6 +2068,7 @@ ${argsStr}
               console.info('[ChatWindow][TodoDebug] 刷新对话后同步待办状态', conversation.todo_status);
             }
             setCurrentPage(0);
+            fetchTodoStatusFromServer(conversationId);
             // 刷新后滚动到底部查看新消息
             setTimeout(() => {
               scrollToBottom();
@@ -2037,7 +2088,7 @@ ${argsStr}
         window.removeEventListener('refreshChatConversation', handleRefreshConversation);
       }
     };
-  }, [boardId, conversationId, scrollToBottom]);
+  }, [boardId, conversationId, scrollToBottom, fetchTodoStatusFromServer]);
 
   // 初始化显示的消息
   useEffect(() => {
@@ -2130,6 +2181,7 @@ ${argsStr}
               setTodoStatus(conversation.todo_status);
               console.info('[ChatWindow][TodoDebug] 批量刷新事件后同步待办状态', conversation.todo_status);
             }
+            fetchTodoStatusFromServer(conversationId);
             
             // 滚动到底部以显示新的系统通知
             setTimeout(() => {
@@ -2150,7 +2202,7 @@ ${argsStr}
         window.removeEventListener('refreshChatConversation', handleRefreshConversation);
       }
     };
-  }, [conversationId, boardId, scrollToBottom]);
+  }, [conversationId, boardId, scrollToBottom, fetchTodoStatusFromServer]);
 
   const applyToolUpdateToCurrentMessage = useCallback((updateFn) => {
     if (!currentAIMessageIdRef.current) {
@@ -2500,7 +2552,7 @@ ${argsStr}
 
       <div className="input-container">
         {/* 折叠的 Todo 显示 */}
-        {todoStatus && todoStatus.has_todos && !showTodoList && (
+        {hasTodos && !showTodoList && (
           <div 
             onClick={() => setShowTodoList(true)}
             style={{

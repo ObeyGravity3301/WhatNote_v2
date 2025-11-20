@@ -12,19 +12,22 @@ from pathlib import Path
 from typing import Dict, List, Optional, AsyncGenerator
 from logger import info, error
 import pypdf
+from config import DATA_DIR
+from services.todo_state_manager import TodoStateManager
 from tools import tool_registry
 from tools.todo_tools import TodoTracker, register_todo_tools
 
 class LLMService:
     """LLM API调用服务"""
     
-    def __init__(self, api_config_manager, content_manager=None, conversation_manager=None):
+    def __init__(self, api_config_manager, content_manager=None, conversation_manager=None, todo_state_manager: Optional[TodoStateManager] = None):
         self.api_config_manager = api_config_manager
         self.content_manager = content_manager
         self.conversation_manager = conversation_manager
+        self.todo_state_manager = todo_state_manager or TodoStateManager(DATA_DIR, conversation_manager)
         
-        # 确保待办工具已注册（只注册一次）
-        register_todo_tools(tool_registry)
+        # 确保待办工具已注册（绑定共享状态管理器）
+        register_todo_tools(tool_registry, state_manager=self.todo_state_manager)
     
     def _extract_pdf_with_pypdf(self, file_path: str, file_info: Dict, content_array: List, pdf_reader=None) -> None:
         """使用PyPDF直接提取PDF文本（回退方案）"""
@@ -660,8 +663,11 @@ class LLMService:
                 }
         """
         try:
-            # 创建 TodoTracker 实例（每个对话一个）
-            todo_tracker = TodoTracker()
+            # 创建/获取 TodoTracker 实例（每个会话一个）
+            if board_id and conversation_id and self.todo_state_manager:
+                todo_tracker = self.todo_state_manager.get_tracker(board_id, conversation_id)
+            else:
+                todo_tracker = TodoTracker()
 
             def log_todo_status(stage: str):
                 if todo_tracker.has_todos():
@@ -678,30 +684,21 @@ class LLMService:
                     info(f"[LLM Tools][Todo] {stage}: 当前无待办列表")
 
             def persist_todo_state(reason: str = "状态更新"):
-                if board_id and conversation_id and self.conversation_manager:
-                    state = todo_tracker.get_state()
-                    status = todo_tracker.get_status()
-                    self.conversation_manager.save_todo_state(board_id, conversation_id, state, status)
+                if board_id and conversation_id and self.todo_state_manager:
+                    self.todo_state_manager.save_tracker(board_id, conversation_id, todo_tracker, reason)
                     log_todo_status(f"{reason}（已持久化）")
                 else:
                     log_todo_status(f"{reason}（未持久化，缺少对话信息）")
 
-            # 如果提供了对话信息，尝试加载持久化的待办状态
-            if board_id and conversation_id and self.conversation_manager:
-                persisted = self.conversation_manager.get_todo_state(board_id, conversation_id)
-                if persisted:
-                    todo_tracker.load_state(persisted.get("state"))
-                    persisted_status = persisted.get("status")
-                    # 如果保存的状态为空但Tracker仍有数据，重新计算状态
-                    if not persisted_status and todo_tracker.has_todos():
-                        persisted_status = todo_tracker.get_status()
-                    if persisted_status and persisted_status.get("has_todos"):
-                        log_todo_status("载入持久化状态后")
-                        yield {
-                            "type": "todo_status",
-                            "content": persisted_status
-                        }
-                # 每次请求开始时同步一次持久化状态，确保todo_status字段最新
+            # 如果已有状态，首次进入时同步给前端
+            if board_id and conversation_id and self.todo_state_manager:
+                initial_status = todo_tracker.get_status()
+                if initial_status and initial_status.get("has_todos"):
+                    log_todo_status("载入持久化状态后")
+                    yield {
+                        "type": "todo_status",
+                        "content": initial_status
+                    }
                 persist_todo_state("请求开始时同步")
             
             # 获取API配置

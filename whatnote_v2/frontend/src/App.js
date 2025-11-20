@@ -1428,6 +1428,7 @@ function App() {
 const getWindowIcon = (type) => {
   const typeIcons = {
     'text': '📝',
+    'web': '🌐',
     'image': '🖼️',
     'video': '🎥',
     'audio': '🎵',

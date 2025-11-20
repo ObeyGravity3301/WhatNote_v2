@@ -1,868 +1,205 @@
 [
   {
-    "id": "trash_1762091911693",
-    "original_name": "LLM 工具测试窗口.md",
-    "trash_filename": "1762091911693_LLM 工具测试窗口.md",
+    "id": "trash_1763313145576",
+    "original_name": "Content-lecture1-2026.pdf",
+    "trash_filename": "1763313145576_Content-lecture1-2026.pdf",
     "window_data": {
-      "id": "window_1762091911690",
-      "title": "LLM 工具测试窗口",
-      "type": "text",
-      "created_at": "2025-11-02T21:58:31.690111",
-      "updated_at": "2025-11-02T21:58:31.692133",
-      "x": 200,
-      "y": 200,
-      "width": 500,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/LLM 工具测试窗口.md"
-    },
-    "board_id": "board-1756987954946",
-    "deleted_at": "2025-11-02T21:58:31.693290",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1756987907632/board-1756987954946/files",
-    "file_size": 207
-  },
-  {
-    "id": "trash_1762091911693",
-    "original_name": "LLM 工具测试窗口.md.json",
-    "trash_filename": "1762091911693_LLM 工具测试窗口.md.json",
-    "window_data": {
-      "id": "window_1762091911690",
-      "title": "LLM 工具测试窗口",
-      "type": "text",
-      "created_at": "2025-11-02T21:58:31.690111",
-      "updated_at": "2025-11-02T21:58:31.692133",
-      "x": 200,
-      "y": 200,
-      "width": 500,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/LLM 工具测试窗口.md",
-      "is_json_config": true
-    },
-    "board_id": "board-1756987954946",
-    "deleted_at": "2025-11-02T21:58:31.693484",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1756987907632/board-1756987954946/files",
-    "file_size": 351
-  },
-  {
-    "id": "trash_1762091916810",
-    "original_name": "LLM 工具测试窗口.md",
-    "trash_filename": "1762091916810_LLM 工具测试窗口.md",
-    "window_data": {
-      "id": "window_1762091916807",
-      "title": "LLM 工具测试窗口",
-      "type": "text",
-      "created_at": "2025-11-02T21:58:36.807721",
-      "updated_at": "2025-11-02T21:58:36.809624",
-      "x": 200,
-      "y": 200,
-      "width": 500,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/LLM 工具测试窗口.md"
-    },
-    "board_id": "board-1756987954946",
-    "deleted_at": "2025-11-02T21:58:36.810732",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1756987907632/board-1756987954946/files",
-    "file_size": 207
-  },
-  {
-    "id": "trash_1762091916810",
-    "original_name": "LLM 工具测试窗口.md.json",
-    "trash_filename": "1762091916810_LLM 工具测试窗口.md.json",
-    "window_data": {
-      "id": "window_1762091916807",
-      "title": "LLM 工具测试窗口",
-      "type": "text",
-      "created_at": "2025-11-02T21:58:36.807721",
-      "updated_at": "2025-11-02T21:58:36.809624",
-      "x": 200,
-      "y": 200,
-      "width": 500,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/LLM 工具测试窗口.md",
-      "is_json_config": true
-    },
-    "board_id": "board-1756987954946",
-    "deleted_at": "2025-11-02T21:58:36.810959",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1756987907632/board-1756987954946/files",
-    "file_size": 351
-  },
-  {
-    "id": "trash_1762091951068",
-    "original_name": "LLM 工具测试窗口.md",
-    "trash_filename": "1762091951068_LLM 工具测试窗口.md",
-    "window_data": {
-      "id": "window_1762091951065",
-      "title": "LLM 工具测试窗口",
-      "type": "text",
-      "created_at": "2025-11-02T21:59:11.065108",
-      "updated_at": "2025-11-02T21:59:11.067160",
-      "x": 200,
-      "y": 200,
-      "width": 500,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/LLM 工具测试窗口.md"
-    },
-    "board_id": "board-1756987954946",
-    "deleted_at": "2025-11-02T21:59:11.068342",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1756987907632/board-1756987954946/files",
-    "file_size": 207
-  },
-  {
-    "id": "trash_1762091951068",
-    "original_name": "LLM 工具测试窗口.md.json",
-    "trash_filename": "1762091951068_LLM 工具测试窗口.md.json",
-    "window_data": {
-      "id": "window_1762091951065",
-      "title": "LLM 工具测试窗口",
-      "type": "text",
-      "created_at": "2025-11-02T21:59:11.065108",
-      "updated_at": "2025-11-02T21:59:11.067160",
-      "x": 200,
-      "y": 200,
-      "width": 500,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/LLM 工具测试窗口.md",
-      "is_json_config": true
-    },
-    "board_id": "board-1756987954946",
-    "deleted_at": "2025-11-02T21:59:11.068649",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1756987907632/board-1756987954946/files",
-    "file_size": 351
-  },
-  {
-    "id": "trash_1762163178892",
-    "original_name": "笔记.md",
-    "trash_filename": "1762163178892_笔记.md",
-    "window_data": {
-      "id": "window_1762162847149",
-      "title": "笔记",
-      "type": "text",
-      "created_at": "2025-11-03T17:40:47.149936",
-      "updated_at": "2025-11-03T17:45:22.880516",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/笔记.md"
-    },
-    "board_id": "board-1761697243755",
-    "deleted_at": "2025-11-03T17:46:18.893465",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761640981104/board-1761697243755/files",
-    "file_size": 89
-  },
-  {
-    "id": "trash_1762163178921",
-    "original_name": "笔记.md.json",
-    "trash_filename": "1762163178921_笔记.md.json",
-    "window_data": {
-      "id": "window_1762162847149",
-      "title": "笔记",
-      "type": "text",
-      "created_at": "2025-11-03T17:40:47.149936",
-      "updated_at": "2025-11-03T17:45:22.880516",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/笔记.md",
-      "is_json_config": true
-    },
-    "board_id": "board-1761697243755",
-    "deleted_at": "2025-11-03T17:46:18.922851",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761640981104/board-1761697243755/files",
-    "file_size": 319
-  },
-  {
-    "id": "trash_1762247488911",
-    "original_name": "132435.md",
-    "trash_filename": "1762247488911_132435.md",
-    "window_data": {
-      "id": "window_1762246988998",
-      "title": "132435",
-      "type": "text",
-      "created_at": "2025-11-04T17:03:08.998363",
-      "updated_at": "2025-11-04T17:11:08.948532",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/132435.md",
+      "type": "pdf",
+      "title": "Content-lecture1-2026.pdf",
       "position": {
-        "x": 100,
-        "y": 100
+        "x": 190,
+        "y": 235
       },
       "size": {
-        "width": 600,
-        "height": 400
+        "width": 1364,
+        "height": 696
       },
-      "hidden": false
+      "id": "window_1763313106427",
+      "created_at": "2025-11-17T01:11:46.427784",
+      "updated_at": "2025-11-17T01:12:22.436462",
+      "hidden": true,
+      "x": 190,
+      "y": 235,
+      "width": 1364,
+      "height": 696,
+      "file_path": "files/Content-lecture1-2026.pdf"
     },
-    "board_id": "board-1762246930716",
-    "deleted_at": "2025-11-04T17:11:28.911515",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762246911131/board-1762246930716/files",
-    "file_size": 21
+    "board_id": "board-1763311891754",
+    "deleted_at": "2025-11-17T01:12:25.576893",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761285731656/board-1763311891754/files",
+    "file_size": 202511
   },
   {
-    "id": "trash_1762247488912",
-    "original_name": "132435.md.json",
-    "trash_filename": "1762247488912_132435.md.json",
+    "id": "trash_1763313145577",
+    "original_name": "Content-lecture1-2026.pdf.json",
+    "trash_filename": "1763313145577_Content-lecture1-2026.pdf.json",
     "window_data": {
-      "id": "window_1762246988998",
-      "title": "132435",
-      "type": "text",
-      "created_at": "2025-11-04T17:03:08.998363",
-      "updated_at": "2025-11-04T17:11:08.948532",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/132435.md",
+      "type": "pdf",
+      "title": "Content-lecture1-2026.pdf",
       "position": {
-        "x": 100,
-        "y": 100
+        "x": 190,
+        "y": 235
       },
       "size": {
-        "width": 600,
-        "height": 400
+        "width": 1364,
+        "height": 696
       },
-      "hidden": false,
+      "id": "window_1763313106427",
+      "created_at": "2025-11-17T01:11:46.427784",
+      "updated_at": "2025-11-17T01:12:22.436462",
+      "hidden": true,
+      "x": 190,
+      "y": 235,
+      "width": 1364,
+      "height": 696,
+      "file_path": "files/Content-lecture1-2026.pdf",
       "is_json_config": true
     },
-    "board_id": "board-1762246930716",
-    "deleted_at": "2025-11-04T17:11:28.912476",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762246911131/board-1762246930716/files",
-    "file_size": 439
+    "board_id": "board-1763311891754",
+    "deleted_at": "2025-11-17T01:12:25.577358",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761285731656/board-1763311891754/files",
+    "file_size": 411
   },
   {
-    "id": "trash_1762701254142",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md",
-    "trash_filename": "1762701254142_PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md",
+    "id": "trash_1763313145577_pages",
+    "original_name": "Content-lecture1-2026_pages",
+    "trash_filename": "1763313145577_Content-lecture1-2026_pages",
+    "type": "pdf_pages_folder",
+    "pdf_name": "Content-lecture1-2026",
+    "deleted_at": "2025-11-17T01:12:25.578022",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761285731656/board-1763311891754/files/pages",
+    "is_folder": true
+  },
+  {
+    "id": "trash_1763443304145",
+    "original_name": "Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026.pdf",
+    "trash_filename": "1763443304145_Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026.pdf",
     "window_data": {
-      "id": "window_1762700948799",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望",
-      "type": "text",
-      "created_at": "2025-11-09T23:09:08.799079",
-      "updated_at": "2025-11-09T23:14:05.918345",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md",
+      "type": "pdf",
+      "title": "Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026.pdf",
       "position": {
-        "x": 100,
-        "y": 100
+        "x": 11,
+        "y": 13
       },
       "size": {
-        "width": 600,
-        "height": 400
+        "width": 1880,
+        "height": 913
       },
-      "hidden": true
+      "id": "window_1763313147074",
+      "created_at": "2025-11-17T01:12:27.074336",
+      "updated_at": "2025-11-18T13:21:39.171887",
+      "file_path": "files/Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026.pdf",
+      "x": 11,
+      "y": 13,
+      "hidden": true,
+      "width": 1880,
+      "height": 913
     },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:14.172457",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
+    "board_id": "board-1763311891754",
+    "deleted_at": "2025-11-18T13:21:44.149294",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761285731656/board-1763311891754/files",
+    "file_size": 7469687
+  },
+  {
+    "id": "trash_1763443304149",
+    "original_name": "Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026.pdf.json",
+    "trash_filename": "1763443304149_Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026.pdf.json",
+    "window_data": {
+      "type": "pdf",
+      "title": "Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026.pdf",
+      "position": {
+        "x": 11,
+        "y": 13
+      },
+      "size": {
+        "width": 1880,
+        "height": 913
+      },
+      "id": "window_1763313147074",
+      "created_at": "2025-11-17T01:12:27.074336",
+      "updated_at": "2025-11-18T13:21:39.171887",
+      "file_path": "files/Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026.pdf",
+      "x": 11,
+      "y": 13,
+      "hidden": true,
+      "width": 1880,
+      "height": 913,
+      "is_json_config": true
+    },
+    "board_id": "board-1763311891754",
+    "deleted_at": "2025-11-18T13:21:44.150333",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761285731656/board-1763311891754/files",
+    "file_size": 449
+  },
+  {
+    "id": "trash_1763443304151_pages",
+    "original_name": "Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026_pages",
+    "trash_filename": "1763443304151_Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026_pages",
+    "type": "pdf_pages_folder",
+    "pdf_name": "Lecture1-WHAT-IS-LIFE-STUDENT-VERSION-2026",
+    "deleted_at": "2025-11-18T13:21:44.151615",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761285731656/board-1763311891754/files/pages",
+    "is_folder": true
+  },
+  {
+    "id": "trash_1763443321123",
+    "original_name": "新建项目(1).md",
+    "trash_filename": "1763443321123_新建项目(1).md",
+    "window_data": {
+      "type": "text",
+      "title": "新建项目(1)",
+      "position": {
+        "x": 290,
+        "y": 279
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1763443314777",
+      "created_at": "2025-11-18T13:21:54.777821",
+      "updated_at": "2025-11-18T13:21:56.036961",
+      "hidden": true,
+      "x": 290,
+      "y": 279,
+      "width": 800,
+      "height": 600,
+      "file_path": "files/新建项目(1).md"
+    },
+    "board_id": "board-1763311891754",
+    "deleted_at": "2025-11-18T13:22:01.123698",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761285731656/board-1763311891754/files",
     "file_size": 0
   },
   {
-    "id": "trash_1762701254174",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md.json",
-    "trash_filename": "1762701254174_PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md.json",
+    "id": "trash_1763443321124",
+    "original_name": "新建项目(1).md.json",
+    "trash_filename": "1763443321124_新建项目(1).md.json",
     "window_data": {
-      "id": "window_1762700948799",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望",
       "type": "text",
-      "created_at": "2025-11-09T23:09:08.799079",
-      "updated_at": "2025-11-09T23:14:05.918345",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 9. 总结与展望.md",
+      "title": "新建项目(1)",
       "position": {
-        "x": 100,
-        "y": 100
+        "x": 290,
+        "y": 279
       },
       "size": {
-        "width": 600,
-        "height": 400
+        "width": 800,
+        "height": 600
       },
+      "id": "window_1763443314777",
+      "created_at": "2025-11-18T13:21:54.777821",
+      "updated_at": "2025-11-18T13:21:56.036961",
       "hidden": true,
+      "x": 290,
+      "y": 279,
+      "width": 800,
+      "height": 600,
+      "file_path": "files/新建项目(1).md",
       "is_json_config": true
     },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:14.175011",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 552
-  },
-  {
-    "id": "trash_1762701256402",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md",
-    "trash_filename": "1762701256402_PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md",
-    "window_data": {
-      "id": "window_1762700947503",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）",
-      "type": "text",
-      "created_at": "2025-11-09T23:09:07.503219",
-      "updated_at": "2025-11-09T23:14:03.975491",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:16.403155",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 0
-  },
-  {
-    "id": "trash_1762701256404",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md.json",
-    "trash_filename": "1762701256404_PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md.json",
-    "window_data": {
-      "id": "window_1762700947503",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）",
-      "type": "text",
-      "created_at": "2025-11-09T23:09:07.503219",
-      "updated_at": "2025-11-09T23:14:03.975491",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 8. 表面改性技术（微结构处理）.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true,
-      "is_json_config": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:16.404738",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 600
-  },
-  {
-    "id": "trash_1762701258313",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md",
-    "trash_filename": "1762701258313_PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md",
-    "window_data": {
-      "id": "window_1762700940055",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）",
-      "type": "text",
-      "created_at": "2025-11-09T23:09:00.055949",
-      "updated_at": "2025-11-09T23:14:01.895512",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:18.314478",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 1403
-  },
-  {
-    "id": "trash_1762701258315",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md.json",
-    "trash_filename": "1762701258315_PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md.json",
-    "window_data": {
-      "id": "window_1762700940055",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）",
-      "type": "text",
-      "created_at": "2025-11-09T23:09:00.055949",
-      "updated_at": "2025-11-09T23:14:01.895512",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 7. 表面改性技术（涂层）.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true,
-      "is_json_config": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:18.316101",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 582
-  },
-  {
-    "id": "trash_1762701260266",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md",
-    "trash_filename": "1762701260266_PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md",
-    "window_data": {
-      "id": "window_1762700938390",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:58.390225",
-      "updated_at": "2025-11-09T23:13:54.320209",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:20.267241",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 1180
-  },
-  {
-    "id": "trash_1762701260268",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md.json",
-    "trash_filename": "1762701260268_PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md.json",
-    "window_data": {
-      "id": "window_1762700938390",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:58.390225",
-      "updated_at": "2025-11-09T23:13:54.320209",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 6. 合金化元素的影响.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true,
-      "is_json_config": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:20.269203",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 570
-  },
-  {
-    "id": "trash_1762701263749",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md",
-    "trash_filename": "1762701263749_PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md",
-    "window_data": {
-      "id": "window_1762700937169",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:57.169923",
-      "updated_at": "2025-11-09T23:13:54.484849",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:23.750528",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 929
-  },
-  {
-    "id": "trash_1762701263754",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md.json",
-    "trash_filename": "1762701263754_PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md.json",
-    "window_data": {
-      "id": "window_1762700937169",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:57.169923",
-      "updated_at": "2025-11-09T23:13:54.484849",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 5. 镁合金的优势与挑战.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true,
-      "is_json_config": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:23.755488",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 576
-  },
-  {
-    "id": "trash_1762701265707",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md",
-    "trash_filename": "1762701265707_PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md",
-    "window_data": {
-      "id": "window_1762700935753",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:55.753069",
-      "updated_at": "2025-11-09T23:13:54.678511",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:25.708343",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 1049
-  },
-  {
-    "id": "trash_1762701265712",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md.json",
-    "trash_filename": "1762701265712_PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md.json",
-    "window_data": {
-      "id": "window_1762700935753",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:55.753069",
-      "updated_at": "2025-11-09T23:13:54.678511",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 4. 腐蚀性能.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true,
-      "is_json_config": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:25.712802",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 546
-  },
-  {
-    "id": "trash_1762701267809",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md",
-    "trash_filename": "1762701267809_PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md",
-    "window_data": {
-      "id": "window_1762700934216",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 3. 机械性能",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:54.216834",
-      "updated_at": "2025-11-09T23:13:53.842626",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:27.810206",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 1090
-  },
-  {
-    "id": "trash_1762701267814",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md.json",
-    "trash_filename": "1762701267814_PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md.json",
-    "window_data": {
-      "id": "window_1762700934216",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 3. 机械性能",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:54.216834",
-      "updated_at": "2025-11-09T23:13:53.842626",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 3. 机械性能.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true,
-      "is_json_config": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:27.815017",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 546
-  },
-  {
-    "id": "trash_1762701269747",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md",
-    "trash_filename": "1762701269747_PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md",
-    "window_data": {
-      "id": "window_1762700926274",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:46.274976",
-      "updated_at": "2025-11-09T23:13:54.101276",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:29.748667",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 1118
-  },
-  {
-    "id": "trash_1762701269753",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md.json",
-    "trash_filename": "1762701269753_PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md.json",
-    "window_data": {
-      "id": "window_1762700926274",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:46.274976",
-      "updated_at": "2025-11-09T23:13:54.101276",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 2. 引言与背景.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true,
-      "is_json_config": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:29.754047",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 552
-  },
-  {
-    "id": "trash_1762701272062",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md",
-    "trash_filename": "1762701272062_PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md",
-    "window_data": {
-      "id": "window_1762700924859",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 1. 标题页",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:44.859987",
-      "updated_at": "2025-11-09T23:13:54.915199",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:32.063312",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 264
-  },
-  {
-    "id": "trash_1762701272092",
-    "original_name": "PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md.json",
-    "trash_filename": "1762701272092_PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md.json",
-    "window_data": {
-      "id": "window_1762700924859",
-      "title": "PPT - 镁合金生物医用植入物介绍 - 1. 标题页",
-      "type": "text",
-      "created_at": "2025-11-09T23:08:44.859987",
-      "updated_at": "2025-11-09T23:13:54.915199",
-      "x": 100,
-      "y": 100,
-      "width": 600,
-      "height": 400,
-      "isMinimized": false,
-      "isHidden": false,
-      "zIndex": 1000,
-      "file_path": "files/PPT - 镁合金生物医用植入物介绍 - 1. 标题页.md",
-      "position": {
-        "x": 100,
-        "y": 100
-      },
-      "size": {
-        "width": 600,
-        "height": 400
-      },
-      "hidden": true,
-      "is_json_config": true
-    },
-    "board_id": "board-1762682292623",
-    "deleted_at": "2025-11-09T23:14:32.093652",
-    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762680647059/board-1762682292623/files",
-    "file_size": 540
+    "board_id": "board-1763311891754",
+    "deleted_at": "2025-11-18T13:22:01.124232",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761285731656/board-1763311891754/files",
+    "file_size": 393
   }
 ]

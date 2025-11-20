@@ -37,7 +37,8 @@ class ToolRegistry:
             'planner': [],     # 日历待办
             'pdf': [],         # PDF 操作
             'search': [],      # 搜索功能
-            'system': []       # 系统功能
+            'system': [],      # 系统功能
+            'todo': []         # 待办任务
         }
         self._initialized = True
         

@@ -133,28 +133,67 @@ class ContentManager:
             # JSON文件命名逻辑
             file_path = window_data.get("file_path")
             window_type = window_data.get("type", "text")
+            is_web_window = window_type == "web"
+            window_id = window_data.get("id")
+
+            existing_json_file = None
+            existing_json_data = None
+            duplicate_json_files = []
+            if window_id:
+                for json_file in files_dir.glob("*.json"):
+                    try:
+                        with open(json_file, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        if data.get("id") == window_id:
+                            if not existing_json_file:
+                                existing_json_file = json_file
+                                existing_json_data = data
+                            else:
+                                duplicate_json_files.append(json_file)
+                    except Exception as e:
+                        print(f"⚠️ 读取JSON文件失败: {json_file}, 错误: {e}")
+                        continue
             
             if window_type == "generic":
                 # 通用窗口：使用窗口标题命名JSON文件
                 window_title = window_data.get("title", "新建项目")
                 safe_name = self._sanitize_filename(window_title)
                 json_file_name = f"{safe_name}.json"
+                json_file_path = files_dir / json_file_name
             elif file_path and file_path.startswith("files/"):
                 # 有具体文件路径的窗口
                 actual_filename = file_path[6:]  # 移除 "files/" 前缀
                 json_file_name = f"{actual_filename}.json"
+                json_file_path = files_dir / json_file_name
             else:
-                # 兜底方案
-                window_title = window_data.get("title", "未命名")
-                file_extension = self._get_file_extension(window_type)
-                safe_name = self._sanitize_filename(window_title)
-                json_file_name = f"{safe_name}{file_extension}.json"
-            
-            json_file_path = files_dir / json_file_name
+                if existing_json_file:
+                    # 使用已有的JSON文件路径，避免重复
+                    json_file_path = existing_json_file
+                else:
+                    # 兜底方案
+                    window_title = window_data.get("title", "未命名")
+                    file_extension = self._get_file_extension(window_type)
+                    safe_name = self._sanitize_filename(window_title)
+                    json_file_name = f"{safe_name}{file_extension}.json"
+                    json_file_path = files_dir / json_file_name
+
+            if is_web_window and existing_json_data:
+                old_file_path = existing_json_data.get("file_path")
+                if old_file_path:
+                    old_content_file = board_dir / old_file_path
+                    try:
+                        if old_content_file.exists():
+                            old_content_file.unlink()
+                            print(f"🧹 已删除旧内容文件: {old_content_file}")
+                    except Exception as e:
+                        print(f"⚠️ 删除旧内容文件失败: {old_content_file}, 错误: {e}")
             
             # 准备存储的窗口数据（移除content，添加file_path）
             storage_data = {k: v for k, v in window_data.items() if k != 'content'}
-            if 'file_path' not in storage_data or storage_data['file_path'] is None:
+            if is_web_window:
+                storage_data['web_url'] = window_data.get('content') or window_data.get('web_url')
+                storage_data['file_path'] = None
+            elif 'file_path' not in storage_data or storage_data['file_path'] is None:
                 if window_type == "generic":
                     # 通用窗口不设置file_path
                     storage_data['file_path'] = None
@@ -163,6 +202,13 @@ class ContentManager:
             
             with open(json_file_path, "w", encoding="utf-8") as f:
                 json.dump(storage_data, f, ensure_ascii=False, indent=2)
+
+            for duplicate_file in duplicate_json_files:
+                try:
+                    duplicate_file.unlink()
+                    print(f"🧹 已删除重复的窗口配置文件: {duplicate_file.name}")
+                except Exception as e:
+                    print(f"⚠️ 删除重复配置文件失败: {duplicate_file}, 错误: {e}")
             
             return True
         
@@ -640,7 +686,10 @@ class ContentManager:
                 # 从对应的文件中加载内容
                 window_type = window_data.get('type', 'text')
                 
-                if window_type == 'generic':
+                if window_type == 'web':
+                    window_data['content'] = window_data.get('web_url', window_data.get('content', ''))
+                    window_data['file_path'] = None
+                elif window_type == 'generic':
                     # 通用窗口没有内容文件，content为空
                     window_data['content'] = ''
                 elif 'file_path' in window_data and window_data['file_path'] is not None:

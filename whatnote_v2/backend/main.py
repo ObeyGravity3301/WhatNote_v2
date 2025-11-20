@@ -25,6 +25,7 @@ from storage.file_watcher import FileWatcher
 from storage.conversation_manager import ConversationManager
 from storage.api_config_manager import APIConfigManager
 from storage.theme_manager import ThemeManager
+from services.todo_state_manager import TodoStateManager
 from llm_service import LLMService
 from document_converter import document_converter
 
@@ -133,13 +134,11 @@ async def startup_event():
     info("启动文件监控服务...")
     file_watcher.start_watching()
     
-    # 注册内置工具
+    # 注册内置工具（每次启动都执行，内部会覆盖旧定义）
     try:
         from tools import tool_registry, register_builtin_tools
-        if len(tool_registry.get_all_tools()) == 0:
-            info("注册内置工具...")
-            register_builtin_tools(tool_registry, content_manager, file_manager, DATA_DIR)
-            info(f"✅ 已注册 {len(tool_registry.get_all_tools())} 个工具")
+        register_builtin_tools(tool_registry, content_manager, file_manager, DATA_DIR)
+        info(f"✅ 当前已注册 {len(tool_registry.get_all_tools())} 个工具")
     except Exception as e:
         error(f"❌ 注册工具失败: {e}")
         import traceback
@@ -207,7 +206,8 @@ file_manager = FileSystemManager(DATA_DIR)
 content_manager = ContentManager(file_manager)
 conversation_manager = ConversationManager(file_manager)
 api_config_manager = APIConfigManager(DATA_DIR)
-llm_service = LLMService(api_config_manager, content_manager, conversation_manager)
+todo_state_manager = TodoStateManager(DATA_DIR, conversation_manager)
+llm_service = LLMService(api_config_manager, content_manager, conversation_manager, todo_state_manager=todo_state_manager)
 theme_manager = ThemeManager()
 
 # 初始化WebSocket连接管理器
@@ -4350,6 +4350,7 @@ async def delete_conversation(board_id: str, conversation_id: str):
         if not success:
             raise HTTPException(status_code=404, detail="对话不存在")
         info(f"删除对话成功: {conversation_id}")
+        todo_state_manager.reset_tracker(board_id, conversation_id)
         return {"success": True}
     except HTTPException:
         raise
@@ -4365,11 +4366,22 @@ async def clear_conversation_messages(board_id: str, conversation_id: str):
         if not success:
             raise HTTPException(status_code=404, detail="对话不存在")
         info(f"清空对话消息成功: {conversation_id}")
+        todo_state_manager.reset_tracker(board_id, conversation_id)
         return {"success": True}
     except HTTPException:
         raise
     except Exception as e:
         error(f"清空对话消息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/boards/{board_id}/conversations/{conversation_id}/todo-status")
+async def get_conversation_todo_status(board_id: str, conversation_id: str):
+    """获取会话的待办状态"""
+    try:
+        status = todo_state_manager.get_status(board_id, conversation_id)
+        return {"todo_status": status}
+    except Exception as e:
+        error(f"获取待办状态失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/boards/{board_id}/conversations/{conversation_id}/context")

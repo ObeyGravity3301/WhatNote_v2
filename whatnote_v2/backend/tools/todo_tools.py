@@ -5,9 +5,12 @@
 
 from .schemas import ToolDefinition, ToolHandler, ToolResult, ToolStatus
 from logger import info, error
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from datetime import datetime
 from difflib import SequenceMatcher
+
+if TYPE_CHECKING:
+    from services.todo_state_manager import TodoStateManager
 
 
 # ==================== 工具定义 ====================
@@ -350,18 +353,26 @@ class TodoTracker:
 class TodoToolHandlers:
     """待办工具处理器"""
     
-    def __init__(self, tracker: Optional[TodoTracker] = None):
-        self.tracker = tracker
+    def __init__(self, tracker: Optional[TodoTracker] = None, state_manager: Optional["TodoStateManager"] = None):
+        self.default_tracker = tracker or TodoTracker()
+        self.state_manager = state_manager
 
     def _resolve_tracker(self, context: Optional[Dict[str, Any]] = None) -> TodoTracker:
-        """从上下文获取当前待办追踪器"""
+        """从上下文或状态管理器获取当前待办追踪器"""
         tracker = None
-        if isinstance(context, dict):
+
+        if isinstance(context, dict) and self.state_manager:
+            board_id = context.get("board_id")
+            conversation_id = context.get("conversation_id")
+            if board_id and conversation_id:
+                tracker = self.state_manager.get_tracker(board_id, conversation_id)
+
+        if tracker is None and isinstance(context, dict):
             tracker = context.get("todo_tracker") or context.get("tracker") or context.get("todoTracker")
+
         if tracker is None:
-            tracker = self.tracker
-        if tracker is None:
-            raise ValueError("todo_tracker 未提供，无法执行待办工具")
+            tracker = self.default_tracker
+
         return tracker
 
     @staticmethod
@@ -621,7 +632,12 @@ class TodoToolHandlers:
 _TODO_TOOLS_REGISTERED = False
 
 
-def register_todo_tools(tool_registry, tracker: Optional[TodoTracker] = None, force: bool = False):
+def register_todo_tools(
+    tool_registry,
+    tracker: Optional[TodoTracker] = None,
+    state_manager: Optional["TodoStateManager"] = None,
+    force: bool = False
+):
     """注册待办工具到工具注册表（默认只注册一次）"""
     global _TODO_TOOLS_REGISTERED
     
@@ -629,7 +645,7 @@ def register_todo_tools(tool_registry, tracker: Optional[TodoTracker] = None, fo
         info("ℹ️ 待办工具已注册，跳过重复注册")
         return
     
-    handlers = TodoToolHandlers(tracker or TodoTracker())
+    handlers = TodoToolHandlers(tracker=tracker, state_manager=state_manager)
     
     todo_tools = [
         (CREATE_TODO_LIST_TOOL, ToolHandler(executor=handlers.create_todo_list)),

@@ -3,8 +3,8 @@
   "language": "zh-CN",
   "default_wallpaper": {
     "filename": "default_wallpaper.png",
-    "original_name": "83019878_p0.png",
-    "uploaded_at": "2025-11-09T23:44:23.202076",
+    "original_name": "thumb-1920-1161622.png",
+    "uploaded_at": "2025-11-17T00:49:45.552878",
     "content_type": "image/png"
   },
   "boards": {
@@ -26,6 +26,10 @@
     },
     "board-1761810918553": {
       "selected_wallpaper_id": null,
+      "display_mode": "cover"
+    },
+    "board-1762857117412": {
+      "selected_wallpaper_id": "wallpaper-1763115948154",
       "display_mode": "cover"
     }
   },
@@ -61,6 +65,22 @@
       "uploaded_at": "2025-11-01T16:40:21.782899",
       "content_type": "image/jpeg",
       "uploaded_by_board": "board-1758716934917"
+    },
+    {
+      "id": "wallpaper-1763115948154",
+      "filename": "boards/board-1762857117412/wallpaper-1763115948154.png",
+      "original_name": "113728263_p0.png",
+      "uploaded_at": "2025-11-14T18:25:48.158068",
+      "content_type": "image/png",
+      "uploaded_by_board": "board-1762857117412"
+    },
+    {
+      "id": "wallpaper-1763115958019",
+      "filename": "boards/board-1762857117412/wallpaper-1763115958019.jpg",
+      "original_name": "3688f4be5be5432e810efc8232b9be10.jpg",
+      "uploaded_at": "2025-11-14T18:25:58.037729",
+      "content_type": "image/jpeg",
+      "uploaded_by_board": "board-1762857117412"
     }
   ],
   "default_display_mode": "cover"

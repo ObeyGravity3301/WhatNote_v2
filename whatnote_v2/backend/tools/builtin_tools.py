@@ -14,6 +14,17 @@ import json
 import aiohttp
 
 
+def normalize_web_url(url: str) -> str:
+    if not url:
+        return ""
+    normalized = url.strip()
+    if not normalized:
+        return ""
+    if not normalized.lower().startswith(("http://", "https://")):
+        normalized = f"https://{normalized}"
+    return normalized
+
+
 # ==================== 工具定义 ====================
 
 # 1. 创建新窗口
@@ -40,7 +51,7 @@ CREATE_WINDOW_TOOL = ToolDefinition(
                 },
                 "window_type": {
                     "type": "string",
-                    "enum": ["text", "image", "video", "audio", "pdf", "document"],
+                    "enum": ["text", "image", "video", "audio", "pdf", "document", "web"],
                     "description": "窗口类型",
                     "default": "text"
                 },
@@ -62,6 +73,50 @@ CREATE_WINDOW_TOOL = ToolDefinition(
                 }
             },
             "required": ["board_id", "title"]
+        }
+    }
+)
+
+
+CREATE_WEB_WINDOW_TOOL = ToolDefinition(
+    type="function",
+    function={
+        "name": "create_web_window",
+        "description": "创建一个网页窗口并加载指定的URL，适用于在白板中快速预览网页。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "board_id": {
+                    "type": "string",
+                    "description": "展板ID，例如 'board-1234567890'"
+                },
+                "url": {
+                    "type": "string",
+                    "description": "要打开的网页URL，支持 http/https 协议"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "窗口标题（可选）。未提供时会自动生成",
+                    "default": ""
+                },
+                "position": {
+                    "type": "object",
+                    "description": "窗口初始位置（可选）",
+                    "properties": {
+                        "x": {"type": "number", "description": "X坐标（像素）"},
+                        "y": {"type": "number", "description": "Y坐标（像素）"}
+                    }
+                },
+                "size": {
+                    "type": "object",
+                    "description": "窗口初始大小（可选）",
+                    "properties": {
+                        "width": {"type": "number", "description": "宽度（像素）"},
+                        "height": {"type": "number", "description": "高度（像素）"}
+                    }
+                }
+            },
+            "required": ["board_id", "url"]
         }
     }
 )
@@ -145,6 +200,53 @@ UPDATE_WINDOW_TOOL = ToolDefinition(
                 }
             },
             "required": ["board_id", "window_id", "content"]
+        }
+    }
+)
+
+
+UPDATE_WEB_WINDOW_TOOL = ToolDefinition(
+    type="function",
+    function={
+        "name": "update_web_window",
+        "description": "更新网页窗口的URL、标题或位置/尺寸，并确保窗口保持web类型。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "board_id": {
+                    "type": "string",
+                    "description": "展板ID"
+                },
+                "window_id": {
+                    "type": "string",
+                    "description": "窗口ID，例如 'window_1234567890'"
+                },
+                "url": {
+                    "type": "string",
+                    "description": "新的网页URL，支持 http/https 协议"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "新的窗口标题（可选）"
+                },
+                "position": {
+                    "type": "object",
+                    "description": "要更新的窗口位置（可选）",
+                    "properties": {
+                        "x": {"type": "number", "description": "X坐标（像素）"},
+                        "y": {"type": "number", "description": "Y坐标（像素）"}
+                    }
+                },
+                "size": {
+                    "type": "object",
+                    "description": "要更新的窗口大小（可选）",
+                    "properties": {
+                        "width": {"type": "number", "description": "宽度（像素）"},
+                        "height": {"type": "number", "description": "高度（像素）"}
+                    }
+                }
+            },
+            "required": ["board_id", "window_id", "url"]
         }
     }
 )
@@ -430,6 +532,88 @@ class WindowToolHandlers:
                 tool_name="create_window",
                 status=ToolStatus.ERROR,
                 error=f"创建窗口时发生错误: {str(e)}"
+            )
+
+    async def create_web_window(self, args: Dict[str, Any], context: Dict[str, Any]) -> ToolResult:
+        """创建网页窗口"""
+        try:
+            board_id = args["board_id"]
+            raw_url = args["url"]
+            normalized_url = normalize_web_url(raw_url)
+            
+            if not normalized_url:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="create_web_window",
+                    status=ToolStatus.ERROR,
+                    error="URL 无效，请提供 http 或 https 链接"
+                )
+            
+            title = args.get("title") or f"网页窗口 {datetime.now().strftime('%H:%M:%S')}"
+            position = args.get("position") or {}
+            size = args.get("size") or {}
+            
+            x = position.get("x", 120)
+            y = position.get("y", 120)
+            width = size.get("width", 900)
+            height = size.get("height", 600)
+            
+            window_id = f"window_{int(datetime.now().timestamp() * 1000)}"
+            timestamp = datetime.now().isoformat()
+            
+            window_data = {
+                "id": window_id,
+                "title": title,
+                "type": "web",
+                "content": normalized_url,
+                "web_url": normalized_url,
+                "file_path": None,
+                "created_at": timestamp,
+                "updated_at": timestamp,
+                "position": {"x": x, "y": y},
+                "size": {"width": width, "height": height},
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "isMinimized": False,
+                "isHidden": False,
+                "zIndex": 1000
+            }
+            
+            success = self.content_manager.save_window_content(board_id, window_data)
+            
+            if not success:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="create_web_window",
+                    status=ToolStatus.ERROR,
+                    error=f"创建网页窗口失败，展板不存在或存储异常 ({board_id})"
+                )
+            
+            info(f"[工具] 创建网页窗口成功: {window_id} @ {board_id}")
+            
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="create_web_window",
+                status=ToolStatus.SUCCESS,
+                data={
+                    "board_id": board_id,
+                    "window_id": window_id,
+                    "title": title,
+                    "url": normalized_url,
+                    "position": {"x": x, "y": y},
+                    "size": {"width": width, "height": height}
+                }
+            )
+            
+        except Exception as e:
+            error(f"[工具] 创建网页窗口失败: {e}")
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="create_web_window",
+                status=ToolStatus.ERROR,
+                error=f"创建网页窗口失败: {str(e)}"
             )
     
     async def get_windows(self, args: Dict[str, Any], context: Dict[str, Any]) -> ToolResult:
@@ -820,6 +1004,102 @@ class WindowToolHandlers:
                 tool_name="edit_window",
                 status=ToolStatus.ERROR,
                 error=f"编辑窗口失败: {str(e)}"
+            )
+
+    async def update_web_window(self, args: Dict[str, Any], context: Dict[str, Any]) -> ToolResult:
+        """更新网页窗口URL或元数据"""
+        try:
+            board_id = args["board_id"]
+            window_id = args["window_id"]
+            raw_url = args["url"]
+            normalized_url = normalize_web_url(raw_url)
+            
+            if not normalized_url:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="update_web_window",
+                    status=ToolStatus.ERROR,
+                    error="URL 无效，请提供 http 或 https 链接"
+                )
+            
+            windows = self.content_manager.get_board_windows(board_id)
+            window = next((w for w in windows if w.get("id") == window_id), None)
+            
+            if not window:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="update_web_window",
+                    status=ToolStatus.ERROR,
+                    error=f"窗口不存在: {window_id}"
+                )
+            
+            updated_window = {**window}
+            updated_window["type"] = "web"
+            updated_window["content"] = normalized_url
+            updated_window["web_url"] = normalized_url
+            updated_window["file_path"] = None
+            updated_window["updated_at"] = datetime.now().isoformat()
+            
+            if args.get("title"):
+                updated_window["title"] = args["title"]
+            
+            position_args = args.get("position")
+            current_position = updated_window.get("position") or {
+                "x": updated_window.get("x", 100),
+                "y": updated_window.get("y", 100)
+            }
+            if position_args:
+                current_position["x"] = position_args.get("x", current_position.get("x", 100))
+                current_position["y"] = position_args.get("y", current_position.get("y", 100))
+            updated_window["position"] = current_position
+            updated_window["x"] = current_position.get("x", 100)
+            updated_window["y"] = current_position.get("y", 100)
+            
+            size_args = args.get("size")
+            current_size = updated_window.get("size") or {
+                "width": updated_window.get("width", 600),
+                "height": updated_window.get("height", 400)
+            }
+            if size_args:
+                current_size["width"] = size_args.get("width", current_size.get("width", 600))
+                current_size["height"] = size_args.get("height", current_size.get("height", 400))
+            updated_window["size"] = current_size
+            updated_window["width"] = current_size.get("width", 600)
+            updated_window["height"] = current_size.get("height", 400)
+            
+            success = self.content_manager.save_window_content(board_id, updated_window)
+            
+            if not success:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="update_web_window",
+                    status=ToolStatus.ERROR,
+                    error="保存网页窗口失败，展板可能不存在"
+                )
+            
+            info(f"[工具] 更新网页窗口成功: {window_id} @ {board_id}")
+            
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="update_web_window",
+                status=ToolStatus.SUCCESS,
+                data={
+                    "window_id": window_id,
+                    "board_id": board_id,
+                    "title": updated_window.get("title"),
+                    "url": normalized_url,
+                    "position": updated_window.get("position"),
+                    "size": updated_window.get("size")
+                }
+            )
+            
+        except Exception as e:
+            error(f"[工具] 更新网页窗口失败: {e}")
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="update_web_window",
+                status=ToolStatus.ERROR,
+                error=f"更新网页窗口失败: {str(e)}"
             )
     
     async def delete_window(self, args: Dict[str, Any], context: Dict[str, Any]) -> ToolResult:
@@ -1751,9 +2031,11 @@ def register_builtin_tools(tool_registry, content_manager: ContentManager, file_
     window_handlers = WindowToolHandlers(content_manager)
     window_tools = [
         (CREATE_WINDOW_TOOL, ToolHandler(executor=window_handlers.create_window)),
+        (CREATE_WEB_WINDOW_TOOL, ToolHandler(executor=window_handlers.create_web_window)),
         (GET_WINDOWS_TOOL, ToolHandler(executor=window_handlers.get_windows)),
         (READ_WINDOW_TOOL, ToolHandler(executor=window_handlers.read_window)),
         (UPDATE_WINDOW_TOOL, ToolHandler(executor=window_handlers.update_window)),
+        (UPDATE_WEB_WINDOW_TOOL, ToolHandler(executor=window_handlers.update_web_window)),
         (EDIT_WINDOW_TOOL, ToolHandler(executor=window_handlers.edit_window)),
         (DELETE_WINDOW_TOOL, ToolHandler(executor=window_handlers.delete_window)),
         (SEARCH_WINDOWS_TOOL, ToolHandler(executor=window_handlers.search_windows)),

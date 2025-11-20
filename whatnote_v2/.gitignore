@@ -136,3 +136,4 @@ whatnote_data/temp/
 # User data - 忽略用户数据但保留结构
 backend/whatnote_data/courses/
 backend/whatnote_data/trash/ 
+backend/whatnote_data/todo_states/

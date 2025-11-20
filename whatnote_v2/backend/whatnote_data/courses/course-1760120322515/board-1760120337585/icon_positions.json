@@ -69,13 +69,33 @@
       "gridY": 0
     }
   },
-  "message-center-window-special": {
+  "window_1763222616720": {
     "position": {
       "x": 580,
       "y": 20
     },
     "gridPosition": {
       "gridX": 7,
+      "gridY": 0
+    }
+  },
+  "window_1763262196446": {
+    "position": {
+      "x": 660,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 8,
+      "gridY": 0
+    }
+  },
+  "window_1763262202821": {
+    "position": {
+      "x": 740,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 9,
       "gridY": 0
     }
   }
