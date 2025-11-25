@@ -25,7 +25,6 @@ from storage.file_watcher import FileWatcher
 from storage.conversation_manager import ConversationManager
 from storage.api_config_manager import APIConfigManager
 from storage.theme_manager import ThemeManager
-from services.todo_state_manager import TodoStateManager
 from llm_service import LLMService
 from document_converter import document_converter
 
@@ -206,8 +205,7 @@ file_manager = FileSystemManager(DATA_DIR)
 content_manager = ContentManager(file_manager)
 conversation_manager = ConversationManager(file_manager)
 api_config_manager = APIConfigManager(DATA_DIR)
-todo_state_manager = TodoStateManager(DATA_DIR, conversation_manager)
-llm_service = LLMService(api_config_manager, content_manager, conversation_manager, todo_state_manager=todo_state_manager)
+llm_service = LLMService(api_config_manager, content_manager, conversation_manager)
 theme_manager = ThemeManager()
 
 # 初始化WebSocket连接管理器
@@ -4350,7 +4348,6 @@ async def delete_conversation(board_id: str, conversation_id: str):
         if not success:
             raise HTTPException(status_code=404, detail="对话不存在")
         info(f"删除对话成功: {conversation_id}")
-        todo_state_manager.reset_tracker(board_id, conversation_id)
         return {"success": True}
     except HTTPException:
         raise
@@ -4366,7 +4363,6 @@ async def clear_conversation_messages(board_id: str, conversation_id: str):
         if not success:
             raise HTTPException(status_code=404, detail="对话不存在")
         info(f"清空对话消息成功: {conversation_id}")
-        todo_state_manager.reset_tracker(board_id, conversation_id)
         return {"success": True}
     except HTTPException:
         raise
@@ -4376,10 +4372,12 @@ async def clear_conversation_messages(board_id: str, conversation_id: str):
 
 @app.get("/api/boards/{board_id}/conversations/{conversation_id}/todo-status")
 async def get_conversation_todo_status(board_id: str, conversation_id: str):
-    """获取会话的待办状态"""
+    """获取会话的待办状态（从对话 JSON 中读取）"""
     try:
-        status = todo_state_manager.get_status(board_id, conversation_id)
-        return {"todo_status": status}
+        data = conversation_manager.get_todo_state(board_id, conversation_id)
+        if data and data.get("status"):
+            return {"todo_status": data.get("status")}
+        return {"todo_status": None}
     except Exception as e:
         error(f"获取待办状态失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

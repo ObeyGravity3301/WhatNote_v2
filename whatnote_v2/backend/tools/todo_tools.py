@@ -1,21 +1,21 @@
 """
-任务追踪工具
+任务追踪工具 - 简化版
 用于 LLM 在复杂多步骤任务中追踪进度和判断完成状态
+
+设计原则：
+1. 单一数据源：Todo 状态只存储在 ConversationManager 的对话 JSON 中
+2. 无内存缓存：每次工具调用时从磁盘读取，执行后立即写回
+3. 简单可靠：减少状态同步复杂度，避免不一致问题
 """
 
 from .schemas import ToolDefinition, ToolHandler, ToolResult, ToolStatus
 from logger import info, error
-from typing import Dict, Any, List, Optional, TYPE_CHECKING
+from typing import Dict, Any, List, Optional
 from datetime import datetime
-from difflib import SequenceMatcher
-
-if TYPE_CHECKING:
-    from services.todo_state_manager import TodoStateManager
 
 
 # ==================== 工具定义 ====================
 
-# 1. 创建待办列表
 CREATE_TODO_LIST_TOOL = ToolDefinition(
     type="function",
     function={
@@ -39,7 +39,6 @@ CREATE_TODO_LIST_TOOL = ToolDefinition(
     }
 )
 
-# 2. 完成待办项
 COMPLETE_TODO_ITEM_TOOL = ToolDefinition(
     type="function",
     function={
@@ -62,7 +61,6 @@ COMPLETE_TODO_ITEM_TOOL = ToolDefinition(
     }
 )
 
-# 3. 获取待办状态
 GET_TODO_STATUS_TOOL = ToolDefinition(
     type="function",
     function={
@@ -76,7 +74,6 @@ GET_TODO_STATUS_TOOL = ToolDefinition(
     }
 )
 
-# 4. 添加待办项
 ADD_TODO_ITEM_TOOL = ToolDefinition(
     type="function",
     function={
@@ -99,26 +96,6 @@ ADD_TODO_ITEM_TOOL = ToolDefinition(
     }
 )
 
-# 6. 暂停执行
-PAUSE_EXECUTION_TOOL = ToolDefinition(
-    type="function",
-    function={
-        "name": "pause_execution",
-        "description": "暂停当前任务的执行。当你需要中途暂停执行（例如：等待用户确认、需要更多信息、或已完成部分工作想先展示给用户），可以调用此工具。暂停后，待办列表会保留，用户可以稍后继续。",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "reason": {
-                    "type": "string",
-                    "description": "暂停的原因（可选），例如：'等待用户确认'、'已完成部分工作，先展示给用户'、'需要更多信息'等"
-                }
-            },
-            "required": []
-        }
-    }
-)
-
-# 5. 跳过待办项
 SKIP_TODO_ITEM_TOOL = ToolDefinition(
     type="function",
     function={
@@ -141,144 +118,70 @@ SKIP_TODO_ITEM_TOOL = ToolDefinition(
     }
 )
 
-
-# ==================== TodoTracker 类 ====================
-
-class TodoTracker:
-    """任务追踪器 - 每个对话会话一个实例"""
-    
-    def __init__(self):
-        self.todos = []  # 待办项列表
-        self.completed = set()  # 已完成的索引集合
-        self.skipped = {}  # 跳过的项 {index: reason}
-        self.notes = {}  # 完成备注 {index: note}
-        self.description = ""  # 整体描述
-        self.created_at = None
-    
-    def create_list(self, items: List[str], description: str = ""):
-        """创建待办列表（会完全重置所有状态）"""
-        # 记录旧状态（用于日志）
-        old_total = len(self.todos)
-        old_completed = len(self.completed)
-        
-        # 完全重置所有状态
-        self.todos = list(items)  # 确保是新的列表对象
-        self.completed = set()  # 清空已完成状态
-        self.skipped = {}  # 清空跳过状态
-        self.notes = {}  # 清空备注
-        self.description = description
-        self.created_at = datetime.now().isoformat()
-        
-        info(
-            f"[TodoTracker] 创建新待办列表: {len(items)} 项 "
-            f"(已清空旧列表: {old_total} 项, 其中 {old_completed} 项已完成)"
-        )
-        
-        # 验证状态确实被重置
-        status = self.get_status()
-        info(
-            f"[TodoTracker] 新列表状态验证: total={status['total']}, "
-            f"completed={status['completed_count']}, remaining={status['remaining_count']}"
-        )
-        
-        return {
-            "success": True,
-            "total": len(items),
-            "description": description,
-            "items": [
-                {
-                    "index": i,
-                    "task": task,
-                    "completed": False
+PAUSE_EXECUTION_TOOL = ToolDefinition(
+    type="function",
+    function={
+        "name": "pause_execution",
+        "description": "暂停当前任务的执行。当你需要中途暂停执行（例如：等待用户确认、需要更多信息、或已完成部分工作想先展示给用户），可以调用此工具。暂停后，待办列表会保留，用户可以稍后继续。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "暂停的原因（可选），例如：'等待用户确认'、'已完成部分工作，先展示给用户'、'需要更多信息'等"
                 }
-                for i, task in enumerate(items)
-            ]
+            },
+            "required": []
         }
+    }
+)
+
+
+# ==================== TodoState 数据结构 ====================
+
+class TodoState:
+    """
+    Todo 状态数据结构
+    设计为纯数据类，不持有任何外部引用
+    """
     
-    def complete_item(self, item_index: int, note: str = ""):
-        """完成待办项"""
-        if item_index < 0 or item_index >= len(self.todos):
-            return {
-                "success": False,
-                "error": f"索引 {item_index} 超出范围 (0-{len(self.todos)-1})"
-            }
-        
-        self.completed.add(item_index)
-        if note:
-            self.notes[item_index] = note
-        
-        remaining = len(self.todos) - len(self.completed)
-        
-        info(f"[TodoTracker] 完成项 {item_index}: {self.todos[item_index]}, 剩余 {remaining} 项")
-        
-        return {
-            "success": True,
-            "completed_index": item_index,
-            "completed_task": self.todos[item_index],
-            "remaining": remaining,
-            "all_completed": remaining == 0
-        }
-    
-    def skip_item(self, item_index: int, reason: str):
-        """跳过待办项"""
-        if item_index < 0 or item_index >= len(self.todos):
-            return {
-                "success": False,
-                "error": f"索引 {item_index} 超出范围"
-            }
-        
-        self.completed.add(item_index)  # 也标记为已完成
-        self.skipped[item_index] = reason
-        
-        remaining = len(self.todos) - len(self.completed)
-        
-        info(f"[TodoTracker] 跳过项 {item_index}: {reason}")
-        
-        return {
-            "success": True,
-            "skipped_index": item_index,
-            "skipped_task": self.todos[item_index],
-            "reason": reason,
-            "remaining": remaining
-        }
-    
-    def add_item(self, item: str, position: int = None):
-        """添加待办项"""
-        if position is None or position >= len(self.todos):
-            # 追加到末尾
-            self.todos.append(item)
-            new_index = len(self.todos) - 1
+    def __init__(self, data: Optional[Dict] = None):
+        if data:
+            self.todos: List[str] = data.get("todos", [])
+            self.completed: set = set(data.get("completed", []))
+            self.skipped: Dict[int, str] = {int(k): v for k, v in data.get("skipped", {}).items()}
+            self.notes: Dict[int, str] = {int(k): v for k, v in data.get("notes", {}).items()}
+            self.description: str = data.get("description", "")
+            self.created_at: Optional[str] = data.get("created_at")
         else:
-            # 插入到指定位置
-            self.todos.insert(position, item)
-            new_index = position
-            
-            # 更新已完成索引（因为插入导致后面的索引变化）
-            new_completed = set()
-            for idx in self.completed:
-                if idx >= position:
-                    new_completed.add(idx + 1)
-                else:
-                    new_completed.add(idx)
-            self.completed = new_completed
-        
-        info(f"[TodoTracker] 添加项 {new_index}: {item}")
-        
+            self.todos = []
+            self.completed = set()
+            self.skipped = {}
+            self.notes = {}
+            self.description = ""
+            self.created_at = None
+    
+    def to_dict(self) -> Optional[Dict]:
+        """导出为可序列化的字典"""
+        if not self.todos:
+            return None
         return {
-            "success": True,
-            "added_index": new_index,
-            "added_task": item,
-            "total": len(self.todos)
+            "todos": self.todos,
+            "completed": list(self.completed),
+            "skipped": self.skipped,
+            "notes": self.notes,
+            "description": self.description,
+            "created_at": self.created_at
         }
     
-    def get_status(self):
-        """获取当前状态"""
-        completed_count = len(self.completed)
+    def get_status(self) -> Dict:
+        """获取状态摘要（用于前端显示）"""
         total = len(self.todos)
+        completed_count = len(self.completed)
         remaining = total - completed_count
         
         return {
-            "has_todos": len(self.todos) > 0,
+            "has_todos": total > 0,
             "description": self.description,
             "total": total,
             "completed_count": completed_count,
@@ -297,163 +200,186 @@ class TodoTracker:
             ]
         }
     
-    def has_todos(self):
-        """是否有待办列表"""
+    def has_todos(self) -> bool:
         return len(self.todos) > 0
     
-    def is_all_completed(self):
-        """是否全部完成"""
+    def is_all_completed(self) -> bool:
         return len(self.todos) > 0 and len(self.completed) == len(self.todos)
-
-    def get_state(self) -> Optional[Dict]:
-        """导出当前待办状态，便于持久化"""
-        if not self.todos:
-            return None
+    
+    def create_list(self, items: List[str], description: str = "") -> Dict:
+        """创建新的待办列表（完全重置）"""
+        self.todos = list(items)
+        self.completed = set()
+        self.skipped = {}
+        self.notes = {}
+        self.description = description
+        self.created_at = datetime.now().isoformat()
+        
+        status = self.get_status()
         return {
-            "todos": self.todos,
-            "completed": list(self.completed),
-            "skipped": self.skipped,
-            "notes": self.notes,
-            "description": self.description,
-            "created_at": self.created_at
+            "success": True,
+            "total": len(items),
+            "description": description,
+            "items": status["items"],
+            **status  # 包含 has_todos, completed_count 等
         }
-
-    def load_state(self, state: Optional[Dict]):
-        """从持久化状态恢复待办列表"""
-        if not state:
-            self.todos = []
-            self.completed = set()
-            self.skipped = {}
-            self.notes = {}
-            self.description = ""
-            self.created_at = None
-            info("[TodoTracker] 已从空状态恢复，当前无待办")
-            return
-
-        self.todos = state.get("todos", [])
-        completed = state.get("completed", [])
-        self.completed = set(int(idx) for idx in completed)
-
-        skipped = state.get("skipped", {})
-        self.skipped = {int(k): v for k, v in skipped.items()}
-
-        notes = state.get("notes", {})
-        self.notes = {int(k): v for k, v in notes.items()}
-
-        self.description = state.get("description", "")
-        self.created_at = state.get("created_at")
-        info(
-            f"[TodoTracker] 从持久化状态恢复: total={len(self.todos)}, completed={len(self.completed)}, "
-            f"remaining={len(self.todos) - len(self.completed)}"
-        )
+    
+    def complete_item(self, index: int, note: str = "") -> Dict:
+        """完成待办项"""
+        if index < 0 or index >= len(self.todos):
+            return {"success": False, "error": f"索引 {index} 超出范围 (0-{len(self.todos)-1})"}
+        
+        self.completed.add(index)
+        if note:
+            self.notes[index] = note
+        
+        remaining = len(self.todos) - len(self.completed)
+        return {
+            "success": True,
+            "completed_index": index,
+            "completed_task": self.todos[index],
+            "remaining": remaining,
+            "all_completed": remaining == 0
+        }
+    
+    def skip_item(self, index: int, reason: str) -> Dict:
+        """跳过待办项"""
+        if index < 0 or index >= len(self.todos):
+            return {"success": False, "error": f"索引 {index} 超出范围"}
+        
+        self.completed.add(index)
+        self.skipped[index] = reason
+        
+        remaining = len(self.todos) - len(self.completed)
+        return {
+            "success": True,
+            "skipped_index": index,
+            "skipped_task": self.todos[index],
+            "reason": reason,
+            "remaining": remaining
+        }
+    
+    def add_item(self, item: str, position: Optional[int] = None) -> Dict:
+        """添加待办项"""
+        if position is None or position >= len(self.todos):
+            self.todos.append(item)
+            new_index = len(self.todos) - 1
+        else:
+            self.todos.insert(position, item)
+            new_index = position
+            # 更新已完成索引
+            new_completed = set()
+            for idx in self.completed:
+                new_completed.add(idx + 1 if idx >= position else idx)
+            self.completed = new_completed
+        
+        return {
+            "success": True,
+            "added_index": new_index,
+            "added_task": item,
+            "total": len(self.todos)
+        }
 
 
 # ==================== 工具处理器 ====================
 
 class TodoToolHandlers:
-    """待办工具处理器"""
+    """
+    待办工具处理器 - 简化版
     
-    def __init__(self, tracker: Optional[TodoTracker] = None, state_manager: Optional["TodoStateManager"] = None):
-        self.default_tracker = tracker or TodoTracker()
-        self.state_manager = state_manager
-
-    def _resolve_tracker(self, context: Optional[Dict[str, Any]] = None) -> TodoTracker:
-        """从上下文或状态管理器获取当前待办追踪器"""
-        tracker = None
-
-        if isinstance(context, dict) and self.state_manager:
-            board_id = context.get("board_id")
-            conversation_id = context.get("conversation_id")
-            if board_id and conversation_id:
-                tracker = self.state_manager.get_tracker(board_id, conversation_id)
-
-        if tracker is None and isinstance(context, dict):
-            tracker = context.get("todo_tracker") or context.get("tracker") or context.get("todoTracker")
-
-        if tracker is None:
-            tracker = self.default_tracker
-
-        return tracker
-
-    @staticmethod
-    def _normalize_text(text: str) -> str:
-        if not text:
-            return ""
-        return ''.join(ch.lower() for ch in text if ch.isalnum() or ch.isspace()).strip()
-
-    def _should_drop_leading_summary(self, first_item: str, description: str) -> bool:
-        if not first_item or not description:
+    设计原则：
+    - 不持有任何状态，每次调用从 context 获取 conversation_manager
+    - 每次操作都从磁盘读取最新状态，操作后立即写回
+    - 通过 context 传递 board_id 和 conversation_id
+    """
+    
+    def __init__(self):
+        pass  # 不再需要任何初始化参数
+    
+    def _get_conversation_manager(self, context: Optional[Dict]) -> Optional[Any]:
+        """从 context 获取 conversation_manager"""
+        if not context:
+            return None
+        return context.get("conversation_manager")
+    
+    def _get_ids(self, context: Optional[Dict]) -> tuple:
+        """从 context 获取 board_id 和 conversation_id"""
+        if not context:
+            return None, None
+        return context.get("board_id"), context.get("conversation_id")
+    
+    def _load_state(self, context: Optional[Dict]) -> TodoState:
+        """从 ConversationManager 加载状态"""
+        conv_manager = self._get_conversation_manager(context)
+        board_id, conv_id = self._get_ids(context)
+        
+        if not conv_manager or not board_id or not conv_id:
+            info("[TodoTools] 缺少必要的上下文信息，使用空状态")
+            return TodoState()
+        
+        try:
+            data = conv_manager.get_todo_state(board_id, conv_id)
+            if data and data.get("state"):
+                info(f"[TodoTools] 从磁盘加载状态: {board_id}/{conv_id}")
+                return TodoState(data.get("state"))
+        except Exception as e:
+            error(f"[TodoTools] 加载状态失败: {e}")
+        
+        return TodoState()
+    
+    def _save_state(self, state: TodoState, context: Optional[Dict]) -> bool:
+        """保存状态到 ConversationManager"""
+        conv_manager = self._get_conversation_manager(context)
+        board_id, conv_id = self._get_ids(context)
+        
+        if not conv_manager or not board_id or not conv_id:
+            info("[TodoTools] 缺少必要的上下文信息，无法保存状态")
             return False
-        normalized_item = self._normalize_text(first_item)
-        normalized_desc = self._normalize_text(description)
-        if not normalized_item or not normalized_desc:
+        
+        try:
+            state_dict = state.to_dict()
+            status_dict = state.get_status()
+            conv_manager.save_todo_state(board_id, conv_id, state_dict, status_dict)
+            info(f"[TodoTools] 状态已保存: {board_id}/{conv_id}, total={status_dict['total']}, completed={status_dict['completed_count']}")
+            return True
+        except Exception as e:
+            error(f"[TodoTools] 保存状态失败: {e}")
             return False
-        if normalized_item == normalized_desc:
-            return True
-        if normalized_item.startswith(normalized_desc) or normalized_desc.startswith(normalized_item):
-            return True
-        similarity = SequenceMatcher(None, normalized_item, normalized_desc).ratio()
-        return similarity >= 0.72
     
     async def create_todo_list(self, arguments: Dict[str, Any], context: Dict[str, Any] = None) -> ToolResult:
-        """创建待办列表（会完全重置旧列表）"""
+        """创建待办列表"""
         try:
-            tracker = self._resolve_tracker(context)
             items = arguments.get("items", [])
             description = arguments.get("description", "")
             
             if not items:
                 return ToolResult(
-                    tool_call_id=context.get("call_id", ""),
+                    tool_call_id=context.get("call_id", "") if context else "",
                     tool_name="create_todo_list",
                     status=ToolStatus.ERROR,
                     error="待办项列表不能为空"
                 )
             
-            # 记录创建前的状态（用于日志）
-            old_status = tracker.get_status() if tracker.has_todos() else None
-            if old_status:
-                info(
-                    f"[TodoToolHandlers] 创建新待办列表前，旧列表状态: "
-                    f"total={old_status['total']}, completed={old_status['completed_count']}"
-                )
+            # 创建新状态（不需要加载旧状态，直接覆盖）
+            state = TodoState()
+            result = state.create_list(items, description)
             
-            cleaned_items = list(items)
-            if description and len(cleaned_items) > 1 and self._should_drop_leading_summary(cleaned_items[0], description):
-                removed_item = cleaned_items.pop(0)
-                info(f"[TodoTracker] 自动移除了重复的总览项: \"{removed_item}\"")
+            # 保存到磁盘
+            self._save_state(state, context)
             
-            # 创建新列表（会完全重置所有状态）
-            result = tracker.create_list(cleaned_items, description)
-            
-            # 验证新状态
-            new_status = tracker.get_status()
-            info(
-                f"[TodoToolHandlers] 创建新待办列表后，状态验证: "
-                f"total={new_status['total']}, completed={new_status['completed_count']}, "
-                f"remaining={new_status['remaining_count']}, has_todos={new_status['has_todos']}"
-            )
-            
-            # 确保返回的数据包含完整的状态信息
-            result_with_status = {
-                **result,
-                "has_todos": new_status['has_todos'],
-                "completed_count": new_status['completed_count'],
-                "remaining_count": new_status['remaining_count'],
-                "all_completed": new_status['all_completed']
-            }
+            info(f"[TodoTools] 创建待办列表: {len(items)} 项, description={description}")
             
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="create_todo_list",
                 status=ToolStatus.SUCCESS,
-                data=result_with_status
+                data=result
             )
             
         except Exception as e:
-            error(f"[工具] 创建待办列表失败: {e}")
+            error(f"[TodoTools] 创建待办列表失败: {e}")
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="create_todo_list",
                 status=ToolStatus.ERROR,
                 error=str(e)
@@ -462,39 +388,55 @@ class TodoToolHandlers:
     async def complete_todo_item(self, arguments: Dict[str, Any], context: Dict[str, Any] = None) -> ToolResult:
         """完成待办项"""
         try:
-            tracker = self._resolve_tracker(context)
             item_index = arguments.get("item_index")
             note = arguments.get("note", "")
             
             if item_index is None:
                 return ToolResult(
-                    tool_call_id=context.get("call_id", ""),
+                    tool_call_id=context.get("call_id", "") if context else "",
                     tool_name="complete_todo_item",
                     status=ToolStatus.ERROR,
                     error="必须提供 item_index"
                 )
             
-            result = tracker.complete_item(item_index, note)
+            # 加载当前状态
+            state = self._load_state(context)
+            
+            if not state.has_todos():
+                return ToolResult(
+                    tool_call_id=context.get("call_id", "") if context else "",
+                    tool_name="complete_todo_item",
+                    status=ToolStatus.ERROR,
+                    error="当前没有待办列表"
+                )
+            
+            # 执行操作
+            result = state.complete_item(item_index, note)
             
             if not result.get("success"):
                 return ToolResult(
-                    tool_call_id=context.get("call_id", ""),
+                    tool_call_id=context.get("call_id", "") if context else "",
                     tool_name="complete_todo_item",
                     status=ToolStatus.ERROR,
                     error=result.get("error")
                 )
             
+            # 保存状态
+            self._save_state(state, context)
+            
+            info(f"[TodoTools] 完成待办项 {item_index}, 剩余 {result['remaining']} 项")
+            
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="complete_todo_item",
                 status=ToolStatus.SUCCESS,
                 data=result
             )
             
         except Exception as e:
-            error(f"[工具] 完成待办项失败: {e}")
+            error(f"[TodoTools] 完成待办项失败: {e}")
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="complete_todo_item",
                 status=ToolStatus.ERROR,
                 error=str(e)
@@ -503,20 +445,20 @@ class TodoToolHandlers:
     async def get_todo_status(self, arguments: Dict[str, Any], context: Dict[str, Any] = None) -> ToolResult:
         """获取待办状态"""
         try:
-            tracker = self._resolve_tracker(context)
-            result = tracker.get_status()
+            state = self._load_state(context)
+            result = state.get_status()
             
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="get_todo_status",
                 status=ToolStatus.SUCCESS,
                 data=result
             )
             
         except Exception as e:
-            error(f"[工具] 获取待办状态失败: {e}")
+            error(f"[TodoTools] 获取待办状态失败: {e}")
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="get_todo_status",
                 status=ToolStatus.ERROR,
                 error=str(e)
@@ -525,31 +467,44 @@ class TodoToolHandlers:
     async def add_todo_item(self, arguments: Dict[str, Any], context: Dict[str, Any] = None) -> ToolResult:
         """添加待办项"""
         try:
-            tracker = self._resolve_tracker(context)
             item = arguments.get("item")
             position = arguments.get("position")
             
             if not item:
                 return ToolResult(
-                    tool_call_id=context.get("call_id", ""),
+                    tool_call_id=context.get("call_id", "") if context else "",
                     tool_name="add_todo_item",
                     status=ToolStatus.ERROR,
                     error="必须提供待办项内容"
                 )
             
-            result = tracker.add_item(item, position)
+            # 加载当前状态
+            state = self._load_state(context)
+            
+            # 如果没有待办列表，创建一个空的
+            if not state.has_todos():
+                state.todos = []
+                state.created_at = datetime.now().isoformat()
+            
+            # 执行操作
+            result = state.add_item(item, position)
+            
+            # 保存状态
+            self._save_state(state, context)
+            
+            info(f"[TodoTools] 添加待办项: {item}, 位置={position}, 总数={result['total']}")
             
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="add_todo_item",
                 status=ToolStatus.SUCCESS,
                 data=result
             )
             
         except Exception as e:
-            error(f"[工具] 添加待办项失败: {e}")
+            error(f"[TodoTools] 添加待办项失败: {e}")
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="add_todo_item",
                 status=ToolStatus.ERROR,
                 error=str(e)
@@ -558,39 +513,55 @@ class TodoToolHandlers:
     async def skip_todo_item(self, arguments: Dict[str, Any], context: Dict[str, Any] = None) -> ToolResult:
         """跳过待办项"""
         try:
-            tracker = self._resolve_tracker(context)
             item_index = arguments.get("item_index")
             reason = arguments.get("reason")
             
             if item_index is None or not reason:
                 return ToolResult(
-                    tool_call_id=context.get("call_id", ""),
+                    tool_call_id=context.get("call_id", "") if context else "",
                     tool_name="skip_todo_item",
                     status=ToolStatus.ERROR,
                     error="必须提供 item_index 和 reason"
                 )
             
-            result = tracker.skip_item(item_index, reason)
+            # 加载当前状态
+            state = self._load_state(context)
+            
+            if not state.has_todos():
+                return ToolResult(
+                    tool_call_id=context.get("call_id", "") if context else "",
+                    tool_name="skip_todo_item",
+                    status=ToolStatus.ERROR,
+                    error="当前没有待办列表"
+                )
+            
+            # 执行操作
+            result = state.skip_item(item_index, reason)
             
             if not result.get("success"):
                 return ToolResult(
-                    tool_call_id=context.get("call_id", ""),
+                    tool_call_id=context.get("call_id", "") if context else "",
                     tool_name="skip_todo_item",
                     status=ToolStatus.ERROR,
                     error=result.get("error")
                 )
             
+            # 保存状态
+            self._save_state(state, context)
+            
+            info(f"[TodoTools] 跳过待办项 {item_index}: {reason}")
+            
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="skip_todo_item",
                 status=ToolStatus.SUCCESS,
                 data=result
             )
             
         except Exception as e:
-            error(f"[工具] 跳过待办项失败: {e}")
+            error(f"[TodoTools] 跳过待办项失败: {e}")
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="skip_todo_item",
                 status=ToolStatus.ERROR,
                 error=str(e)
@@ -599,14 +570,12 @@ class TodoToolHandlers:
     async def pause_execution(self, arguments: Dict[str, Any], context: Dict[str, Any] = None) -> ToolResult:
         """暂停执行"""
         try:
-            tracker = self._resolve_tracker(context)
             reason = arguments.get("reason", "")
             
-            info(f"[工具] 暂停执行，原因: {reason if reason else '未指定'}")
+            info(f"[TodoTools] 暂停执行，原因: {reason if reason else '未指定'}")
             
-            # 返回特殊标记，让 llm_service 知道要暂停
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="pause_execution",
                 status=ToolStatus.SUCCESS,
                 data={
@@ -618,9 +587,9 @@ class TodoToolHandlers:
             )
             
         except Exception as e:
-            error(f"[工具] 暂停执行失败: {e}")
+            error(f"[TodoTools] 暂停执行失败: {e}")
             return ToolResult(
-                tool_call_id=context.get("call_id", ""),
+                tool_call_id=context.get("call_id", "") if context else "",
                 tool_name="pause_execution",
                 status=ToolStatus.ERROR,
                 error=str(e)
@@ -629,23 +598,20 @@ class TodoToolHandlers:
 
 # ==================== 工具注册函数 ====================
 
-_TODO_TOOLS_REGISTERED = False
+_TODO_HANDLERS_INSTANCE: Optional[TodoToolHandlers] = None
 
 
-def register_todo_tools(
-    tool_registry,
-    tracker: Optional[TodoTracker] = None,
-    state_manager: Optional["TodoStateManager"] = None,
-    force: bool = False
-):
-    """注册待办工具到工具注册表（默认只注册一次）"""
-    global _TODO_TOOLS_REGISTERED
-    
-    if _TODO_TOOLS_REGISTERED and not force:
-        info("ℹ️ 待办工具已注册，跳过重复注册")
-        return
-    
-    handlers = TodoToolHandlers(tracker=tracker, state_manager=state_manager)
+def get_todo_handlers() -> TodoToolHandlers:
+    """获取全局唯一的 TodoToolHandlers 实例"""
+    global _TODO_HANDLERS_INSTANCE
+    if _TODO_HANDLERS_INSTANCE is None:
+        _TODO_HANDLERS_INSTANCE = TodoToolHandlers()
+    return _TODO_HANDLERS_INSTANCE
+
+
+def register_todo_tools(tool_registry):
+    """注册待办工具到工具注册表"""
+    handlers = get_todo_handlers()
     
     todo_tools = [
         (CREATE_TODO_LIST_TOOL, ToolHandler(executor=handlers.create_todo_list)),
@@ -659,6 +625,18 @@ def register_todo_tools(
     for tool_def, handler in todo_tools:
         tool_registry.register_tool(tool_def, handler, category="todo")
     
-    _TODO_TOOLS_REGISTERED = True
     info(f"✅ 已注册 {len(todo_tools)} 个待办工具")
 
+
+# ==================== 辅助函数 ====================
+
+def load_todo_state_from_context(context: Optional[Dict]) -> TodoState:
+    """从 context 加载 Todo 状态（供 llm_service 使用）"""
+    handlers = get_todo_handlers()
+    return handlers._load_state(context)
+
+
+def get_todo_status_from_context(context: Optional[Dict]) -> Dict:
+    """从 context 获取 Todo 状态摘要（供 llm_service 使用）"""
+    state = load_todo_state_from_context(context)
+    return state.get_status()
