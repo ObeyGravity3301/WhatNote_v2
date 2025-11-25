@@ -62,28 +62,31 @@ class ContentManager:
                 print(f"⚠️ 读取JSON文件失败: {json_file}, 错误: {e}")
                 continue
         
-        # 新存储逻辑：文本类型窗口
-        if window_type == "text":
+        # 新存储逻辑：文本类型窗口和便签窗口（都需要保存内容到文件）
+        if window_type == "text" or window_type == "sticky-note":
             # 如果已存在窗口，使用相同的文件名；否则生成新文件名
+            # 确定文件扩展名
+            file_ext = ".txt" if window_type == "sticky-note" else ".md"
+            
             if existing_json_file:
-                # 从现有文件名推导出 .md 文件名
+                # 从现有文件名推导出文件名
                 existing_name = existing_json_file.stem  # 移除 .json
-                if existing_name.endswith('.md'):
+                if existing_name.endswith('.md') or existing_name.endswith('.txt'):
                     md_file_name = existing_name
                 else:
                     # 如果格式不对，使用标题生成新文件名
-                    md_file_name = f"{safe_name}.md"
+                    md_file_name = f"{safe_name}{file_ext}"
             else:
                 # 生成唯一的文件名（使用 window_id 的一部分确保唯一性）
                 # 如果标题相同，使用 window_id 的后缀来区分
-                md_file_name = f"{safe_name}.md"
+                md_file_name = f"{safe_name}{file_ext}"
                 md_file_path = files_dir / md_file_name
                 
                 # 检查文件名冲突，如果冲突则添加 window_id 后缀
                 if md_file_path.exists() and not existing_json_file:
                     # 使用 window_id 的后8位作为后缀
                     window_id_suffix = window_id[-8:] if len(window_id) >= 8 else window_id
-                    md_file_name = f"{safe_name}_{window_id_suffix}.md"
+                    md_file_name = f"{safe_name}_{window_id_suffix}{file_ext}"
                     md_file_path = files_dir / md_file_name
             
             md_file_path = files_dir / md_file_name
@@ -697,8 +700,8 @@ class ContentManager:
                     if content_file_path.exists():
                         try:
                             # 根据文件类型决定如何加载内容
-                            if window_type == 'text':
-                                # 文本类型：从文件读取内容，尝试多种编码
+                            if window_type == 'text' or window_type == 'sticky-note':
+                                # 文本类型和便签类型：从文件读取内容，尝试多种编码
                                 try:
                                     with open(content_file_path, "r", encoding="utf-8") as f:
                                         window_data['content'] = f.read()

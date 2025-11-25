@@ -973,6 +973,7 @@ class LLMService:
                         # 从磁盘重新读取最新状态（工具已经保存了）
                         current_status = get_current_todo_status()
                         log_todo_status("执行待办工具后")
+                        info(f"[LLM Tools][Todo] 发送 todo_status 事件: total={current_status.get('total')}, completed={current_status.get('completed_count')}, items={len(current_status.get('items', []))}")
                         yield {
                             "type": "todo_status",
                             "content": current_status

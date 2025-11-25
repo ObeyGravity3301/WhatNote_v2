@@ -339,9 +339,12 @@ class TodoToolHandlers:
         try:
             state_dict = state.to_dict()
             status_dict = state.get_status()
-            conv_manager.save_todo_state(board_id, conv_id, state_dict, status_dict)
-            info(f"[TodoTools] 状态已保存: {board_id}/{conv_id}, total={status_dict['total']}, completed={status_dict['completed_count']}")
-            return True
+            success = conv_manager.save_todo_state(board_id, conv_id, state_dict, status_dict)
+            if success:
+                info(f"[TodoTools] 状态已保存: {board_id}/{conv_id}, total={status_dict['total']}, completed={status_dict['completed_count']}")
+            else:
+                error(f"[TodoTools] 保存状态失败: 对话不存在 {board_id}/{conv_id}")
+            return success
         except Exception as e:
             error(f"[TodoTools] 保存状态失败: {e}")
             return False
@@ -365,9 +368,9 @@ class TodoToolHandlers:
             result = state.create_list(items, description)
             
             # 保存到磁盘
-            self._save_state(state, context)
+            saved = self._save_state(state, context)
             
-            info(f"[TodoTools] 创建待办列表: {len(items)} 项, description={description}")
+            info(f"[TodoTools] 创建待办列表: {len(items)} 项, saved={saved}")
             
             return ToolResult(
                 tool_call_id=context.get("call_id", "") if context else "",

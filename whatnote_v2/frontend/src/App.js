@@ -1036,6 +1036,21 @@ function App() {
                   <span className="taskbar-icon win98-icon win98-icon-calendar"></span>
                   <span className="taskbar-text">日历</span>
                 </button>
+
+                <button
+                  className="taskbar-item plugin-manager-taskbar-btn"
+                  onClick={() => {
+                    const event = new CustomEvent('togglePluginManagerWindow');
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(event);
+                    }
+                  }}
+                  title="插件管理器"
+                  style={{ minWidth: 'auto', width: '90px' }}
+                >
+                  <span className="taskbar-icon">🔌</span>
+                  <span className="taskbar-text">插件</span>
+                </button>
               </>
             )}
             

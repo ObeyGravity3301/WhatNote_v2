@@ -20,6 +20,8 @@ import ChatWindow from './ChatWindow';
 import RadialMindMap from './RadialMindMap';
 import PersonalizationPanel from './PersonalizationPanel';
 import CalendarPlannerWindow from './CalendarPlannerWindow';
+import PluginManager from '../plugins/PluginManager';
+import { initializePlugins, pluginRegistry } from '../plugins';
 
 // 配置PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -6767,7 +6769,7 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
 }
 
 // 简单的文本编辑器组件，支持实时预览和打字机模式
-function TextEditorWithPreview({ window: windowData, onContentChange, onConvertToWeb }) {
+function TextEditorWithPreview({ window: windowData, boardId, onContentChange, onConvertToWeb }) {
   // 调试模式检测 - 必须在所有其他代码之前定义
   const isDebugMode = typeof window !== 'undefined' && 
     (window.location.search.includes('debug=true') || window.location.hash.includes('debug'));
@@ -6777,6 +6779,7 @@ function TextEditorWithPreview({ window: windowData, onContentChange, onConvertT
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
   const [localContent, setLocalContent] = useState(windowData.content || '');
   const [webUrlInput, setWebUrlInput] = useState('');
+  const [pluginStateKey, setPluginStateKey] = useState(0); // 用于触发插件重新渲染
   const textareaRef = useRef(null);
   const previewRef = useRef(null);
   const saveTimeoutRef = useRef(null);
@@ -7501,6 +7504,68 @@ function TextEditorWithPreview({ window: windowData, onContentChange, onConvertT
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* 插件工具栏按钮 */}
+          {(() => {
+            // 使用 state 来触发重新渲染
+            const [pluginStateKey, setPluginStateKey] = useState(0);
+            
+            useEffect(() => {
+              const handlePluginStateChanged = () => {
+                setPluginStateKey(prev => prev + 1);
+              };
+              
+              if (typeof window !== 'undefined') {
+                window.addEventListener('pluginStateChanged', handlePluginStateChanged);
+              }
+              return () => {
+                if (typeof window !== 'undefined') {
+                  window.removeEventListener('pluginStateChanged', handlePluginStateChanged);
+                }
+              };
+            }, []);
+            
+            return useMemo(() => {
+              try {
+                const toolbarPlugins = pluginRegistry.getToolbarPluginsForWindow('text');
+                console.log('[插件系统] 文本窗口工具栏插件:', toolbarPlugins.map(p => p.id));
+                
+                if (!toolbarPlugins || toolbarPlugins.length === 0) {
+                  console.warn('[插件系统] 没有找到适用于文本窗口的工具栏插件');
+                  return null;
+                }
+                
+                return toolbarPlugins
+                  .filter(p => p.renderToolbarButton)
+                  .map((plugin) => {
+                    try {
+                      const ButtonComponent = plugin.renderToolbarButton({
+                        windowId: windowData.id,
+                        content: localContent,
+                        onContentChange: handleContentChange,
+                        boardId: boardId || null
+                      });
+                      // 确保返回的是一个有效的 React 元素
+                      if (React.isValidElement(ButtonComponent)) {
+                        return <React.Fragment key={`plugin-${plugin.id}`}>{ButtonComponent}</React.Fragment>;
+                      } else if (typeof ButtonComponent === 'function') {
+                        // 如果返回的是组件函数，需要实例化
+                        const Component = ButtonComponent;
+                        return <Component key={`plugin-${plugin.id}`} />;
+                      }
+                      return null;
+                    } catch (error) {
+                      console.error(`[插件系统] 渲染插件 ${plugin.id} 的按钮时出错:`, error);
+                      return null;
+                    }
+                  })
+                  .filter(Boolean);
+              } catch (error) {
+                console.error('[插件系统] 获取工具栏插件时出错:', error);
+                return null;
+              }
+            }, [windowData.id, localContent, boardId, pluginStateKey]);
+          })()}
+          
           <div style={{ position: 'relative' }} ref={marpMenuRef}>
             <button
               onClick={() => setShowMarpMenu((prev) => !prev)}
@@ -8046,6 +8111,7 @@ function BoardCanvas({
   const MESSAGE_CENTER_WINDOW_ID = 'message-center-window-special';
   const PERSONALIZATION_WINDOW_ID = 'personalization-window-special';
   const PLANNER_WINDOW_ID = 'planner-window-special';
+  const PLUGIN_MANAGER_WINDOW_ID = 'plugin-manager-window-special';
   
   // 创建聊天窗口对象
   const createChatWindow = () => {
@@ -8097,6 +8163,20 @@ function BoardCanvas({
       title: '日历与计划',
       position: { x: 240, y: 140 },
       size: { width: 560, height: 520 },
+      content: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  };
+
+  // 创建插件管理器窗口对象
+  const createPluginManagerWindow = () => {
+    return {
+      id: PLUGIN_MANAGER_WINDOW_ID,
+      type: 'plugin-manager',
+      title: '🔌 插件管理器',
+      position: { x: 260, y: 120 },
+      size: { width: 600, height: 500 },
       content: '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -8158,6 +8238,11 @@ function BoardCanvas({
     } catch (err) {
       console.warn('[BoardCanvas] 加载日历任务失败:', err);
     }
+  }, []);
+
+  // 初始化插件系统
+  useEffect(() => {
+    initializePlugins();
   }, []);
 
   useEffect(() => {
@@ -8459,6 +8544,11 @@ function BoardCanvas({
       case 'planner':
         return '📅';
       default:
+        // 检查是否是插件窗口类型
+        const windowTypePlugin = pluginRegistry.getWindowTypePlugin(window.type);
+        if (windowTypePlugin && windowTypePlugin.getWindowIcon) {
+          return windowTypePlugin.getWindowIcon();
+        }
         return '🪟';
     }
   };
@@ -8947,7 +9037,8 @@ function BoardCanvas({
         window.type === 'chat' || 
         window.type === 'message-center' ||
         window.type === 'personalization' ||
-        window.type === 'planner';
+        window.type === 'planner' ||
+        window.type === 'plugin-manager';
       
       if (isSpecialWindow) {
         console.log('🎯 跳过特殊窗口，不创建桌面图标:', window.id, window.title);
@@ -9652,8 +9743,15 @@ function BoardCanvas({
       }
 
       // 聊天窗口和消息中心窗口不需要保存到后端文件系统
-      if (window.type === 'chat' || window.type === 'message-center' || window.type === 'personalization' || window.type === 'planner') {
-        console.log(`${window.type === 'chat' ? '💬 聊天' : window.type === 'message-center' ? '📬 消息中心' : window.type === 'personalization' ? '🎨 个性化' : '📅 日历计划'}窗口状态不保存到后端，跳过保存`);
+      if (window.type === 'chat' || window.type === 'message-center' || window.type === 'personalization' || window.type === 'planner' || window.type === 'plugin-manager') {
+        const typeNames = {
+          'chat': '💬 聊天',
+          'message-center': '📬 消息中心',
+          'personalization': '🎨 个性化',
+          'planner': '📅 日历计划',
+          'plugin-manager': '🔌 插件管理器'
+        };
+        console.log(`${typeNames[window.type] || window.type}窗口状态不保存到后端，跳过保存`);
         return true;
       }
 
@@ -10192,9 +10290,67 @@ function BoardCanvas({
     showContextMenu(e, 'icon', iconId);
   };
 
+  // 创建窗口的通用函数（供插件使用）
+  const createWindowForPlugin = async (windowData) => {
+    try {
+      const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(windowData),
+      });
+
+      if (response.ok) {
+        const newWindow = await response.json();
+        console.log('✅ 创建窗口成功:', newWindow);
+        
+        // 直接添加到本地状态
+        setWindows(prev => [...prev, newWindow]);
+        
+        // 新创建的窗口自动获得焦点
+        setTimeout(() => {
+          handleWindowFocusLocal(newWindow.id);
+        }, 100);
+        
+        return newWindow;
+      } else {
+        const errorText = await response.text();
+        console.error('❌ 创建窗口失败:', response.status, errorText);
+        throw new Error(`创建窗口失败: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ 创建窗口异常:', error);
+      throw error;
+    }
+  };
+
   // 右键菜单项点击处理
-  const handleContextMenuAction = (action, targetId = null) => {
+  const handleContextMenuAction = async (action, targetId = null) => {
     hideContextMenu();
+    
+    // 检查是否是插件菜单项
+    if (action.startsWith('plugin:')) {
+      // 找到对应的插件并调用其处理函数
+      const pluginId = action.split(':')[1];
+      const plugin = pluginRegistry.get(pluginId);
+      
+      if (plugin && plugin.handleContextMenuAction) {
+        try {
+          await plugin.handleContextMenuAction(action, {
+            boardId,
+            windows,
+            createWindow: createWindowForPlugin,
+            targetId
+          });
+        } catch (error) {
+          console.error(`[插件系统] 处理插件菜单项 ${action} 时出错:`, error);
+        }
+      } else {
+        console.warn(`[插件系统] 未找到插件 ${pluginId} 或插件没有 handleContextMenuAction 方法`);
+      }
+      return;
+    }
     
     switch (action) {
       case 'new-project':
@@ -10216,6 +10372,25 @@ function BoardCanvas({
           window.openConsoleAtCurrentBoard(courseId, boardId);
         } else {
           console.error('[BoardCanvas] window.openConsoleAtCurrentBoard 不存在');
+        }
+        break;
+      case 'open-plugin-manager':
+        // 打开插件管理器窗口
+        const existingPluginManager = windows.find(w => w.id === PLUGIN_MANAGER_WINDOW_ID);
+        if (existingPluginManager) {
+          // 如果已存在，则聚焦到该窗口
+          handleWindowFocusLocal(PLUGIN_MANAGER_WINDOW_ID);
+          // 如果窗口被最小化，则恢复
+          if (minimizedWindows.has(PLUGIN_MANAGER_WINDOW_ID)) {
+            handleWindowMinimizeLocal(PLUGIN_MANAGER_WINDOW_ID);
+          }
+        } else {
+          // 创建新窗口
+          const pluginManagerWindow = createPluginManagerWindow();
+          setWindows(prev => [...prev, pluginManagerWindow]);
+          setTimeout(() => {
+            handleWindowFocusLocal(PLUGIN_MANAGER_WINDOW_ID);
+          }, 100);
         }
         break;
       case 'rename':
@@ -10781,6 +10956,44 @@ function BoardCanvas({
     };
   }, [minimizedWindows]);
   
+  // 监听插件管理器窗口切换事件
+  useEffect(() => {
+    const handleTogglePluginManagerWindow = () => {
+      setWindows(prev => {
+        const pluginManagerWindow = prev.find(w => w.id === PLUGIN_MANAGER_WINDOW_ID);
+
+        if (pluginManagerWindow) {
+          // 如果窗口存在，检查是否被隐藏
+          if (hiddenWindows && hiddenWindows.has(PLUGIN_MANAGER_WINDOW_ID) && onWindowShow) {
+            onWindowShow(PLUGIN_MANAGER_WINDOW_ID);
+          }
+          // 如果窗口存在且可见，聚焦到它
+          setTimeout(() => {
+            handleWindowFocusLocal(PLUGIN_MANAGER_WINDOW_ID);
+          }, 0);
+          return prev;
+        }
+
+        // 如果窗口不存在，创建它
+        const newPluginManagerWindow = createPluginManagerWindow();
+        return [...prev, newPluginManagerWindow];
+      });
+      
+      setTimeout(() => {
+        handleWindowFocusLocal(PLUGIN_MANAGER_WINDOW_ID);
+      }, 100);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('togglePluginManagerWindow', handleTogglePluginManagerWindow);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('togglePluginManagerWindow', handleTogglePluginManagerWindow);
+      }
+    };
+  }, [hiddenWindows, onWindowShow]);
+  
   // 监听打开消息中心事件
   useEffect(() => {
     const handleToggleMessageCenter = () => {
@@ -11017,18 +11230,28 @@ function BoardCanvas({
       { 
         label: '新建项目', 
         action: 'new-project',
-        icon: '📝'
+        icon: '📝',
+        order: 0
       },
       {
         label: '新建网页窗口',
         action: 'new-web-window',
-        icon: '🌐'
+        icon: '🌐',
+        order: 1
       },
-      { type: 'separator' },
+      { type: 'separator', order: 2 },
       { 
         label: '打开控制台', 
         action: 'open-console',
-        icon: '💻'
+        icon: '💻',
+        order: 10
+      },
+      { type: 'separator', order: 11 },
+      { 
+        label: '插件管理器', 
+        action: 'open-plugin-manager',
+        icon: '🔌',
+        order: 12
       }
     ];
 
@@ -11036,17 +11259,32 @@ function BoardCanvas({
       { 
         label: '重命名', 
         action: 'rename',
-        icon: '✏️'
+        icon: '✏️',
+        order: 0
       },
-      { type: 'separator' },
+      { type: 'separator', order: 1 },
       { 
         label: '删除', 
         action: 'delete',
-        icon: '🗑️'
+        icon: '🗑️',
+        order: 2
       }
     ];
 
-    const menuItems = type === 'desktop' ? desktopMenuItems : iconMenuItems;
+    // 获取插件菜单项
+    const pluginMenuItems = pluginRegistry.getContextMenuItems(type);
+    
+    // 合并菜单项并按 order 排序
+    const baseMenuItems = type === 'desktop' ? desktopMenuItems : iconMenuItems;
+    const allMenuItems = [...baseMenuItems, ...pluginMenuItems].sort((a, b) => {
+      if (a.type === 'separator' && b.type !== 'separator') return 1;
+      if (a.type !== 'separator' && b.type === 'separator') return -1;
+      const orderA = a.order !== undefined ? a.order : 999;
+      const orderB = b.order !== undefined ? b.order : 999;
+      return orderA - orderB;
+    });
+
+    const menuItems = allMenuItems;
 
     return (
       <div 
@@ -11300,7 +11538,7 @@ function BoardCanvas({
                     console.log('点击了关闭按钮:', window.id);
                     e.stopPropagation();
                     e.preventDefault();
-                    // Chat 和消息中心窗口关闭时执行最小化，其他窗口执行真正的关闭
+                    // Chat、消息中心和日历窗口关闭时执行最小化，其他窗口执行真正的关闭
                     if (window.type === 'chat' || window.type === 'message-center' || window.type === 'planner') {
                       handleWindowMinimizeLocal(window.id);
                     } else {
@@ -11332,6 +11570,7 @@ function BoardCanvas({
               {window.type === 'text' && (
                 <TextEditorWithPreview
                   window={window}
+                  boardId={boardId}
                   onContentChange={(content, mode) => handleWindowContentChange(window.id, content, mode)}
                   onConvertToWeb={(url) => handleConvertWindowToWeb(window.id, url)}
                 />
@@ -11521,6 +11760,21 @@ function BoardCanvas({
               {window.type === 'planner' && (
                 <CalendarPlannerWindow />
               )}
+              {window.type === 'plugin-manager' && (
+                <PluginManager />
+              )}
+              {/* 插件窗口类型渲染 */}
+              {(() => {
+                const windowTypePlugin = pluginRegistry.getWindowTypePlugin(window.type);
+                if (windowTypePlugin && windowTypePlugin.renderWindow) {
+                  return windowTypePlugin.renderWindow({
+                    window: window,
+                    onContentChange: (content) => handleWindowContentChange(window.id, content),
+                    boardId: boardId
+                  });
+                }
+                return null;
+              })()}
               {window.type === 'image' && (
                 <ImageWindowRenderer
                   window={window}
@@ -11713,8 +11967,16 @@ const getWindowIcon = (type) => {
     'chat': '💬',
     'message-center': '📬',
     'personalization': '🎨',
-    'planner': '📅'
+    'planner': '📅',
+    'plugin-manager': '🔌'
   };
+  
+  // 检查是否是插件窗口类型
+  const windowTypePlugin = pluginRegistry.getWindowTypePlugin(type);
+  if (windowTypePlugin && windowTypePlugin.getWindowIcon) {
+    return windowTypePlugin.getWindowIcon();
+  }
+  
   return typeIcons[type] || '🪟';
 };
 
