@@ -61,6 +61,30 @@ COMPLETE_TODO_ITEM_TOOL = ToolDefinition(
     }
 )
 
+COMPLETE_TODO_ITEMS_TOOL = ToolDefinition(
+    type="function",
+    function={
+        "name": "complete_todo_items",
+        "description": "一次性标记多个待办项为已完成。当你连续完成了多个步骤后，可以使用此工具批量标记，比逐个调用 complete_todo_item 更高效，节省时间和 token",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "item_indices": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "待办项的索引列表（从0开始），例如 [0, 1, 2] 表示同时完成前3项"
+                },
+                "notes": {
+                    "type": "object",
+                    "description": "可选的备注字典，键为索引，值为备注内容，例如 {\"0\": \"已完成\", \"1\": \"已确认\"}",
+                    "additionalProperties": {"type": "string"}
+                }
+            },
+            "required": ["item_indices"]
+        }
+    }
+)
+
 GET_TODO_STATUS_TOOL = ToolDefinition(
     type="function",
     function={
@@ -238,6 +262,37 @@ class TodoState:
             "success": True,
             "completed_index": index,
             "completed_task": self.todos[index],
+            "remaining": remaining,
+            "all_completed": remaining == 0
+        }
+    
+    def complete_items(self, indices: List[int], notes: Optional[Dict[int, str]] = None) -> Dict:
+        """一次性完成多个待办项"""
+        if not indices:
+            return {"success": False, "error": "索引列表不能为空"}
+        
+        invalid_indices = [idx for idx in indices if idx < 0 or idx >= len(self.todos)]
+        if invalid_indices:
+            return {"success": False, "error": f"无效的索引: {invalid_indices}，有效范围 (0-{len(self.todos)-1})"}
+        
+        # 完成所有项
+        completed_tasks = []
+        for index in indices:
+            self.completed.add(index)
+            completed_tasks.append({
+                "index": index,
+                "task": self.todos[index]
+            })
+            # 如果有对应的备注，添加备注
+            if notes and index in notes:
+                self.notes[index] = notes[index]
+        
+        remaining = len(self.todos) - len(self.completed)
+        return {
+            "success": True,
+            "completed_count": len(indices),
+            "completed_indices": indices,
+            "completed_tasks": completed_tasks,
             "remaining": remaining,
             "all_completed": remaining == 0
         }
@@ -445,6 +500,72 @@ class TodoToolHandlers:
                 error=str(e)
             )
     
+    async def complete_todo_items(self, arguments: Dict[str, Any], context: Dict[str, Any] = None) -> ToolResult:
+        """批量完成待办项"""
+        try:
+            item_indices = arguments.get("item_indices", [])
+            notes_raw = arguments.get("notes", {})
+            
+            if not item_indices:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", "") if context else "",
+                    tool_name="complete_todo_items",
+                    status=ToolStatus.ERROR,
+                    error="必须提供 item_indices 数组"
+                )
+            
+            # 转换 notes 字典的键为整数（JSON 中的键可能是字符串）
+            notes = {}
+            if notes_raw:
+                for key, value in notes_raw.items():
+                    try:
+                        notes[int(key)] = str(value)
+                    except (ValueError, TypeError):
+                        pass  # 忽略无效的键
+            
+            # 加载当前状态
+            state = self._load_state(context)
+            
+            if not state.has_todos():
+                return ToolResult(
+                    tool_call_id=context.get("call_id", "") if context else "",
+                    tool_name="complete_todo_items",
+                    status=ToolStatus.ERROR,
+                    error="当前没有待办列表"
+                )
+            
+            # 执行操作
+            result = state.complete_items(item_indices, notes if notes else None)
+            
+            if not result.get("success"):
+                return ToolResult(
+                    tool_call_id=context.get("call_id", "") if context else "",
+                    tool_name="complete_todo_items",
+                    status=ToolStatus.ERROR,
+                    error=result.get("error")
+                )
+            
+            # 保存状态
+            self._save_state(state, context)
+            
+            info(f"[TodoTools] 批量完成待办项 {len(item_indices)} 项: {item_indices}, 剩余 {result['remaining']} 项")
+            
+            return ToolResult(
+                tool_call_id=context.get("call_id", "") if context else "",
+                tool_name="complete_todo_items",
+                status=ToolStatus.SUCCESS,
+                data=result
+            )
+            
+        except Exception as e:
+            error(f"[TodoTools] 批量完成待办项失败: {e}")
+            return ToolResult(
+                tool_call_id=context.get("call_id", "") if context else "",
+                tool_name="complete_todo_items",
+                status=ToolStatus.ERROR,
+                error=str(e)
+            )
+    
     async def get_todo_status(self, arguments: Dict[str, Any], context: Dict[str, Any] = None) -> ToolResult:
         """获取待办状态"""
         try:
@@ -619,6 +740,7 @@ def register_todo_tools(tool_registry):
     todo_tools = [
         (CREATE_TODO_LIST_TOOL, ToolHandler(executor=handlers.create_todo_list)),
         (COMPLETE_TODO_ITEM_TOOL, ToolHandler(executor=handlers.complete_todo_item)),
+        (COMPLETE_TODO_ITEMS_TOOL, ToolHandler(executor=handlers.complete_todo_items)),
         (GET_TODO_STATUS_TOOL, ToolHandler(executor=handlers.get_todo_status)),
         (ADD_TODO_ITEM_TOOL, ToolHandler(executor=handlers.add_todo_item)),
         (SKIP_TODO_ITEM_TOOL, ToolHandler(executor=handlers.skip_todo_item)),
