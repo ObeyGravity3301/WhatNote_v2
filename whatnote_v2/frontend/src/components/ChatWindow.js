@@ -1698,8 +1698,8 @@ todo 系统是为了帮助你在**非常复杂的长任务**中记住后续步�
                   const argsStr = JSON.stringify(parsed.arguments, null, 2);
                   skipToolCallsRef.current[toolCallId] = false;
                   
-                  fullResponse += `\n<details class="tool-call-block" data-tool-id="${toolCallId}" data-skipped="false">
-<summary>🔧 <code>${parsed.tool_name}</code> <span class="tool-status">[执行中...]</span></summary>
+                  fullResponse += `\n<details class="tool-call-block tool-call-real" data-tool-id="${toolCallId}" data-skipped="false">
+<summary>🔧 <code>${parsed.tool_name}</code> <span class="tool-status">[执行中...]</span> <span class="tool-source">【系统调用】</span></summary>
 <div class="tool-call-actions">
   <button type="button" class="tool-skip-button" data-tool-id="${toolCallId}" data-tool-name="${parsed.tool_name}">跳过等待</button>
 </div>
