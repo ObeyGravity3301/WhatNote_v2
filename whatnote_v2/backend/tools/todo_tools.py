@@ -614,9 +614,13 @@ class TodoToolHandlers:
             result = state.add_item(item, position)
             
             # 保存状态
-            self._save_state(state, context)
+            saved = self._save_state(state, context)
             
-            info(f"[TodoTools] 添加待办项: {item}, 位置={position}, 总数={result['total']}")
+            info(f"[TodoTools] 添加待办项: {item}, 位置={position}, 总数={result['total']}, 保存结果={saved}")
+            
+            # 验证保存后的状态
+            verify_state = self._load_state(context)
+            info(f"[TodoTools] 验证保存后状态: todos={len(verify_state.todos)}, items={[t[:15] for t in verify_state.todos]}")
             
             return ToolResult(
                 tool_call_id=context.get("call_id", "") if context else "",
@@ -764,4 +768,6 @@ def load_todo_state_from_context(context: Optional[Dict]) -> TodoState:
 def get_todo_status_from_context(context: Optional[Dict]) -> Dict:
     """从 context 获取 Todo 状态摘要（供 llm_service 使用）"""
     state = load_todo_state_from_context(context)
-    return state.get_status()
+    status = state.get_status()
+    info(f"[TodoTools] get_todo_status_from_context: total={status.get('total')}, items_count={len(status.get('items', []))}")
+    return status
