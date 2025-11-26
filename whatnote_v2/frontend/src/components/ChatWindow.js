@@ -1692,8 +1692,11 @@ ${todoItems}
               setStreamingMessageId(null);
               fullResponse = streamingContentRef.current || fullResponse;
               
-              // ⭐ 将所有剩余的"等待中"标记改为"已完成"（对话结束时）
-              fullResponse = fullResponse.replace(/⏳ `([^`]+)` \[(?:等待中\.\.\.|已跳过等待)\]/g, '✅ `$1` [已完成]');
+              // ⭐ 将所有剩余的未完成状态标记改为"已完成"（对话结束时）
+              fullResponse = fullResponse.replace(
+                /(<span class="tool-status">)\[(?:执行中\.\.\.|等待LLM响应)\](<\/span>)/g,
+                '$1[已完成]$2'
+              );
               
               // 最后更新一次显示
               setMessages(prev => prev.map(msg => 
@@ -1746,14 +1749,15 @@ ${todoItems}
                   currentToolLogs.push(toolLog);
                   setToolCallLogs(prev => [...prev, toolLog]);
                   
-                  // ⭐ 如果有"等待中"的工具，先标记为"已完成"
+                  // ⭐ 如果有之前的工具状态，先标记为"已完成"
                   fullResponse = fullResponse.replace(
-                    /(<span class="tool-status">)\[等待中\.\.\.\](<\/span>)/g,
+                    /(<span class="tool-status">)\[(?:执行中\.\.\.|等待LLM响应)\](<\/span>)/g,
                     '$1[已完成]$2'
                   );
                   streamingContentRef.current = fullResponse;
                   
-                  // 在消息中显示工具标签（执行中）- 使用 details 标签实现点击展开
+                  // 在消息中显示工具标签 - 使用 details 标签实现点击展开
+                  // 状态：[执行中...] 表示工具正在执行
                   const toolCallId = `tool-${Date.now()}-${parsed.tool_name}`;
                   const argsStr = JSON.stringify(parsed.arguments, null, 2);
                   skipToolCallsRef.current[toolCallId] = false;
@@ -1815,7 +1819,8 @@ ${argsStr}
                     );
                   }
                   
-                  // ⭐ 将最后一个 [执行中...] 的工具状态改为 [等待中...]，并添加执行结果
+                  // ⭐ 工具执行完成，更新状态并添加执行结果
+                  // 状态：[执行中...] -> [等待LLM响应] 表示工具已完成，等待 LLM 继续
                   const resultStr = JSON.stringify(parsed.tool_result, null, 2);
                   
                   // 找到最后一个 </details> 的位置
@@ -1825,10 +1830,10 @@ ${argsStr}
                     const beforeDetails = fullResponse.substring(0, lastDetailsEndIndex);
                     const afterDetails = fullResponse.substring(lastDetailsEndIndex);
                     
-                    // 替换状态：[执行中...] -> [等待中...]
+                    // 替换状态：[执行中...] -> [等待LLM响应]
                     const updatedBefore = beforeDetails.replace(
                       /(<span class="tool-status">)\[执行中\.\.\.\](<\/span>)(?![\s\S]*\[执行中\.\.\.\])/,
-                      '$1[等待中...]$2'
+                      '$1[等待LLM响应]$2'
                     );
                     
                     fullResponse = updatedBefore + `\n\n**执行结果**：\n\`\`\`json\n${resultStr}\n\`\`\`\n` + afterDetails;
@@ -1876,9 +1881,9 @@ ${argsStr}
                   
                 } else if (parsed.type === 'text_start') {
                   // 💬 开始文本输出
-                  // 将最后一个"等待中"的工具标记为"已完成"
+                  // 将所有未完成的工具标记为"已完成"
                   fullResponse = fullResponse.replace(
-                    /(<span class="tool-status">)\[(?:等待中\.\.\.|已跳过等待)\](<\/span>)/g,
+                    /(<span class="tool-status">)\[(?:执行中\.\.\.|等待LLM响应)\](<\/span>)/g,
                     '$1[已完成]$2'
                   );
                   fullResponse += `\n`;
@@ -2291,10 +2296,10 @@ ${argsStr}
       if (detailAttrRegex.test(updated)) {
         updated = updated.replace(detailAttrRegex, `$1data-skipped="true"`);
       }
-      const statusRegex = new RegExp(`(<details class="tool-call-block" data-tool-id="${toolCallId}"[\s\S]*?<span class="tool-status">)\[[^\]]+\]`);
-      updated = updated.replace(statusRegex, `$1[已跳过等待]`);
+      const statusRegex = new RegExp(`(<details class="tool-call-block"[^>]*data-tool-id="${toolCallId}"[\\s\\S]*?<span class="tool-status">)\\[[^\\]]+\\]`);
+      updated = updated.replace(statusRegex, `$1[已跳过]`);
       const buttonRegex = new RegExp(`(<button[^>]*class="tool-skip-button"[^>]*data-tool-id="${toolCallId}"[^>]*)(>)([\s\S]*?</button>)`);
-      updated = updated.replace(buttonRegex, `$1 data-skipped="true" disabled>$2已跳过等待</button>`);
+      updated = updated.replace(buttonRegex, `$1 data-skipped="true" disabled>$2已跳过</button>`);
       if (!new RegExp(`tool-skip-note"[^>]*data-tool-id="${toolCallId}"`).test(updated)) {
         const actionsRegex = new RegExp(`(<div class="tool-call-actions">[\s\S]*?data-tool-id="${toolCallId}"[\s\S]*?</div>)`);
         if (actionsRegex.test(updated)) {
@@ -2397,7 +2402,7 @@ ${argsStr}
       if (!toolId || skipToolCallsRef.current[toolId]) return;
       if (detail) {
         const statusText = detail.querySelector('.tool-status')?.textContent || '';
-        if (statusText.includes('已完成')) {
+        if (statusText.includes('已完成') || statusText.includes('已跳过')) {
           return;
         }
       }
