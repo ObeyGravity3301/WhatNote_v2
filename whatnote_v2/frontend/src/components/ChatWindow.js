@@ -1594,7 +1594,7 @@ todo 系统是为了帮助你在**非常复杂的长任务**中记住后续步�
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           messages: conversationMessages,
-          max_iterations: 25,  // 最大工具调用轮数
+          max_iterations: 50,  // 最大工具调用轮数
           board_id: boardId,
           conversation_id: conversationId
         }),

@@ -640,7 +640,7 @@ class LLMService:
     async def chat_with_tools(
         self,
         messages: List[Dict],
-        max_iterations: int = 25,
+        max_iterations: int = 50,
         board_id: Optional[str] = None,
         conversation_id: Optional[str] = None
     ) -> AsyncGenerator[Dict, None]:

@@ -4098,7 +4098,7 @@ async def llm_chat_with_tools(request: dict):
     """支持工具调用的LLM对话API"""
     try:
         messages = request.get('messages', [])
-        max_iterations = request.get('max_iterations', 25)
+        max_iterations = request.get('max_iterations', 50)
         board_id = request.get('board_id')
         conversation_id = request.get('conversation_id')
         
