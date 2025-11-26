@@ -1570,12 +1570,34 @@ todo 系统是为了帮助你在**非常复杂的长任务**中记住后续步�
         conversationMessages.push(contextMessage);
       }
       
+      // 清理消息内容中的工具调用 HTML 格式，避免 LLM 学习并模仿这些格式
+      const cleanToolCallContent = (content) => {
+        if (!content || typeof content !== 'string') return content;
+        
+        // 移除 <details> 工具调用块（包含调用参数和执行结果）
+        let cleaned = content.replace(/<details class="tool-call-block[^"]*"[\s\S]*?<\/details>/g, '');
+        
+        // 移除可能残留的工具调用相关标记
+        cleaned = cleaned.replace(/\*\*调用参数\*\*：[\s\S]*?```\n/g, '');
+        cleaned = cleaned.replace(/\*\*执行结果\*\*：[\s\S]*?```\n/g, '');
+        
+        // 清理多余的空行
+        cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+        
+        return cleaned.trim();
+      };
+      
       // 然后添加历史消息
       messages.forEach(msg => {
+        // 对 assistant 消息清理工具调用格式，避免 LLM 模仿
+        const cleanedContent = msg.role === 'assistant' 
+          ? cleanToolCallContent(msg.content) 
+          : msg.content;
+        
         conversationMessages.push({
-        role: msg.role,
-        content: msg.content,
-        files: msg.files
+          role: msg.role,
+          content: cleanedContent,
+          files: msg.files
         });
       });
       
