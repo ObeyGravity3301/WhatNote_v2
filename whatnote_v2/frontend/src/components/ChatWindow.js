@@ -1587,6 +1587,27 @@ todo 系统是为了帮助你在**非常复杂的长任务**中记住后续步�
         conversationMessages.push(contextMessage);
       }
       
+      // 如果有活跃的 todo 列表，将其状态添加到上下文中
+      // 这样 LLM 不需要每次都调用 get_todo_status 来获取当前状态
+      if (hasActiveTodos(todoStatus)) {
+        const todoItems = (todoStatus.items || []).map((item, idx) => {
+          const status = item.completed ? '✅' : '⏳';
+          return `${idx}. ${status} ${item.task}`;
+        }).join('\n');
+        
+        const todoContextMessage = {
+          role: 'system',
+          content: `### 当前 Todo 列表状态 ###
+描述：${todoStatus.description || '无'}
+进度：${todoStatus.completed_count}/${todoStatus.total} 已完成，剩余 ${todoStatus.remaining_count} 项
+
+${todoItems}
+
+注意：如需修改此列表，请使用 add_todo_item、complete_todo_item、complete_todo_items 等工具。`
+        };
+        conversationMessages.push(todoContextMessage);
+      }
+      
       // 清理消息内容中的工具调用 HTML 格式，避免 LLM 学习并模仿这些格式
       const cleanToolCallContent = (content) => {
         if (!content || typeof content !== 'string') return content;
