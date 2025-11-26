@@ -936,7 +936,9 @@ class LLMService:
 
                     window_related_tools = {
                         'create_window',
+                        'create_web_window',
                         'update_window',
+                        'update_web_window',
                         'edit_window',
                         'delete_window',
                         'move_window',
@@ -966,6 +968,7 @@ class LLMService:
                     if function_name in [
                         'create_todo_list',
                         'complete_todo_item',
+                        'complete_todo_items',  # 批量完成
                         'add_todo_item',
                         'skip_todo_item',
                         'get_todo_status'
