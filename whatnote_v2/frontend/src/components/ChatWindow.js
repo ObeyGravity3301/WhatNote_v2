@@ -425,9 +425,7 @@ const Toolbar = React.memo(({
   onClearMessages,
   todoStatus,
   showTodoList,
-  setShowTodoList,
-  isStreaming,
-  onStopGeneration
+  setShowTodoList
 }) => {
   const hasTodos = hasActiveTodos(todoStatus);
 
@@ -555,30 +553,6 @@ const Toolbar = React.memo(({
       >
         ⬇️ 底部
       </button>
-      
-      {isStreaming && (
-        <button
-          onClick={onStopGeneration}
-          style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: '#ff4444',
-            color: 'white',
-            border: '2px outset #ff4444',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '50px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-          title="停止生成"
-        >
-          ⏸️ 停止
-        </button>
-      )}
       
       <button
         onClick={onClearMessages}
@@ -2481,8 +2455,6 @@ ${argsStr}
         todoStatus={todoStatus}
         showTodoList={showTodoList}
         setShowTodoList={setShowTodoList}
-        isStreaming={isStreaming}
-        onStopGeneration={handleStopGeneration}
       />
 
       <div 
@@ -2720,7 +2692,7 @@ ${argsStr}
             onKeyPress={handleKeyPress}
             placeholder="输入消息... (Enter发送，Shift+Enter换行)"
             rows="1"
-            disabled={isLoading}
+            disabled={isLoading || isStreaming}
             style={{
               resize: 'none',
               minHeight: '16px',
@@ -2729,14 +2701,28 @@ ${argsStr}
               transition: 'height 0.1s ease'
             }}
           />
-          <button
-            className="send-button"
-            onClick={sendMessage}
-            disabled={isLoading || (!inputText.trim() && selectedFiles.length === 0)}
-            title="发送消息"
-          >
-            {isLoading ? '⏳' : '📤'}
-          </button>
+          {isStreaming ? (
+            <button
+              className="send-button stop-button"
+              onClick={handleStopGeneration}
+              title="停止生成"
+              style={{
+                backgroundColor: '#ff4444',
+                borderColor: '#ff4444'
+              }}
+            >
+              ⏹️
+            </button>
+          ) : (
+            <button
+              className="send-button"
+              onClick={sendMessage}
+              disabled={isLoading || (!inputText.trim() && selectedFiles.length === 0)}
+              title="发送消息"
+            >
+              {isLoading ? '⏳' : '📤'}
+            </button>
+          )}
         </div>
       </div>
     </div>

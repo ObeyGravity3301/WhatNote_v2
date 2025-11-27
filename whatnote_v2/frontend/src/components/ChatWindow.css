@@ -331,6 +331,37 @@
   cursor: not-allowed;
 }
 
+/* 停止按钮样式 */
+.send-button.stop-button {
+  background: #ff4444;
+  border-top: 1px solid #ff6666;
+  border-left: 1px solid #ff6666;
+  border-right: 1px solid #cc0000;
+  border-bottom: 1px solid #cc0000;
+  animation: pulse-stop 1s infinite;
+}
+
+.send-button.stop-button:hover {
+  background: #ff6666;
+}
+
+.send-button.stop-button:active {
+  border-top: 1px solid #cc0000;
+  border-left: 1px solid #cc0000;
+  border-right: 1px solid #ff6666;
+  border-bottom: 1px solid #ff6666;
+  background: #cc0000;
+}
+
+@keyframes pulse-stop {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
 /* 工具调用块样式 */
 .tool-call-block {
   margin: 8px 0;
