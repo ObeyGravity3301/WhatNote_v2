@@ -1693,8 +1693,13 @@ ${todoItems}
               fullResponse = streamingContentRef.current || fullResponse;
               
               // ⭐ 将所有剩余的未完成状态标记改为"已完成"（对话结束时）
+              // 先移除可能残留的"生成调用中..."临时块
               fullResponse = fullResponse.replace(
-                /(<span class="tool-status">)\[(?:执行中\.\.\.|等待LLM响应)\](<\/span>)/g,
+                /<details class="tool-call-block tool-call-pending"[^>]*>[\s\S]*?<\/details>\n?/g,
+                ''
+              );
+              fullResponse = fullResponse.replace(
+                /(<span class="tool-status">)\[(?:执行中\.\.\.|等待LLM响应|生成调用中\.\.\.)\](<\/span>)/g,
                 '$1[已完成]$2'
               );
               
@@ -1738,8 +1743,34 @@ ${todoItems}
                   // 显示思考动画（可选）
                   console.log('[ChatWindow] LLM 正在推理...');
                   
+                } else if (parsed.type === 'tool_call_start') {
+                  // 🔧 LLM 开始生成工具调用（还未完成）
+                  // 立即显示"正在生成调用..."，让用户知道 LLM 在做什么
+                  console.log(`[ChatWindow] LLM 开始生成工具调用: ${parsed.tool_name}`);
+                  
+                  // ⭐ 如果有之前的工具状态，先标记为"已完成"
+                  fullResponse = fullResponse.replace(
+                    /(<span class="tool-status">)\[(?:执行中\.\.\.|等待LLM响应|生成调用中\.\.\.)\](<\/span>)/g,
+                    '$1[已完成]$2'
+                  );
+                  
+                  // 创建一个临时的工具调用块，显示"生成调用中..."
+                  const pendingToolCallId = `tool-pending-${Date.now()}-${parsed.tool_name}`;
+                  fullResponse += `\n<details class="tool-call-block tool-call-pending" data-tool-id="${pendingToolCallId}" open>
+<summary>🔧 <code>${parsed.tool_name}</code> <span class="tool-status">[生成调用中...]</span> <span class="tool-source">【系统调用】</span></summary>
+<div class="tool-call-info">正在生成调用参数...</div>
+</details>\n`;
+                  streamingContentRef.current = fullResponse;
+                  
+                  // 立即更新显示
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { ...msg, content: fullResponse }
+                      : msg
+                  ));
+                  
                 } else if (parsed.type === 'tool_call') {
-                  // 🔧 工具调用开始
+                  // 🔧 工具调用参数生成完成，开始执行
                   const toolLog = {
                     type: 'tool_call',
                     tool_name: parsed.tool_name,
@@ -1749,7 +1780,11 @@ ${todoItems}
                   currentToolLogs.push(toolLog);
                   setToolCallLogs(prev => [...prev, toolLog]);
                   
-                  // ⭐ 如果有之前的工具状态，先标记为"已完成"
+                  // ⭐ 移除之前的"生成调用中..."临时块，并标记其他未完成的为"已完成"
+                  fullResponse = fullResponse.replace(
+                    /<details class="tool-call-block tool-call-pending"[^>]*>[\s\S]*?<\/details>\n?/g,
+                    ''
+                  );
                   fullResponse = fullResponse.replace(
                     /(<span class="tool-status">)\[(?:执行中\.\.\.|等待LLM响应)\](<\/span>)/g,
                     '$1[已完成]$2'
@@ -1881,9 +1916,14 @@ ${argsStr}
                   
                 } else if (parsed.type === 'text_start') {
                   // 💬 开始文本输出
+                  // 移除可能残留的"生成调用中..."临时块
+                  fullResponse = fullResponse.replace(
+                    /<details class="tool-call-block tool-call-pending"[^>]*>[\s\S]*?<\/details>\n?/g,
+                    ''
+                  );
                   // 将所有未完成的工具标记为"已完成"
                   fullResponse = fullResponse.replace(
-                    /(<span class="tool-status">)\[(?:执行中\.\.\.|等待LLM响应)\](<\/span>)/g,
+                    /(<span class="tool-status">)\[(?:执行中\.\.\.|等待LLM响应|生成调用中\.\.\.)\](<\/span>)/g,
                     '$1[已完成]$2'
                   );
                   fullResponse += `\n`;

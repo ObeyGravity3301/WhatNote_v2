@@ -806,7 +806,10 @@ class LLMService:
                                     for tool_call_delta in delta['tool_calls']:
                                         idx = tool_call_delta.get('index', 0)
                                         
-                                        if idx not in tool_calls_buffer:
+                                        # 检测是否是新的 tool call（首次出现）
+                                        is_new_tool_call = idx not in tool_calls_buffer
+                                        
+                                        if is_new_tool_call:
                                             tool_calls_buffer[idx] = {
                                                 'id': '',
                                                 'type': 'function',
@@ -820,6 +823,14 @@ class LLMService:
                                             func = tool_call_delta['function']
                                             if 'name' in func and func['name']:
                                                 tool_calls_buffer[idx]['function']['name'] += func['name']
+                                                # ⭐ 当工具名称首次完整出现时，发送 tool_call_start 事件
+                                                # 这样前端可以立即显示"正在生成调用..."
+                                                if is_new_tool_call or (len(tool_calls_buffer[idx]['function']['name']) == len(func['name'])):
+                                                    yield {
+                                                        "type": "tool_call_start",
+                                                        "tool_name": tool_calls_buffer[idx]['function']['name'],
+                                                        "tool_index": idx
+                                                    }
                                             if 'arguments' in func and func['arguments']:
                                                 tool_calls_buffer[idx]['function']['arguments'] += func['arguments']
                                 

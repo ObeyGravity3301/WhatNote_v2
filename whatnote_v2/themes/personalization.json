@@ -35,6 +35,10 @@
     "board-1763627971001": {
       "selected_wallpaper_id": null,
       "display_mode": "cover"
+    },
+    "board-1764243168212": {
+      "selected_wallpaper_id": "wallpaper-1764247897048",
+      "display_mode": "cover"
     }
   },
   "board_wallpapers": [
@@ -85,6 +89,14 @@
       "uploaded_at": "2025-11-14T18:25:58.037729",
       "content_type": "image/jpeg",
       "uploaded_by_board": "board-1762857117412"
+    },
+    {
+      "id": "wallpaper-1764247897048",
+      "filename": "boards/board-1764243168212/wallpaper-1764247897048.jpg",
+      "original_name": "unnamed (1).jpg",
+      "uploaded_at": "2025-11-27T20:51:37.049408",
+      "content_type": "image/jpeg",
+      "uploaded_by_board": "board-1764243168212"
     }
   ],
   "default_display_mode": "cover"
