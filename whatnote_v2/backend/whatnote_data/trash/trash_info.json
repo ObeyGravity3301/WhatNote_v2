@@ -364,5 +364,347 @@
     "deleted_at": "2025-11-26T18:44:26.668198",
     "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
     "file_size": 455
+  },
+  {
+    "id": "trash_1764333728155",
+    "original_name": "unnamed (1)_extracted.md",
+    "trash_filename": "1764333728155_unnamed (1)_extracted.md",
+    "window_data": {
+      "id": "window_1764333389323",
+      "type": "text",
+      "title": "unnamed (1)_extracted.md",
+      "position": {
+        "x": 371,
+        "y": 124
+      },
+      "size": {
+        "width": 400,
+        "height": 300
+      },
+      "file_path": "files/unnamed (1)_extracted.md",
+      "created_at": "2025-11-28T20:36:29.323674",
+      "updated_at": "2025-11-28T20:42:01.002287",
+      "hidden": true,
+      "x": 371,
+      "y": 124,
+      "width": 400,
+      "height": 300
+    },
+    "board_id": "board-1764153674624",
+    "deleted_at": "2025-11-28T20:42:08.155684",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
+    "file_size": 441
+  },
+  {
+    "id": "trash_1764333728159",
+    "original_name": "unnamed (1)_extracted.md.json",
+    "trash_filename": "1764333728159_unnamed (1)_extracted.md.json",
+    "window_data": {
+      "id": "window_1764333389323",
+      "type": "text",
+      "title": "unnamed (1)_extracted.md",
+      "position": {
+        "x": 371,
+        "y": 124
+      },
+      "size": {
+        "width": 400,
+        "height": 300
+      },
+      "file_path": "files/unnamed (1)_extracted.md",
+      "created_at": "2025-11-28T20:36:29.323674",
+      "updated_at": "2025-11-28T20:42:01.002287",
+      "hidden": true,
+      "x": 371,
+      "y": 124,
+      "width": 400,
+      "height": 300,
+      "is_json_config": true
+    },
+    "board_id": "board-1764153674624",
+    "deleted_at": "2025-11-28T20:42:08.159468",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
+    "file_size": 408
+  },
+  {
+    "id": "trash_1764333730406",
+    "original_name": "unnamed (1)_extracted.md.md",
+    "trash_filename": "1764333730406_unnamed (1)_extracted.md.md",
+    "window_data": {
+      "id": "window_1764333364065",
+      "title": "unnamed (1)_extracted.md",
+      "type": "text",
+      "x": 100,
+      "y": 100,
+      "width": 400,
+      "height": 300,
+      "hidden": true,
+      "file_path": "files/unnamed (1)_extracted.md.md"
+    },
+    "board_id": "board-1764153674624",
+    "deleted_at": "2025-11-28T20:42:10.407140",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
+    "file_size": 434
+  },
+  {
+    "id": "trash_1764333730408",
+    "original_name": "unnamed (1)_extracted.md.md.json",
+    "trash_filename": "1764333730408_unnamed (1)_extracted.md.md.json",
+    "window_data": {
+      "id": "window_1764333364065",
+      "title": "unnamed (1)_extracted.md",
+      "type": "text",
+      "x": 100,
+      "y": 100,
+      "width": 400,
+      "height": 300,
+      "hidden": true,
+      "file_path": "files/unnamed (1)_extracted.md.md",
+      "is_json_config": true
+    },
+    "board_id": "board-1764153674624",
+    "deleted_at": "2025-11-28T20:42:10.408504",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
+    "file_size": 218
+  },
+  {
+    "id": "trash_1764334791305",
+    "original_name": "unnamed (1)_extracted.md",
+    "trash_filename": "1764334791305_unnamed (1)_extracted.md",
+    "window_data": {
+      "id": "window_1764333739486",
+      "type": "text",
+      "title": "unnamed (1)_extracted.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 400,
+        "height": 300
+      },
+      "file_path": "files/unnamed (1)_extracted.md",
+      "created_at": "2025-11-28T20:42:19.486653",
+      "updated_at": "2025-11-28T20:59:48.367383",
+      "hidden": true,
+      "x": 100,
+      "y": 100,
+      "width": 400,
+      "height": 300
+    },
+    "board_id": "board-1764153674624",
+    "deleted_at": "2025-11-28T20:59:51.306031",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
+    "file_size": 441
+  },
+  {
+    "id": "trash_1764334791306",
+    "original_name": "unnamed (1)_extracted.md.json",
+    "trash_filename": "1764334791306_unnamed (1)_extracted.md.json",
+    "window_data": {
+      "id": "window_1764333739486",
+      "type": "text",
+      "title": "unnamed (1)_extracted.md",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "size": {
+        "width": 400,
+        "height": 300
+      },
+      "file_path": "files/unnamed (1)_extracted.md",
+      "created_at": "2025-11-28T20:42:19.486653",
+      "updated_at": "2025-11-28T20:59:48.367383",
+      "hidden": true,
+      "x": 100,
+      "y": 100,
+      "width": 400,
+      "height": 300,
+      "is_json_config": true
+    },
+    "board_id": "board-1764153674624",
+    "deleted_at": "2025-11-28T20:59:51.307129",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
+    "file_size": 408
+  },
+  {
+    "id": "trash_1764334793504",
+    "original_name": "unnamed (1)_extracted.md.md",
+    "trash_filename": "1764334793504_unnamed (1)_extracted.md.md",
+    "window_data": {
+      "id": "window_1764333732477",
+      "title": "unnamed (1)_extracted.md",
+      "type": "text",
+      "x": 543,
+      "y": 99,
+      "width": 400,
+      "height": 300,
+      "hidden": true,
+      "file_path": "files/unnamed (1)_extracted.md.md",
+      "position": {
+        "x": 543,
+        "y": 99
+      },
+      "size": {
+        "width": 400,
+        "height": 300
+      },
+      "updated_at": "2025-11-28T20:59:49.187583"
+    },
+    "board_id": "board-1764153674624",
+    "deleted_at": "2025-11-28T20:59:53.505003",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
+    "file_size": 401
+  },
+  {
+    "id": "trash_1764334793506",
+    "original_name": "unnamed (1)_extracted.md.md.json",
+    "trash_filename": "1764334793506_unnamed (1)_extracted.md.md.json",
+    "window_data": {
+      "id": "window_1764333732477",
+      "title": "unnamed (1)_extracted.md",
+      "type": "text",
+      "x": 543,
+      "y": 99,
+      "width": 400,
+      "height": 300,
+      "hidden": true,
+      "file_path": "files/unnamed (1)_extracted.md.md",
+      "position": {
+        "x": 543,
+        "y": 99
+      },
+      "size": {
+        "width": 400,
+        "height": 300
+      },
+      "updated_at": "2025-11-28T20:59:49.187583",
+      "is_json_config": true
+    },
+    "board_id": "board-1764153674624",
+    "deleted_at": "2025-11-28T20:59:53.506675",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
+    "file_size": 363
+  },
+  {
+    "id": "trash_1764339251670",
+    "original_name": "Tool Call 能力演示 - 第一个窗口.md",
+    "trash_filename": "1764339251670_Tool Call 能力演示 - 第一个窗口.md",
+    "window_data": {
+      "id": "window_1764339239070",
+      "title": "Tool Call 能力演示 - 第一个窗口",
+      "type": "text",
+      "created_at": "2025-11-28T22:13:59.070954",
+      "updated_at": "2025-11-28T22:14:03.481105",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/Tool Call 能力演示 - 第一个窗口.md"
+    },
+    "board_id": "board-1764153674624",
+    "deleted_at": "2025-11-28T22:14:11.674025",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
+    "file_size": 230
+  },
+  {
+    "id": "trash_1764339251676",
+    "original_name": "Tool Call 能力演示 - 第一个窗口.md.json",
+    "trash_filename": "1764339251676_Tool Call 能力演示 - 第一个窗口.md.json",
+    "window_data": {
+      "id": "window_1764339239070",
+      "title": "Tool Call 能力演示 - 第一个窗口",
+      "type": "text",
+      "created_at": "2025-11-28T22:13:59.070954",
+      "updated_at": "2025-11-28T22:14:03.481105",
+      "x": 100,
+      "y": 100,
+      "width": 600,
+      "height": 400,
+      "isMinimized": false,
+      "isHidden": false,
+      "zIndex": 1000,
+      "file_path": "files/Tool Call 能力演示 - 第一个窗口.md",
+      "is_json_config": true
+    },
+    "board_id": "board-1764153674624",
+    "deleted_at": "2025-11-28T22:14:11.677990",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764153666816/board-1764153674624/files",
+    "file_size": 387
+  },
+  {
+    "id": "trash_1764416752920",
+    "original_name": "1.pdf",
+    "trash_filename": "1764416752920_1.pdf",
+    "window_data": {
+      "type": "pdf",
+      "title": "1.pdf",
+      "position": {
+        "x": 191,
+        "y": 273
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1764416727851",
+      "created_at": "2025-11-29T19:45:27.851802",
+      "updated_at": "2025-11-29T19:45:50.003399",
+      "hidden": true,
+      "x": 191,
+      "y": 273,
+      "width": 800,
+      "height": 600,
+      "file_path": "files/1.pdf"
+    },
+    "board_id": "board-1761029334485",
+    "deleted_at": "2025-11-29T19:45:52.923456",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761029323890/board-1761029334485/files",
+    "file_size": 112243
+  },
+  {
+    "id": "trash_1764416752924",
+    "original_name": "1.pdf.json",
+    "trash_filename": "1764416752924_1.pdf.json",
+    "window_data": {
+      "type": "pdf",
+      "title": "1.pdf",
+      "position": {
+        "x": 191,
+        "y": 273
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1764416727851",
+      "created_at": "2025-11-29T19:45:27.851802",
+      "updated_at": "2025-11-29T19:45:50.003399",
+      "hidden": true,
+      "x": 191,
+      "y": 273,
+      "width": 800,
+      "height": 600,
+      "file_path": "files/1.pdf",
+      "is_json_config": true
+    },
+    "board_id": "board-1761029334485",
+    "deleted_at": "2025-11-29T19:45:52.924525",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761029323890/board-1761029334485/files",
+    "file_size": 369
+  },
+  {
+    "id": "trash_1764416752925_pages",
+    "original_name": "1_pages",
+    "trash_filename": "1764416752925_1_pages",
+    "type": "pdf_pages_folder",
+    "pdf_name": "1",
+    "deleted_at": "2025-11-29T19:45:52.925759",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761029323890/board-1761029334485/files/pages",
+    "is_folder": true
   }
 ]

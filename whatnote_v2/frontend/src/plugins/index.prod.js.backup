@@ -1,0 +1,75 @@
+/**
+ * 插件系统入口
+ * 统一导出所有插件和注册表
+ * 
+ * 注意：如果插件文件在构建时不存在，webpack 会报错
+ * 这是预期的行为，因为我们需要知道哪些插件可用
+ * 
+ * 如果需要在运行时动态加载插件，可以使用动态 import()
+ */
+
+import { pluginRegistry } from './registry';
+
+// 导入插件 - 使用静态 import（构建时检查文件存在性）
+// 如果文件不存在，构建会失败（这是预期的，帮助我们发现问题）
+import wordCountPluginModule from './core/word-count-plugin';
+import stickyNotePluginModule from './core/sticky-note-plugin';
+
+// 提取插件对象（处理 default export 和 named export）
+const wordCountPlugin = wordCountPluginModule?.default || wordCountPluginModule;
+const stickyNotePlugin = stickyNotePluginModule?.default || stickyNotePluginModule;
+
+// 注册所有内置插件
+export function initializePlugins() {
+  console.log('[插件系统] 初始化插件系统...');
+  
+  let registeredCount = 0;
+  let skippedCount = 0;
+  
+  // 注册工具栏功能插件
+  if (wordCountPlugin) {
+    try {
+      pluginRegistry.register(wordCountPlugin);
+      console.log('[插件系统] ✓ 已注册字数统计插件');
+      registeredCount++;
+    } catch (error) {
+      console.error('[插件系统] ✗ 注册字数统计插件失败:', error);
+      skippedCount++;
+    }
+  } else {
+    console.warn('[插件系统] ⚠️ 字数统计插件未加载，跳过注册');
+    skippedCount++;
+  }
+  
+  // 注册窗口类型插件
+  if (stickyNotePlugin) {
+    try {
+      pluginRegistry.register(stickyNotePlugin);
+      console.log('[插件系统] ✓ 已注册便签窗口插件');
+      registeredCount++;
+    } catch (error) {
+      console.error('[插件系统] ✗ 注册便签窗口插件失败:', error);
+      skippedCount++;
+    }
+  } else {
+    console.warn('[插件系统] ⚠️ 便签窗口插件未加载，跳过注册');
+    skippedCount++;
+  }
+  
+  const allPlugins = pluginRegistry.getAll();
+  const enabledPlugins = pluginRegistry.getEnabled();
+  
+  console.log(`[插件系统] 初始化完成: 已注册 ${allPlugins.length} 个插件 (成功: ${registeredCount}, 跳过: ${skippedCount})`);
+  console.log(`[插件系统] 已启用 ${enabledPlugins.length} 个插件:`, enabledPlugins.map(p => p.id));
+  
+  if (skippedCount > 0) {
+    console.warn(`[插件系统] ⚠️ 有 ${skippedCount} 个插件未能加载，系统将继续运行`);
+  }
+}
+
+// 导出注册表供其他模块使用
+export { pluginRegistry };
+
+// 导出插件（供参考）
+export { wordCountPlugin, stickyNotePlugin };
+

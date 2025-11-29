@@ -248,6 +248,63 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [extractedContents, setExtractedContents] = useState({}); // 提取的内容 {pageNum: {text, description}}
   const [pageVersions, setPageVersions] = useState({}); // 每页使用的版本 {pageNum: 'text'|'image'|'full'}
   
+  // 全文档笔记状态
+  const [summaryNote, setSummaryNote] = useState(''); // 笔记内容
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false); // 是否正在生成
+  const [summaryProgress, setSummaryProgress] = useState({ message: '', percentage: 0 }); // 生成进度
+  
+  // 全文档笔记设置
+  const defaultSummarySettings = {
+    style: 'detailed',
+    customPrompt: ''
+  };
+  const [summarySettings, setSummarySettings] = useState(defaultSummarySettings);
+
+  // 全文档笔记预设风格
+  const summaryNoteStyles = {
+    detailed: {
+      name: '详细笔记',
+      prompt: '你是一位专业的学术和文档分析助手。请仔细阅读以下PDF文档的全部内容，生成一份详尽的、结构清晰的**全文档阅读笔记**。\n\n**笔记生成要求**：\n1. **核心观点提炼**：首先用简练的语言概括文档的核心主旨（Executive Summary）。\n2. **结构化内容梳理**：按照文档的逻辑结构（章节或主题），详细记录关键信息、重要数据、论点和结论。请保留足够的细节，不要只是列大纲。\n3. **重要概念解析**：解释文档中出现的关键术语和概念。\n4. **总结与启示**：总结文档的价值，并给出你的阅读心得或批判性思考。\n5. **格式要求**：使用标准Markdown格式，利用多级标题、列表、加粗等使笔记易于阅读。'
+    },
+    concise: {
+      name: '简洁摘要',
+      prompt: '请阅读文档内容，生成一份**简洁的摘要笔记**。\n\n**要求**：\n1. 提炼核心论点，忽略次要细节。\n2. 使用要点列表（Bullet points）形式呈现。\n3. 控制篇幅，专注于“文档讲了什么”和“主要结论是什么”。\n4. 适合快速浏览。'
+    },
+    academic: {
+      name: '学术综述',
+      prompt: '请以**学术综述**的风格撰写这份文档的笔记。\n\n**要求**：\n1. **背景与问题**：文档研究了什么问题？背景是什么？\n2. **方法与论证**：作者使用了什么方法或论据？\n3. **主要发现**：得出了什么结论？\n4. **学术价值**：该文档在相关领域的贡献是什么？\n5. **引用与术语**：准确引用文中的专业术语。'
+    },
+    outline: {
+      name: '大纲式笔记',
+      prompt: '请为这份文档生成一份**大纲式笔记**。\n\n**要求**：\n1. 严格遵循文档的目录结构。\n2. 在每个层级下，用简短的句子概括该部分的内容。\n3. 重点展示文档的逻辑框架和层次关系。\n4. 适合梳理文档结构。'
+    }
+  };
+
+  // 加载全文档笔记设置
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    try {
+      const saved = window.localStorage.getItem('summarySettings');
+      if (saved) {
+        setSummarySettings(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.warn('加载 summarySettings 失败:', error);
+    }
+  }, []);
+
+  // 保存全文档笔记设置
+  const saveSummarySettings = (newSettings) => {
+    setSummarySettings(newSettings);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem('summarySettings', JSON.stringify(newSettings));
+      } catch (error) {
+        console.warn('保存 summarySettings 失败:', error);
+      }
+    }
+  };
+
   // 预设的注释风格
   const annotationStyles = {
     detailed: {
@@ -333,38 +390,60 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   }, [currentPage, showAnnotationPanel, boardId, windowId]);
 
   // 加载大纲数据
-  useEffect(() => {
-    const loadOutlineData = async () => {
-      if (!boardId || !windowId) return;
-      
-      try {
-        // 尝试加载大纲数据
-        const outlineResponse = await fetch(
-          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/outline-data`
-        );
-        if (outlineResponse.ok) {
-          const outlineData = await outlineResponse.json();
-          setBatchOutline(outlineData);
-          console.log('加载已有大纲数据:', outlineData);
-        }
-        
-        // 尝试加载细分数据
-        const subdivResponse = await fetch(
-          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
-        );
-        if (subdivResponse.ok) {
-          const subdivData = await subdivResponse.json();
-          setBatchSubdivisions(subdivData);
-          setStage2Completed(true);
-          console.log('加载已有细分数据:', subdivData);
-        }
-      } catch (error) {
-        console.log('未找到批量大纲数据（首次使用）');
-      }
-    };
+  const loadOutlineData = useCallback(async () => {
+    if (!boardId || !windowId) return;
     
-    loadOutlineData();
+    try {
+      // 尝试加载大纲数据
+      const outlineResponse = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/outline-data`
+      );
+      if (outlineResponse.ok) {
+        const outlineData = await outlineResponse.json();
+        setBatchOutline(outlineData);
+        console.log('加载已有大纲数据:', outlineData);
+      }
+      
+      // 尝试加载细分数据
+      const subdivResponse = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
+      );
+      if (subdivResponse.ok) {
+        const subdivData = await subdivResponse.json();
+        setBatchSubdivisions(subdivData);
+        setStage2Completed(true);
+        console.log('加载已有细分数据:', subdivData);
+      }
+      
+      // 尝试加载全文档笔记
+      const summaryResponse = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/summary-note`
+      );
+      if (summaryResponse.ok) {
+        const summaryData = await summaryResponse.json();
+        if (summaryData.success && summaryData.content) {
+          setSummaryNote(summaryData.content);
+          console.log('加载已有全文档笔记');
+        }
+      }
+    } catch (error) {
+      console.log('未找到批量数据（首次使用）');
+    }
   }, [boardId, windowId]);
+
+  useEffect(() => {
+    loadOutlineData();
+  }, [loadOutlineData]);
+
+  // 监听刷新事件
+  useEffect(() => {
+    const handleRefresh = () => {
+      console.log('PDFViewer收到刷新请求，重新加载数据');
+      loadOutlineData();
+    };
+    window.addEventListener('refreshBoard', handleRefresh);
+    return () => window.removeEventListener('refreshBoard', handleRefresh);
+  }, [loadOutlineData]);
 
   // 点击外部区域或按ESC键关闭LLM菜单和设置面板
   useEffect(() => {
@@ -2488,6 +2567,24 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   </>
                 )}
                 
+                {/* 全文档笔记视图按钮 */}
+                {(summaryNote || isGeneratingSummary) && (
+                  <button
+                    onClick={() => setOutlineView('summary')}
+                    style={{
+                      padding: '2px 6px',
+                      fontSize: '10px',
+                      backgroundColor: outlineView === 'summary' ? '#ffffff' : '#c0c0c0',
+                      border: outlineView === 'summary' ? '2px inset #ffffff' : '2px outset #c0c0c0',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif'
+                    }}
+                    title="全文档笔记"
+                  >
+                    📝
+                  </button>
+                )}
+                
                 <button
                   onClick={() => setShowOutlinePanel(false)}
                   style={{
@@ -2511,6 +2608,282 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               padding: '8px',
               backgroundColor: '#f0f0f0'
             }}>
+              {/* 全文档笔记视图 */}
+              {outlineView === 'summary' && (
+                <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  {/* 笔记状态信息 */}
+                  {isGeneratingSummary && (
+                    <div style={{
+                      marginBottom: '12px',
+                      padding: '8px',
+                      backgroundColor: '#e0f0ff',
+                      border: '2px inset #c0c0c0',
+                      fontSize: '11px'
+                    }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>正在生成笔记...</div>
+                      <div>{summaryProgress.message}</div>
+                    </div>
+                  )}
+                  
+                  {/* 笔记配置面板（当没有笔记且未生成时显示） */}
+                  {!summaryNote && !isGeneratingSummary && (
+                    <div style={{
+                      marginBottom: '12px',
+                      padding: '12px',
+                      backgroundColor: '#ffffff',
+                      border: '2px inset #c0c0c0',
+                      fontSize: '11px'
+                    }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>
+                        📝 全文档笔记生成设置
+                      </div>
+                      
+                      <div style={{ marginBottom: '8px' }}>
+                        <label style={{ display: 'block', marginBottom: '4px' }}>笔记风格:</label>
+                        <select
+                          value={summarySettings.style}
+                          onChange={(e) => saveSummarySettings({ ...summarySettings, style: e.target.value })}
+                          style={{ width: '100%', padding: '2px' }}
+                        >
+                          {Object.entries(summaryNoteStyles).map(([key, style]) => (
+                            <option key={key} value={key}>{style.name}</option>
+                          ))}
+                          <option value="custom">自定义...</option>
+                        </select>
+                      </div>
+                      
+                      {summarySettings.style === 'custom' && (
+                        <div style={{ marginBottom: '8px' }}>
+                          <label style={{ display: 'block', marginBottom: '4px' }}>自定义提示词:</label>
+                          <textarea
+                            value={summarySettings.customPrompt}
+                            onChange={(e) => saveSummarySettings({ ...summarySettings, customPrompt: e.target.value })}
+                            style={{ width: '100%', height: '80px', padding: '4px', resize: 'vertical' }}
+                            placeholder="请输入提示词模板..."
+                          />
+                        </div>
+                      )}
+                      
+                      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '12px' }}>
+                        <button
+                          onClick={async () => {
+                            setIsGeneratingSummary(true);
+                            setSummaryNote('');
+                            setSummaryProgress({ message: '准备开始...', percentage: 0 });
+                            
+                            try {
+                              const response = await fetch(
+                                `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/summary-note`,
+                                {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    summary_style: summarySettings.style,
+                                    custom_prompt: summarySettings.customPrompt
+                                  })
+                                }
+                              );
+                              
+                              if (!response.ok) {
+                                const errorData = await response.json().catch(() => ({}));
+                                throw new Error(errorData.detail || 'API请求失败');
+                              }
+                              
+                              // 处理流式响应
+                              const reader = response.body.getReader();
+                              const decoder = new TextDecoder();
+                              let buffer = '';
+                              
+                              while (true) {
+                                const {done, value} = await reader.read();
+                                if (done) break;
+                                
+                                buffer += decoder.decode(value, {stream: true});
+                                const lines = buffer.split('\n\n');
+                                buffer = lines.pop() || '';
+                                
+                                for (const line of lines) {
+                                  if (line.startsWith('data: ')) {
+                                    const data = JSON.parse(line.slice(6));
+                                    
+                                    if (data.type === 'status') {
+                                      setSummaryProgress(prev => ({ ...prev, message: data.message }));
+                                    } else if (data.type === 'content' || data.type === 'merge_content') {
+                                      setSummaryNote(prev => prev + data.content);
+                                    } else if (data.type === 'group_content') {
+                                      setSummaryProgress(prev => ({ ...prev, message: `正在分析第${data.group}部分...` }));
+                                    } else if (data.type === 'saved') {
+                                      console.log('笔记已保存:', data.path);
+                                      addMessageWithSource('✅ 全文档笔记生成完成', '已保存并加载', 'success');
+                                    } else if (data.type === 'complete') {
+                                      setIsGeneratingSummary(false);
+                                      setSummaryProgress({ message: '生成完成', percentage: 100 });
+                                    } else if (data.type === 'error') {
+                                      console.error('生成笔记错误:', data.error);
+                                      setSummaryProgress({ message: '生成失败: ' + data.error, percentage: 0 });
+                                      setIsGeneratingSummary(false);
+                                    }
+                                  }
+                                }
+                              }
+                            } catch (error) {
+                              console.error('生成全文档笔记失败:', error);
+                              setSummaryProgress({ message: '错误: ' + error.message, percentage: 0 });
+                              setIsGeneratingSummary(false);
+                            }
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#c0c0c0',
+                            border: '2px outset #ffffff',
+                            cursor: 'pointer',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          🚀 开始生成
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 笔记内容展示 */}
+                  {summaryNote && (
+                    <div style={{
+                    flex: 1,
+                    backgroundColor: '#ffffff',
+                    border: '2px inset #c0c0c0',
+                    padding: '16px',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    {/* 操作栏 */}
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      marginBottom: '10px',
+                      paddingBottom: '5px',
+                      borderBottom: '1px solid #eee'
+                    }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '12px' }}>全文档笔记</div>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          onClick={async () => {
+                             try {
+                               const summaryResponse = await fetch(
+                                 `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/summary-note`
+                               );
+                               if (summaryResponse.ok) {
+                                 const summaryData = await summaryResponse.json();
+                                 if (summaryData.success && summaryData.content) {
+                                   setSummaryNote(summaryData.content);
+                                   if (addMessage) addMessage('笔记刷新', '全文档笔记已重新加载', 'success');
+                                 } else {
+                                   if (addMessage) addMessage('刷新失败', '未找到笔记内容', 'warning');
+                                 }
+                               }
+                             } catch (error) {
+                               console.error('刷新笔记失败:', error);
+                               if (addMessage) addMessage('刷新失败', '请求发生错误', 'error');
+                             }
+                          }}
+                          title="刷新笔记内容"
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '14px',
+                            cursor: 'pointer',
+                            backgroundColor: 'transparent',
+                            border: '1px solid #ccc',
+                            borderRadius: '2px'
+                          }}
+                        >
+                          🔄
+                        </button>
+                        <button
+                          onClick={() => {
+                            const doRegenerate = () => {
+                              setSummaryNote('');
+                              setIsGeneratingSummary(false);
+                            };
+                            
+                            if (setConfirmDialog) {
+                              setConfirmDialog({
+                                title: '确认重新生成',
+                                message: '确定要重新生成笔记吗？现有的笔记将被覆盖。',
+                                confirmText: '重新生成',
+                                cancelText: '取消',
+                                icon: '⚠️',
+                                onConfirm: () => {
+                                  setConfirmDialog(null);
+                                  doRegenerate();
+                                },
+                                onCancel: () => {
+                                  setConfirmDialog(null);
+                                }
+                              });
+                            } else if (window.confirm('确定要重新生成笔记吗？现有的笔记将被覆盖。')) {
+                              doRegenerate();
+                            }
+                          }}
+                          title="重新生成"
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '14px',
+                            cursor: 'pointer',
+                            backgroundColor: 'transparent',
+                            border: '1px solid #ccc',
+                            borderRadius: '2px'
+                          }}
+                        >
+                          ⚡
+                        </button>
+                      </div>
+                    </div>
+
+                    {summaryNote ? (
+                      <div style={{ flex: 1, overflowY: 'auto' }}>
+                        <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          h1: ({node, ...props}) => <h1 style={{ fontSize: '18px', borderBottom: '2px solid #000', paddingBottom: '4px', marginTop: '16px', marginBottom: '12px' }} {...props} />,
+                          h2: ({node, ...props}) => <h2 style={{ fontSize: '16px', borderBottom: '1px solid #ccc', paddingBottom: '2px', marginTop: '14px', marginBottom: '10px' }} {...props} />,
+                          h3: ({node, ...props}) => <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginTop: '12px', marginBottom: '8px' }} {...props} />,
+                          p: ({node, ...props}) => <p style={{ fontSize: '12px', lineHeight: '1.6', marginBottom: '8px' }} {...props} />,
+                          ul: ({node, ...props}) => <ul style={{ paddingLeft: '20px', marginBottom: '8px' }} {...props} />,
+                          ol: ({node, ...props}) => <ol style={{ paddingLeft: '20px', marginBottom: '8px' }} {...props} />,
+                          li: ({node, ...props}) => <li style={{ fontSize: '12px', marginBottom: '4px' }} {...props} />,
+                          blockquote: ({node, ...props}) => <blockquote style={{ borderLeft: '4px solid #ccc', paddingLeft: '10px', marginLeft: '0', color: '#666', fontStyle: 'italic' }} {...props} />,
+                          code: ({node, inline, className, children, ...props}) => {
+                            const match = /language-(\w+)/.exec(className || '')
+                            return !inline && match ? (
+                              <div style={{ backgroundColor: '#f5f5f5', padding: '8px', borderRadius: '4px', overflowX: 'auto', marginBottom: '8px' }}>
+                                <code className={className} {...props}>
+                                  {children}
+                                </code>
+                              </div>
+                            ) : (
+                              <code style={{ backgroundColor: '#f5f5f5', padding: '2px 4px', borderRadius: '2px', fontFamily: 'monospace' }} {...props}>
+                                {children}
+                              </code>
+                            )
+                          }
+                        }}
+                      >
+                        {summaryNote}
+                      </ReactMarkdown>
+                      </div>
+                    ) : !isGeneratingSummary && (
+                      <div style={{ textAlign: 'center', color: '#888', marginTop: '40px' }}>
+                        点击“生成全文档笔记”开始生成
+                      </div>
+                    )}
+                  </div>
+                  )}
+                </div>
+              )}
+
               {/* 细分内容详情页 */}
               {outlineView === 'detail' && selectedSection !== null && batchSubdivisions && batchSubdivisions.subdivisions && batchSubdivisions.subdivisions[selectedSection] && (
                 <div>
@@ -4622,6 +4995,103 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       
                       <button
                         onClick={async () => {
+                          console.log('生成/查看全文档笔记');
+                          setShowLLMMenu(false);
+                          
+                          // 打开侧栏并切换到笔记视图
+                          setShowOutlinePanel(true);
+                          setOutlineView('summary');
+                          
+                          // 如果已经有笔记，就不重新生成了
+                          if (summaryNote && !isGeneratingSummary) {
+                            console.log('已有笔记，直接显示');
+                            return;
+                          }
+                          
+                          setIsGeneratingSummary(true);
+                          setSummaryNote('');
+                          setSummaryProgress({ message: '准备开始...', percentage: 0 });
+                          
+                          try {
+                            const response = await fetch(
+                              `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/summary-note`,
+                              {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' }
+                              }
+                            );
+                            
+                            if (!response.ok) {
+                              const errorData = await response.json().catch(() => ({}));
+                              throw new Error(errorData.detail || 'API请求失败');
+                            }
+                            
+                            // 处理流式响应
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder();
+                            let buffer = '';
+                            
+                            while (true) {
+                              const {done, value} = await reader.read();
+                              if (done) break;
+                              
+                              buffer += decoder.decode(value, {stream: true});
+                              const lines = buffer.split('\n\n');
+                              buffer = lines.pop() || '';
+                              
+                              for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                  const data = JSON.parse(line.slice(6));
+                                  
+                                  if (data.type === 'status') {
+                                    setSummaryProgress(prev => ({ ...prev, message: data.message }));
+                                  } else if (data.type === 'content' || data.type === 'merge_content') {
+                                    setSummaryNote(prev => prev + data.content);
+                                  } else if (data.type === 'group_content') {
+                                    // 可选：显示局部生成的进度
+                                    setSummaryProgress(prev => ({ ...prev, message: `正在分析第${data.group}部分...` }));
+                                  } else if (data.type === 'group_done') {
+                                    // 更新进度条（假设大约有多少组）
+                                    // 这里没法精确知道总组数，只能估算
+                                  } else if (data.type === 'saved') {
+                                    console.log('笔记已保存:', data.path);
+                                    addMessageWithSource('✅ 全文档笔记生成完成', '已保存并加载', 'success');
+                                  } else if (data.type === 'complete') {
+                                    setIsGeneratingSummary(false);
+                                    setSummaryProgress({ message: '生成完成', percentage: 100 });
+                                  } else if (data.type === 'error') {
+                                    console.error('生成笔记错误:', data.error);
+                                    setSummaryProgress({ message: '生成失败: ' + data.error, percentage: 0 });
+                                    setIsGeneratingSummary(false);
+                                  }
+                                }
+                              }
+                            }
+                          } catch (error) {
+                            console.error('生成全文档笔记失败:', error);
+                            setSummaryProgress({ message: '错误: ' + error.message, percentage: 0 });
+                            setIsGeneratingSummary(false);
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          backgroundColor: '#c0c0c0',
+                          border: 'none',
+                          borderBottom: '1px solid #a0a0a0',
+                          cursor: 'pointer',
+                          fontFamily: 'MS Sans Serif, sans-serif',
+                          textAlign: 'left'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
+                      >
+                        📝 生成全文档笔记
+                      </button>
+
+                      <button
+                        onClick={async () => {
                           console.log('批量生成功能');
                           
                           // 保存当前的大纲和细分数据（用于后续比对）
@@ -6084,64 +6554,27 @@ const toMediaUrl = (windowOrContent, boardId) => {
     content = windowOrContent;
   }
   
-  // 优先使用 content 字段中的绝对路径来提取课程ID（最可靠）
-  if (content && typeof content === 'string' && (content.includes('\\') || content.includes('/'))) {
-    const pathParts = content.split(/[\\\/]/);
-    const filename = pathParts[pathParts.length - 1];
-    
-    // 从绝对路径中提取课程ID
-    const courseIndex = pathParts.findIndex(part => part.startsWith('course-'));
-    if (courseIndex !== -1) {
-      const courseId = pathParts[courseIndex];
-      console.log('🔍 从content绝对路径提取课程ID:', courseId);
-      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${encodeURIComponent(filename)}`;
-      console.log('🔗 从content绝对路径生成静态URL:', staticUrl);
-      return staticUrl;
-    }
-  }
-  
-  // 备用：使用 file_path 生成静态文件URL
+  // 统一处理：提取文件名并使用新API生成URL
+  let filename = null;
+
   if (filePath && typeof filePath === 'string') {
-    let filename;
-    let courseId;
-    
     if (filePath.startsWith('files/')) {
-      // 旧格式：files/filename
-      filename = filePath.substring(6); // 移除 "files/" 前缀
-      
-      // 动态获取courseId - 优先从URL路径中提取
-      const currentPath = window.location.pathname;
-      console.log('🔍 当前URL路径:', currentPath);
-      const courseMatch = currentPath.match(/\/courses\/(course-\d+)/);
-      courseId = courseMatch ? courseMatch[1] : 'course-1756987907632'; // 默认值作为备选
-      console.log('🔍 提取的课程ID:', courseId);
-      
-      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${encodeURIComponent(filename)}`;
-      console.log('🔗 从file_path生成静态URL:', staticUrl, 'courseId:', courseId);
-      return staticUrl;
+      filename = filePath.substring(6);
     } else if (filePath.includes('\\') || filePath.includes('/')) {
-      // 新格式：绝对路径，需要提取文件名和课程ID
-      const pathParts = filePath.split(/[\\\/]/);
-      filename = pathParts[pathParts.length - 1];
-      
-      // 优先从路径中提取课程ID
-      const courseIndex = pathParts.findIndex(part => part.startsWith('course-'));
-      if (courseIndex !== -1) {
-        courseId = pathParts[courseIndex];
-        console.log('🔍 从文件路径提取课程ID:', courseId);
-      } else {
-        // 如果路径中没有课程ID，从URL中提取
-        const currentPath = window.location.pathname;
-        const courseMatch = currentPath.match(/\/courses\/(course-\d+)/);
-        courseId = courseMatch ? courseMatch[1] : 'course-1756987907632';
-        console.log('🔍 从URL路径提取课程ID:', courseId);
-      }
-      
-      console.log('🔍 从绝对路径提取:', { filename, courseId, filePath });
-      const staticUrl = `http://localhost:8081/static/files/courses/${courseId}/${boardId}/files/${encodeURIComponent(filename)}`;
-      console.log('🔗 从绝对路径生成静态URL:', staticUrl);
-      return staticUrl;
+      const parts = filePath.split(/[\\\/]/);
+      filename = parts[parts.length - 1];
+    } else {
+      filename = filePath;
     }
+  } else if (content && typeof content === 'string' && (content.includes('\\') || content.includes('/'))) {
+    const parts = content.split(/[\\\/]/);
+    filename = parts[parts.length - 1];
+  }
+
+  if (filename && boardId) {
+    const staticUrl = `http://localhost:8081/api/boards/${boardId}/files/${encodeURIComponent(filename)}`;
+    console.log('🔗 使用新API生成静态URL:', staticUrl);
+    return staticUrl;
   }
   
   // 备用：使用 content 字段
@@ -6170,8 +6603,13 @@ const toMediaUrl = (windowOrContent, boardId) => {
 function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter }) {
   const hasContent = hasRealMediaContent(windowData);
   const imageUrl = hasContent ? toMediaUrl(windowData, boardId) : null;
+  
+  // 新增状态
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractResult, setExtractResult] = useState(null);
+  const [showResult, setShowResult] = useState(false);
 
-  const triggerImageAction = (action) => {
+  const triggerImageAction = async (action, forceRefresh = false) => {
     const actionLabels = {
       'text-extract': '文字提取',
       'image-translate': '图片翻译'
@@ -6182,6 +6620,65 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
         addMessage('请先上传图片', `${actionLabels[action]}需要有效的图片内容`, 'warning', windowData.id);
       }
       return;
+    }
+
+    if (action === 'text-extract') {
+        // 如果已经显示结果且不是强制刷新，则关闭结果
+        if (showResult && !forceRefresh) {
+            setShowResult(false);
+            return;
+        }
+
+        setIsExtracting(true);
+        try {
+            if (!forceRefresh && addMessage) {
+                // 只有非强制刷新时才显示"正在提取"，因为可能是从缓存读取
+                // 但为了用户体验，如果很快返回，这个消息可能会一闪而过，所以只在需要较长时间时显示比较好
+                // 这里简单处理：总是提示，但文案不同
+                // addMessage('正在获取提取内容...', '请稍候', 'info', windowData.id);
+            }
+            
+            if (forceRefresh && addMessage) {
+                 addMessage('正在重新提取文字...', '请稍候，这可能需要几秒钟', 'info', windowData.id);
+            }
+            
+            const url = `http://localhost:8081/api/boards/${boardId}/windows/${windowData.id}/image/extract${forceRefresh ? '?force=true' : ''}`;
+            const response = await fetch(url, {
+                method: 'POST'
+            });
+            
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
+            
+            const data = await response.json();
+            setExtractResult(data);
+            setShowResult(true);
+            
+            if (addMessage) {
+                if (data.cached) {
+                    // 缓存命中，不发成功消息，直接显示
+                } else {
+                    addMessage('✅ 文字提取成功', '点击查看结果', 'success', windowData.id);
+                    // 只有新提取的内容才打开消息中心
+                    if (openMessageCenter) {
+                        openMessageCenter();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('提取失败:', error);
+            if (addMessage) {
+                addMessage('❌ 提取失败', error.message || '未知错误', 'error', windowData.id);
+                // 出错时打开消息中心
+                if (openMessageCenter) {
+                    openMessageCenter();
+                }
+            }
+        } finally {
+            setIsExtracting(false);
+        }
+        return;
     }
 
     if (typeof window !== 'undefined') {
@@ -6221,7 +6718,7 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
   };
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div style={{
         backgroundColor: '#c0c0c0',
         borderBottom: '2px outset #c0c0c0',
@@ -6234,13 +6731,14 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <button
-            style={toolbarButtonStyle}
-            onClick={() => triggerImageAction('text-extract')}
-            onMouseDown={(e) => { e.currentTarget.style.border = '2px inset #c0c0c0'; e.currentTarget.style.backgroundColor = '#a0a0a0'; }}
-            onMouseUp={(e) => { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
+            style={{...toolbarButtonStyle, cursor: isExtracting ? 'wait' : 'pointer'}}
+            onClick={() => !isExtracting && triggerImageAction('text-extract')}
+            onMouseDown={(e) => { if(!isExtracting) { e.currentTarget.style.border = '2px inset #c0c0c0'; e.currentTarget.style.backgroundColor = '#a0a0a0'; } }}
+            onMouseUp={(e) => { if(!isExtracting) { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; } }}
+            onMouseLeave={(e) => { if(!isExtracting) { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; } }}
+            disabled={isExtracting}
           >
-            文字提取
+            {isExtracting ? '提取中...' : '文字提取'}
           </button>
           <button
             style={toolbarButtonStyle}
@@ -6253,7 +6751,7 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
           </button>
         </div>
       </div>
-      <div style={{ flex: 1, display: 'flex' }}>
+      <div style={{ flex: 1, display: 'flex', position: 'relative' }}>
         <label className="image-placeholder" title={windowData.content || '点击上传图片'} style={{ width: '100%', height: '100%' }}>
           {hasContent ? (
             <img
@@ -6280,6 +6778,88 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
             }}
           />
         </label>
+
+        {/* 提取结果覆盖层 */}
+        {showResult && extractResult && (
+            <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                display: 'flex',
+                flexDirection: 'column',
+                zIndex: 10,
+                padding: '4px'
+            }}>
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '4px',
+                    borderBottom: '2px solid #808080',
+                    marginBottom: '4px',
+                    backgroundColor: '#c0c0c0'
+                }}>
+                    <span style={{ fontWeight: 'bold', fontSize: '11px', fontFamily: 'MS Sans Serif, sans-serif' }}>提取结果 {extractResult.cached ? '(已缓存)' : ''}</span>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                        <button 
+                            onClick={() => triggerImageAction('text-extract', true)}
+                            style={{
+                                fontSize: '10px',
+                                cursor: 'pointer',
+                                border: '1px outset #ffffff',
+                                padding: '0px 4px',
+                                backgroundColor: '#c0c0c0',
+                                fontFamily: 'MS Sans Serif, sans-serif'
+                            }}
+                            title="强制重新调用LLM提取"
+                        >
+                            重新提取
+                        </button>
+                        <button 
+                            onClick={() => setShowResult(false)}
+                            style={{
+                                fontSize: '10px',
+                                cursor: 'pointer',
+                                border: '1px outset #ffffff',
+                                padding: '0px 4px',
+                                backgroundColor: '#c0c0c0'
+                            }}
+                        >
+                            ×
+                        </button>
+                    </div>
+                </div>
+                
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', overflow: 'hidden' }}>
+                    {/* 文本内容 */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px inset #ffffff', backgroundColor: '#ffffff' }}>
+                        <div style={{ padding: '2px 4px', backgroundColor: '#e0e0e0', fontSize: '10px', fontWeight: 'bold' }}>
+                            📝 文本内容
+                        </div>
+                        <div style={{ flex: 1, overflow: 'auto', padding: '4px', fontSize: '11px', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                            {extractResult.text_content || '(无文本内容)'}
+                        </div>
+                    </div>
+                    
+                    {/* 图片描述 */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px inset #ffffff', backgroundColor: '#ffffff' }}>
+                        <div style={{ padding: '2px 4px', backgroundColor: '#e0e0e0', fontSize: '10px', fontWeight: 'bold' }}>
+                            🖼️ 图片描述
+                        </div>
+                        <div style={{ flex: 1, overflow: 'auto', padding: '4px', fontSize: '11px', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                            {extractResult.image_content || '(无图片描述)'}
+                        </div>
+                    </div>
+                </div>
+                
+                <div style={{ marginTop: '4px', fontSize: '10px', color: '#666', textAlign: 'center' }}>
+                    已自动保存至: {extractResult.saved_path ? extractResult.saved_path.split('/').pop() : 'files/'}
+                </div>
+            </div>
+        )}
       </div>
     </div>
   );

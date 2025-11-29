@@ -67,7 +67,9 @@ class ConsoleHandler:
             'view': 'window',
             'win': 'window',
             'annotate': 'generate_pdf_annotation',
-            'annot': 'generate_pdf_annotation'
+            'annot': 'generate_pdf_annotation',
+            'summary': 'generate_pdf_summary_note',
+            'note': 'generate_pdf_summary_note'
         }
         
         # 应用别名
@@ -143,6 +145,11 @@ class ConsoleHandler:
                 "    ▸ 别名: annot",
                 "    ▸ 示例: annotate \"window_123\" pages=[1,2,3] style=simple",
                 "    ▸ 示例: annotate \"window_123\" pages=all style=custom custom_prompt=\"请为第{page}页生成注释...\"",
+                "  summary \"窗口ID\" style=detailed  - 生成PDF全文档笔记",
+                "    ▸ style: detailed/concise/academic/outline/custom",
+                "    ▸ 别名: note",
+                "    ▸ 示例: summary \"window_123\" style=academic",
+                "    ▸ 示例: summary \"window_123\" style=custom custom_prompt=\"请以XXX视角总结...\"",
                 "",
                 "日历命令:",
                 "  task \"标题\" \"时间\" [\"日期\"]    - 添加任务(默认今日)",
@@ -943,6 +950,43 @@ class ConsoleHandler:
                     
                     lines.append("")
                     lines.append("提示: 在PDF窗口中查看生成的注释")
+                    
+                    return {
+                        "type": "success",
+                        "content": "\n".join(lines),
+                        "data": result.data,
+                        "action": {
+                            "type": "refresh_board"
+                        }
+                    }
+                
+                elif tool_name == "generate_pdf_summary_note":
+                    data = result.data or {}
+                    lines = [
+                        "全文档笔记生成完成",
+                        "=" * 60,
+                        ""
+                    ]
+                    
+                    message = data.get('message', '')
+                    saved_path = data.get('saved_path', '')
+                    content = data.get('note_content', '')
+                    
+                    lines.append(message)
+                    if saved_path:
+                        lines.append(f"保存路径: {saved_path}")
+                    lines.append("")
+                    
+                    if content:
+                        lines.append("笔记预览:")
+                        lines.append("-" * 60)
+                        preview = content[:500] + "..." if len(content) > 500 else content
+                        lines.append(preview)
+                        if len(content) > 500:
+                            lines.append(f"\n... (还有 {len(content) - 500} 个字符)")
+                    
+                    lines.append("")
+                    lines.append("提示: 请在前端大纲侧栏查看完整笔记")
                     
                     return {
                         "type": "success",

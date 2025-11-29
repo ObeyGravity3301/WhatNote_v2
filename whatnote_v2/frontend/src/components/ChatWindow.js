@@ -1863,7 +1863,9 @@ ${argsStr}
                     'delete_window',
                     'update_window',
                     'update_web_window',
-                    'edit_window'
+                    'edit_window',
+                    'generate_pdf_summary_note', // 添加全文档笔记生成工具
+                    'generate_pdf_annotation'    // 添加PDF注释生成工具
                   ];
                   if (windowTools.includes(parsed.tool_name)) {
                     const isSuccess = parsed.tool_result?.status === 'success' || parsed.tool_result?.window_id || parsed.tool_result?.message;

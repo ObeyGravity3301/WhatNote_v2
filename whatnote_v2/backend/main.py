@@ -937,6 +937,41 @@ async def upload_file_to_window(
         error(f"详细错误信息: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/boards/{board_id}/files/{filename}")
+async def get_board_file(board_id: str, filename: str):
+    """获取展板文件（自动查找课程路径）"""
+    try:
+        # 查找展板目录
+        board_dir = None
+        for course_dir in content_manager.file_manager.courses_dir.iterdir():
+            if course_dir.is_dir():
+                potential_board_dir = course_dir / board_id
+                if potential_board_dir.exists():
+                    board_dir = potential_board_dir
+                    break
+        
+        if not board_dir:
+            raise HTTPException(status_code=404, detail="展板不存在")
+            
+        file_path = board_dir / "files" / filename
+        
+        if not file_path.exists():
+            # 尝试 URL 解码文件名再次查找
+            import urllib.parse
+            decoded_filename = urllib.parse.unquote(filename)
+            file_path = board_dir / "files" / decoded_filename
+            
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="文件不存在")
+        
+        return FileResponse(file_path)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取文件失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # PDF文本提取API
 @app.post("/api/boards/{board_id}/windows/{window_id}/extract-text")
 async def extract_pdf_text(board_id: str, window_id: str):
@@ -2912,6 +2947,56 @@ async def get_subdivision_data(board_id: str, window_id: str):
         error(f"加载细分数据失败: {e}")
         raise HTTPException(status_code=500, detail=f"加载细分数据失败: {str(e)}")
 
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/summary-note")
+async def get_batch_summary_note(board_id: str, window_id: str):
+    """获取已生成的全文档笔记"""
+    try:
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        # 查找PDF文件所在的目录
+        pdf_file_path = Path(target_window.get('content'))
+        if not pdf_file_path.is_absolute():
+            # 如果是相对路径，需要找到它所在的展板目录
+            board_dir = None
+            for course_dir in content_manager.file_manager.courses_dir.iterdir():
+                if course_dir.is_dir():
+                    potential_board_dir = course_dir / board_id
+                    if potential_board_dir.exists():
+                        board_dir = potential_board_dir
+                        break
+            
+            if board_dir:
+                pdf_file_path = board_dir / pdf_file_path
+        
+        if pdf_file_path and pdf_file_path.exists():
+            pdf_name = pdf_file_path.stem
+            pages_dir = pdf_file_path.parent / "pages" / pdf_name
+            summary_file_path = pages_dir / "summary_note.md"
+            
+            if summary_file_path.exists():
+                with open(summary_file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                return {"success": True, "content": content}
+            else:
+                return {"success": False, "message": "笔记文件不存在"}
+        else:
+            raise HTTPException(status_code=404, detail="PDF文件路径无效")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"加载全文档笔记失败: {e}")
+        raise HTTPException(status_code=500, detail=f"加载全文档笔记失败: {str(e)}")
+
 @app.post("/api/boards/{board_id}/windows/{window_id}/annotations/semantic-search")
 async def semantic_search_annotations(
     board_id: str,
@@ -4396,3 +4481,690 @@ if __name__ == "__main__":
     import uvicorn
     info("启动WhatNote V2后端服务...")
     uvicorn.run("main:app", host="127.0.0.1", port=8081, reload=False) 
+
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/image/extract")
+async def extract_image_content(board_id: str, window_id: str, force: bool = False):
+    """提取图片窗口的文字内容"""
+    try:
+        info(f"🚀 开始提取图片内容: window_id={window_id}, force={force}")
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        window_data = None
+        for window in windows:
+            if window.get('id') == window_id:
+                window_data = window
+                break
+        
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        # 确定图片路径
+        image_path_str = window_data.get('content', '')
+        if not image_path_str:
+            # 尝试从 file_path 获取
+            image_path_str = window_data.get('file_path', '')
+            
+        if not image_path_str:
+             raise HTTPException(status_code=400, detail="窗口没有图片内容")
+
+        # 处理路径
+        image_path = Path(image_path_str)
+        if not image_path.is_absolute():
+             # 1. 尝试直接拼接 DATA_DIR
+             path1 = Path(DATA_DIR) / image_path_str
+             if path1.exists():
+                 image_path = path1
+             else:
+                 # 2. 尝试作为 board_dir 下的文件
+                 # 这里的 board_dir 假设为 DATA_DIR / board_id (兼容旧结构) 或 DATA_DIR / "courses" / ... / board_id
+                 # 简单遍历查找
+                 found = False
+                 for root, dirs, files in os.walk(DATA_DIR):
+                     if image_path_str in files:
+                         image_path = Path(root) / image_path_str
+                         found = True
+                         break
+                     # 也可以检查相对路径
+                     possible = Path(root) / image_path_str
+                     if possible.exists() and possible.is_file():
+                         image_path = possible
+                         found = True
+                         break
+                 
+                 if not found:
+                     # 最后的尝试：URL解码
+                     if "/static/files/" in image_path_str:
+                         try:
+                             import urllib.parse
+                             rel_path = urllib.parse.unquote(image_path_str.split("/static/files/")[1])
+                             path2 = Path(DATA_DIR) / rel_path
+                             if path2.exists():
+                                 image_path = path2
+                         except:
+                             pass
+
+        if not image_path.exists():
+             raise HTTPException(status_code=404, detail=f"图片文件不存在: {image_path_str}")
+
+        # 确定保存路径
+        # 这里的 files_dir 应该是 image_path 的父目录（如果是标准上传的话）
+        # 或者是 image_path 的父目录的父目录 + "files" ?
+        # 通常 image_path 在 .../files/image.jpg
+        files_dir = image_path.parent
+        
+        # 确保我们找到了 files 目录
+        if files_dir.name != "files":
+            # 尝试向上查找
+            if (files_dir / "files").exists():
+                files_dir = files_dir / "files"
+            elif (files_dir.parent / "files").exists():
+                files_dir = files_dir.parent / "files"
+            else:
+                # 如果找不到标准的 files 目录，就用 image_path.parent 作为基准
+                pass
+
+        image_stem = image_path.stem
+        # 使用 pages 目录来避免在桌面上创建图标
+        # 结构: .../files/pages/{image_name}/extracted.md
+        pages_dir = files_dir / "pages" / image_stem
+        pages_dir.mkdir(parents=True, exist_ok=True)
+             
+        md_filename = f"{image_stem}_extracted.md"
+        md_path = pages_dir / md_filename
+
+        # 如果不强制刷新且文件存在，直接返回内容
+        if not force and md_path.exists():
+            info(f"📄 找到已有提取结果: {md_path}")
+            with open(md_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 尝试解析回 JSON 结构
+            text_content = ""
+            image_content = ""
+            
+            # 简单解析Markdown
+            if "## 文本提取" in content and "## 图片描述" in content:
+                parts = content.split("## 图片描述")
+                if len(parts) >= 2:
+                    text_part = parts[0]
+                    if "## 文本提取" in text_part:
+                        text_content = text_part.split("## 文本提取")[1].strip()
+                    image_content = parts[1].strip()
+            else:
+                text_content = content
+            
+            return {
+                'success': True,
+                'text_content': text_content,
+                'image_content': image_content,
+                'saved_path': str(md_path),
+                'cached': True
+            }
+
+        info(f"处理图片: {image_path}")
+
+        # 读取图片并转base64
+        import base64
+        with open(image_path, 'rb') as f:
+            img_bytes = f.read()
+        img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+        
+        # 构造 Prompt
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": """你正在分析一张图片。请完成以下两个独立任务：
+
+**任务1：文本提取（OCR）**
+- 识别并提取图片中的**所有文字内容**。
+- 保持原有的层次结构和格式。
+- 使用Markdown格式（# 标题、- 列表等）。
+- 如果没有文字，返回空字符串。
+
+**任务2：图片内容描述**
+- 详细描述图片展示的具体内容。
+- 如果是图表，描述图表类型、数据趋势等。
+- 如果没有明显内容，返回空字符串。
+
+**输出格式（必须是纯JSON）：**
+```json
+{
+  "text_extraction": "文字内容（Markdown）",
+  "visual_description": "图片描述"
+}
+```
+只返回JSON，不要markdown代码块标记。"""
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{img_base64}"
+                        }
+                    }
+                ]
+            }
+        ]
+
+        # 调用LLM
+        current_config = llm_service.get_config()
+        current_provider = current_config.get('provider', 'qwen')
+        
+        vision_model_map = {
+            'qwen': 'qwen-vl-plus',
+            'openai': 'gpt-4o',
+            'anthropic': 'claude-3-5-sonnet-20241022',
+            'gemini': 'gemini-1.5-pro'
+        }
+        use_model = vision_model_map.get(current_provider, 'qwen-vl-plus')
+
+        accumulated_content = ""
+        async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
+            accumulated_content += chunk
+        
+        info(f"✅ 图片内容提取完成: {len(accumulated_content)} 字")
+
+        # 解析 JSON
+        text_content = ""
+        image_content = ""
+        try:
+            json_content = accumulated_content.strip()
+            if json_content.startswith("```json"):
+                json_content = json_content[7:]
+            if json_content.startswith("```"):
+                json_content = json_content[3:]
+            if json_content.endswith("```"):
+                json_content = json_content[:-3]
+            json_content = json_content.strip()
+            
+            import json
+            parsed = json.loads(json_content)
+            text_content = parsed.get("text_extraction", "")
+            image_content = parsed.get("visual_description", "")
+        except Exception as e:
+            info(f"JSON解析失败，返回原始内容: {e}")
+            text_content = accumulated_content
+            image_content = "（解析失败）"
+
+        # 保存结果
+        # md_path 已经在上面定义了
+        
+        final_content = f"# 图片提取内容: {image_path.name}\n\n## 文本提取\n\n{text_content}\n\n## 图片描述\n\n{image_content}"
+        
+        with open(md_path, 'w', encoding='utf-8') as f:
+            f.write(final_content)
+            
+        info(f"💾 内容已保存到: {md_path}")
+        
+        return {
+            'success': True,
+            'text_content': text_content,
+            'image_content': image_content,
+            'saved_path': str(md_path),
+            'cached': False
+        }
+
+    except Exception as e:
+        error(f"图片提取失败: {e}")
+        import traceback
+        error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/summary-note")
+async def generate_batch_summary_note(
+    board_id: str,
+    window_id: str,
+    request: Request
+):
+    """生成PDF全文档阅读笔记（使用Split-Merge策略）"""
+    try:
+        # 获取请求体参数
+        body = await request.json()
+        summary_style = body.get('summary_style', 'detailed')
+        custom_prompt = body.get('custom_prompt', '')
+        
+        info(f"生成全文档阅读笔记: board_id={board_id}, window_id={window_id}, style={summary_style}")
+        
+        # 预设Prompt模板
+        SUMMARY_PROMPTS = {
+            'detailed': """你是一位专业的学术和文档分析助手。请仔细阅读以下PDF文档的全部内容，生成一份详尽的、结构清晰的**全文档阅读笔记**。
+
+**笔记生成要求**：
+1. **核心观点提炼**：首先用简练的语言概括文档的核心主旨（Executive Summary）。
+2. **结构化内容梳理**：按照文档的逻辑结构（章节或主题），详细记录关键信息、重要数据、论点和结论。请保留足够的细节，不要只是列大纲，另外，需要在重点或者细节位置提供页码，以(page XXX)的形式提供。
+3. **重要概念解析**：解释文档中出现的关键术语和概念。
+4. **总结与启示**：总结文档的价值，并给出你的阅读心得或批判性思考。
+5. **格式要求**：使用标准Markdown格式，利用多级标题、列表、加粗等使笔记易于阅读。
+
+请直接输出Markdown格式的笔记内容。""",
+            'concise': """请阅读文档内容，生成一份**简洁的摘要笔记**。
+
+**要求**：
+1. 提炼核心论点，忽略次要细节。
+2. 使用要点列表（Bullet points）形式呈现。
+3. 控制篇幅，专注于“文档讲了什么”和“主要结论是什么”。
+4. 适合快速浏览。""",
+            'academic': """请以**学术综述**的风格撰写这份文档的笔记。
+
+**要求**：
+1. **背景与问题**：文档研究了什么问题？背景是什么？
+2. **方法与论证**：作者使用了什么方法或论据？
+3. **主要发现**：得出了什么结论？
+4. **学术价值**：该文档在相关领域的贡献是什么？
+5. **引用与术语**：准确引用文中的专业术语。""",
+            'outline': """请为这份文档生成一份**大纲式笔记**。
+
+**要求**：
+1. 严格遵循文档的目录结构。
+2. 在每个层级下，用简短的句子概括该部分的内容。
+3. 重点展示文档的逻辑框架和层次关系。
+4. 适合梳理文档结构。"""
+        }
+        
+        # 确定Prompt模板
+        base_prompt_template = custom_prompt if summary_style == 'custom' else SUMMARY_PROMPTS.get(summary_style, SUMMARY_PROMPTS['detailed'])
+        
+        # 配置参数
+        SMALL_FILE_THRESHOLD = 30000  # 小文件阈值（字符数）
+        PAGES_PER_GROUP = 10  # 大文件分组时每组页数
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        if target_window.get('type') != 'pdf':
+            raise HTTPException(status_code=400, detail="只有PDF文件支持批量注释功能")
+        
+        pdf_filename = target_window.get('title', 'unknown')
+        info(f"开始分析PDF文件: {pdf_filename}")
+        
+        # 读取PDF所有页面内容
+        all_pages_content = []
+        total_chars = 0
+        page_num = 1
+        
+        while True:
+            page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
+            if not page_content.get('current'):
+                break
+            
+            page_text = page_content['current']
+            all_pages_content.append({
+                'page': page_num,
+                'content': page_text,
+                'length': len(page_text)
+            })
+            total_chars += len(page_text)
+            page_num += 1
+        
+        total_pages = len(all_pages_content)
+        info(f"PDF总页数: {total_pages}, 总字符数: {total_chars}")
+        
+        if total_pages == 0:
+            raise HTTPException(status_code=400, detail="PDF文件无内容")
+        
+        # 创建或获取总笔记对话记录
+        summary_conv_id = f"summary-note-{window_id}"
+        conversation = conversation_manager.get_conversation(board_id, summary_conv_id, page=None, limit=None)
+        if not conversation:
+            conversation = conversation_manager.create_conversation(
+                board_id,
+                title=f"全文档笔记 - {pdf_filename}"
+            )
+            conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+            old_file = conversations_dir / f"{conversation['id']}.json"
+            new_file = conversations_dir / f"{summary_conv_id}.json"
+            if old_file.exists():
+                old_file.rename(new_file)
+            conversation['id'] = summary_conv_id
+        
+        # 准备SSE流式响应
+        async def generate_summary_stream():
+            try:
+                # 判断使用哪种方法
+                if total_chars <= SMALL_FILE_THRESHOLD:
+                    # 方法1：小文件，直接发送全部内容
+                    info(f"使用直接方法（文件较小）: {total_chars} 字符")
+                    yield f"data: {json.dumps({'type': 'status', 'message': '文件较小，直接生成笔记中...'}, ensure_ascii=False)}\n\n"
+                    
+                    # 构建完整文本
+                    full_text = "\n\n".join([
+                        f"=== 第{p['page']}页 ===\n{p['content']}"
+                        for p in all_pages_content
+                    ])
+                    
+                    # 构建最终提示词
+                    prompt = f"""{base_prompt_template}
+
+**文档信息**：
+- 文件名: {pdf_filename}
+- 总页数: {total_pages}
+
+**文档内容**：
+{full_text}"""
+                    
+                    # 发送给LLM
+                    user_message = {
+                        "role": "user",
+                        "content": prompt,
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "action": "generate_batch_summary_note",
+                            "pdf_filename": pdf_filename,
+                            "window_id": window_id,
+                            "total_pages": total_pages,
+                            "total_chars": total_chars,
+                            "method": "direct",
+                            "style": summary_style
+                        }
+                    }
+                    
+                    messages = [user_message]
+                    accumulated_content = ""
+                    
+                    async for chunk in llm_service.chat_completion(messages, stream=True):
+                        if chunk:
+                            accumulated_content += chunk
+                            yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
+                    
+                    # 保存助手消息
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": accumulated_content,
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "action": "generate_batch_summary_note",
+                            "method": "direct",
+                            "total_pages": total_pages,
+                            "total_chars": total_chars
+                        }
+                    }
+                    
+                    conversation_manager.add_message(board_id, summary_conv_id, user_message)
+                    conversation_manager.add_message(board_id, summary_conv_id, assistant_message)
+                    
+                    # === 新增：保存总笔记到文件（小文件模式） ===
+                    try:
+                        # 1. 找到PDF文件所在的目录
+                        pdf_file_path = Path(target_window.get('content'))
+                        if not pdf_file_path.is_absolute():
+                            # 如果是相对路径，需要找到它所在的展板目录
+                            board_dir = None
+                            for course_dir in content_manager.file_manager.courses_dir.iterdir():
+                                if course_dir.is_dir():
+                                    potential_board_dir = course_dir / board_id
+                                    if potential_board_dir.exists():
+                                        board_dir = potential_board_dir
+                                        break
+                            
+                            if board_dir:
+                                pdf_file_path = board_dir / pdf_file_path
+                        
+                        if pdf_file_path and pdf_file_path.exists():
+                            pdf_name = pdf_file_path.stem
+                            pages_dir = pdf_file_path.parent / "pages" / pdf_name
+                            pages_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            summary_file_path = pages_dir / "summary_note.md"
+                            
+                            with open(summary_file_path, 'w', encoding='utf-8') as f:
+                                f.write(accumulated_content)
+                            
+                            info(f"✅ 全文档笔记已保存至: {summary_file_path}")
+                            yield f"data: {json.dumps({'type': 'saved', 'path': str(summary_file_path)}, ensure_ascii=False)}\n\n"
+                        else:
+                            error(f"无法保存笔记文件，PDF路径不存在: {pdf_file_path}")
+                    except Exception as e:
+                        error(f"保存笔记文件失败: {e}")
+                    # ============================
+
+                    yield f"data: {json.dumps({'type': 'complete', 'content': accumulated_content}, ensure_ascii=False)}\n\n"
+                    
+                else:
+                    # 方法2：大文件，Split-Merge策略
+                    info(f"使用Split-Merge方法（文件较大）: {total_chars} 字符")
+                    yield f"data: {json.dumps({'type': 'status', 'message': '文件较大，使用分组分析策略...'}, ensure_ascii=False)}\n\n"
+                    
+                    # 分割页面
+                    groups = []
+                    for i in range(0, total_pages, PAGES_PER_GROUP):
+                        group_pages = all_pages_content[i:i+PAGES_PER_GROUP]
+                        groups.append({
+                            'group_number': len(groups) + 1,
+                            'pages': group_pages,
+                            'page_start': group_pages[0]['page'],
+                            'page_end': group_pages[-1]['page']
+                        })
+                    
+                    info(f"分为{len(groups)}组进行分析")
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'分为{len(groups)}组进行逐个分析...'}, ensure_ascii=False)}\n\n"
+                    
+                    # 对每组进行分析（生成局部笔记）
+                    group_notes = []
+                    for group in groups:
+                        group_num = group['group_number']
+                        page_start = group['page_start']
+                        page_end = group['page_end']
+                        status_message = f'正在分析第{group_num}组 (第{page_start}-{page_end}页)...'
+                        yield f"data: {json.dumps({'type': 'status', 'message': status_message}, ensure_ascii=False)}\n\n"
+                        
+                        # 构建组文本
+                        group_text = "\n\n".join([
+                            f"=== 第{p['page']}页 ===\n{p['content']}"
+                            for p in group['pages']
+                        ])
+                        
+                        # 构建子模型提示词 - 局部笔记
+                        sub_prompt = f"""你是一位专业的文档分析助手。请分析以下PDF文档片段的内容，生成一份**局部阅读笔记**。
+
+**文档信息**：
+- 文件名: {pdf_filename}
+- 分析范围: 第{group['page_start']}-{group['page_end']}页（共{total_pages}页）
+- 组号: {group_num}/{len(groups)}
+
+**文档片段内容**：
+{group_text}
+
+**任务要求**：
+1. 仔细阅读该片段，提取其中的关键信息、主要论点和重要数据。
+2. **不要生成大纲**，而是生成内容详实的笔记段落。
+3. 如果片段包含完整的章节，请明确章节标题。
+4. 标记出该部分中最重要的概念。
+5. 保持客观、准确。
+
+请输出Markdown格式的笔记内容。"""
+                        
+                        # 创建子对话记录
+                        sub_conv_id = f"summary-note-{window_id}-part{group_num}"
+                        sub_conversation = conversation_manager.get_conversation(board_id, sub_conv_id, page=None, limit=None)
+                        if not sub_conversation:
+                            sub_conversation = conversation_manager.create_conversation(
+                                board_id,
+                                title=f"全文档笔记-分组{group_num} - {pdf_filename}"
+                            )
+                            conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                            old_file = conversations_dir / f"{sub_conversation['id']}.json"
+                            new_file = conversations_dir / f"{sub_conv_id}.json"
+                            if old_file.exists():
+                                old_file.rename(new_file)
+                            sub_conversation['id'] = sub_conv_id
+                        
+                        # 发送给子模型
+                        sub_user_message = {
+                            "role": "user",
+                            "content": sub_prompt,
+                            "timestamp": datetime.now().isoformat(),
+                            "metadata": {
+                                "action": "generate_batch_summary_note_sub",
+                                "pdf_filename": pdf_filename,
+                                "window_id": window_id,
+                                "group_number": group_num,
+                                "page_start": group['page_start'],
+                                "page_end": group['page_end'],
+                                "method": "split"
+                            }
+                        }
+                        
+                        sub_messages = [sub_user_message]
+                        sub_accumulated_content = ""
+                        
+                        async for chunk in llm_service.chat_completion(sub_messages, stream=True):
+                            if chunk:
+                                sub_accumulated_content += chunk
+                                # 将子模型的输出也流式传递给前端（作为进度预览）
+                                yield f"data: {json.dumps({'type': 'group_content', 'group': group_num, 'content': chunk}, ensure_ascii=False)}\n\n"
+                        
+                        # 保存子模型消息
+                        sub_assistant_message = {
+                            "role": "assistant",
+                            "content": sub_accumulated_content,
+                            "timestamp": datetime.now().isoformat(),
+                            "metadata": {
+                                "action": "generate_batch_summary_note_sub",
+                                "group_number": group_num,
+                                "method": "split"
+                            }
+                        }
+                        
+                        conversation_manager.add_message(board_id, sub_conv_id, sub_user_message)
+                        conversation_manager.add_message(board_id, sub_conv_id, sub_assistant_message)
+                        
+                        group_notes.append({
+                            'group_number': group_num,
+                            'content': sub_accumulated_content
+                        })
+                        yield f"data: {json.dumps({'type': 'group_done', 'group': group_num}, ensure_ascii=False)}\n\n"
+                    
+                    # 汇总所有分组笔记
+                    yield f"data: {json.dumps({'type': 'status', 'message': '所有分组分析完成，正在整合成总笔记...'}, ensure_ascii=False)}\n\n"
+                    
+                    # 构建汇总提示词 - Merge
+                    groups_summary = "\n\n".join([
+                        f"=== 第{g['group_number']}部分笔记 ===\n{g['content']}"
+                        for g in group_notes
+                    ])
+                    
+                    merge_prompt = f"""{base_prompt_template}
+
+**文档信息**：
+- 文件名: {pdf_filename}
+- 总页数: {total_pages}
+
+**各部分局部笔记（原始素材）**：
+{groups_summary}
+
+**特别指示**：
+以上内容是基于文档分段生成的局部笔记。请根据你的笔记风格要求，将这些素材整合成一份完整的、连贯的全文档笔记。确保整合后的内容流畅，不要有明显的拼接痕迹。"""
+                    
+                    # 发送给LLM进行汇总
+                    merge_user_message = {
+                        "role": "user",
+                        "content": merge_prompt,
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "action": "generate_batch_summary_note_merge",
+                            "pdf_filename": pdf_filename,
+                            "window_id": window_id,
+                            "total_pages": total_pages,
+                            "total_groups": len(groups),
+                            "method": "split_merge",
+                            "style": summary_style
+                        }
+                    }
+                    
+                    merge_messages = [merge_user_message]
+                    merge_accumulated_content = ""
+                    
+                    async for chunk in llm_service.chat_completion(merge_messages, stream=True):
+                        if chunk:
+                            merge_accumulated_content += chunk
+                            yield f"data: {json.dumps({'type': 'merge_content', 'content': chunk}, ensure_ascii=False)}\n\n"
+                    
+                    # 保存汇总消息
+                    merge_assistant_message = {
+                        "role": "assistant",
+                        "content": merge_accumulated_content,
+                        "timestamp": datetime.now().isoformat(),
+                        "metadata": {
+                            "action": "generate_batch_summary_note_merge",
+                            "method": "split_merge",
+                            "total_pages": total_pages,
+                            "total_groups": len(groups)
+                        }
+                    }
+                    
+                    conversation_manager.add_message(board_id, summary_conv_id, merge_user_message)
+                    conversation_manager.add_message(board_id, summary_conv_id, merge_assistant_message)
+
+                    # === 新增：保存总笔记到文件 ===
+                    try:
+                        # 1. 找到PDF文件所在的目录
+                        pdf_file_path = Path(target_window.get('content'))
+                        if not pdf_file_path.is_absolute():
+                            # 如果是相对路径，需要找到它所在的展板目录
+                            # 这里使用与content_manager中相同的逻辑
+                            board_dir = None
+                            for course_dir in content_manager.file_manager.courses_dir.iterdir():
+                                if course_dir.is_dir():
+                                    potential_board_dir = course_dir / board_id
+                                    if potential_board_dir.exists():
+                                        board_dir = potential_board_dir
+                                        break
+                            
+                            if board_dir:
+                                pdf_file_path = board_dir / pdf_file_path
+                        
+                        if pdf_file_path and pdf_file_path.exists():
+                            pdf_name = pdf_file_path.stem
+                            pages_dir = pdf_file_path.parent / "pages" / pdf_name
+                            pages_dir.mkdir(parents=True, exist_ok=True)
+                            
+                            summary_file_path = pages_dir / "summary_note.md"
+                            
+                            with open(summary_file_path, 'w', encoding='utf-8') as f:
+                                f.write(merge_accumulated_content)
+                            
+                            info(f"✅ 全文档笔记已保存至: {summary_file_path}")
+                            yield f"data: {json.dumps({'type': 'saved', 'path': str(summary_file_path)}, ensure_ascii=False)}\n\n"
+                        else:
+                            error(f"无法保存笔记文件，PDF路径不存在: {pdf_file_path}")
+                            yield f"data: {json.dumps({'type': 'error', 'error': '无法保存笔记文件，PDF路径无效'}, ensure_ascii=False)}\n\n"
+
+                    except Exception as e:
+                        error(f"保存笔记文件失败: {e}")
+                        yield f"data: {json.dumps({'type': 'error', 'error': f'保存文件失败: {str(e)}'}, ensure_ascii=False)}\n\n"
+                    # ============================
+                    
+                    yield f"data: {json.dumps({'type': 'complete', 'content': merge_accumulated_content}, ensure_ascii=False)}\n\n"
+
+            except Exception as e:
+                error(f"生成全文档笔记失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+        
+        return StreamingResponse(
+            generate_summary_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"生成全文档笔记失败: {e}")
+        raise HTTPException(status_code=500, detail=f"生成全文档笔记失败: {str(e)}")
+
+

@@ -14,8 +14,6 @@ import { pluginRegistry } from './registry';
 // 如果插件文件缺失，不会导致构建失败
 let wordCountPlugin = null;
 let stickyNotePlugin = null;
-let ttsPlugin = null;
-let webAppPlugin = null;
 let pluginsLoaded = false;
 
 // 异步加载所有插件
@@ -44,26 +42,6 @@ async function loadPlugins() {
     stickyNotePlugin = null;
   }
   
-  // 加载 TTS 语音生成插件
-  try {
-    const ttsModule = await import('./core/tts-plugin');
-    ttsPlugin = ttsModule?.default || ttsModule;
-    console.log('[插件系统] ✓ TTS 语音生成插件加载成功');
-  } catch (error) {
-    console.warn('[插件系统] ⚠️ TTS 语音生成插件加载失败:', error.message);
-    ttsPlugin = null;
-  }
-  
-  // 加载 Web 应用集成插件
-  try {
-    const webAppModule = await import('./core/web-app-plugin');
-    webAppPlugin = webAppModule?.default || webAppModule;
-    console.log('[插件系统] ✓ Web 应用集成插件加载成功');
-  } catch (error) {
-    console.warn('[插件系统] ⚠️ Web 应用集成插件加载失败:', error.message);
-    webAppPlugin = null;
-  }
-  
   pluginsLoaded = true;
 }
 
@@ -71,7 +49,8 @@ async function loadPlugins() {
 export function initializePlugins() {
   console.log('[插件系统] 初始化插件系统（测试模式）...');
   
-  // 异步加载插件，加载完成后注册
+  // 异步加载插件，但不阻塞初始化
+  // 这样可以兼容同步调用方式
   loadPlugins().then(() => {
     // 插件加载完成后注册
     registerLoadedPlugins();
@@ -81,8 +60,8 @@ export function initializePlugins() {
     registerLoadedPlugins();
   });
   
-  // 注意：由于是异步加载，插件可能在初始化时还未加载完成
-  // 但系统会继续运行，插件会在加载完成后自动注册
+  // 立即尝试注册（如果插件已经加载）
+  registerLoadedPlugins();
 }
 
 // 注册已加载的插件
@@ -121,36 +100,6 @@ function registerLoadedPlugins() {
     skippedCount++;
   }
   
-  // 注册 TTS 语音生成插件
-  if (ttsPlugin) {
-    try {
-      pluginRegistry.register(ttsPlugin);
-      console.log('[插件系统] ✓ 已注册 TTS 语音生成插件');
-      registeredCount++;
-    } catch (error) {
-      console.error('[插件系统] ✗ 注册 TTS 语音生成插件失败:', error);
-      skippedCount++;
-    }
-  } else {
-    console.warn('[插件系统] ⚠️ TTS 语音生成插件未加载，跳过注册');
-    skippedCount++;
-  }
-  
-  // 注册 Web 应用集成插件
-  if (webAppPlugin) {
-    try {
-      pluginRegistry.register(webAppPlugin);
-      console.log('[插件系统] ✓ 已注册 Web 应用集成插件');
-      registeredCount++;
-    } catch (error) {
-      console.error('[插件系统] ✗ 注册 Web 应用集成插件失败:', error);
-      skippedCount++;
-    }
-  } else {
-    console.warn('[插件系统] ⚠️ Web 应用集成插件未加载，跳过注册');
-    skippedCount++;
-  }
-  
   const allPlugins = pluginRegistry.getAll();
   const enabledPlugins = pluginRegistry.getEnabled();
   
@@ -168,5 +117,5 @@ function registerLoadedPlugins() {
 export { pluginRegistry };
 
 // 导出插件（供参考，可能是 null）
-export { wordCountPlugin, stickyNotePlugin, ttsPlugin, webAppPlugin };
+export { wordCountPlugin, stickyNotePlugin };
 

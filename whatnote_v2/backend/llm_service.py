@@ -27,6 +27,12 @@ class LLMService:
         # 注册待办工具（简化版，不需要状态管理器）
         register_todo_tools(tool_registry)
     
+    def get_config(self) -> Dict:
+        """获取当前API配置，包含provider信息"""
+        config = self.api_config_manager.get_current_config().copy()
+        config['provider'] = self.api_config_manager.get_current_provider()
+        return config
+    
     def _extract_pdf_with_pypdf(self, file_path: str, file_info: Dict, content_array: List, pdf_reader=None) -> None:
         """使用PyPDF直接提取PDF文本（回退方案）"""
         try:

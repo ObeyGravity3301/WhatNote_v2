@@ -457,6 +457,39 @@ GENERATE_PDF_ANNOTATION_TOOL = ToolDefinition(
     }
 )
 
+# 9. 生成PDF全文档笔记
+GENERATE_PDF_SUMMARY_NOTE_TOOL = ToolDefinition(
+    type="function",
+    function={
+        "name": "generate_pdf_summary_note",
+        "description": "为PDF文档生成全文档阅读笔记（Summary Note）。支持不同的笔记风格和自定义提示词。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "board_id": {
+                    "type": "string",
+                    "description": "展板ID"
+                },
+                "window_id": {
+                    "type": "string",
+                    "description": "PDF窗口ID"
+                },
+                "style": {
+                    "type": "string",
+                    "enum": ["detailed", "concise", "academic", "outline", "custom"],
+                    "description": "笔记风格：detailed=详细笔记；concise=简洁摘要；academic=学术综述；outline=大纲式笔记；custom=自定义提示词",
+                    "default": "detailed"
+                },
+                "custom_prompt": {
+                    "type": "string",
+                    "description": "自定义提示词模板（当style为custom时使用）。"
+                }
+            },
+            "required": ["board_id", "window_id"]
+        }
+    }
+)
+
 
 # ==================== 工具处理器 ====================
 
@@ -1491,8 +1524,105 @@ class PDFToolHandlers:
                 tool_call_id=context.get("call_id", ""),
                 tool_name="generate_pdf_annotation",
                 status=ToolStatus.ERROR,
-                error=f"生成PDF注释时发生错误: {str(e)}"
+                error=f"生成PDF注释时发生异常: {str(e)}"
             )
+
+    async def generate_pdf_summary_note(self, args: Dict[str, Any], context: Dict[str, Any]) -> ToolResult:
+        """生成PDF全文档笔记"""
+        try:
+            board_id = args.get("board_id")
+            window_id = args.get("window_id")
+            style = args.get("style", "detailed")
+            custom_prompt = args.get("custom_prompt", "")
+            
+            if style == "custom" and not custom_prompt:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="generate_pdf_summary_note",
+                    status=ToolStatus.ERROR,
+                    error="当style为custom时，必须提供custom_prompt参数"
+                )
+            
+            # 调用后端API生成笔记
+            # 设置较长的超时时间，因为生成笔记可能需要较长时间（尤其是大文件）
+            timeout = aiohttp.ClientTimeout(total=600, sock_connect=30, sock_read=550)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                url = f"http://localhost:8081/api/boards/{board_id}/windows/{window_id}/annotations/batch/summary-note"
+                payload = {
+                    "summary_style": style,
+                    "custom_prompt": custom_prompt
+                }
+                
+                async with session.post(url, json=payload) as response:
+                    if response.status == 200:
+                        # 处理SSE流式响应
+                        accumulated_content = ""
+                        saved_path = ""
+                        
+                        async for line_bytes in response.content:
+                            if not line_bytes:
+                                continue
+                            
+                            line = line_bytes.decode('utf-8', errors='ignore').strip()
+                            if line.startswith('data: '):
+                                data_str = line[6:]
+                                try:
+                                    chunk_data = json.loads(data_str)
+                                    msg_type = chunk_data.get('type')
+                                    
+                                    if msg_type in ['content', 'merge_content']:
+                                        accumulated_content += chunk_data.get('content', '')
+                                    elif msg_type == 'saved':
+                                        saved_path = chunk_data.get('path', '')
+                                    elif msg_type == 'error':
+                                        return ToolResult(
+                                            tool_call_id=context.get("call_id", ""),
+                                            tool_name="generate_pdf_summary_note",
+                                            status=ToolStatus.ERROR,
+                                            error=f"生成过程中出错: {chunk_data.get('error')}"
+                                        )
+                                except json.JSONDecodeError:
+                                    pass
+                        
+                        if accumulated_content:
+                            info(f"[工具] 全文档笔记生成成功: {len(accumulated_content)} 字符")
+                            return ToolResult(
+                                tool_call_id=context.get("call_id", ""),
+                                tool_name="generate_pdf_summary_note",
+                                status=ToolStatus.SUCCESS,
+                                data={
+                                    "note_content": accumulated_content,
+                                    "saved_path": saved_path,
+                                    "message": "全文档笔记生成成功"
+                                }
+                            )
+                        else:
+                            return ToolResult(
+                                tool_call_id=context.get("call_id", ""),
+                                tool_name="generate_pdf_summary_note",
+                                status=ToolStatus.ERROR,
+                                error="未收到笔记内容"
+                            )
+                    else:
+                        error_text = await response.text()
+                        return ToolResult(
+                            tool_call_id=context.get("call_id", ""),
+                            tool_name="generate_pdf_summary_note",
+                            status=ToolStatus.ERROR,
+                            error=f"API请求失败 (HTTP {response.status}): {error_text}"
+                        )
+                        
+        except Exception as e:
+            error(f"[工具] 生成全文档笔记失败: {e}")
+            import traceback
+            error(traceback.format_exc())
+            return ToolResult(
+                tool_call_id=context.get("call_id", ""),
+                tool_name="generate_pdf_summary_note",
+                status=ToolStatus.ERROR,
+                error=f"生成全文档笔记时发生异常: {str(e)}"
+            )
+            
 
     async def _collect_sse_events(self, response) -> List[Dict[str, Any]]:
         """从SSE响应中收集事件"""
@@ -2049,8 +2179,9 @@ def register_builtin_tools(tool_registry, content_manager: ContentManager, file_
     # PDF工具
     pdf_handlers = PDFToolHandlers(content_manager)
     pdf_tools = [
-        (READ_PDF_TEXT_TOOL, ToolHandler(executor=pdf_handlers.read_pdf_text)),
-        (GENERATE_PDF_ANNOTATION_TOOL, ToolHandler(executor=pdf_handlers.generate_pdf_annotation)),
+        (READ_PDF_TEXT_TOOL, ToolHandler(executor=pdf_handlers.read_pdf_text, timeout=120)),
+        (GENERATE_PDF_ANNOTATION_TOOL, ToolHandler(executor=pdf_handlers.generate_pdf_annotation, timeout=600)),
+        (GENERATE_PDF_SUMMARY_NOTE_TOOL, ToolHandler(executor=pdf_handlers.generate_pdf_summary_note, timeout=600)),
     ]
     
     for tool_def, handler in pdf_tools:
