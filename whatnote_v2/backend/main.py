@@ -12,8 +12,15 @@ from fastapi.staticfiles import StaticFiles
 import asyncio
 import json
 import os
+import shutil
+import zipfile
+import aiohttp
+import uuid
 from typing import List, Dict, Optional
 from pathlib import Path
+
+# 配置 GPT-SoVITS 默认地址
+GPT_SOVITS_URL = "http://127.0.0.1:9880"
 from datetime import datetime
 from config import API_HOST, API_PORT, DATA_DIR
 from logger import info, error
@@ -1132,6 +1139,8 @@ async def generate_pdf_annotation(
         # 获取请求体中的自定义提示词（如果有）
         request_body = await request.json() if request.headers.get('content-type') == 'application/json' else {}
         custom_prompt_template = request_body.get('promptTemplate', '')
+        previous_script = request_body.get('previous_script', '')
+        next_script = request_body.get('next_script', '')
         
         # 获取窗口信息
         windows = content_manager.get_board_windows(board_id)
@@ -1155,12 +1164,17 @@ async def generate_pdf_annotation(
         
         # 构建发送给LLM的提示词
         prompt_parts = []
-        prompt_parts.append("请根据以下PDF页面内容生成注释。注意：我提供了前后页面的内容是为了防止页面分割导致内容不连续，你的注释应该主要针对当前页面。\n")
+        prompt_parts.append("请根据以下PDF页面内容生成注释/讲稿。注意：我提供了前后页面的内容以及可能的讲稿参考，是为了防止页面分割导致内容不连续，你的输出应该主要针对当前页面，并保持上下文连贯。\n")
         
         if page_contents.get('previous'):
             prompt_parts.append(f"【上一页内容（第{page-1}页）】\n{page_contents['previous']}\n")
+            if previous_script:
+                prompt_parts.append(f"【上一页已生成的讲稿参考】\n{previous_script}\n")
         
         prompt_parts.append(f"【当前页内容（第{page}页）】\n{page_contents['current']}\n")
+        
+        if next_script:
+            prompt_parts.append(f"【下一页已生成的讲稿参考】\n{next_script}\n")
         
         if page_contents.get('next'):
             prompt_parts.append(f"【下一页内容（第{page+1}页）】\n{page_contents['next']}\n")
@@ -5167,4 +5181,277 @@ async def generate_batch_summary_note(
         error(f"生成全文档笔记失败: {e}")
         raise HTTPException(status_code=500, detail=f"生成全文档笔记失败: {str(e)}")
 
+
+# ... imports ...
+from pydantic import BaseModel
+
+# ... other models ...
+
+class TTSRequest(BaseModel):
+    text: str
+    text_lang: str = "zh"
+    ref_audio_path: Optional[str] = None
+    prompt_text: Optional[str] = None
+    prompt_lang: Optional[str] = "zh"
+    top_k: int = 5
+    top_p: float = 1
+    temperature: float = 1
+    text_split_method: str = "cut5"
+    batch_size: int = 1
+    batch_threshold: float = 0.75
+    split_bucket: bool = True
+    speed_factor: float = 1.0
+    fragment_interval: float = 0.3
+    seed: int = -1
+    media_type: str = "wav"
+    streaming_mode: bool = False
+    parallel_infer: bool = True
+    repetition_penalty: float = 1.35
+
+# ... other endpoints ...
+
+@app.post("/api/tts/generate")
+async def generate_tts(request: TTSRequest):
+    """调用 GPT-SoVITS 生成语音"""
+    try:
+        info(f"收到 TTS 请求: {request.text[:50]}...")
+        
+        # 构造 GPT-SoVITS 请求数据
+        # 根据官方 API 文档，通常是一个 POST 请求到默认端口 9880
+        # 端点通常是 /tts 或 /
+        
+        # 简单起见，这里先实现基本的 /tts 端点调用
+        payload = request.dict()
+        
+        # 如果没有提供参考音频，使用默认的（这里需要您配置一个默认参考音频路径）
+        # TODO: 在设置中允许用户上传或选择参考音频
+        if not payload.get("ref_audio_path"):
+            # 这里暂时硬编码一个示例，实际部署时需要替换为存在的音频文件
+            # 或者让 GPT-SoVITS 使用它自己的默认值（如果支持）
+            # 更好的做法是让前端必须传递，或者后端提供一个默认文件
+            pass
+
+        timeout = aiohttp.ClientTimeout(total=300) # 5分钟超时
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            # 尝试调用 GPT-SoVITS API
+            # 注意：GPT-SoVITS 的 API 结构可能随版本变化，这里假设是标准的 GET/POST
+            # 我们可以尝试 GET 方式，因为它比较简单
+            
+            # 构建 GET 参数 (GPT-SoVITS 常用方式)
+            params = {
+                "text": request.text,
+                "text_lang": request.text_lang,
+                "ref_audio_path": request.ref_audio_path or "default_ref.wav", # 需替换
+                "prompt_text": request.prompt_text or "",
+                "prompt_lang": request.prompt_lang,
+                "text_split_method": request.text_split_method,
+                "batch_size": request.batch_size,
+                "media_type": request.media_type,
+                "speed_factor": request.speed_factor
+            }
+            
+            # 如果有参考音频路径，使用它
+            # 这里为了测试，如果用户没有传参考音频，我们暂时不传这个参数，看看 GPT-SoVITS 是否有默认行为
+            # 或者报错。通常 GPT-SoVITS 需要参考音频。
+            
+            # 模拟：如果连接失败，返回错误
+            try:
+                async with session.get(f"{GPT_SOVITS_URL}/tts", params=params) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise HTTPException(status_code=response.status, detail=f"GPT-SoVITS Error: {error_text}")
+                    
+                    # 读取音频数据
+                    audio_data = await response.read()
+                    
+                    # 保存文件
+                    filename = f"tts_{uuid.uuid4()}.{request.media_type}"
+                    # 假设我们把音频保存在第一个课程的第一个展板的 files/audio 目录下
+                    # 或者更简单，放在 static/temp 目录下
+                    save_dir = DATA_DIR / "temp" / "audio"
+                    save_dir.mkdir(parents=True, exist_ok=True)
+                    save_path = save_dir / filename
+                    
+                    with open(save_path, "wb") as f:
+                        f.write(audio_data)
+                    
+                    # 返回 URL
+                    audio_url = f"/static/files/temp/audio/{filename}"
+                    return {"success": True, "audio_url": audio_url, "duration": 0} # 暂不计算时长
+
+            except aiohttp.ClientConnectorError:
+                raise HTTPException(status_code=503, detail="无法连接到 GPT-SoVITS 服务，请确认服务已启动 (默认端口 9880)")
+
+    except Exception as e:
+        error(f"TTS 生成失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/generate-script-section")
+async def generate_narrator_script_section(
+    board_id: str,
+    window_id: str,
+    request: Request
+):
+    """批量生成讲稿：为一个分段的所有页面生成演讲稿"""
+    try:
+        request_body = await request.json()
+        section_index = request_body.get('section_index', 0)
+        section_data = request_body.get('section_data')
+        subdivision_data = request_body.get('subdivision_data')
+        prompt_template = request_body.get('promptTemplate', '')
+        
+        info(f"开始为分段 {section_index} 批量生成讲稿")
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        page_start = section_data['page_start']
+        page_end = section_data['page_end']
+        
+        async def generate_stream():
+            try:
+                yield f"data: {json.dumps({'type': 'status', 'message': f'正在为第 {page_start}-{page_end} 页生成讲稿...'}, ensure_ascii=False)}\n\n"
+                
+                # 读取该分段所有页面的内容
+                pages_content = []
+                for page in range(page_start, page_end + 1):
+                    page_data = content_manager.get_pdf_page_contents(board_id, window_id, page)
+                    if page_data and page_data.get('current'):
+                        pages_content.append({
+                            'page': page,
+                            'content': page_data['current']
+                        })
+                
+                if not pages_content:
+                    error_msg = f'未找到分段内容，页码范围: {page_start}-{page_end}'
+                    yield f"data: {json.dumps({'type': 'error', 'error': error_msg}, ensure_ascii=False)}\n\n"
+                    return
+                
+                # 构建完整的内容文本
+                full_content = ""
+                for page_info in pages_content:
+                    full_content += f"\n\n=== 第{page_info['page']}页 ===\n{page_info['content']}"
+                
+                # 获取分段描述
+                section_description = ''
+                if subdivision_data:
+                     section_description = subdivision_data.get('section_summary') or section_data.get('description') or ''
+
+                # 默认讲稿要求
+                default_req = "请为每一页撰写一份口语化的演讲稿。\n要求：\n1. 时间控制在 30-60 秒。\n2. 语言自然流畅，适合朗读。\n3. 不要念标题，而是解释核心观点。\n4. 使用第一人称。"
+                script_requirement = prompt_template if prompt_template else default_req
+                
+                prompt = f"""你是一位专业的演讲者。请根据以下PDF分段内容，为每一页撰写演讲稿。
+
+**分段信息**：
+- 分段标题: {section_data.get('title', '未命名')}
+- 分段描述: {section_description}
+- 页码范围: 第{page_start}页 - 第{page_end}页
+
+**分段完整内容**：
+{full_content}
+
+**讲稿要求**：
+{script_requirement}
+
+**输出格式**（必须严格遵守JSON格式）：
+```json
+{{
+  "scripts": [
+    {{
+      "page": {page_start},
+      "script": "第{page_start}页的演讲稿内容..."
+    }},
+    {{
+      "page": {page_start + 1},
+      "script": "第{page_start + 1}页的演讲稿内容..."
+    }}
+  ]
+}}
+```
+请确保scripts数组包含从{page_start}到{page_end}的所有页面。
+直接输出JSON，不要添加任何额外的说明文字。"""
+                
+                messages = [{
+                    "role": "user",
+                    "content": prompt,
+                    "timestamp": datetime.now().isoformat()
+                }]
+                
+                accumulated_content = ""
+                
+                # 调用LLM
+                async for chunk in llm_service.chat_completion(messages, stream=True):
+                    if chunk:
+                        accumulated_content += chunk
+                
+                # 解析结果
+                try:
+                    content = accumulated_content.strip()
+                    if content.startswith('```'):
+                        lines = content.split('\n')
+                        if lines[0].startswith('```'): lines = lines[1:]
+                        if lines[-1].startswith('```'): lines = lines[:-1]
+                        content = '\n'.join(lines)
+                    
+                    result_data = json.loads(content)
+                    scripts = result_data.get('scripts', [])
+                    
+                    for script_item in scripts:
+                        page = script_item.get('page')
+                        text = script_item.get('script')
+                        if page and text:
+                            yield f"data: {json.dumps({'type': 'page_done', 'page': page, 'content': text}, ensure_ascii=False)}\n\n"
+                    
+                    yield f"data: {json.dumps({'type': 'complete', 'total': len(scripts)}, ensure_ascii=False)}\n\n"
+                    
+                except json.JSONDecodeError as e:
+                    error(f"解析讲稿JSON失败: {e}")
+                    yield f"data: {json.dumps({'type': 'error', 'error': f'JSON解析失败: {str(e)}'}, ensure_ascii=False)}\n\n"
+
+            except Exception as e:
+                error(f"批量生成讲稿失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"批量生成讲稿接口错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/narrator/scripts/{page}")
+async def get_narrator_script(board_id: str, window_id: str, page: int):
+    try:
+        content = content_manager.get_narrator_script(board_id, window_id, page)
+        return {"success": True, "content": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/boards/{board_id}/windows/{window_id}/narrator/scripts/{page}")
+async def save_narrator_script(board_id: str, window_id: str, page: int, request: Request):
+    try:
+        data = await request.json()
+        content = data.get('content', '')
+        success = content_manager.save_narrator_script(board_id, window_id, page, content)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 

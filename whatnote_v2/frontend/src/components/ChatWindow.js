@@ -900,7 +900,7 @@ const TodoListSelector = React.memo(({
           )}
         </div>
       </div>
-    </div>
+      </div>
   );
 });
 
@@ -1607,9 +1607,9 @@ ${todoItems}
           : msg.content;
         
         conversationMessages.push({
-          role: msg.role,
+        role: msg.role,
           content: cleanedContent,
-          files: msg.files
+        files: msg.files
         });
       });
       
@@ -1907,7 +1907,7 @@ ${argsStr}
                   
                 } else if (parsed.type === 'text_chunk') {
                   // 💬 流式输出文本
-                  fullResponse += parsed.content;
+                fullResponse += parsed.content;
                   streamingContentRef.current = fullResponse;
                   
                   // 立即更新显示
@@ -2045,12 +2045,12 @@ ${argsStr}
         ));
         console.log('⏸️ 用户已停止生成');
       } else {
-        setMessages(prev => prev.map(msg => 
-          msg.id === aiMessageId 
-            ? { ...msg, content: `❌ API调用失败: ${error.message}\n\n请检查:\n1. API配置是否正确\n2. 网络连接是否正常\n3. API密钥是否有效` }
-            : msg
-        ));
-      }
+      setMessages(prev => prev.map(msg => 
+        msg.id === aiMessageId 
+          ? { ...msg, content: `❌ API调用失败: ${error.message}\n\n请检查:\n1. API配置是否正确\n2. 网络连接是否正常\n3. API密钥是否有效` }
+          : msg
+      ));
+    }
     }
   }, [messages, boardId, boardName, conversationId, useTools]);
 
@@ -2598,14 +2598,14 @@ ${argsStr}
           <>
             {/* 消息列表 */}
             {displayedMessages.map((message, index) => (
-              <MessageComponent
+            <MessageComponent
                 key={`msg-${message.id}-${index}`}
-                message={message}
-                isStreaming={isStreaming}
-                streamingMessageId={streamingMessageId}
-                onOpenWindow={onOpenWindow}
-                getFileIcon={getFileIcon}
-              />
+              message={message}
+              isStreaming={isStreaming}
+              streamingMessageId={streamingMessageId}
+              onOpenWindow={onOpenWindow}
+              getFileIcon={getFileIcon}
+            />
             ))}
           </>
         )}
@@ -2626,7 +2626,7 @@ ${argsStr}
         todoStatus={todoStatus}
       />
 
-      <div className="input-container">
+        <div className="input-container">
         {/* 折叠的 Todo 显示 */}
         {hasTodos && !showTodoList && (
           <div 
@@ -2655,54 +2655,54 @@ ${argsStr}
           </div>
         )}
         
-        {selectedFiles.length > 0 && (
-          <div style={{
-            fontSize: '10px',
-            color: '#0078d4',
-            padding: '2px 4px',
-            backgroundColor: '#f0f8ff',
-            border: '1px solid #0078d4',
-            borderRadius: '2px',
-            margin: '0 4px 4px 4px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}>
-            <span>📎 已选择 {selectedFiles.length} 个文件</span>
-            <button
-              onClick={() => setSelectedFiles([])}
-              style={{
-                backgroundColor: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '10px',
-                color: '#0078d4',
-                padding: '0 2px'
-              }}
-              title="清空选择"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        <div className="input-box">
-          <textarea
-            ref={inputRef}
-            value={inputText}
-            onChange={handleInputChange}
-            onKeyPress={handleKeyPress}
-            placeholder="输入消息... (Enter发送，Shift+Enter换行)"
-            rows="1"
+          {selectedFiles.length > 0 && (
+            <div style={{
+              fontSize: '10px',
+              color: '#0078d4',
+              padding: '2px 4px',
+              backgroundColor: '#f0f8ff',
+              border: '1px solid #0078d4',
+              borderRadius: '2px',
+              margin: '0 4px 4px 4px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              <span>📎 已选择 {selectedFiles.length} 个文件</span>
+              <button
+                onClick={() => setSelectedFiles([])}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '10px',
+                  color: '#0078d4',
+                  padding: '0 2px'
+                }}
+                title="清空选择"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          
+          <div className="input-box">
+            <textarea
+              ref={inputRef}
+              value={inputText}
+              onChange={handleInputChange}
+              onKeyPress={handleKeyPress}
+              placeholder="输入消息... (Enter发送，Shift+Enter换行)"
+              rows="1"
             disabled={isLoading || isStreaming}
-            style={{
-              resize: 'none',
-              minHeight: '16px',
+              style={{
+                resize: 'none',
+                minHeight: '16px',
               maxHeight: '96px',
-              overflowY: 'hidden',
-              transition: 'height 0.1s ease'
-            }}
-          />
+                overflowY: 'hidden',
+                transition: 'height 0.1s ease'
+              }}
+            />
           {isStreaming ? (
             <button
               className="send-button stop-button"
@@ -2716,7 +2716,7 @@ ${argsStr}
               ⏹️
             </button>
           ) : (
-            <button
+            <button 
               className="send-button"
               onClick={sendMessage}
               disabled={isLoading || (!inputText.trim() && selectedFiles.length === 0)}
@@ -2725,8 +2725,8 @@ ${argsStr}
               {isLoading ? '⏳' : '📤'}
             </button>
           )}
+          </div>
         </div>
-      </div>
     </div>
   );
 }

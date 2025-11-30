@@ -1,0 +1,19 @@
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/narrator/scripts/{page}")
+async def get_narrator_script(board_id: str, window_id: str, page: int):
+    try:
+        content = content_manager.get_narrator_script(board_id, window_id, page)
+        return {"success": True, "content": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/boards/{board_id}/windows/{window_id}/narrator/scripts/{page}")
+async def save_narrator_script(board_id: str, window_id: str, page: int, request: Request):
+    try:
+        data = await request.json()
+        content = data.get('content', '')
+        success = content_manager.save_narrator_script(board_id, window_id, page, content)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

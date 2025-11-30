@@ -1602,7 +1602,7 @@ class PDFToolHandlers:
                                 tool_name="generate_pdf_summary_note",
                                 status=ToolStatus.ERROR,
                                 error="未收到笔记内容"
-                            )
+            )
                     else:
                         error_text = await response.text()
                         return ToolResult(

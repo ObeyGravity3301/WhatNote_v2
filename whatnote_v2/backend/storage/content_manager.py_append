@@ -1,0 +1,53 @@
+    def save_narrator_script(self, board_id: str, window_id: str, page: int, content: str) -> bool:
+        """保存PDF指定页面的讲稿内容"""
+        try:
+            print(f"[save_narrator_script] 开始保存: board_id={board_id}, window_id={window_id}, page={page}")
+            
+            windows = self.get_board_windows(board_id)
+            target_window = next((w for w in windows if w.get('id') == window_id), None)
+            if not target_window: return False
+            
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'): title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+            
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            if not pdf_pages_dir: return False
+            
+            # scripts 子目录
+            scripts_dir = pdf_pages_dir / "scripts"
+            scripts_dir.mkdir(parents=True, exist_ok=True)
+            
+            script_filename = f"script_{page:03d}.md"
+            script_path = scripts_dir / script_filename
+            
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+                
+            print(f"[save_narrator_script] ✅ 已保存讲稿: {script_filename}")
+            return True
+        except Exception as e:
+            print(f"保存讲稿失败: {e}")
+            return False
+
+    def get_narrator_script(self, board_id: str, window_id: str, page: int) -> str:
+        """获取PDF指定页面的讲稿内容"""
+        try:
+            windows = self.get_board_windows(board_id)
+            target_window = next((w for w in windows if w.get('id') == window_id), None)
+            if not target_window: return ""
+            
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'): title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+            
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            if not pdf_pages_dir: return ""
+            
+            script_path = pdf_pages_dir / "scripts" / f"script_{page:03d}.md"
+            
+            if script_path.exists():
+                with open(script_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            return ""
+

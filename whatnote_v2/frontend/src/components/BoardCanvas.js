@@ -119,6 +119,70 @@ const MARP_THEME_OPTIONS = [
 
 const AVAILABLE_MARP_THEME_IDS = MARP_THEME_OPTIONS.map((theme) => theme.id);
 
+// 将插件工具栏提取为独立组件，避免在render中定义Hooks
+const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument }) => {
+  const [pluginStateKey, setPluginStateKey] = useState(0);
+  
+  useEffect(() => {
+    const handlePluginStateChanged = () => {
+      console.log('[PDFPaginationViewer] 收到插件状态更新事件');
+      setPluginStateKey(prev => prev + 1);
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pluginStateChanged', handlePluginStateChanged);
+    }
+    
+    const timer1 = setTimeout(() => setPluginStateKey(prev => prev + 1), 500);
+    const timer2 = setTimeout(() => setPluginStateKey(prev => prev + 1), 2000);
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pluginStateChanged', handlePluginStateChanged);
+      }
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, []);
+
+  return useMemo(() => {
+    try {
+      const toolbarPlugins = pluginRegistry.getToolbarPluginsForWindow('pdf-pagination');
+      
+      if (!toolbarPlugins || toolbarPlugins.length === 0) {
+        return null;
+      }
+      
+      return toolbarPlugins
+        .filter(p => p.renderToolbarButton)
+        .map((plugin) => {
+          try {
+            const ButtonComponent = plugin.renderToolbarButton({
+              windowId,
+              boardId,
+              pageControl,
+              pdfDocument
+            });
+            
+            if (React.isValidElement(ButtonComponent)) {
+              return <React.Fragment key={`plugin-${plugin.id}`}>{ButtonComponent}</React.Fragment>;
+            } else if (typeof ButtonComponent === 'function') {
+              const Component = ButtonComponent;
+              return <Component key={`plugin-${plugin.id}`} />;
+            }
+            return null;
+          } catch (error) {
+            console.error(`[插件系统] 渲染插件 ${plugin.id} 的按钮时出错:`, error);
+            return null;
+          }
+        });
+    } catch (error) {
+      console.error('[插件系统] 获取PDF工具栏插件时出错:', error);
+      return null;
+    }
+  }, [pluginStateKey, windowId, boardId, pageControl.currentPage, pageControl.totalPages]);
+};
+
 // PDF分页组件
 function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter, setConfirmDialog }) {
   const [pdfDocument, setPdfDocument] = useState(null);
@@ -211,9 +275,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   
   // 注释设置状态
   const defaultAnnotationSettings = {
-    style: 'detailed', // 默认风格: detailed, simple, academic
-    customPrompt: ''
-  };
+      style: 'detailed', // 默认风格: detailed, simple, academic
+      customPrompt: ''
+    };
 
   const [annotationSettings, setAnnotationSettings] = useState(defaultAnnotationSettings);
 
@@ -304,7 +368,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
       }
     }
   };
-
+  
   // 预设的注释风格
   const annotationStyles = {
     detailed: {
@@ -391,29 +455,29 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
 
   // 加载大纲数据
   const loadOutlineData = useCallback(async () => {
-    if (!boardId || !windowId) return;
-    
-    try {
-      // 尝试加载大纲数据
-      const outlineResponse = await fetch(
-        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/outline-data`
-      );
-      if (outlineResponse.ok) {
-        const outlineData = await outlineResponse.json();
-        setBatchOutline(outlineData);
-        console.log('加载已有大纲数据:', outlineData);
-      }
+      if (!boardId || !windowId) return;
       
-      // 尝试加载细分数据
-      const subdivResponse = await fetch(
-        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
-      );
-      if (subdivResponse.ok) {
-        const subdivData = await subdivResponse.json();
-        setBatchSubdivisions(subdivData);
-        setStage2Completed(true);
-        console.log('加载已有细分数据:', subdivData);
-      }
+      try {
+        // 尝试加载大纲数据
+        const outlineResponse = await fetch(
+          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/outline-data`
+        );
+        if (outlineResponse.ok) {
+          const outlineData = await outlineResponse.json();
+          setBatchOutline(outlineData);
+          console.log('加载已有大纲数据:', outlineData);
+        }
+        
+        // 尝试加载细分数据
+        const subdivResponse = await fetch(
+          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
+        );
+        if (subdivResponse.ok) {
+          const subdivData = await subdivResponse.json();
+          setBatchSubdivisions(subdivData);
+          setStage2Completed(true);
+          console.log('加载已有细分数据:', subdivData);
+        }
       
       // 尝试加载全文档笔记
       const summaryResponse = await fetch(
@@ -426,11 +490,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           console.log('加载已有全文档笔记');
         }
       }
-    } catch (error) {
+      } catch (error) {
       console.log('未找到批量数据（首次使用）');
-    }
+      }
   }, [boardId, windowId]);
-
+    
   useEffect(() => {
     loadOutlineData();
   }, [loadOutlineData]);
@@ -1303,7 +1367,28 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         >
           关闭分页
         </button>
+
+        {/* 插件工具栏插槽 */}
+        {(() => {
+          return <PluginToolbar 
+            windowId={windowId}
+            boardId={boardId}
+            pageControl={{
+              currentPage,
+              totalPages,
+              goToNextPage,
+              goToPreviousPage,
+              goToPage: (page) => {
+                if (page >= 1 && page <= totalPages) {
+                  setCurrentPage(page);
+                }
+              }
+            }}
+            pdfDocument={pdfDocument}
+          />;
+        })()}
       </div>
+
 
       {/* 搜索面板 */}
       {showSearchPanel && (
@@ -5089,7 +5174,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       >
                         📝 生成全文档笔记
                       </button>
-
+                      
                       <button
                         onClick={async () => {
                           console.log('批量生成功能');
@@ -6505,6 +6590,17 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           </div>
         )}
       </div>
+      
+      {/* 插件底部面板插槽 */}
+      <div 
+        id={`pdf-plugin-bottom-panel-${windowId}`} 
+        style={{
+          width: '100%',
+          flexShrink: 0,
+          backgroundColor: '#c0c0c0',
+          zIndex: 100 // 确保在 PDF iframe 之上
+        }}
+      />
     </div>
   );
 }
@@ -6563,18 +6659,18 @@ const toMediaUrl = (windowOrContent, boardId) => {
     } else if (filePath.includes('\\') || filePath.includes('/')) {
       const parts = filePath.split(/[\\\/]/);
       filename = parts[parts.length - 1];
-    } else {
+      } else {
       filename = filePath;
     }
   } else if (content && typeof content === 'string' && (content.includes('\\') || content.includes('/'))) {
     const parts = content.split(/[\\\/]/);
     filename = parts[parts.length - 1];
-  }
-
+      }
+      
   if (filename && boardId) {
     const staticUrl = `http://localhost:8081/api/boards/${boardId}/files/${encodeURIComponent(filename)}`;
     console.log('🔗 使用新API生成静态URL:', staticUrl);
-    return staticUrl;
+      return staticUrl;
   }
   
   // 备用：使用 content 字段
@@ -12362,7 +12458,7 @@ function BoardCanvas({
                   boardId={boardId}
                   addMessage={addMessage}
                   openMessageCenter={openMessageCenter}
-                />
+                  />
               )}
               {window.type === 'video' && (
                 <label className="video-placeholder" title={window.content || '点击上传视频'}>

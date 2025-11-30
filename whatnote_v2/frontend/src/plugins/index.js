@@ -16,6 +16,7 @@ let wordCountPlugin = null;
 let stickyNotePlugin = null;
 let ttsPlugin = null;
 let webAppPlugin = null;
+let pdfNarratorPlugin = null;
 let pluginsLoaded = false;
 
 // 异步加载所有插件
@@ -63,6 +64,16 @@ async function loadPlugins() {
     console.warn('[插件系统] ⚠️ Web 应用集成插件加载失败:', error.message);
     webAppPlugin = null;
   }
+
+  // 加载 PPT 智能讲解员插件
+  try {
+    const pdfNarratorModule = await import('./core/pdf-narrator-plugin');
+    pdfNarratorPlugin = pdfNarratorModule?.default || pdfNarratorModule;
+    console.log('[插件系统] ✓ PPT 智能讲解员插件加载成功');
+  } catch (error) {
+    console.warn('[插件系统] ⚠️ PPT 智能讲解员插件加载失败:', error.message);
+    pdfNarratorPlugin = null;
+  }
   
   pluginsLoaded = true;
 }
@@ -106,7 +117,7 @@ function registerLoadedPlugins() {
     skippedCount++;
   }
   
-  // 注册窗口类型插件
+  // 注册便签窗口插件
   if (stickyNotePlugin) {
     try {
       pluginRegistry.register(stickyNotePlugin);
@@ -150,6 +161,21 @@ function registerLoadedPlugins() {
     console.warn('[插件系统] ⚠️ Web 应用集成插件未加载，跳过注册');
     skippedCount++;
   }
+
+  // 注册 PPT 智能讲解员插件
+  if (pdfNarratorPlugin) {
+    try {
+      pluginRegistry.register(pdfNarratorPlugin);
+      console.log('[插件系统] ✓ 已注册 PPT 智能讲解员插件');
+      registeredCount++;
+    } catch (error) {
+      console.error('[插件系统] ✗ 注册 PPT 智能讲解员插件失败:', error);
+      skippedCount++;
+    }
+  } else {
+    console.warn('[插件系统] ⚠️ PPT 智能讲解员插件未加载，跳过注册');
+    skippedCount++;
+  }
   
   const allPlugins = pluginRegistry.getAll();
   const enabledPlugins = pluginRegistry.getEnabled();
@@ -168,5 +194,4 @@ function registerLoadedPlugins() {
 export { pluginRegistry };
 
 // 导出插件（供参考，可能是 null）
-export { wordCountPlugin, stickyNotePlugin, ttsPlugin, webAppPlugin };
-
+export { wordCountPlugin, stickyNotePlugin, ttsPlugin, webAppPlugin, pdfNarratorPlugin };

@@ -2,7 +2,7 @@
   "id": "conv-1758867369997",
   "title": "新对话",
   "created_at": "2025-09-26T14:16:09.997322",
-  "updated_at": "2025-10-17T22:24:47.073201",
+  "updated_at": "2025-11-30T23:43:39.227368",
   "messages": [
     {
       "id": 1758867379256,
@@ -135,6 +135,67 @@
         "window_id": "window_1759156566324",
         "page": 1,
         "action": "generate_annotation"
+      }
+    },
+    {
+      "role": "system",
+      "content": "📚 用户对PDF文件《MHC molecules (1).pdf》生成了文档大纲，共6个分段。",
+      "timestamp": "2025-11-30T23:43:39.227354",
+      "metadata": {
+        "type": "batch_outline_generated",
+        "pdf_filename": "MHC molecules (1).pdf",
+        "window_id": "window_1764517302134",
+        "total_sections": 6,
+        "sections_summary": [
+          {
+            "index": 1,
+            "title": "MHC分子简介与发现历史",
+            "pages": [
+              1,
+              2
+            ]
+          },
+          {
+            "index": 2,
+            "title": "MHC的遗传结构",
+            "pages": [
+              3,
+              3
+            ]
+          },
+          {
+            "index": 3,
+            "title": "MHC分子的结构特征",
+            "pages": [
+              4,
+              4
+            ]
+          },
+          {
+            "index": 4,
+            "title": "MHC I类分子的抗原加工与呈递途径",
+            "pages": [
+              5,
+              5
+            ]
+          },
+          {
+            "index": 5,
+            "title": "MHC II类分子的抗原加工与呈递途径",
+            "pages": [
+              6,
+              6
+            ]
+          },
+          {
+            "index": 6,
+            "title": "MHC I与MHC II的比较总结",
+            "pages": [
+              7,
+              7
+            ]
+          }
+        ]
       }
     }
   ],
