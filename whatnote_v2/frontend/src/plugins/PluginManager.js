@@ -57,8 +57,9 @@ const PluginManager = ({ onClose }) => {
           paddingBottom: '4px'
         }}
       >
-        <div style={{ fontWeight: 'bold', fontSize: '12px' }}>
-          🔌 插件管理器
+        <div style={{ fontWeight: 'bold', fontSize: '12px', display: 'flex', alignItems: 'center' }}>
+          <span className="win98-icon win98-icon-plugin" style={{marginRight: '6px'}}></span>
+          插件管理器
         </div>
         {onClose && (
           <button

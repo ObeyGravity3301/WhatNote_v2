@@ -320,7 +320,7 @@ const Console = ({ onClose, initialPath }) => {
       {/* 标题栏 */}
       <div className="console-titlebar">
         <div className="console-titlebar-text">
-          <span className="console-icon"></span>
+          <span className="win98-icon win98-icon-console" style={{marginRight: '6px'}}></span>
           <span>WhatNote Tool Console</span>
         </div>
         <div className="console-titlebar-buttons">

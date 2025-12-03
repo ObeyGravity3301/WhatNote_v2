@@ -10627,7 +10627,7 @@ function BoardCanvas({
         throw new Error('窗口不存在');
       }
       
-      console.log('📤 上传文件到窗口:', windowId, '文件名:', file.name);
+      console.log('上传文件到窗口:', windowId, '文件名:', file.name);
       
       // 发送上传请求
       const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/upload`, {
@@ -10726,7 +10726,7 @@ function BoardCanvas({
         const iconToDelete = desktopIcons.find(icon => icon.windowId === windowId);
         if (iconToDelete && iconToDelete.gridPosition) {
           deletedIconPositionsRef.current.push(iconToDelete.gridPosition);
-          console.log(`🎯 记录被删除图标的位置: (${iconToDelete.gridPosition.gridX},${iconToDelete.gridPosition.gridY})`);
+          console.log(`记录被删除图标的位置: (${iconToDelete.gridPosition.gridX},${iconToDelete.gridPosition.gridY})`);
         }
         
         const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
@@ -11295,9 +11295,9 @@ function BoardCanvas({
             });
             
             // 使用统一的保存函数，确保包含所有状态
-            console.log('🔄 开始保存窗口位置...');
+            console.log('开始保存窗口位置...');
             const saveResult = await saveWindowState(target.id, { position: finalPosition });
-            console.log('💾 窗口位置保存结果:', saveResult ? '成功' : '失败');
+            console.log('窗口位置保存结果:', saveResult ? '成功' : '失败');
             
             // 验证保存是否真正生效
             if (saveResult) {
@@ -11906,27 +11906,27 @@ function BoardCanvas({
       { 
         label: '新建项目', 
         action: 'new-project',
-        icon: '📝',
+        icon: <span className="win98-icon win98-icon-text"></span>,
         order: 0
       },
       {
         label: '新建网页窗口',
         action: 'new-web-window',
-        icon: '🌐',
+        icon: <span className="win98-icon win98-icon-web"></span>,
         order: 1
       },
       { type: 'separator', order: 2 },
       { 
         label: '打开控制台', 
         action: 'open-console',
-        icon: '💻',
+        icon: <span className="win98-icon win98-icon-console"></span>,
         order: 10
       },
       { type: 'separator', order: 11 },
       { 
         label: '插件管理器', 
         action: 'open-plugin-manager',
-        icon: '🔌',
+        icon: <span className="win98-icon win98-icon-plugin"></span>,
         order: 12
       }
     ];
@@ -11935,14 +11935,14 @@ function BoardCanvas({
       { 
         label: '重命名', 
         action: 'rename',
-        icon: '✏️',
+        icon: <span className="win98-icon win98-icon-text"></span>,
         order: 0
       },
       { type: 'separator', order: 1 },
       { 
         label: '删除', 
         action: 'delete',
-        icon: '🗑️',
+        icon: <span className="win98-icon win98-icon-recycle"></span>,
         order: 2
       }
     ];
@@ -12646,7 +12646,7 @@ const getWindowIconClass = (type) => {
     'console': 'win98-icon win98-icon-console',
     'plugin-manager': 'win98-icon win98-icon-plugin'
   };
-  return typeIconClass[type] || null;
+  return typeIconClass[type] || 'win98-icon win98-icon-default';
 };
 
 const getWindowIcon = (type) => {
@@ -12670,7 +12670,7 @@ const getWindowIcon = (type) => {
     return windowTypePlugin.getWindowIcon();
   }
   
-  return typeIcons[type] || '🪟';
+  return typeIcons[type] || '';
 };
 
 export default BoardCanvas; 

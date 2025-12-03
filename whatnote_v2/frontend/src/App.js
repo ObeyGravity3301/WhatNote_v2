@@ -1047,7 +1047,7 @@ function App() {
                   title="插件管理器"
                   style={{ minWidth: 'auto', width: '90px' }}
                 >
-                  <span className="taskbar-icon">🔌</span>
+                  <span className="taskbar-icon win98-icon win98-icon-plugin"></span>
                   <span className="taskbar-text">插件</span>
                 </button>
               </>
@@ -1055,7 +1055,7 @@ function App() {
             
             {/* 连接状态指示器 */}
             <div className="connection-status" style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 8px' }}>
-              <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`}></span>
+              <span className={`win98-icon ${isConnected ? 'win98-icon-connected' : 'win98-icon-disconnected'}`}></span>
               <span className="status-text" style={{ fontSize: '11px', color: 'black' }}>
                 {isConnected ? '已连接' : '未连接'}
               </span>
@@ -1452,7 +1452,7 @@ const getWindowIcon = (type) => {
     'personalization': '🎨',
     'planner': '📅'
   };
-  return typeIcons[type] || '🪟';
+  return typeIcons[type] || '';
 };
 
 const getWindowIconClass = (type) => {
@@ -1470,7 +1470,7 @@ const getWindowIconClass = (type) => {
     'console': 'win98-icon win98-icon-console',
     'plugin-manager': 'win98-icon win98-icon-plugin'
   };
-  return typeIconClass[type] || null;
+  return typeIconClass[type] || 'win98-icon win98-icon-default';
 };
 
 export default App; 

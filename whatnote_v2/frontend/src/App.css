@@ -130,7 +130,7 @@ html, body {
   background-repeat: no-repeat;
   background-size: contain;
   background-position: center;
-  /* image-rendering: pixelated; */
+  image-rendering: pixelated;
 }
 
 .taskbar-separator {
@@ -305,15 +305,15 @@ html, body {
 }
 
 .start-menu-item:hover {
-  background: #316ac5;
+  background: #000080;
   color: white;
-  border: 1px solid #316ac5;
+  border: 1px solid #000080;
 }
 
 .start-menu-item.active {
-  background: #316ac5;
+  background: #000080;
   color: white;
-  border: 1px solid #316ac5;
+  border: 1px solid #000080;
 }
 
 .start-menu-item.active .menu-arrow {
@@ -343,7 +343,7 @@ html, body {
   background-repeat: no-repeat;
   background-size: contain;
   background-position: center;
-  /* image-rendering: pixelated; - 移除此行以支持高清图标缩放 */
+  image-rendering: pixelated;
 }
 
 .menu-icon.win98-icon,
@@ -360,7 +360,7 @@ html, body {
   background-repeat: no-repeat;
   background-size: contain;
   background-position: center;
-  /* image-rendering: pixelated; - 移除此行以支持高清图标缩放 */
+  image-rendering: pixelated;
   margin-bottom: 4px;
 }
 
@@ -573,9 +573,9 @@ html, body {
 }
 
 .context-menu-item:hover {
-  background: #316ac5;
+  background: #000080;
   color: white;
-  border: 1px solid #316ac5;
+  border: 1px solid #000080;
 }
 
 .start-menu-context-menu {
@@ -901,9 +901,9 @@ html, body {
 }
 
 .submenu-item:hover {
-  background: #316ac5;
+  background: #000080;
   color: white;
-  border: 1px solid #316ac5;
+  border: 1px solid #000080;
 }
 
 .submenu-text {
@@ -1142,7 +1142,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: #316ac5;
+  background: #000080;
   color: white;
   border-bottom: 1px solid #404040;
 }
@@ -1324,7 +1324,7 @@ html, body {
 }
 
 .tool-item:hover {
-  background: #316ac5;
+  background: #000080;
   color: white;
 }
 
