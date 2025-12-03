@@ -12626,8 +12626,17 @@ function BoardCanvas({
 
 const getWindowIconClass = (type) => {
   const typeIconClass = {
+    'text': 'win98-icon win98-icon-text',
+    'web': 'win98-icon win98-icon-web',
+    'image': 'win98-icon win98-icon-image',
+    'video': 'win98-icon win98-icon-video',
+    'audio': 'win98-icon win98-icon-audio',
+    'pdf': 'win98-icon win98-icon-pdf',
+    'chat': 'win98-icon win98-icon-chat',
     'message-center': 'win98-icon win98-icon-mail',
-    'planner': 'win98-icon win98-icon-calendar'
+    'personalization': 'win98-icon win98-icon-settings',
+    'planner': 'win98-icon win98-icon-calendar',
+    'console': 'win98-icon win98-icon-console'
   };
   return typeIconClass[type] || null;
 };
