@@ -58,24 +58,25 @@ html, body {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 30px;
-  background: linear-gradient(to bottom, #d4d4d4, #a0a0a0);
-  border-top: 2px solid #ffffff;
-  border-bottom: none; /* 移除底部边框，避免缝隙 */
+  height: 28px; /* Win98 默认高度通常是 28px 或 26px */
+  background: #c0c0c0;
+  border-top: 2px solid #ffffff; /* 顶部亮白线 */
+  border-bottom: none;
   z-index: 10000;
   font-family: 'MS Sans Serif', sans-serif;
   font-size: 11px;
   margin: 0;
   padding: 0;
+  box-shadow: inset 0 1px 0 #dfdfdf; /* 模拟顶部边缘的过渡 */
 }
 
 .taskbar-content {
   display: flex;
   align-items: center;
   height: 100%;
-  padding: 0 4px;
-  gap: 4px; /* 元素间距 */
-  justify-content: flex-start; /* 左对齐 */
+  padding: 2px; /* 给点内边距 */
+  gap: 4px;
+  justify-content: flex-start;
 }
 
 .taskbar-label {
@@ -93,15 +94,19 @@ html, body {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 2px 6px;
   background: #c0c0c0;
-  border: 2px outset #c0c0c0;
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
   cursor: pointer;
   font-size: 11px;
   color: black;
   height: 22px;
   font-family: 'MS Sans Serif', sans-serif;
   font-weight: bold;
+  box-shadow: 1px 1px 0 #000000; /* 额外的黑色阴影让其更立体 */
 }
 
 .start-button:hover {
@@ -109,8 +114,13 @@ html, body {
 }
 
 .start-button:active {
-  border: 2px inset #c0c0c0;
-  background: #a0a0a0;
+  border-top: 2px solid #404040;
+  border-left: 2px solid #404040;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  background: #c0c0c0;
+  box-shadow: none;
+  padding: 3px 5px 1px 7px; /* 模拟内容下沉 */
 }
 
 .start-icon {
@@ -125,8 +135,10 @@ html, body {
 
 .taskbar-separator {
   width: 2px;
-  height: 18px;
-  background: linear-gradient(to right, #808080, #c0c0c0);
+  height: 20px;
+  border-left: 1px solid #808080;
+  border-right: 1px solid #ffffff;
+  background: transparent;
   margin: 0 4px;
 }
 
@@ -137,7 +149,10 @@ html, body {
   gap: 4px;
   padding: 2px 8px;
   background: #c0c0c0;
-  border: 2px outset #c0c0c0;
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #ffffff;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
   cursor: pointer;
   font-size: 11px;
   color: black;
@@ -145,6 +160,7 @@ html, body {
   max-width: 160px;
   height: 22px;
   font-family: 'MS Sans Serif', sans-serif;
+  box-shadow: 1px 1px 0 #000000; /* 额外的阴影模拟3D */
 }
 
 .taskbar-item:hover {
@@ -152,20 +168,37 @@ html, body {
 }
 
 .taskbar-item:active {
-  border: 2px inset #c0c0c0;
-  background: #a0a0a0;
+  border-top: 2px solid #404040;
+  border-left: 2px solid #404040;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  box-shadow: none;
+  background: #c0c0c0;
+  background-image: linear-gradient(45deg, #ffffff 25%, transparent 25%, transparent 75%, #ffffff 75%, #ffffff), 
+                    linear-gradient(45deg, #ffffff 25%, transparent 25%, transparent 75%, #ffffff 75%, #ffffff);
+  background-size: 2px 2px;
+  background-position: 0 0, 1px 1px;
 }
 
 .taskbar-item.focused {
-  background: #0078d4;
-  color: white;
-  border: 2px inset #0078d4;
+  background: #e0e0e0; /* 激活状态背景 */
+  color: black;
+  border-top: 2px solid #404040;
+  border-left: 2px solid #404040;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  box-shadow: none;
+  /* 经典的 Win98 点阵背景模拟 */
+  background-image: linear-gradient(45deg, #ffffff 25%, transparent 25%, transparent 75%, #ffffff 75%, #ffffff), 
+                    linear-gradient(45deg, #ffffff 25%, transparent 25%, transparent 75%, #ffffff 75%, #ffffff);
+  background-size: 2px 2px;
+  background-position: 0 0, 1px 1px;
+  font-weight: bold; /* 激活窗口字体加粗 */
 }
 
 .taskbar-item.minimized {
-  background: linear-gradient(to bottom, #c0c0c0, #a0a0a0);
+  background: #c0c0c0;
   color: #606060;
-  border: 2px inset #c0c0c0;
   font-style: italic;
 }
 
@@ -1236,15 +1269,20 @@ html, body {
   color: white;
 }
 
-/* 连接状态指示器样式 */
+/* 连接状态指示器样式 - 模拟 Win98 托盘区 */
 .connection-status {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 2px 6px;
   background: #c0c0c0;
-  border: 1px outset #c0c0c0;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
   font-family: 'MS Sans Serif', sans-serif;
+  height: 22px; /* 保持高度一致 */
+  margin-right: 2px;
 }
 
 .status-dot {
