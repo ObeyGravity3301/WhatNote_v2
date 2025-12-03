@@ -17,6 +17,9 @@ function App() {
   const [consoleInitialPath, setConsoleInitialPath] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   
+  // 系统时间状态
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
   // 开始菜单相关状态
   const [showStartMenu, setShowStartMenu] = useState(false);
   const [showCreateCourse, setShowCreateCourse] = useState(false);
@@ -192,7 +195,7 @@ function App() {
       toastTimeoutRef.current = null;
     }, 3000);
   };
-
+  
   const hideToast = () => {
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
@@ -243,6 +246,15 @@ function App() {
   const [minimizedWindows, setMinimizedWindows] = useState(new Set());
   const [hiddenWindows, setHiddenWindows] = useState(new Set());
   const [focusedWindowId, setFocusedWindowId] = useState(null);
+
+  // 系统时间更新
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, []);
 
   // WebSocket连接
   useEffect(() => {
@@ -989,21 +1001,21 @@ function App() {
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
             {selectedBoard && (
               <>
-                <button 
-                  className="taskbar-item"
-                  onClick={() => {
-                    // 通过事件通知BoardCanvas打开聊天窗口
-                    const event = new CustomEvent('toggleChatWindow');
+              <button 
+                className="taskbar-item"
+                onClick={() => {
+                  // 通过事件通知BoardCanvas打开聊天窗口
+                  const event = new CustomEvent('toggleChatWindow');
                     if (typeof window !== 'undefined') {
-                      window.dispatchEvent(event);
+                  window.dispatchEvent(event);
                     }
-                  }}
-                  title="AI助手聊天"
-                  style={{ minWidth: 'auto', width: '80px' }}
-                >
+                }}
+                title="AI助手聊天"
+                style={{ minWidth: 'auto', width: '80px' }}
+              >
                   <span className="taskbar-icon win98-icon win98-icon-chat"></span>
-                  <span className="taskbar-text">AI助手</span>
-                </button>
+                <span className="taskbar-text">AI助手</span>
+              </button>
                 
                 <button 
                   className="taskbar-item message-center-taskbar-btn"
@@ -1059,6 +1071,16 @@ function App() {
               <span className="status-text" style={{ fontSize: '11px', color: 'black' }}>
                 {isConnected ? '已连接' : '未连接'}
               </span>
+            </div>
+            
+            {/* 系统时间显示 */}
+            <div className="taskbar-clock" title={currentTime.toLocaleString('zh-CN')}>
+              <div className="clock-time">
+                {currentTime.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}
+              </div>
+              <div className="clock-date">
+                {currentTime.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/')}
+              </div>
             </div>
           </div>
         </div>

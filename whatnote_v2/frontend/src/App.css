@@ -1346,6 +1346,37 @@ html, body {
   margin-right: 2px;
 }
 
+/* 任务栏时钟样式 */
+.taskbar-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 8px;
+  background: #c0c0c0;
+  border-top: 2px solid #808080;
+  border-left: 2px solid #808080;
+  border-right: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  height: 22px;
+  min-width: 60px;
+  cursor: default;
+}
+
+.clock-time {
+  font-size: 11px;
+  color: black;
+  line-height: 1.1;
+  font-weight: normal;
+}
+
+.clock-date {
+  font-size: 9px;
+  color: #404040;
+  line-height: 1.1;
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
