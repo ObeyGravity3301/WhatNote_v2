@@ -1001,7 +1001,7 @@ function App() {
                   title="AI助手聊天"
                   style={{ minWidth: 'auto', width: '80px' }}
                 >
-                  <span className="taskbar-icon">💬</span>
+                  <span className="taskbar-icon win98-icon win98-icon-chat"></span>
                   <span className="taskbar-text">AI助手</span>
                 </button>
                 
@@ -1467,7 +1467,8 @@ const getWindowIconClass = (type) => {
     'message-center': 'win98-icon win98-icon-mail',
     'personalization': 'win98-icon win98-icon-settings',
     'planner': 'win98-icon win98-icon-calendar',
-    'console': 'win98-icon win98-icon-console'
+    'console': 'win98-icon win98-icon-console',
+    'plugin-manager': 'win98-icon win98-icon-plugin'
   };
   return typeIconClass[type] || null;
 };

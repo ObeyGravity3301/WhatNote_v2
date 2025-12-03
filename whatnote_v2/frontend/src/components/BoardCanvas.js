@@ -10459,10 +10459,10 @@ function BoardCanvas({
       
       // 只在非内容更新时输出详细日志
       if (!updates.hasOwnProperty('content')) {
-        console.log('💾 保存窗口状态:', windowId, '更新字段:', Object.keys(updates));
+        console.log('保存窗口状态:', windowId, '更新字段:', Object.keys(updates));
         console.log('📍 窗口位置:', updatedWindow.position);
-        console.log('📏 窗口大小:', updatedWindow.size);
-        console.log('👁️ 隐藏状态:', updatedWindow.hidden);
+        console.log('窗口大小:', updatedWindow.size);
+        console.log('隐藏状态:', updatedWindow.hidden);
       }
         
         const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}`, {
@@ -10493,11 +10493,11 @@ function BoardCanvas({
     try {
       if (mode === 'upload' && newContent instanceof File) {
         // 处理文件上传
-        console.log('📁 开始上传文件:', newContent.name, newContent.type, newContent.size);
+        console.log('开始上传文件:', newContent.name, newContent.type, newContent.size);
         await handleFileUploadToWindow(windowId, newContent);
       } else {
         // 处理内容更新
-        console.log('📝 保存窗口内容:', windowId, '内容长度:', newContent.length);
+        console.log('保存窗口内容:', windowId, '内容长度:', newContent.length);
         
         // 更新本地状态
         setWindows(prevWindows => 
@@ -10555,14 +10555,14 @@ function BoardCanvas({
     );
 
     if (successMessage) {
-      addMessage('🌐 网页窗口', successMessage, 'success');
+      addMessage('网页窗口', successMessage, 'success');
     }
   };
 
   const handleConvertWindowToWeb = async (windowId, rawUrl) => {
     const normalizedUrl = ensureHttpUrl(rawUrl);
     if (!normalizedUrl) {
-      addMessage('⚠️ 无效的地址', '请输入正确的URL，例如 https://example.com', 'warning');
+      addMessage('无效的地址', '请输入正确的URL，例如 https://example.com', 'warning');
       return;
     }
 
@@ -12048,6 +12048,8 @@ function BoardCanvas({
         {/* 桌面图标 */}
         {desktopIcons.map(icon => {
           const iconClass = getWindowIconClass(icon.type);
+          const isThumbnailImage = typeof icon.thumbnail === 'string' && (icon.thumbnail.startsWith('http') || icon.thumbnail.startsWith('data:image'));
+          
           return (
           <div
             key={icon.id}
@@ -12067,17 +12069,17 @@ function BoardCanvas({
             onContextMenu={(e) => handleIconRightClick(e, icon.id)}
           >
             <div className="desktop-icon-image">
-              {iconClass ? (
-                <span className={`desktop-icon-win98 ${iconClass}`}></span>
-              ) : (typeof icon.thumbnail === 'string' && icon.thumbnail.startsWith('http') ? (
+              {isThumbnailImage ? (
                 <img 
                   src={icon.thumbnail} 
                   alt={icon.title}
                   className="desktop-icon-thumbnail"
                 />
+              ) : iconClass ? (
+                <span className={`desktop-icon-win98 ${iconClass}`}></span>
               ) : (
                 <span className="desktop-icon-emoji">{icon.thumbnail}</span>
-              ))}
+              )}
             </div>
             <div className="desktop-icon-label">
               {editingTitleId === icon.id ? (
@@ -12641,7 +12643,8 @@ const getWindowIconClass = (type) => {
     'message-center': 'win98-icon win98-icon-mail',
     'personalization': 'win98-icon win98-icon-settings',
     'planner': 'win98-icon win98-icon-calendar',
-    'console': 'win98-icon win98-icon-console'
+    'console': 'win98-icon win98-icon-console',
+    'plugin-manager': 'win98-icon win98-icon-plugin'
   };
   return typeIconClass[type] || null;
 };

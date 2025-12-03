@@ -396,6 +396,10 @@ html, body {
   background-image: url('./assets/icons/settings.png');
 }
 
+.win98-icon-plugin {
+  background-image: url('./assets/icons/plugin.png');
+}
+
 .win98-icon-document {
   background-image: url('./assets/icons/pdf.png');
 }
