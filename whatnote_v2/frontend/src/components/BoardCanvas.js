@@ -12117,7 +12117,8 @@ function BoardCanvas({
               )}
             </div>
           </div>
-        ))}
+          );
+        })}
         
         {/* 窗口渲染 */}
         {windows
