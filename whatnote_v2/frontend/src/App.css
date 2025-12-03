@@ -353,6 +353,17 @@ html, body {
   background-position: center;
 }
 
+.desktop-icon-win98 {
+  width: 32px;
+  height: 32px;
+  display: inline-block;
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  image-rendering: pixelated;
+  margin-bottom: 4px;
+}
+
 .win98-icon-text {
   background-image: url('./assets/icons/notepad.png');
 }

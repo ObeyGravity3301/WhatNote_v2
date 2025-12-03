@@ -8794,7 +8794,7 @@ function BoardCanvas({
     return {
       id: CHAT_WINDOW_ID,
       type: 'chat',
-      title: `💬 AI助手 - ${boardName}`,
+      title: `AI助手 - ${boardName}`,
       position: { x: 150, y: 100 },
       size: { width: 400, height: 500 },
       content: '',
@@ -8822,7 +8822,7 @@ function BoardCanvas({
     return {
       id: PERSONALIZATION_WINDOW_ID,
       type: 'personalization',
-      title: `🎨 个性化设置 - ${boardName || ''}`.trim(),
+      title: `个性化设置 - ${boardName || ''}`.trim(),
       position: { x: 220, y: 160 },
       size: { width: 540, height: 520 },
       content: '',
@@ -8850,7 +8850,7 @@ function BoardCanvas({
     return {
       id: PLUGIN_MANAGER_WINDOW_ID,
       type: 'plugin-manager',
-      title: '🔌 插件管理器',
+      title: '插件管理器',
       position: { x: 260, y: 120 },
       size: { width: 600, height: 500 },
       content: '',
@@ -10421,11 +10421,11 @@ function BoardCanvas({
       // 聊天窗口和消息中心窗口不需要保存到后端文件系统
       if (window.type === 'chat' || window.type === 'message-center' || window.type === 'personalization' || window.type === 'planner' || window.type === 'plugin-manager') {
         const typeNames = {
-          'chat': '💬 聊天',
-          'message-center': '📬 消息中心',
-          'personalization': '🎨 个性化',
-          'planner': '📅 日历计划',
-          'plugin-manager': '🔌 插件管理器'
+          'chat': '聊天',
+          'message-center': '消息中心',
+          'personalization': '个性化',
+          'planner': '日历计划',
+          'plugin-manager': '插件管理器'
         };
         console.log(`${typeNames[window.type] || window.type}窗口状态不保存到后端，跳过保存`);
         return true;
@@ -12046,7 +12046,9 @@ function BoardCanvas({
         onDrop={handleDrop}
       >
         {/* 桌面图标 */}
-        {desktopIcons.map(icon => (
+        {desktopIcons.map(icon => {
+          const iconClass = getWindowIconClass(icon.type);
+          return (
           <div
             key={icon.id}
             className={`desktop-icon ${selectedIconId === icon.id ? 'selected' : ''} ${icon.isHidden ? 'hidden-window' : ''}`}
@@ -12065,7 +12067,9 @@ function BoardCanvas({
             onContextMenu={(e) => handleIconRightClick(e, icon.id)}
           >
             <div className="desktop-icon-image">
-              {typeof icon.thumbnail === 'string' && icon.thumbnail.startsWith('http') ? (
+              {iconClass ? (
+                <span className={`desktop-icon-win98 ${iconClass}`}></span>
+              ) : (typeof icon.thumbnail === 'string' && icon.thumbnail.startsWith('http') ? (
                 <img 
                   src={icon.thumbnail} 
                   alt={icon.title}
@@ -12073,7 +12077,7 @@ function BoardCanvas({
                 />
               ) : (
                 <span className="desktop-icon-emoji">{icon.thumbnail}</span>
-              )}
+              ))}
             </div>
             <div className="desktop-icon-label">
               {editingTitleId === icon.id ? (
