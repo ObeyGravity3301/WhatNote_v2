@@ -130,7 +130,7 @@ html, body {
   background-repeat: no-repeat;
   background-size: contain;
   background-position: center;
-  image-rendering: pixelated;
+  /* image-rendering: pixelated; */
 }
 
 .taskbar-separator {
@@ -343,7 +343,7 @@ html, body {
   background-repeat: no-repeat;
   background-size: contain;
   background-position: center;
-  image-rendering: pixelated;
+  /* image-rendering: pixelated; - 移除此行以支持高清图标缩放 */
 }
 
 .menu-icon.win98-icon,
@@ -360,7 +360,7 @@ html, body {
   background-repeat: no-repeat;
   background-size: contain;
   background-position: center;
-  image-rendering: pixelated;
+  /* image-rendering: pixelated; - 移除此行以支持高清图标缩放 */
   margin-bottom: 4px;
 }
 
@@ -398,6 +398,18 @@ html, body {
 
 .win98-icon-plugin {
   background-image: url('./assets/icons/plugin.png');
+}
+
+.win98-icon-default {
+  background-image: url('./assets/icons/window.png');
+}
+
+.win98-icon-connected {
+  background-image: url('./assets/icons/connect_established.png');
+}
+
+.win98-icon-disconnected {
+  background-image: url('./assets/icons/connect_no.png');
 }
 
 .win98-icon-document {
