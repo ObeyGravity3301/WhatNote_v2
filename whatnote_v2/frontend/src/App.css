@@ -353,6 +353,38 @@ html, body {
   background-position: center;
 }
 
+.win98-icon-text {
+  background-image: url('./assets/icons/notepad.png');
+}
+
+.win98-icon-web {
+  background-image: url('./assets/icons/internet.png');
+}
+
+.win98-icon-image {
+  background-image: url('./assets/icons/image.png');
+}
+
+.win98-icon-video {
+  background-image: url('./assets/icons/video.png');
+}
+
+.win98-icon-audio {
+  background-image: url('./assets/icons/audio.png');
+}
+
+.win98-icon-pdf {
+  background-image: url('./assets/icons/pdf.png');
+}
+
+.win98-icon-chat {
+  background-image: url('./assets/icons/chat.png');
+}
+
+.win98-icon-settings {
+  background-image: url('./assets/icons/settings.png');
+}
+
 .win98-icon-document {
   background-image: url('./assets/icons/pdf.png');
 }
