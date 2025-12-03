@@ -344,6 +344,7 @@ html, body {
   background-size: contain;
   background-position: center;
   image-rendering: pixelated;
+  opacity: 1;
 }
 
 .menu-icon.win98-icon,
@@ -362,6 +363,7 @@ html, body {
   background-position: center;
   image-rendering: pixelated;
   margin-bottom: 4px;
+  opacity: 1;
 }
 
 .win98-icon-text {
