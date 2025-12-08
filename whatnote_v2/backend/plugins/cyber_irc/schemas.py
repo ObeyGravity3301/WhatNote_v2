@@ -17,8 +17,17 @@ class AgentStatus(str, Enum):
 class AgentSchedule(BaseModel):
     """Defines when an agent is active/online."""
     # Simple hour-based schedule (0-23)
-    active_hours: List[int] = Field(default_factory=lambda: list(range(9, 23)), description="List of active hours (0-23)")
+    active_hours: List[int] = Field(default_factory=lambda: list(range(9, 23)), description="List of active hours (0-23) used as fallback")
+    
+    # Advanced: Weekday vs Weekend
+    weekdays_active_hours: Optional[List[int]] = Field(None, description="Active hours for Mon-Fri")
+    weekends_active_hours: Optional[List[int]] = Field(None, description="Active hours for Sat-Sun")
+    
     timezone_offset: int = Field(default=8, description="UTC offset (e.g. 8 for Beijing)")
+    
+    # Randomness
+    random_online_chance: float = Field(default=0.0, description="Chance (0-1) to be online during offline hours (e.g. Insomnia)")
+    random_offline_chance: float = Field(default=0.0, description="Chance (0-1) to be offline during active hours (e.g. Busy)")
 
 class AgentProfile(BaseModel):
     id: str

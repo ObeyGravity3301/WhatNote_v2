@@ -176,7 +176,11 @@ class CyberChatManager:
         - interests: A list of 3-5 topics they are interested in.
         - style: A description of their speaking style (e.g., slang, formal, emoji usage).
         - system_prompt: Additional instructions for the LLM to act as this character.
-        - active_hours: A list of integers (0-23) representing hours they are likely to be online based on their role (e.g., students: [18,19,20,21,22], workers: [20,21,22], night owls: [23,0,1,2,3]).
+        - active_hours: A list of integers (0-23) used as default fallback.
+        - weekdays_active_hours: A list of integers (0-23) for Mon-Fri schedule.
+        - weekends_active_hours: A list of integers (0-23) for Sat-Sun schedule.
+        - random_online_chance: Float 0.0-1.0 (prob to be online when offline, e.g. insomnia).
+        - random_offline_chance: Float 0.0-1.0 (prob to be offline when online, e.g. busy).
         
         JSON:
         """
@@ -199,7 +203,22 @@ class CyberChatManager:
             data = json.loads(clean_text)
             
             from .schemas import AgentSchedule
-            schedule = AgentSchedule(active_hours=data.get('active_hours', list(range(9, 23))))
+            
+            # Smart schedule parsing
+            schedule_data = {
+                "active_hours": data.get('active_hours', list(range(9, 23))),
+                "timezone_offset": data.get('timezone_offset', 8)
+            }
+            if 'weekdays_active_hours' in data:
+                schedule_data['weekdays_active_hours'] = data['weekdays_active_hours']
+            if 'weekends_active_hours' in data:
+                schedule_data['weekends_active_hours'] = data['weekends_active_hours']
+            if 'random_online_chance' in data:
+                schedule_data['random_online_chance'] = data['random_online_chance']
+            if 'random_offline_chance' in data:
+                schedule_data['random_offline_chance'] = data['random_offline_chance']
+                
+            schedule = AgentSchedule(**schedule_data)
             
             # Generate ID from name + random
             import uuid
@@ -293,13 +312,16 @@ class CyberChatManager:
         The Heartbeat.
         Iterate over all rooms.
         """
+        info("[CyberChat] Heartbeat loop running...")
         while self.is_running:
             try:
                 await asyncio.sleep(random.uniform(3, 8))
+                # info(f"[CyberChat] Tick. Active rooms: {len(self.rooms)}") 
                 
                 # Check each room independently
                 for room_id, room in self.rooms.items():
                     if not room.active_agents:
+                        # info(f"[CyberChat] Room {room_id} has no active agents.")
                         continue
                         
                     # Shuffle agents
@@ -315,7 +337,7 @@ class CyberChatManager:
                         
                         if should_speak:
                             info(f"[CyberChat][{room_id}] {agent.profile.name} decided to speak.")
-                            response = await agent.speak()
+                            response = await agent.speak(room.dict()) # Pass room context
                             if response:
                                 await self.post_message(
                                     room_id=room_id,

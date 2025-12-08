@@ -1269,8 +1269,30 @@ const PdfNarratorPlugin = {
     return <NarratorPluginComponent {...props} />;
   },
 
-  onEnable: () => {
+  onEnable: async () => {
     console.log('[PdfNarratorPlugin] 插件已启用');
+    try {
+      await fetch('http://localhost:8081/api/narrator/control', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' }) 
+      });
+    } catch (e) {
+      console.error('[PdfNarratorPlugin] Failed to enable backend:', e);
+    }
+  },
+
+  onDisable: async () => {
+    console.log('[PdfNarratorPlugin] 插件已禁用');
+    try {
+      await fetch('http://localhost:8081/api/narrator/control', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' }) 
+      });
+    } catch (e) {
+      console.error('[PdfNarratorPlugin] Failed to disable backend:', e);
+    }
   }
 };
 

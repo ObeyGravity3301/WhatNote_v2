@@ -540,11 +540,41 @@ const CyberIRCWindow = ({ window: windowData }) => {
               />
             </div>
           ) : (
-            <div style={{fontSize: '12px', color: '#ccc'}}>
+            <div style={{fontSize: '12px', color: '#ccc', maxHeight: '300px', overflowY: 'auto'}}>
               <p><strong style={{color: '#fff'}}>Name:</strong> {generatedAgent.name}</p>
               <p><strong style={{color: '#fff'}}>Role:</strong> {generatedAgent.personality}</p>
               <p><strong style={{color: '#fff'}}>Style:</strong> {generatedAgent.style}</p>
-              <p><strong style={{color: '#fff'}}>Hours:</strong> {generatedAgent.schedule?.active_hours.join(',')}</p>
+              
+              <div style={{marginTop: '8px', borderTop: '1px solid #333', paddingTop: '4px'}}>
+                <strong style={{color: '#00ff00'}}>SCHEDULE</strong>
+                
+                <div style={{marginTop: '4px'}}>
+                   <span style={{color: '#aaa'}}>Weekdays: </span>
+                   {generatedAgent.schedule?.weekdays_active_hours 
+                      ? generatedAgent.schedule.weekdays_active_hours.join(',') 
+                      : (generatedAgent.schedule?.active_hours || []).join(',')
+                   }
+                </div>
+                
+                <div style={{marginTop: '4px'}}>
+                   <span style={{color: '#aaa'}}>Weekends: </span>
+                   {generatedAgent.schedule?.weekends_active_hours 
+                      ? generatedAgent.schedule.weekends_active_hours.join(',') 
+                      : (generatedAgent.schedule?.active_hours || []).join(',')
+                   }
+                </div>
+                
+                <div style={{marginTop: '8px', display: 'flex', justifyContent: 'space-between'}}>
+                    <div>
+                        <span style={{color: '#aaa'}}>Insomnia Chance: </span>
+                        {((generatedAgent.schedule?.random_online_chance || 0) * 100).toFixed(0)}%
+                    </div>
+                    <div>
+                        <span style={{color: '#aaa'}}>Busy Chance: </span>
+                        {((generatedAgent.schedule?.random_offline_chance || 0) * 100).toFixed(0)}%
+                    </div>
+                </div>
+              </div>
             </div>
           )}
         </Modal>
@@ -624,6 +654,32 @@ const cyberIRCPlugin = {
         }
       };
       await createWindow(windowData);
+    }
+  },
+
+  onEnable: async (context) => {
+    console.log('[CyberIRC] Enabling plugin, starting backend loop...');
+    try {
+      await fetch('http://localhost:8081/api/chat/control', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' }) 
+      });
+    } catch (e) {
+      console.error('[CyberIRC] Failed to start backend:', e);
+    }
+  },
+
+  onDisable: async (context) => {
+    console.log('[CyberIRC] Disabling plugin, stopping backend loop...');
+    try {
+      await fetch('http://localhost:8081/api/chat/control', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' }) 
+      });
+    } catch (e) {
+      console.error('[CyberIRC] Failed to stop backend:', e);
     }
   }
 };

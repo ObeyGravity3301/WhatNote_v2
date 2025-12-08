@@ -61,12 +61,54 @@ CRITICAL INSTRUCTIONS:
             return True
             
         import datetime
+        import random
+        
         # UTC time + offset (Default 8 for Beijing)
         offset = self.profile.schedule.timezone_offset
         now = datetime.datetime.utcnow() + datetime.timedelta(hours=offset)
         current_hour = now.hour
+        weekday = now.weekday() # 0=Mon, 6=Sun
+        is_weekend = weekday >= 5
         
-        return current_hour in self.profile.schedule.active_hours
+        # Determine base active hours
+        active_hours = self.profile.schedule.active_hours
+        if is_weekend and self.profile.schedule.weekends_active_hours:
+            active_hours = self.profile.schedule.weekends_active_hours
+        elif not is_weekend and self.profile.schedule.weekdays_active_hours:
+            active_hours = self.profile.schedule.weekdays_active_hours
+            
+        is_active = current_hour in active_hours
+        
+        # Apply randomness (Simulate Insomnia / Emergency)
+        # Use a deterministic seed based on date+hour+name so state persists for the hour
+        # Format: "2023-10-27-23-HackerNeo"
+        time_seed = f"{now.strftime('%Y-%m-%d-%H')}-{self.profile.name}"
+        random.seed(time_seed)
+        r_val = random.random()
+        
+        override_status = None
+        if not is_active:
+            # Chance to wake up randomly (Insomnia)
+            if r_val < self.profile.schedule.random_online_chance:
+                is_active = True
+                override_status = "INSOMNIA"
+        else:
+            # Chance to go offline randomly (Busy)
+            if r_val < self.profile.schedule.random_offline_chance:
+                is_active = False
+                override_status = "BUSY"
+                
+        # Reset seed to avoid affecting other random calls
+        random.seed()
+        
+        log_msg = f"[AgentCheck] {self.profile.name}: {weekday=}, Hour={current_hour}"
+        if override_status:
+            log_msg += f" -> OVERRIDE: {override_status} ({is_active})"
+        else:
+            log_msg += f" -> Online? {is_active}"
+            
+        # info(log_msg)
+        return is_active
 
     async def should_speak(self, room_context: Dict) -> bool:
         """
@@ -74,27 +116,30 @@ CRITICAL INSTRUCTIONS:
         """
         # Check online status first
         if not self.is_online():
-            # Maybe very low chance to "wake up" if mentioned? No, let's keep it strict for now.
+            info(f"[AgentCheck] {self.profile.name} is offline (schedule).")
             return False
 
         # 1. If mentioned, high probability
         last_msg = self.memory[-1]
         if last_msg['role'] == Role.USER and self.profile.name.lower() in last_msg['content'].lower():
+            info(f"[AgentCheck] {self.profile.name} was mentioned, speaking.")
             return True
             
         # 2. Random chance based on 'boredom' or 'interest'
         import random
-        # Base chance
-        chance = 0.1
+        # Base chance INCREASED for testing
+        chance = 0.3 
         
         # Increase chance if room topic matches interests (simple keyword match)
         topic = room_context.get('topic', '').lower()
         for interest in self.profile.interests:
             if interest.lower() in topic:
-                chance += 0.1
+                chance += 0.2
                 break
                 
-        if random.random() < chance: 
+        r = random.random()
+        info(f"[AgentCheck] {self.profile.name} roll: {r:.2f} < {chance:.2f}?")
+        if r < chance: 
             return True
             
         return False
