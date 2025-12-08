@@ -403,7 +403,8 @@ rm -rf whatnote_v2/backend/models/gpt-sovit/
 
 ---
 
-**最后更新**: 2024
+**最后更新**: 2025
 **维护者**: WhatNote Team
+
 
 

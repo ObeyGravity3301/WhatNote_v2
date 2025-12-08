@@ -3114,3 +3114,58 @@ class ContentManager:
             print(f"获取讲稿失败: {e}")
             return ""
 
+
+    def get_narrator_audio_path(self, board_id: str, window_id: str, page: int) -> Optional[str]:
+        """获取PDF指定页面的语音文件路径（如果存在）"""
+        try:
+            windows = self.get_board_windows(board_id)
+            target_window = next((w for w in windows if w.get('id') == window_id), None)
+            if not target_window: return None
+            
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'): title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+            
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            if not pdf_pages_dir: return None
+            
+            audio_dir = pdf_pages_dir / "audio"
+            if not audio_dir.exists(): return None
+            
+            audio_filename = f"audio_{page:03d}.wav"
+            audio_path = audio_dir / audio_filename
+            
+            if audio_path.exists():
+                return str(audio_path)
+            return None
+        except Exception as e:
+            print(f"获取语音路径失败: {e}")
+            return None
+
+    def save_narrator_audio(self, board_id: str, window_id: str, page: int, audio_content: bytes) -> Optional[str]:
+        """保存PDF指定页面的语音内容"""
+        try:
+            windows = self.get_board_windows(board_id)
+            target_window = next((w for w in windows if w.get('id') == window_id), None)
+            if not target_window: return None
+            
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'): title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+            
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            if not pdf_pages_dir: return None
+            
+            audio_dir = pdf_pages_dir / "audio"
+            audio_dir.mkdir(parents=True, exist_ok=True)
+            
+            audio_filename = f"audio_{page:03d}.wav"
+            audio_path = audio_dir / audio_filename
+            
+            with open(audio_path, 'wb') as f:
+                f.write(audio_content)
+                
+            return str(audio_path)
+        except Exception as e:
+            print(f"保存语音失败: {e}")
+            return None

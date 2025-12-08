@@ -27,6 +27,15 @@ IS_WINDOWS = platform.system() == "Windows"
 IS_LINUX = platform.system() == "Linux"
 IS_MACOS = platform.system() == "Darwin"
 
+# GPT-SoVITS 配置
+# start_universal.py 位于 whatnote_v2/ 下
+# PROJECT_ROOT 是 whatnote_v2/
+# parent 是 whatnote/
+# parent.parent 是 Projects/
+# 所以 GPT-SoVITS 在 PROJECT_ROOT.parent.parent / "GPT-SoVITS"
+GPT_SOVITS_DIR = (PROJECT_ROOT.parent.parent / "GPT-SoVITS").resolve()
+GPT_SOVITS_PORT = 9880
+
 class Colors:
     """终端颜色"""
     BLUE = '\033[94m'
@@ -85,6 +94,51 @@ def kill_process_on_port(port):
                 pass
     except Exception as e:
         print_colored(f"⚠ 清理端口 {port} 时出错: {e}", Colors.YELLOW)
+
+def get_gpt_sovits_python():
+    """获取GPT-SoVITS虚拟环境中的Python路径"""
+    if IS_WINDOWS:
+        return GPT_SOVITS_DIR / "venv" / "Scripts" / "python.exe"
+    else:
+        return GPT_SOVITS_DIR / "venv" / "bin" / "python"
+
+def start_gpt_sovits():
+    """启动GPT-SoVITS服务"""
+    if not GPT_SOVITS_DIR.exists():
+        print_colored("⚠ 未找到 GPT-SoVITS 目录，跳过启动", Colors.YELLOW)
+        return None
+
+    venv_python = get_gpt_sovits_python()
+    if not venv_python.exists():
+        print_colored("⚠ 未找到 GPT-SoVITS 虚拟环境，跳过启动", Colors.YELLOW)
+        return None
+
+    print_colored("🚀 启动 GPT-SoVITS 服务...", Colors.BLUE)
+    
+    try:
+        cmd = [str(venv_python), 'api.py']
+        
+        # 设置环境变量
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        
+        process = subprocess.Popen(
+            cmd,
+            cwd=GPT_SOVITS_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            bufsize=1,
+            env=env,
+            shell=False
+        )
+        
+        print_colored(f"✓ GPT-SoVITS 服务启动中 (端口: {GPT_SOVITS_PORT})", Colors.GREEN)
+        return process
+        
+    except Exception as e:
+        print_colored(f"❌ GPT-SoVITS 启动失败: {e}", Colors.RED)
+        return None
 
 def check_python_version():
     """检查Python版本"""
@@ -327,6 +381,7 @@ def main():
     print_colored("🧹 清理端口...", Colors.BLUE)
     kill_process_on_port(BACKEND_PORT)
     kill_process_on_port(FRONTEND_PORT)
+    kill_process_on_port(GPT_SOVITS_PORT)
     
     # 设置虚拟环境
     venv_path = PROJECT_ROOT / "venv"
@@ -346,8 +401,11 @@ def main():
         return False
     
     # 启动服务
+    gpt_sovits_process = start_gpt_sovits()
+    
     backend_process = start_backend()
     if not backend_process:
+        if gpt_sovits_process: gpt_sovits_process.terminate()
         return False
     
     time.sleep(2)  # 给后端一些启动时间
@@ -355,6 +413,7 @@ def main():
     frontend_process = start_frontend()
     if not frontend_process:
         backend_process.terminate()
+        if gpt_sovits_process: gpt_sovits_process.terminate()
         return False
     
     # 启动监控线程
@@ -366,6 +425,11 @@ def main():
     
     backend_thread.start()
     frontend_thread.start()
+
+    if gpt_sovits_process:
+        gpt_thread = threading.Thread(target=monitor_process, args=(gpt_sovits_process, "GPT-SoVITS"))
+        gpt_thread.daemon = True
+        gpt_thread.start()
     
     # 等待服务就绪
     wait_for_services()
@@ -376,6 +440,7 @@ def main():
     print_colored("="*50, Colors.GREEN)
     print_colored(f"📱 前端界面: http://localhost:{FRONTEND_PORT}", Colors.BLUE)
     print_colored(f"🔧 后端API:  http://localhost:{BACKEND_PORT}", Colors.BLUE)
+    print_colored(f"🔊 TTS服务:  http://localhost:{GPT_SOVITS_PORT}", Colors.BLUE)
     print_colored(f"📊 API文档:  http://localhost:{BACKEND_PORT}/docs", Colors.BLUE)
     print_colored("="*50, Colors.GREEN)
     print_colored("💡 按 Ctrl+C 停止所有服务", Colors.YELLOW)
@@ -392,15 +457,18 @@ def main():
         try:
             backend_process.terminate()
             frontend_process.terminate()
+            if gpt_sovits_process: gpt_sovits_process.terminate()
             
             # 等待进程结束
             backend_process.wait(timeout=5)
             frontend_process.wait(timeout=5)
+            if gpt_sovits_process: gpt_sovits_process.wait(timeout=5)
             
         except subprocess.TimeoutExpired:
             # 强制杀死进程
             backend_process.kill()
             frontend_process.kill()
+            if gpt_sovits_process: gpt_sovits_process.kill()
         
         print_colored("✓ 所有服务已停止", Colors.GREEN)
         return True

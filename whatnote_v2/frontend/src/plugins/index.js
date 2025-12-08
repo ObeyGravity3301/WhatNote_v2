@@ -17,6 +17,7 @@ let stickyNotePlugin = null;
 let ttsPlugin = null;
 let webAppPlugin = null;
 let pdfNarratorPlugin = null;
+let cyberIRCPlugin = null;
 let pluginsLoaded = false;
 
 // 异步加载所有插件
@@ -73,6 +74,16 @@ async function loadPlugins() {
   } catch (error) {
     console.warn('[插件系统] ⚠️ PPT 智能讲解员插件加载失败:', error.message);
     pdfNarratorPlugin = null;
+  }
+
+  // 加载 CyberIRC 插件
+  try {
+    const cyberIRCModule = await import('./core/cyber-irc-plugin');
+    cyberIRCPlugin = cyberIRCModule?.default || cyberIRCModule;
+    console.log('[插件系统] ✓ CyberIRC 插件加载成功');
+  } catch (error) {
+    console.warn('[插件系统] ⚠️ CyberIRC 插件加载失败:', error.message);
+    cyberIRCPlugin = null;
   }
   
   pluginsLoaded = true;
@@ -176,6 +187,21 @@ function registerLoadedPlugins() {
     console.warn('[插件系统] ⚠️ PPT 智能讲解员插件未加载，跳过注册');
     skippedCount++;
   }
+
+  // 注册 CyberIRC 插件
+  if (cyberIRCPlugin) {
+    try {
+      pluginRegistry.register(cyberIRCPlugin);
+      console.log('[插件系统] ✓ 已注册 CyberIRC 插件');
+      registeredCount++;
+    } catch (error) {
+      console.error('[插件系统] ✗ 注册 CyberIRC 插件失败:', error);
+      skippedCount++;
+    }
+  } else {
+    console.warn('[插件系统] ⚠️ CyberIRC 插件未加载，跳过注册');
+    skippedCount++;
+  }
   
   const allPlugins = pluginRegistry.getAll();
   const enabledPlugins = pluginRegistry.getEnabled();
@@ -194,4 +220,4 @@ function registerLoadedPlugins() {
 export { pluginRegistry };
 
 // 导出插件（供参考，可能是 null）
-export { wordCountPlugin, stickyNotePlugin, ttsPlugin, webAppPlugin, pdfNarratorPlugin };
+export { wordCountPlugin, stickyNotePlugin, ttsPlugin, webAppPlugin, pdfNarratorPlugin, cyberIRCPlugin };

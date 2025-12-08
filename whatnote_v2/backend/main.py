@@ -33,6 +33,8 @@ from storage.conversation_manager import ConversationManager
 from storage.api_config_manager import APIConfigManager
 from storage.theme_manager import ThemeManager
 from llm_service import LLMService
+from agents.manager import CyberChatManager
+from agents.schemas import AgentProfile
 from document_converter import document_converter
 
 app = FastAPI(title="WhatNote V2 API", version="2.0.0")
@@ -150,6 +152,9 @@ async def startup_event():
         import traceback
         error(traceback.format_exc())
 
+    # 启动聊天管理器
+    await chat_manager.start_loop()
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时停止文件监控服务"""
@@ -159,6 +164,9 @@ async def shutdown_event():
         info("文件监控服务已停止")
     except Exception as e:
         info(f"停止文件监控服务时出错: {e}")
+    
+    # 停止聊天管理器
+    await chat_manager.stop_loop()
     
     # 等待一下让线程完全停止
     import time
@@ -215,6 +223,56 @@ api_config_manager = APIConfigManager(DATA_DIR)
 llm_service = LLMService(api_config_manager, content_manager, conversation_manager)
 theme_manager = ThemeManager()
 
+# 初始化 CyberChat 管理器
+chat_manager = CyberChatManager(llm_service, DATA_DIR)
+
+# 1. 处理旧房间 (暂停)
+default_room = chat_manager.create_room("default_room", "CyberLounge 98 (Legacy)", "Chaos")
+default_room.active_agents = [] # 清空活跃成员以暂停自动对话
+chat_manager.save_room("default_room")
+
+# 2. 创建新房间 (Casual Lounge)
+casual_room = chat_manager.create_room("casual_lounge", "The Lounge", "Chill & Tech")
+
+# 初始化默认 Agents (使用优化后的 Prompt)
+try:
+    chat_manager.create_agent(AgentProfile(
+        id="hacker_neo",
+        name="HackerNeo",
+        personality="Cybersecurity expert. Knowledgeable but chill. Skeptical of big tech.",
+        style="Concise, tech-savvy, lowercase usually. Minimal jargon unless necessary.",
+        interests=["Security", "Tech", "Privacy"]
+    ))
+
+    chat_manager.create_agent(AgentProfile(
+        id="anime_chan",
+        name="AnimeChan",
+        personality="Design student who loves pop culture. Friendly and observant.",
+        style="Casual, warm, uses emojis sparsely. Sounds like a normal gen-z user.",
+        interests=["Art", "Anime", "Design", "Daily Life"]
+    ))
+
+    chat_manager.create_agent(AgentProfile(
+        id="tech_bro",
+        name="TechBro",
+        personality="Startup founder working on AI. Optimistic but grounded.",
+        style="Direct, professional but casual. Efficient communicator.",
+        interests=["AI", "Startups", "Productivity"]
+    ))
+    
+    # 3. 将 Agent 加入新房间
+    chat_manager.add_agent_to_room("hacker_neo", "casual_lounge")
+    chat_manager.add_agent_to_room("anime_chan", "casual_lounge")
+    chat_manager.add_agent_to_room("tech_bro", "casual_lounge")
+    
+    # 重放历史记录给 Agent
+    chat_manager.replay_history()
+    
+    info("[Main] CyberChat Agents initialized in casual_lounge.")
+except Exception as e:
+    error(f"[Main] Failed to initialize CyberChat agents: {e}")
+
+
 # 初始化WebSocket连接管理器
 manager = ConnectionManager()
 
@@ -245,6 +303,141 @@ async def root():
 async def health_check():
     """健康检查端点"""
     return {"status": "ok", "service": "WhatNote V2"}
+
+# --- CyberChat API ---
+
+@app.post("/api/chat/send")
+async def send_chat_message(request: Request):
+    """Send a message to the chat room."""
+    try:
+        data = await request.json()
+        content = data.get("content")
+        sender_name = data.get("sender_name", "User")
+        
+        if not content:
+            raise HTTPException(status_code=400, detail="Content is required")
+        
+        # For now, we assume a single 'user' identity
+        user_id = "user_main" 
+        room_id = data.get("room_id", "casual_lounge") # Default to new room
+        
+        msg = await chat_manager.post_message(room_id, user_id, sender_name, content)
+        return {"status": "success", "message": msg}
+    except Exception as e:
+        error(f"Error sending chat message: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chat/stream")
+async def stream_chat_messages(request: Request):
+    """SSE stream for chat messages."""
+    async def event_generator():
+        # Subscribe to the manager
+        queue = await chat_manager.subscribe()
+        try:
+            while True:
+                # Check for client disconnect
+                if await request.is_disconnected():
+                    break
+                    
+                # Wait for next message
+                msg = await queue.get()
+                # 必须使用 json.dumps(default=str) 处理 timestamp 等字段
+                yield f"data: {json.dumps(msg.dict(), default=str)}\n\n"
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            error(f"SSE Error: {e}")
+        finally:
+            chat_manager.unsubscribe(queue)
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.get("/api/chat/agents")
+async def get_chat_agents(room_id: Optional[str] = None):
+    """Get agents. If room_id provided, return agents in that room."""
+    if room_id:
+        room = chat_manager.get_room(room_id)
+        if not room:
+            return {"agents": []}
+        agents = []
+        for agent_id in room.active_agents:
+            agent = chat_manager.agents.get(agent_id)
+            if agent:
+                agents.append(agent.profile.dict())
+        return {"agents": agents}
+    else:
+        # Return all agents
+        return {"agents": [a.profile.dict() for a in chat_manager.agents.values()]}
+
+@app.post("/api/chat/agents/generate")
+async def generate_agent(request: Request):
+    """Generate an agent profile using LLM."""
+    data = await request.json()
+    description = data.get("description")
+    if not description:
+        raise HTTPException(status_code=400, detail="Description required")
+        
+    try:
+        profile = await chat_manager.generate_agent_profile(description)
+        # Create and save the agent immediately
+        chat_manager.create_agent(profile)
+        return {"status": "success", "agent": profile.dict()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chat/rooms")
+async def get_chat_rooms():
+    """List all chat rooms."""
+    return {"rooms": [
+        {
+            "id": r.id, 
+            "name": r.name, 
+            "topic": r.topic, 
+            "active_agents_count": len(r.active_agents)
+        } 
+        for r in chat_manager.rooms.values()
+    ]}
+
+@app.post("/api/chat/rooms")
+async def create_chat_room(request: Request):
+    """Create a new chat room."""
+    data = await request.json()
+    name = data.get("name")
+    topic = data.get("topic", "")
+    system_prompt = data.get("system_prompt", "")
+    
+    if not name:
+        raise HTTPException(status_code=400, detail="Room name required")
+        
+    room_id = f"room_{uuid.uuid4().hex[:8]}"
+    room = chat_manager.create_room(room_id, name, topic)
+    # Update extra fields
+    room.system_prompt = system_prompt
+    chat_manager.save_room(room_id)
+    
+    return {"status": "success", "room": room.dict()}
+
+@app.post("/api/chat/rooms/{room_id}/invite")
+async def invite_agent(room_id: str, request: Request):
+    """Invite an agent to a room."""
+    data = await request.json()
+    agent_id = data.get("agent_id")
+    
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="Agent ID required")
+        
+    if room_id not in chat_manager.rooms:
+        raise HTTPException(status_code=404, detail="Room not found")
+        
+    chat_manager.add_agent_to_room(agent_id, room_id)
+    return {"status": "success", "message": f"Added {agent_id} to {room_id}"}
+
+@app.get("/api/chat/history")
+async def get_chat_history(room_id: str = "casual_lounge"):
+    """Get recent chat history."""
+    room = chat_manager.get_room(room_id)
+    return {"history": room.history if room else []}
+
 
 @app.get("/api/tools/status")
 async def tools_status():
@@ -1867,23 +2060,30 @@ async def generate_batch_outline(
                     info(f"分为{len(groups)}组进行分析")
                     yield f"data: {json.dumps({'type': 'status', 'message': f'分为{len(groups)}组进行分析...'}, ensure_ascii=False)}\n\n"
                     
-                    # 对每组进行分析
-                    group_outlines = []
-                    for group in groups:
-                        group_num = group['group_number']
-                        page_start = group['page_start']
-                        page_end = group['page_end']
-                        status_message = f'正在分析第{group_num}组 (第{page_start}-{page_end}页)...'
-                        yield f"data: {json.dumps({'type': 'status', 'message': status_message}, ensure_ascii=False)}\n\n"
-                        
-                        # 构建组文本
-                        group_text = "\n\n".join([
-                            f"=== 第{p['page']}页 ===\n{p['content']}"
-                            for p in group['pages']
-                        ])
-                        
-                        # 构建子模型提示词
-                        sub_prompt = f"""你是一位专业的文档分析助手。请分析以下PDF文档片段的内容，并生成一个结构化的大纲。
+                    # 对每组进行分析 (并发处理)
+                    info(f"开始并发分析 {len(groups)} 个分组 (并发数: 3)")
+                    
+                    import asyncio
+                    queue = asyncio.Queue()
+                    semaphore = asyncio.Semaphore(3) # 并发限制
+                    
+                    async def process_group(group):
+                        async with semaphore:
+                            group_num = group['group_number']
+                            page_start = group['page_start']
+                            page_end = group['page_end']
+                            
+                            try:
+                                await queue.put(f"data: {json.dumps({'type': 'status', 'message': f'正在并发分析第{group_num}组 (第{page_start}-{page_end}页)...'}, ensure_ascii=False)}\n\n")
+                                
+                                # 构建组文本
+                                group_text = "\n\n".join([
+                                    f"=== 第{p['page']}页 ===\n{p['content']}"
+                                    for p in group['pages']
+                                ])
+                                
+                                # 构建子模型提示词
+                                sub_prompt = f"""你是一位专业的文档分析助手。请分析以下PDF文档片段的内容，并生成一个结构化的大纲。
 
 **文档信息**：
 - 文件名: {pdf_filename}
@@ -1918,82 +2118,119 @@ async def generate_batch_outline(
 ```
 
 请直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
+                                
+                                # 创建子对话记录
+                                sub_conv_id = f"outline-pdf-{window_id}-3{chr(64+group_num)}"  # 3A, 3B, 3C...
+                                sub_conversation = conversation_manager.get_conversation(board_id, sub_conv_id, page=None, limit=None)
+                                if not sub_conversation:
+                                    sub_conversation = conversation_manager.create_conversation(
+                                        board_id,
+                                        title=f"批量注释大纲-分组{group_num} - {pdf_filename}"
+                                    )
+                                    conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                                    old_file = conversations_dir / f"{sub_conversation['id']}.json"
+                                    new_file = conversations_dir / f"{sub_conv_id}.json"
+                                    if old_file.exists():
+                                        old_file.rename(new_file)
+                                    sub_conversation['id'] = sub_conv_id
+                                
+                                # 发送给子模型
+                                sub_user_message = {
+                                    "role": "user",
+                                    "content": sub_prompt,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "metadata": {
+                                        "action": "generate_batch_outline_sub",
+                                        "pdf_filename": pdf_filename,
+                                        "window_id": window_id,
+                                        "group_number": group_num,
+                                        "page_start": group['page_start'],
+                                        "page_end": group['page_end'],
+                                        "method": "split"
+                                    }
+                                }
+                                
+                                sub_messages = [sub_user_message]
+                                sub_accumulated_content = ""
+                                
+                                async for chunk in llm_service.chat_completion(sub_messages, stream=True):
+                                    if chunk:
+                                        sub_accumulated_content += chunk
+                                        # 将子模型的输出也流式传递给前端 (可选，如果前端不展示可以忽略，但为了保持兼容性还是传一下)
+                                        # 注意：并发时这可能会导致前端接收到的 group_content 混杂，但只要前端按 group 字段区分或者忽略就没问题
+                                        # 鉴于目前 narrator plugin 忽略此消息，我们只在 debug 级别发送，或者保留原样
+                                        # await queue.put(f"data: {json.dumps({'type': 'group_content', 'group': group_num, 'content': chunk}, ensure_ascii=False)}\n\n")
+                                        pass 
+                                
+                                # 保存子模型消息
+                                sub_assistant_message = {
+                                    "role": "assistant",
+                                    "content": sub_accumulated_content,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "metadata": {
+                                        "action": "generate_batch_outline_sub",
+                                        "group_number": group_num,
+                                        "method": "split"
+                                    }
+                                }
+                                
+                                conversation_manager.add_message(board_id, sub_conv_id, sub_user_message)
+                                conversation_manager.add_message(board_id, sub_conv_id, sub_assistant_message)
+                                
+                                # 解析子模型结果
+                                try:
+                                    content = sub_accumulated_content.strip()
+                                    if content.startswith('```'):
+                                        lines = content.split('\\n')
+                                        content = '\\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                                    
+                                    sub_outline_data = json.loads(content)
+                                    
+                                    # 发送完成信号
+                                    await queue.put(f"data: {json.dumps({'type': 'group_done', 'group': group_num, 'outline': sub_outline_data}, ensure_ascii=False)}\n\n")
+                                    
+                                    return {
+                                        'group_number': group_num,
+                                        'outline': sub_outline_data.get('outline', [])
+                                    }
+                                except json.JSONDecodeError as e:
+                                    error(f"解析分组{group_num}大纲JSON失败: {e}")
+                                    return {
+                                        'group_number': group_num,
+                                        'outline': [],
+                                        'error': str(e)
+                                    }
+                            except Exception as e:
+                                error(f"分组{group_num}分析出错: {e}")
+                                return {
+                                    'group_number': group_num,
+                                    'outline': [],
+                                    'error': str(e)
+                                }
+
+                    # 创建任务
+                    tasks = [asyncio.create_task(process_group(g)) for g in groups]
+                    
+                    # 等待任务并管理队列
+                    async def result_waiter():
+                        results = await asyncio.gather(*tasks)
+                        await queue.put(None) # 结束信号
+                        return results
                         
-                        # 创建子对话记录
-                        sub_conv_id = f"outline-pdf-{window_id}-3{chr(64+group_num)}"  # 3A, 3B, 3C...
-                        sub_conversation = conversation_manager.get_conversation(board_id, sub_conv_id, page=None, limit=None)
-                        if not sub_conversation:
-                            sub_conversation = conversation_manager.create_conversation(
-                                board_id,
-                                title=f"批量注释大纲-分组{group_num} - {pdf_filename}"
-                            )
-                            conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
-                            old_file = conversations_dir / f"{sub_conversation['id']}.json"
-                            new_file = conversations_dir / f"{sub_conv_id}.json"
-                            if old_file.exists():
-                                old_file.rename(new_file)
-                            sub_conversation['id'] = sub_conv_id
+                    waiter_task = asyncio.create_task(result_waiter())
+                    
+                    # 从队列中读取消息并yield
+                    while True:
+                        msg = await queue.get()
+                        if msg is None:
+                            break
+                        yield msg
                         
-                        # 发送给子模型
-                        sub_user_message = {
-                            "role": "user",
-                            "content": sub_prompt,
-                            "timestamp": datetime.now().isoformat(),
-                            "metadata": {
-                                "action": "generate_batch_outline_sub",
-                                "pdf_filename": pdf_filename,
-                                "window_id": window_id,
-                                "group_number": group_num,
-                                "page_start": group['page_start'],
-                                "page_end": group['page_end'],
-                                "method": "split"
-                            }
-                        }
-                        
-                        sub_messages = [sub_user_message]
-                        sub_accumulated_content = ""
-                        
-                        async for chunk in llm_service.chat_completion(sub_messages, stream=True):
-                            if chunk:
-                                sub_accumulated_content += chunk
-                                # 将子模型的输出也流式传递给前端
-                                yield f"data: {json.dumps({'type': 'group_content', 'group': group_num, 'content': chunk}, ensure_ascii=False)}\n\n"
-                        
-                        # 保存子模型消息
-                        sub_assistant_message = {
-                            "role": "assistant",
-                            "content": sub_accumulated_content,
-                            "timestamp": datetime.now().isoformat(),
-                            "metadata": {
-                                "action": "generate_batch_outline_sub",
-                                "group_number": group_num,
-                                "method": "split"
-                            }
-                        }
-                        
-                        conversation_manager.add_message(board_id, sub_conv_id, sub_user_message)
-                        conversation_manager.add_message(board_id, sub_conv_id, sub_assistant_message)
-                        
-                        # 解析子模型结果
-                        try:
-                            content = sub_accumulated_content.strip()
-                            if content.startswith('```'):
-                                lines = content.split('\n')
-                                content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
-                            
-                            sub_outline_data = json.loads(content)
-                            group_outlines.append({
-                                'group_number': group_num,
-                                'outline': sub_outline_data.get('outline', [])
-                            })
-                            yield f"data: {json.dumps({'type': 'group_done', 'group': group_num, 'outline': sub_outline_data}, ensure_ascii=False)}\n\n"
-                        except json.JSONDecodeError as e:
-                            error(f"解析分组{group_num}大纲JSON失败: {e}")
-                            group_outlines.append({
-                                'group_number': group_num,
-                                'outline': [],
-                                'error': str(e)
-                            })
+                    # 获取最终结果
+                    results = await waiter_task
+                    
+                    # 整理结果（按组号排序）
+                    group_outlines = sorted(results, key=lambda x: x['group_number'])
                     
                     # 汇总所有分组结果
                     yield f"data: {json.dumps({'type': 'status', 'message': '正在汇总所有分组结果...'}, ensure_ascii=False)}\n\n"
@@ -5299,6 +5536,7 @@ async def generate_narrator_script_section(
         section_index = request_body.get('section_index', 0)
         section_data = request_body.get('section_data')
         subdivision_data = request_body.get('subdivision_data')
+        previous_subdivision = request_body.get('previous_subdivision')  # 获取上一分段信息
         prompt_template = request_body.get('promptTemplate', '')
         
         info(f"开始为分段 {section_index} 批量生成讲稿")
@@ -5317,11 +5555,16 @@ async def generate_narrator_script_section(
         page_start = section_data['page_start']
         page_end = section_data['page_end']
         
+        # 获取目标生成范围（去重后）
+        target_range = request_body.get('target_range', {})
+        target_start = target_range.get('start', page_start)
+        target_end = target_range.get('end', page_end)
+        
         async def generate_stream():
             try:
-                yield f"data: {json.dumps({'type': 'status', 'message': f'正在为第 {page_start}-{page_end} 页生成讲稿...'}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'status', 'message': f'正在为第 {target_start}-{target_end} 页生成讲稿...'}, ensure_ascii=False)}\n\n"
                 
-                # 读取该分段所有页面的内容
+                # 读取该分段所有页面的内容（作为完整上下文，即使不在目标范围内）
                 pages_content = []
                 for page in range(page_start, page_end + 1):
                     page_data = content_manager.get_pdf_page_contents(board_id, window_id, page)
@@ -5346,19 +5589,32 @@ async def generate_narrator_script_section(
                 if subdivision_data:
                      section_description = subdivision_data.get('section_summary') or section_data.get('description') or ''
 
+                # 获取上一分段描述（用于上下文连贯）
+                previous_context_text = ""
+                if previous_subdivision:
+                    prev_summary = previous_subdivision.get('section_summary', '')
+                    prev_title = previous_subdivision.get('title', '')
+                    if prev_summary:
+                        previous_context_text = f"\n**前情提要（上一分段上下文）**：\n- 上一分段标题: {prev_title}\n- 上一分段主要内容: {prev_summary}\n- 提示：请承接上述内容，保持演讲的连贯性，避免生硬的开场。"
+
                 # 默认讲稿要求
                 default_req = "请为每一页撰写一份口语化的演讲稿。\n要求：\n1. 时间控制在 30-60 秒。\n2. 语言自然流畅，适合朗读。\n3. 不要念标题，而是解释核心观点。\n4. 使用第一人称。"
                 script_requirement = prompt_template if prompt_template else default_req
                 
-                prompt = f"""你是一位专业的演讲者。请根据以下PDF分段内容，为每一页撰写演讲稿。
+                prompt = f"""你是一位专业的演讲者。请根据以下PDF分段内容（包含上下文），为指定范围的页面撰写演讲稿。
 
-**分段信息**：
+**分段上下文信息**：
 - 分段标题: {section_data.get('title', '未命名')}
 - 分段描述: {section_description}
-- 页码范围: 第{page_start}页 - 第{page_end}页
+- 完整上下文页码: 第{page_start}页 - 第{page_end}页
+{previous_context_text}
 
 **分段完整内容**：
 {full_content}
+
+**任务目标**：
+请仅为 **第{target_start}页 到 第{target_end}页** 生成演讲稿。
+（第{page_start}页到第{target_start-1}页的内容仅供参考，不需要生成讲稿）
 
 **讲稿要求**：
 {script_requirement}
@@ -5368,17 +5624,17 @@ async def generate_narrator_script_section(
 {{
   "scripts": [
     {{
-      "page": {page_start},
-      "script": "第{page_start}页的演讲稿内容..."
+      "page": {target_start},
+      "script": "第{target_start}页的演讲稿内容..."
     }},
     {{
-      "page": {page_start + 1},
-      "script": "第{page_start + 1}页的演讲稿内容..."
+      "page": {target_start + 1},
+      "script": "第{target_start + 1}页的演讲稿内容..."
     }}
   ]
 }}
 ```
-请确保scripts数组包含从{page_start}到{page_end}的所有页面。
+请确保scripts数组包含从 **{target_start}** 到 **{target_end}** 的所有页面。
 直接输出JSON，不要添加任何额外的说明文字。"""
                 
                 messages = [{
@@ -5453,5 +5709,284 @@ async def save_narrator_script(board_id: str, window_id: str, page: int, request
         success = content_manager.save_narrator_script(board_id, window_id, page, content)
         return {"success": success}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/narrator/audio/{page}")
+async def get_narrator_audio(
+    board_id: str,
+    window_id: str,
+    page: int
+):
+    """获取PDF指定页面的语音文件（仅获取，不生成）"""
+    try:
+        existing_audio_path = content_manager.get_narrator_audio_path(board_id, window_id, page)
+        if existing_audio_path:
+            return FileResponse(existing_audio_path, media_type="audio/wav")
+        raise HTTPException(status_code=404, detail="语音文件不存在")
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取语音失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取语音失败: {str(e)}")
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/narrator/audio/{page}")
+async def generate_narrator_audio(
+    board_id: str,
+    window_id: str,
+    page: int,
+    request: Request
+):
+    """生成PDF指定页面的语音（强制重新生成）"""
+    try:
+        # 1. 获取参数
+        request_body = await request.json()
+        text = request_body.get('text', '')
+        prompt_audio_path = request_body.get('prompt_audio_path', '') # 前端暂未传，预留
+        text_language = request_body.get('text_language', 'zh')
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="缺少文本内容")
+            
+        # 3. 准备 TTS 请求
+        ref_audio_path = prompt_audio_path
+        prompt_text = request_body.get('prompt_text', '')
+        prompt_lang = request_body.get('prompt_lang', 'zh')
+        
+        # 默认参考音频路径
+        ref_dir = DATA_DIR / "ref_audio"
+        default_ref_path = ref_dir / "default.wav"
+        
+        if not ref_audio_path and default_ref_path.exists():
+            ref_audio_path = str(default_ref_path.absolute())
+            meta_path = ref_dir / "default.json"
+            if meta_path.exists():
+                try:
+                    with open(meta_path, 'r') as f:
+                        meta = json.load(f)
+                        if not prompt_text:
+                            prompt_text = meta.get('text', '')
+                        if not prompt_lang:
+                            prompt_lang = meta.get('language', 'zh')
+                except:
+                    pass
+        
+        # 如果还是没有，尝试使用 GPT-SoVITS 目录下的示例音频作为最后的 Fallback
+        if not ref_audio_path:
+             # 这是一个 hack，让用户第一次能跑通
+             # 如果没有 default.wav，我们报错提示用户上传
+             raise HTTPException(status_code=400, detail="未设置参考音频，请在设置中上传一段5-10秒的参考音频")
+
+        # 4. 调用 TTS 服务
+        payload = {
+            "text": text,
+            "text_language": text_language,
+            "refer_wav_path": ref_audio_path,
+            "prompt_text": prompt_text,
+            "prompt_language": prompt_lang,
+            "cut_punc": "，。！"
+        }
+        
+        info(f"调用TTS: {GPT_SOVITS_URL}, text len: {len(text)}")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{GPT_SOVITS_URL}/", json=payload) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    error(f"TTS API Error: {error_text}")
+                    raise HTTPException(status_code=response.status, detail=f"TTS服务错误: {error_text}")
+                
+                audio_content = await response.read()
+                
+        # 5. 保存并返回
+        saved_path = content_manager.save_narrator_audio(board_id, window_id, page, audio_content)
+        
+        if saved_path:
+            return FileResponse(saved_path, media_type="audio/wav")
+        else:
+            raise HTTPException(status_code=500, detail="保存音频失败")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"生成语音失败: {e}")
+        raise HTTPException(status_code=500, detail=f"生成语音失败: {str(e)}")
+
+@app.get("/api/tts/reference")
+async def get_tts_reference():
+    """获取当前默认参考音频信息"""
+    try:
+        ref_dir = DATA_DIR / "ref_audio"
+        meta_path = ref_dir / "default.json"
+        wav_path = ref_dir / "default.wav"
+        
+        if not meta_path.exists() or not wav_path.exists():
+            return {"exists": False}
+            
+        with open(meta_path, 'r') as f:
+            meta = json.load(f)
+            
+        return {
+            "exists": True,
+            "text": meta.get("text", ""),
+            "language": meta.get("language", "zh")
+        }
+    except Exception as e:
+        error(f"获取参考音频信息失败: {e}")
+        return {"exists": False, "error": str(e)}
+
+@app.post("/api/tts/reference")
+async def upload_tts_reference(
+    file: UploadFile = File(...),
+    text: str = Form(...),
+    language: str = Form("zh")
+):
+    """上传默认参考音频"""
+    try:
+        ref_dir = DATA_DIR / "ref_audio"
+        ref_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_path = ref_dir / "default.wav"
+        meta_path = ref_dir / "default.json"
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # 即使text为空，也保存下来（或者合并旧的text？不，前端会负责传正确的）
+        # 如果text是空的，我们尝试读取旧的meta里的text，避免覆盖成空（如果是为了修正的话）
+        # 但根据前端逻辑，上传时text可能就是空的。
+        # 我们这里允许保存空text，生成时如果为空会报错。
+        
+        meta_data = {"text": text, "language": language}
+        # 如果传入的text是空的，尝试保留旧的text
+        if not text and meta_path.exists():
+            try:
+                with open(meta_path, 'r') as f:
+                    old_meta = json.load(f)
+                    if old_meta.get('text'):
+                        meta_data['text'] = old_meta['text']
+            except:
+                pass
+
+        with open(meta_path, "w") as f:
+            json.dump(meta_data, f)
+            
+        return {"success": True, "message": "参考音频已更新"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
+
+@app.get("/api/tts/status")
+async def get_tts_status():
+    """检查TTS服务状态"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            # 尝试调用 control 接口或直接 ping
+            async with session.get(f"{GPT_SOVITS_URL}/control") as response:
+                # 只要能连通就行，哪怕返回 405 Method Not Allowed
+                return {"status": "online", "version": "v2"}
+    except Exception as e:
+        return {"status": "offline", "error": str(e)}
+
+
+@app.get("/api/tts/models")
+async def get_tts_models():
+    """获取可用的GPT和SoVITS模型列表"""
+    try:
+        # 详细的路径调试信息
+        cwd = Path.cwd().resolve()
+        info(f"当前工作目录: {cwd}")
+        
+        # 尝试定位 GPT-SoVITS 目录
+        # 策略：向上一级一级查找，直到找到 GPT-SoVITS
+        candidate_dir = cwd
+        base_dir = None
+        
+        # 向上查找3层
+        for _ in range(4):
+            check_path = candidate_dir / "GPT-SoVITS"
+            # info(f"尝试查找: {check_path}") # 调试用
+            if check_path.exists() and (check_path / "GPT_weights").exists():
+                base_dir = check_path
+                break
+            
+            # 也许 GPT-SoVITS 就在当前目录的上一级 (即 candidate_dir 是兄弟目录)
+            sibling_path = candidate_dir.parent / "GPT-SoVITS"
+            if sibling_path.exists() and (sibling_path / "GPT_weights").exists():
+                base_dir = sibling_path
+                break
+                
+            candidate_dir = candidate_dir.parent
+            
+        if not base_dir:
+            # 最后的硬编码尝试
+            hardcoded = Path("/home/obeygravity/Projects/GPT-SoVITS")
+            if hardcoded.exists():
+                base_dir = hardcoded
+        
+        if not base_dir:
+            error(f"未找到 GPT-SoVITS 目录, start_from={cwd}")
+            return {"gpt_weights": [], "sovits_weights": [], "error": f"未找到 GPT-SoVITS 目录 (cwd: {cwd})"}
+
+        info(f"定位到 GPT-SoVITS 目录: {base_dir}")
+
+        gpt_weights = []
+        gpt_dir = base_dir / "GPT_weights"
+        if gpt_dir.exists():
+            gpt_weights = [f.name for f in gpt_dir.glob("*.ckpt")]
+            
+        sovits_weights = []
+        sovits_dir = base_dir / "SoVITS_weights"
+        if sovits_dir.exists():
+            sovits_weights = [f.name for f in sovits_dir.glob("*.pth")]
+            
+        info(f"找到 GPT模型: {len(gpt_weights)}个, SoVITS模型: {len(sovits_weights)}个")
+        return {
+            "gpt_weights": sorted(gpt_weights),
+            "sovits_weights": sorted(sovits_weights)
+        }
+    except Exception as e:
+        error(f"获取模型列表失败: {e}")
+        return {"gpt_weights": [], "sovits_weights": [], "error": str(e)}
+
+@app.post("/api/tts/set_model")
+async def set_tts_model(request: Request):
+    """切换GPT-SoVITS模型"""
+    try:
+        data = await request.json()
+        gpt_name = data.get("gpt_model")
+        sovits_name = data.get("sovits_model")
+        
+        # 重新定位 base_dir (同上)
+        possible_paths = [
+            Path("../../GPT-SoVITS"), 
+            Path("../GPT-SoVITS"),
+            Path("GPT-SoVITS"),
+        ]
+        base_dir = None
+        for p in possible_paths:
+            if p.exists() and (p / "GPT_weights").exists():
+                base_dir = p.resolve() # 获取绝对路径
+                break
+        
+        if not base_dir:
+            raise HTTPException(status_code=500, detail="未找到 GPT-SoVITS 目录")
+
+        payload = {}
+        if gpt_name:
+            payload["gpt_model_path"] = str(base_dir / "GPT_weights" / gpt_name)
+        if sovits_name:
+            payload["sovits_model_path"] = str(base_dir / "SoVITS_weights" / sovits_name)
+            
+        info(f"切换模型: {payload}")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{GPT_SOVITS_URL}/set_model", json=payload) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise HTTPException(status_code=resp.status, detail=f"切换失败: {text}")
+                return await resp.json()
+                
+    except Exception as e:
+        error(f"切换模型出错: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

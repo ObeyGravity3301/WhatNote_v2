@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import './BoardCanvas.css';
 import ReactMarkdown from 'react-markdown';
@@ -9812,26 +9812,9 @@ function BoardCanvas({
     }
     
     // 更新z-index，让当前窗口置顶
-    bringWindowToFront(windowId);
-  };
-  
-  // 将窗口移到最上层（更新z-index）
-  const bringWindowToFront = (windowId) => {
-    if (!windowId) return;
-    
     setWindowZIndexes(prev => {
-      const currentZIndex = prev[windowId] || 100;
-      const maxZIndex = maxZIndexRef.current;
-      
-      // 如果窗口已经是最高的，不需要更新
-      if (currentZIndex >= maxZIndex) {
-        return prev;
-      }
-      
       const newZIndex = maxZIndexRef.current + 1;
       maxZIndexRef.current = newZIndex;
-      
-      console.log(`窗口 ${windowId} z-index 更新: ${currentZIndex} -> ${newZIndex}`);
       
       return {
         ...prev,
@@ -9839,14 +9822,6 @@ function BoardCanvas({
       };
     });
   };
-  
-  // 监听 focusedWindowId 变化，自动将窗口移到最上层
-  // 这确保了从任务栏点击、双击桌面图标等任何方式聚焦窗口时，都会更新 z-index
-  useEffect(() => {
-    if (focusedWindowId) {
-      bringWindowToFront(focusedWindowId);
-    }
-  }, [focusedWindowId]);
   
   // 快捷键：上下方向键切换窗口
   useEffect(() => {
@@ -11925,6 +11900,32 @@ function BoardCanvas({
 
   // 右键菜单组件
   const ContextMenu = ({ visible, x, y, type, onAction }) => {
+    const menuRef = useRef(null);
+
+    useLayoutEffect(() => {
+      if (visible && menuRef.current) {
+        const menu = menuRef.current;
+        const rect = menu.getBoundingClientRect();
+        const { innerWidth, innerHeight } = window;
+
+        if (rect.bottom > innerHeight) {
+          menu.style.top = 'auto';
+          menu.style.bottom = `${innerHeight - y}px`;
+        } else {
+          menu.style.bottom = 'auto';
+          menu.style.top = `${y}px`;
+        }
+
+        if (rect.right > innerWidth) {
+          menu.style.left = 'auto';
+          menu.style.right = `${innerWidth - x}px`;
+        } else {
+          menu.style.right = 'auto';
+          menu.style.left = `${x}px`;
+        }
+      }
+    }, [visible, x, y]);
+
     if (!visible) return null;
 
     const desktopMenuItems = [
@@ -11989,6 +11990,7 @@ function BoardCanvas({
 
     return (
       <div 
+        ref={menuRef}
         className="context-menu" 
         style={{ 
           left: x, 
@@ -12176,8 +12178,10 @@ function BoardCanvas({
               }}
               onMouseDown={(e) => {
                 console.log(`窗口 ${window.id} 当前位置:`, window.position);
-                // 点击窗口任何位置都设置焦点并将其移到最上层
-                handleWindowFocusLocal(window.id);
+                // 点击窗口时设置焦点
+                if (e.target === e.currentTarget) {
+                  handleWindowFocusLocal(window.id);
+                }
               }}
             >
             <div 

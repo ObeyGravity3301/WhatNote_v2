@@ -706,5 +706,421 @@
     "deleted_at": "2025-11-29T19:45:52.925759",
     "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1761029323890/board-1761029334485/files/pages",
     "is_folder": true
+  },
+  {
+    "id": "trash_1764518822413",
+    "original_name": "新建项目.md",
+    "trash_filename": "1764518822413_新建项目.md",
+    "window_data": {
+      "type": "text",
+      "title": "新建项目",
+      "position": {
+        "x": 145,
+        "y": 213
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1764518817239",
+      "created_at": "2025-12-01T00:06:57.239823",
+      "updated_at": "2025-12-01T00:06:59.539319",
+      "hidden": true,
+      "x": 145,
+      "y": 213,
+      "width": 800,
+      "height": 600,
+      "file_path": "files/新建项目.md"
+    },
+    "board_id": "board-1764518486093",
+    "deleted_at": "2025-12-01T00:07:02.414568",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764518475822/board-1764518486093/files",
+    "file_size": 0
+  },
+  {
+    "id": "trash_1764518822416",
+    "original_name": "新建项目.md.json",
+    "trash_filename": "1764518822416_新建项目.md.json",
+    "window_data": {
+      "type": "text",
+      "title": "新建项目",
+      "position": {
+        "x": 145,
+        "y": 213
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1764518817239",
+      "created_at": "2025-12-01T00:06:57.239823",
+      "updated_at": "2025-12-01T00:06:59.539319",
+      "hidden": true,
+      "x": 145,
+      "y": 213,
+      "width": 800,
+      "height": 600,
+      "file_path": "files/新建项目.md",
+      "is_json_config": true
+    },
+    "board_id": "board-1764518486093",
+    "deleted_at": "2025-12-01T00:07:02.416880",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764518475822/board-1764518486093/files",
+    "file_size": 387
+  },
+  {
+    "id": "trash_1764570845951",
+    "original_name": "Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which.pdf",
+    "trash_filename": "1764570845951_Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which.pdf",
+    "window_data": {
+      "type": "pdf",
+      "title": "Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which.pdf",
+      "position": {
+        "x": 7,
+        "y": 7
+      },
+      "size": {
+        "width": 1358,
+        "height": 924
+      },
+      "id": "window_1762478744707",
+      "created_at": "2025-11-07T09:25:44.707260",
+      "updated_at": "2025-12-01T14:33:59.842292",
+      "file_path": "files/Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which.pdf",
+      "hidden": true,
+      "x": 7,
+      "y": 7,
+      "width": 1358,
+      "height": 924
+    },
+    "board_id": "board-1762478738531",
+    "deleted_at": "2025-12-01T14:34:05.955163",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762339682254/board-1762478738531/files",
+    "file_size": 1541598
+  },
+  {
+    "id": "trash_1764570845956",
+    "original_name": "Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which.pdf.json",
+    "trash_filename": "1764570845956_Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which.pdf.json",
+    "window_data": {
+      "type": "pdf",
+      "title": "Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which.pdf",
+      "position": {
+        "x": 7,
+        "y": 7
+      },
+      "size": {
+        "width": 1358,
+        "height": 924
+      },
+      "id": "window_1762478744707",
+      "created_at": "2025-11-07T09:25:44.707260",
+      "updated_at": "2025-12-01T14:33:59.842292",
+      "file_path": "files/Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which.pdf",
+      "hidden": true,
+      "x": 7,
+      "y": 7,
+      "width": 1358,
+      "height": 924,
+      "is_json_config": true
+    },
+    "board_id": "board-1762478738531",
+    "deleted_at": "2025-12-01T14:34:05.957521",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762339682254/board-1762478738531/files",
+    "file_size": 487
+  },
+  {
+    "id": "trash_1764570845959_pages",
+    "original_name": "Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which_pages",
+    "trash_filename": "1764570845959_Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which_pages",
+    "type": "pdf_pages_folder",
+    "pdf_name": "Example1-SOMERVILLE-1981-A Mutant of Arabidopsis thaliana Which",
+    "deleted_at": "2025-12-01T14:34:05.959832",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762339682254/board-1762478738531/files/pages",
+    "is_folder": true
+  },
+  {
+    "id": "trash_1764664355235",
+    "original_name": "Virology Chapter 3studentver(1).pdf",
+    "trash_filename": "1764664355235_Virology Chapter 3studentver(1).pdf",
+    "window_data": {
+      "type": "pdf",
+      "title": "Virology Chapter 3studentver(1).pdf",
+      "position": {
+        "x": 421,
+        "y": 217
+      },
+      "size": {
+        "width": 1216,
+        "height": 735
+      },
+      "id": "window_1764663919931",
+      "created_at": "2025-12-02T16:25:19.932449",
+      "updated_at": "2025-12-02T16:32:31.444210",
+      "file_path": "files/Virology Chapter 3studentver(1).pdf",
+      "x": 421,
+      "y": 217,
+      "width": 1216,
+      "height": 735,
+      "hidden": true
+    },
+    "board_id": "board-1764233272071",
+    "deleted_at": "2025-12-02T16:32:35.237245",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764233264526/board-1764233272071/files",
+    "file_size": 1356058
+  },
+  {
+    "id": "trash_1764664355239",
+    "original_name": "Virology Chapter 3studentver(1).pdf.json",
+    "trash_filename": "1764664355239_Virology Chapter 3studentver(1).pdf.json",
+    "window_data": {
+      "type": "pdf",
+      "title": "Virology Chapter 3studentver(1).pdf",
+      "position": {
+        "x": 421,
+        "y": 217
+      },
+      "size": {
+        "width": 1216,
+        "height": 735
+      },
+      "id": "window_1764663919931",
+      "created_at": "2025-12-02T16:25:19.932449",
+      "updated_at": "2025-12-02T16:32:31.444210",
+      "file_path": "files/Virology Chapter 3studentver(1).pdf",
+      "x": 421,
+      "y": 217,
+      "width": 1216,
+      "height": 735,
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1764233272071",
+    "deleted_at": "2025-12-02T16:32:35.241068",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764233264526/board-1764233272071/files",
+    "file_size": 431
+  },
+  {
+    "id": "trash_1764664355243_pages",
+    "original_name": "Virology Chapter 3studentver(1)_pages",
+    "trash_filename": "1764664355243_Virology Chapter 3studentver(1)_pages",
+    "type": "pdf_pages_folder",
+    "pdf_name": "Virology Chapter 3studentver(1)",
+    "deleted_at": "2025-12-02T16:32:35.244575",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764233264526/board-1764233272071/files/pages",
+    "is_folder": true
+  },
+  {
+    "id": "trash_1764664376095",
+    "original_name": "Tutorial3-2026-students.pdf",
+    "trash_filename": "1764664376095_Tutorial3-2026-students.pdf",
+    "window_data": {
+      "type": "pdf",
+      "title": "Tutorial3-2026-students.pdf",
+      "position": {
+        "x": 262,
+        "y": 291
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1764664357248",
+      "created_at": "2025-12-02T16:32:37.248189",
+      "updated_at": "2025-12-02T16:32:52.666852",
+      "file_path": "files/Tutorial3-2026-students.pdf",
+      "hidden": true,
+      "x": 262,
+      "y": 291,
+      "width": 800,
+      "height": 600
+    },
+    "board_id": "board-1764233272071",
+    "deleted_at": "2025-12-02T16:32:56.096368",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764233264526/board-1764233272071/files",
+    "file_size": 145066
+  },
+  {
+    "id": "trash_1764664376127",
+    "original_name": "Tutorial3-2026-students.pdf.json",
+    "trash_filename": "1764664376127_Tutorial3-2026-students.pdf.json",
+    "window_data": {
+      "type": "pdf",
+      "title": "Tutorial3-2026-students.pdf",
+      "position": {
+        "x": 262,
+        "y": 291
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1764664357248",
+      "created_at": "2025-12-02T16:32:37.248189",
+      "updated_at": "2025-12-02T16:32:52.666852",
+      "file_path": "files/Tutorial3-2026-students.pdf",
+      "hidden": true,
+      "x": 262,
+      "y": 291,
+      "width": 800,
+      "height": 600,
+      "is_json_config": true
+    },
+    "board_id": "board-1764233272071",
+    "deleted_at": "2025-12-02T16:32:56.130677",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764233264526/board-1764233272071/files",
+    "file_size": 413
+  },
+  {
+    "id": "trash_1764664376133_pages",
+    "original_name": "Tutorial3-2026-students_pages",
+    "trash_filename": "1764664376133_Tutorial3-2026-students_pages",
+    "type": "pdf_pages_folder",
+    "pdf_name": "Tutorial3-2026-students",
+    "deleted_at": "2025-12-02T16:32:56.134129",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1764233264526/board-1764233272071/files/pages",
+    "is_folder": true
+  },
+  {
+    "id": "trash_1765191483491",
+    "original_name": "Tutorial1-student-2026.pdf",
+    "trash_filename": "1765191483491_Tutorial1-student-2026.pdf",
+    "window_data": {
+      "type": "pdf",
+      "title": "Tutorial1-student-2026.pdf",
+      "position": {
+        "x": 153,
+        "y": 82
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1765191386762",
+      "created_at": "2025-12-08T18:56:26.762989",
+      "updated_at": "2025-12-08T18:57:58.839188",
+      "file_path": "files/Tutorial1-student-2026.pdf",
+      "x": 153,
+      "y": 82,
+      "hidden": true,
+      "width": 800,
+      "height": 600
+    },
+    "board_id": "board-1765191381657",
+    "deleted_at": "2025-12-08T18:58:03.495599",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762857110448/board-1765191381657/files",
+    "file_size": 1818699
+  },
+  {
+    "id": "trash_1765191483498",
+    "original_name": "Tutorial1-student-2026.pdf.json",
+    "trash_filename": "1765191483498_Tutorial1-student-2026.pdf.json",
+    "window_data": {
+      "type": "pdf",
+      "title": "Tutorial1-student-2026.pdf",
+      "position": {
+        "x": 153,
+        "y": 82
+      },
+      "size": {
+        "width": 800,
+        "height": 600
+      },
+      "id": "window_1765191386762",
+      "created_at": "2025-12-08T18:56:26.762989",
+      "updated_at": "2025-12-08T18:57:58.839188",
+      "file_path": "files/Tutorial1-student-2026.pdf",
+      "x": 153,
+      "y": 82,
+      "hidden": true,
+      "width": 800,
+      "height": 600,
+      "is_json_config": true
+    },
+    "board_id": "board-1765191381657",
+    "deleted_at": "2025-12-08T18:58:03.498720",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762857110448/board-1765191381657/files",
+    "file_size": 409
+  },
+  {
+    "id": "trash_1765191483500_pages",
+    "original_name": "Tutorial1-student-2026_pages",
+    "trash_filename": "1765191483500_Tutorial1-student-2026_pages",
+    "type": "pdf_pages_folder",
+    "pdf_name": "Tutorial1-student-2026",
+    "deleted_at": "2025-12-08T18:58:03.501106",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762857110448/board-1765191381657/files/pages",
+    "is_folder": true
+  },
+  {
+    "id": "trash_1765194055054",
+    "original_name": "Tutorial1-student-2026.pdf",
+    "trash_filename": "1765194055054_Tutorial1-student-2026.pdf",
+    "window_data": {
+      "type": "pdf",
+      "title": "Tutorial1-student-2026.pdf",
+      "position": {
+        "x": 45,
+        "y": 26
+      },
+      "size": {
+        "width": 1788,
+        "height": 885
+      },
+      "id": "window_1765191485022",
+      "created_at": "2025-12-08T18:58:05.022894",
+      "updated_at": "2025-12-08T19:40:50.299702",
+      "file_path": "files/Tutorial1-student-2026.pdf",
+      "width": 1788,
+      "height": 885,
+      "x": 45,
+      "y": 26,
+      "hidden": true
+    },
+    "board_id": "board-1765191381657",
+    "deleted_at": "2025-12-08T19:40:55.084000",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762857110448/board-1765191381657/files",
+    "file_size": 1818699
+  },
+  {
+    "id": "trash_1765194055089",
+    "original_name": "Tutorial1-student-2026.pdf.json",
+    "trash_filename": "1765194055089_Tutorial1-student-2026.pdf.json",
+    "window_data": {
+      "type": "pdf",
+      "title": "Tutorial1-student-2026.pdf",
+      "position": {
+        "x": 45,
+        "y": 26
+      },
+      "size": {
+        "width": 1788,
+        "height": 885
+      },
+      "id": "window_1765191485022",
+      "created_at": "2025-12-08T18:58:05.022894",
+      "updated_at": "2025-12-08T19:40:50.299702",
+      "file_path": "files/Tutorial1-student-2026.pdf",
+      "width": 1788,
+      "height": 885,
+      "x": 45,
+      "y": 26,
+      "hidden": true,
+      "is_json_config": true
+    },
+    "board_id": "board-1765191381657",
+    "deleted_at": "2025-12-08T19:40:55.090384",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762857110448/board-1765191381657/files",
+    "file_size": 409
+  },
+  {
+    "id": "trash_1765194055092_pages",
+    "original_name": "Tutorial1-student-2026_pages",
+    "trash_filename": "1765194055092_Tutorial1-student-2026_pages",
+    "type": "pdf_pages_folder",
+    "pdf_name": "Tutorial1-student-2026",
+    "deleted_at": "2025-12-08T19:40:55.094045",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1762857110448/board-1765191381657/files/pages",
+    "is_folder": true
   }
 ]

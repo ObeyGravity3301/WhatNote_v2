@@ -1375,9 +1375,11 @@ function ChatWindow({
         { value: 'gemini-pro-vision', label: 'Gemini Pro Vision (多模态)' }
       ],
       'qwen': [
-        { value: 'qwen-vl-plus', label: '通义千问-VL-Plus (多模态推荐)' },
-        { value: 'qwen-long', label: '通义千问-Long (长文本+多模态)' },
-        { value: 'qwen-vl-max', label: '通义千问-VL-Max (多模态最强)' }
+        { value: 'qwen-vl-plus', label: '通义千问-VL-Plus (支持图片识别)' },
+        { value: 'qwen-vl-max', label: '通义千问-VL-Max (支持图片识别-最强)' },
+        { value: 'qwen-plus', label: '通义千问-Plus (纯文本)' },
+        { value: 'qwen-turbo', label: '通义千问-Turbo (纯文本-快速)' },
+        { value: 'qwen-long', label: '通义千问-Long (长文本)' }
       ]
     };
     return options[provider] || [];

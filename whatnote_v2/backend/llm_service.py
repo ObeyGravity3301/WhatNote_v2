@@ -14,6 +14,7 @@ from logger import info, error
 import pypdf
 from tools import tool_registry
 from tools.todo_tools import register_todo_tools, get_todo_status_from_context
+from tools.vision_tools import register_vision_tools
 
 
 class LLMService:
@@ -26,6 +27,8 @@ class LLMService:
         
         # 注册待办工具（简化版，不需要状态管理器）
         register_todo_tools(tool_registry)
+        # 注册视觉工具
+        register_vision_tools(tool_registry, api_config_manager)
     
     def get_config(self) -> Dict:
         """获取当前API配置，包含provider信息"""
@@ -70,12 +73,13 @@ class LLMService:
                 'text': f"[PDF文件: {file_info.get('name', 'unknown')} - 提取失败: {str(e)}]"
             })
     
-    def _process_message_files(self, message: Dict) -> Dict:
+    def _process_message_files(self, message: Dict, current_model: str = "") -> Dict:
         """
         处理消息中的文件，将文件内容转换为LLM可理解的格式
         
         Args:
             message: 包含files字段的消息
+            current_model: 当前使用的模型名称（用于判断是否支持视觉）
             
         Returns:
             Dict: 处理后的消息，包含文件内容
@@ -83,6 +87,10 @@ class LLMService:
         if 'files' not in message or not message['files']:
             info("消息中没有文件信息，直接返回原消息")
             return message
+        
+        # 判断当前模型是否支持视觉
+        is_vl_model = 'vl' in current_model.lower() or 'gpt-4-vision' in current_model.lower() or 'gemini' in current_model.lower() or 'claude-3' in current_model.lower()
+        info(f"当前模型: {current_model}, 支持视觉: {is_vl_model}")
         
         info(f"开始处理文件: {len(message['files'])} 个文件")
         
@@ -100,13 +108,43 @@ class LLMService:
         
         for file_info in message['files']:
             try:
-                file_path = Path(file_info.get('path', ''))
+                raw_path = file_info.get('path', '')
+                file_path = Path(raw_path)
+                
+                # 路径检查和修正
+                if not file_path.exists():
+                    # 尝试相对于当前工作目录的 data 目录
+                    possible_path = Path("data") / raw_path
+                    if possible_path.exists():
+                        file_path = possible_path
+                        info(f"使用修正后的路径: {file_path}")
+                    else:
+                        # 尝试相对于 backend 目录的上级
+                        possible_path_2 = Path("../data") / raw_path
+                        if possible_path_2.exists():
+                            file_path = possible_path_2
+                            info(f"使用修正后的路径(2): {file_path}")
+
                 info(f"处理文件: {file_info.get('name', 'unknown')} - 路径: {file_path} - 类型: {file_info.get('type', 'unknown')}")
                 
                 if not file_path.exists():
-                    info(f"文件不存在: {file_path}")
+                    info(f"❌ 文件不存在: {file_path} (原始路径: {raw_path})")
+                    content_array.append({
+                        'type': 'text',
+                        'text': f"[系统提示: 文件 {file_info.get('name')} 未找到，无法发送图片内容]"
+                    })
                     continue
                 
+                # 针对非视觉模型的特殊处理
+                if file_info.get('type') == 'images' and not is_vl_model:
+                    # 如果模型不支持视觉，只发送文件路径和提示
+                    info(f"⚠️ 模型 {current_model} 不支持视觉，发送图片路径供 analyze_image 工具使用")
+                    content_array.append({
+                        'type': 'text',
+                        'text': f"\n[图片文件: {file_info.get('name')}]\n路径: {file_path}\n(提示: 当前模型无法直接查看图片，请使用 analyze_image 工具进行分析)"
+                    })
+                    continue
+
                 # 读取文件内容
                 with open(file_path, 'rb') as f:
                     file_data = f.read()
@@ -358,7 +396,7 @@ class LLMService:
                 else:
                     info("消息中没有文件信息")
                 
-                processed_message = self._process_message_files(message)
+                processed_message = self._process_message_files(message, current_model=provider_config.get('model', ''))
                 
                 # 检查处理后的消息是否包含文件内容
                 if isinstance(processed_message.get('content'), list):
@@ -460,9 +498,41 @@ class LLMService:
         for msg in messages:
             if msg['role'] == 'system':
                 continue  # Claude 3.5的system消息需要特殊处理
+            
+            content = msg['content']
+            # 处理多模态内容格式转换 (OpenAI -> Anthropic)
+            if isinstance(content, list):
+                new_content = []
+                for item in content:
+                    if item.get('type') == 'image_url':
+                        # 转换图片格式
+                        try:
+                            data_url = item['image_url']['url']
+                            if data_url.startswith('data:'):
+                                header, base64_data = data_url.split(',', 1)
+                                mime_type = header.split(';')[0].split(':')[1]
+                                new_content.append({
+                                    'type': 'image',
+                                    'source': {
+                                        'type': 'base64',
+                                        'media_type': mime_type,
+                                        'data': base64_data
+                                    }
+                                })
+                                info(f"已将OpenAI图片格式转换为Anthropic格式 ({mime_type})")
+                            else:
+                                info(f"跳过非Data URI格式的图片URL: {data_url[:30]}...")
+                        except Exception as e:
+                            error(f"转换Anthropic图片格式失败: {e}")
+                            # 失败时保留原样，虽然可能会报错
+                            new_content.append(item)
+                    else:
+                        new_content.append(item)
+                content = new_content
+                
             anthropic_messages.append({
                 'role': msg['role'],
-                'content': msg['content']
+                'content': content
             })
         
         payload = {
@@ -595,6 +665,29 @@ class LLMService:
     
     async def _call_qwen_api(self, config: Dict, messages: List[Dict], stream: bool) -> AsyncGenerator[str, None]:
         """调用通义千问API（OpenAI兼容模式）"""
+        
+        # 检查是否包含图片
+        has_images = False
+        for msg in messages:
+            content = msg.get('content')
+            if isinstance(content, list):
+                for item in content:
+                    if item.get('type') == 'image_url':
+                        has_images = True
+                        break
+            if has_images:
+                break
+        
+        # 智能模型路由策略 - 已移除自动路由，完全遵从用户配置
+        # 在 Visual-as-a-Tool 架构下，纯文本模型通过 analyze_image 工具调用 VL 模型
+        current_model = config['model']
+        
+        # 记录当前模型信息
+        is_vl_model = 'vl' in current_model.lower()
+        if has_images and not is_vl_model:
+            info(f"ℹ️ 当前为纯文本模型 {current_model}，图片已转换为路径占位符，等待模型调用 analyze_image 工具")
+
+
         url = f"{config['baseUrl']}/chat/completions"
         headers = {
             'Authorization': f"Bearer {config['apiKey']}",
@@ -602,7 +695,7 @@ class LLMService:
         }
         
         payload = {
-            'model': config['model'],
+            'model': current_model,  # 使用路由后的模型
             'messages': messages,
             'stream': stream,
             'temperature': 0.7,
@@ -720,13 +813,30 @@ class LLMService:
             
             # 处理消息中的文件
             processed_messages = []
+            has_images = False
             for msg in messages:
-                processed_msg = self._process_message_files(msg)
+                processed_msg = self._process_message_files(msg, current_model=provider_config.get('model', ''))
                 processed_messages.append(processed_msg)
+                # 检查是否包含图片
+                content = processed_msg.get('content')
+                if isinstance(content, list):
+                    for item in content:
+                        if item.get('type') == 'image_url':
+                            has_images = True
+            
+            # 智能模型路由策略 - 已移除自动路由，完全遵从用户配置
+            current_model = provider_config['model']
+            is_vl_model = 'vl' in current_model.lower()
+            
+            # Qwen 模型不再自动升级到 VL
+            # 如果用户使用的是 qwen-plus 且发送了图片，_process_message_files 会将其转换为图片路径占位符
+            # 并提示 LLM 使用 analyze_image 工具
             
             # 工具调用循环
+            empty_response_count = 0  # 空响应计数器，用于防止死循环
+            
             for iteration in range(max_iterations):
-                info(f"[LLM Tools] 第 {iteration + 1} 轮对话")
+                info(f"[LLM Tools] 第 {iteration + 1} 轮对话 (Model: {current_model})")
                 
                 # ⭐ 真正的流式处理：边接收边判断类型
                 accumulated_message = {
@@ -738,6 +848,7 @@ class LLMService:
                 tool_calls_buffer = {}
                 text_buffer = ""
                 is_outputting_text = False  # 标记是否正在输出文本
+                has_tool_calls = False      # 标记本轮是否有工具调用
                 
                 # 调用LLM（流式）
                 url = f"{provider_config['baseUrl']}/chat/completions"
@@ -747,7 +858,7 @@ class LLMService:
                 }
                 
                 payload = {
-                    'model': provider_config['model'],
+                    'model': current_model,  # 使用路由后的模型
                     'messages': processed_messages,
                     'stream': True,
                     'temperature': 0.7
@@ -815,15 +926,16 @@ class LLMService:
                                         # 检测是否是新的 tool call（首次出现）
                                         is_new_tool_call = idx not in tool_calls_buffer
                                         
-                                        if is_new_tool_call:
-                                            tool_calls_buffer[idx] = {
-                                                'id': '',
-                                                'type': 'function',
-                                                'function': {'name': '', 'arguments': ''}
-                                            }
-                                        
-                                        if 'id' in tool_call_delta:
-                                            tool_calls_buffer[idx]['id'] = tool_call_delta['id']
+                                    if is_new_tool_call:
+                                        tool_calls_buffer[idx] = {
+                                            'id': '',
+                                            'type': 'function',
+                                            'function': {'name': '', 'arguments': ''}
+                                        }
+                                        has_tool_calls = True  # 标记有工具调用
+                                    
+                                    if 'id' in tool_call_delta:
+                                        tool_calls_buffer[idx]['id'] = tool_call_delta['id']
                                         
                                         if 'function' in tool_call_delta:
                                             func = tool_call_delta['function']
@@ -851,6 +963,26 @@ class LLMService:
                 if is_outputting_text:
                     yield {"type": "text_complete", "content": ""}
                 
+                # 死循环检测：如果既没有文本输出，也没有工具调用，且 finish_reason 为空或 stop
+                if not is_outputting_text and not has_tool_calls:
+                    empty_response_count += 1
+                    info(f"[LLM Tools] 检测到空响应 (计数: {empty_response_count})")
+                    
+                    if empty_response_count >= 2:
+                        info(f"[LLM Tools] 连续 {empty_response_count} 次空响应，强制结束对话")
+                        
+                        # 如果没有待办项，直接结束
+                        current_status = get_current_todo_status()
+                        if not current_status or not current_status.get('has_todos'):
+                            yield {
+                                "type": "info",
+                                "content": "（由于模型未返回更多内容，对话已结束）"
+                            }
+                            return
+                else:
+                    # 只要有任何输出，重置计数器
+                    empty_response_count = 0
+
                 # 构建完整消息
                 if tool_calls_buffer:
                     accumulated_message['tool_calls'] = [
@@ -860,7 +992,7 @@ class LLMService:
                 message = accumulated_message
                 
                 # 检查是否有工具调用
-                if finish_reason == 'tool_calls' and message.get('tool_calls'):
+                if (finish_reason == 'tool_calls' or has_tool_calls) and message.get('tool_calls'):
                     tool_calls = message['tool_calls']
                     info(f"[LLM Tools] 检测到 {len(tool_calls)} 个工具调用")
                     

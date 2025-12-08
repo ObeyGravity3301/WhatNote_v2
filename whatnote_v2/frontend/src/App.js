@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
 
@@ -50,6 +50,56 @@ function App() {
   // 任务栏右键菜单状态
   const [showTaskbarContextMenu, setShowTaskbarContextMenu] = useState(false);
   const [taskbarMenuPosition, setTaskbarMenuPosition] = useState({ x: 0, y: 0 });
+  const taskbarMenuRef = useRef(null);
+  const startMenuContextRef = useRef(null);
+
+  useLayoutEffect(() => {
+    // Taskbar Menu
+    if (showTaskbarContextMenu && taskbarMenuRef.current) {
+      const menu = taskbarMenuRef.current;
+      const rect = menu.getBoundingClientRect();
+      const { innerWidth, innerHeight } = window;
+
+      if (rect.bottom > innerHeight) {
+        menu.style.top = 'auto';
+        menu.style.bottom = `${innerHeight - taskbarMenuPosition.y}px`;
+      } else {
+        menu.style.bottom = 'auto';
+        menu.style.top = `${taskbarMenuPosition.y}px`;
+      }
+
+      if (rect.right > innerWidth) {
+        menu.style.left = 'auto';
+        menu.style.right = `${innerWidth - taskbarMenuPosition.x}px`;
+      } else {
+        menu.style.right = 'auto';
+        menu.style.left = `${taskbarMenuPosition.x}px`;
+      }
+    }
+
+    // Start Menu Context Menu
+    if (startMenuContextMenu.visible && startMenuContextRef.current) {
+      const menu = startMenuContextRef.current;
+      const rect = menu.getBoundingClientRect();
+      const { innerWidth, innerHeight } = window;
+
+      if (rect.bottom > innerHeight) {
+        menu.style.top = 'auto';
+        menu.style.bottom = `${innerHeight - startMenuContextMenu.y}px`;
+      } else {
+        menu.style.bottom = 'auto';
+        menu.style.top = `${startMenuContextMenu.y}px`;
+      }
+
+      if (rect.right > innerWidth) {
+        menu.style.left = 'auto';
+        menu.style.right = `${innerWidth - startMenuContextMenu.x}px`;
+      } else {
+        menu.style.right = 'auto';
+        menu.style.left = `${startMenuContextMenu.x}px`;
+      }
+    }
+  }, [showTaskbarContextMenu, taskbarMenuPosition, startMenuContextMenu]);
   
   // 子菜单激活状态
   const [activeCourseId, setActiveCourseId] = useState(null);
@@ -998,7 +1048,7 @@ function App() {
           )}
           
           {/* 右侧聊天按钮和连接状态 */}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div className="taskbar-tray" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
             {selectedBoard && (
               <>
               <button 
@@ -1089,6 +1139,7 @@ function App() {
       {/* 任务栏右键菜单 */}
       {showTaskbarContextMenu && (
         <div 
+          ref={taskbarMenuRef}
           className="taskbar-context-menu"
           style={{
             position: 'fixed',
@@ -1322,6 +1373,7 @@ function App() {
       
       {startMenuContextMenu.visible && showStartMenu && (
         <div
+          ref={startMenuContextRef}
           className="start-menu-context-menu"
           style={{ left: `${startMenuContextMenu.x}px`, top: `${startMenuContextMenu.y}px` }}
           onClick={(e) => e.stopPropagation()}

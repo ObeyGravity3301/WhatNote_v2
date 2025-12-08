@@ -77,6 +77,11 @@ html, body {
   padding: 2px; /* 给点内边距 */
   gap: 4px;
   justify-content: flex-start;
+  overflow: hidden; /* 防止溢出 */
+}
+
+.taskbar-tray {
+  flex-shrink: 0; /* 防止托盘区被压缩 */
 }
 
 .taskbar-label {
@@ -107,6 +112,7 @@ html, body {
   font-family: 'MS Sans Serif', sans-serif;
   font-weight: bold;
   box-shadow: 1px 1px 0 #000000; /* 额外的黑色阴影让其更立体 */
+  flex-shrink: 0; /* 防止被压缩 */
 }
 
 .start-button:hover {
@@ -156,11 +162,13 @@ html, body {
   cursor: pointer;
   font-size: 11px;
   color: black;
-  min-width: 120px;
+  min-width: 36px; /* 允许缩小到仅显示图标 */
   max-width: 160px;
+  flex: 0 1 160px; /* 基准160px，允许缩小，不放大 */
   height: 22px;
   font-family: 'MS Sans Serif', sans-serif;
   box-shadow: 1px 1px 0 #000000; /* 额外的阴影模拟3D */
+  overflow: hidden; /* 防止内容溢出 */
 }
 
 .taskbar-item:hover {
@@ -1344,6 +1352,13 @@ html, body {
   font-family: 'MS Sans Serif', sans-serif;
   height: 22px; /* 保持高度一致 */
   margin-right: 2px;
+  flex-shrink: 0; /* 防止被压缩 */
+  white-space: nowrap; /* 防止文字换行 */
+}
+
+.connection-status .win98-icon,
+.connection-status .status-text {
+  flex-shrink: 0; /* 确保内部元素不被压缩 */
 }
 
 /* 任务栏时钟样式 */
@@ -1362,6 +1377,7 @@ html, body {
   height: 22px;
   min-width: 60px;
   cursor: default;
+  flex-shrink: 0;
 }
 
 .clock-time {

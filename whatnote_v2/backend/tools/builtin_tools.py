@@ -720,21 +720,43 @@ class WindowToolHandlers:
             window_type = window.get("type", "text")
             title = window.get("title", "无标题")
             
-            info(f"[工具] 读取窗口成功: {window_id} @ {board_id}")
+            # 构建返回数据
+            response_data = {
+                "window_id": window_id,
+                "title": title,
+                "type": window_type,
+                "created_at": window.get("created_at"),
+                "updated_at": window.get("updated_at")
+            }
+            
+            # 针对不同类型窗口返回不同内容
+            if window_type == "image":
+                # 返回文件路径，供 analyze_image 工具使用
+                file_path = window.get("file_path") or content
+                response_data["file_path"] = file_path
+                response_data["message"] = "这是图片窗口。如果需要分析图片内容，请调用 analyze_image 工具，并提供此 file_path。"
+                # 如果有OCR结果或其他描述（暂未实现，预留字段）
+                response_data["description"] = window.get("description", "暂无文本描述")
+                
+            elif window_type == "text" or window_type == "markdown":
+                response_data["content"] = content
+                response_data["content_length"] = len(content)
+                
+            elif window_type == "pdf":
+                response_data["file_path"] = window.get("file_path") or content
+                response_data["message"] = "这是PDF窗口。请使用 read_pdf_text 工具读取内容，或 generate_pdf_annotation 工具生成注释。"
+                
+            else:
+                # 其他类型（web, video, etc.）
+                response_data["content"] = content
+            
+            info(f"[工具] 读取窗口成功: {window_id} @ {board_id} (Type: {window_type})")
             
             return ToolResult(
                 tool_call_id=context.get("call_id", ""),
                 tool_name="read_window",
                 status=ToolStatus.SUCCESS,
-                data={
-                    "window_id": window_id,
-                    "title": title,
-                    "type": window_type,
-                    "content": content,
-                    "content_length": len(content),
-                    "created_at": window.get("created_at"),
-                    "updated_at": window.get("updated_at")
-                }
+                data=response_data
             )
             
         except Exception as e:
