@@ -42,8 +42,9 @@ ANALYZE_IMAGE_TOOL = ToolDefinition(
 class VisionToolHandlers:
     """视觉工具处理器"""
     
-    def __init__(self, api_config_manager):
+    def __init__(self, api_config_manager, content_manager=None):
         self.api_config_manager = api_config_manager
+        self.content_manager = content_manager
     
     async def analyze_image(self, args: Dict[str, Any], context: Dict[str, Any]) -> ToolResult:
         """分析图片"""
@@ -53,19 +54,59 @@ class VisionToolHandlers:
             
             # 1. 验证图片文件
             path = Path(image_path)
-            if not path.exists():
-                # 尝试相对路径修正
+            found = False
+            
+            # 路径查找优先级：
+            # 1. 绝对路径或相对于 CWD 的路径（原样尝试）
+            if path.exists():
+                found = True
+            
+            # 2. 如果提供了 board_id，尝试在展板目录下查找
+            if not found and self.content_manager:
+                board_id = context.get("board_id")
+                if board_id:
+                    # 使用受保护方法查找展板目录
+                    try:
+                        board_dir = self.content_manager._locate_board_directory(board_id)
+                        if board_dir:
+                            # 尝试直接拼接
+                            try_path = board_dir / image_path
+                            if try_path.exists():
+                                path = try_path
+                                found = True
+                            else:
+                                # 尝试在展板的 files 子目录下查找
+                                try_path_files = board_dir / "files" / image_path
+                                if try_path_files.exists():
+                                    path = try_path_files
+                                    found = True
+                                
+                                # 处理 LLM 返回 "files/xxx" 但实际在 board_dir/xxx 的情况
+                                if not found and image_path.startswith("files/"):
+                                    stripped_path = image_path.replace("files/", "", 1)
+                                    try_path_stripped = board_dir / stripped_path
+                                    if try_path_stripped.exists():
+                                        path = try_path_stripped
+                                        found = True
+                    except Exception as e:
+                        info(f"[Vision Tool] 查找展板目录失败: {e}")
+
+            # 3. 尝试 data 目录（回退兼容）
+            if not found:
                 if (Path("data") / image_path).exists():
                     path = Path("data") / image_path
+                    found = True
                 elif (Path("../data") / image_path).exists():
                     path = Path("../data") / image_path
-                else:
-                    return ToolResult(
-                        tool_call_id=context.get("call_id", ""),
-                        tool_name="analyze_image",
-                        status=ToolStatus.ERROR,
-                        error=f"图片文件不存在: {image_path}"
-                    )
+                    found = True
+            
+            if not found:
+                return ToolResult(
+                    tool_call_id=context.get("call_id", ""),
+                    tool_name="analyze_image",
+                    status=ToolStatus.ERROR,
+                    error=f"图片文件不存在: {image_path}"
+                )
             
             # 2. 读取并编码图片
             try:
@@ -116,7 +157,9 @@ class VisionToolHandlers:
                 }
             ]
             
-            async with aiohttp.ClientSession() as session:
+            # 设置超时时间为90秒（一分半），以便处理大图片或慢速响应
+            timeout = aiohttp.ClientTimeout(total=90)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 url = f"{base_url}/chat/completions"
                 headers = {
                     "Authorization": f"Bearer {api_key}",
@@ -165,13 +208,14 @@ class VisionToolHandlers:
                 error=f"分析过程发生异常: {str(e)}"
             )
 
-def register_vision_tools(tool_registry, api_config_manager):
+def register_vision_tools(tool_registry, api_config_manager, content_manager=None):
     """注册视觉工具"""
-    handlers = VisionToolHandlers(api_config_manager)
+    handlers = VisionToolHandlers(api_config_manager, content_manager)
     
+    # 视觉任务可能耗时较长，设置超时为120秒
     tool_registry.register_tool(
         ANALYZE_IMAGE_TOOL, 
-        ToolHandler(executor=handlers.analyze_image),
+        ToolHandler(executor=handlers.analyze_image, timeout=120),
         category="vision"
     )
     

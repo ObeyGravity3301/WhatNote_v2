@@ -237,3 +237,7 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
 
 
 
+
+
+
+

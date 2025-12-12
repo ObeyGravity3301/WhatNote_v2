@@ -173,7 +173,7 @@ class ToolHandler:
     executor: Callable[[Dict[str, Any], Any], Awaitable[ToolResult]]  # 异步执行函数
     requires_confirmation: bool = False  # 是否需要用户确认
     is_dangerous: bool = False  # 是否为危险操作（删除等）
-    timeout: int = 30  # 超时时间（秒）
+    timeout: int = 120  # 超时时间（秒）
     
     async def execute(self, arguments: Dict[str, Any], context: Any = None) -> ToolResult:
         """

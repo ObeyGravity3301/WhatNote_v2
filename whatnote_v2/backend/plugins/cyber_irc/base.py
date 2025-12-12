@@ -55,10 +55,14 @@ CRITICAL INSTRUCTIONS:
             # Keep system prompt (index 0) and last 49
             self.memory = [self.memory[0]] + self.memory[-49:]
 
-    def is_online(self) -> bool:
-        """Check if agent is online based on schedule."""
+    def is_online(self) -> Dict[str, Any]:
+        """
+        Check if agent is online based on schedule.
+        Returns: {'is_online': bool, 'status_code': str}
+        status_code: 'ACTIVE', 'OFFLINE', 'INSOMNIA', 'BUSY'
+        """
         if not self.profile.schedule:
-            return True
+            return {'is_online': True, 'status_code': 'ACTIVE'}
             
         import datetime
         import random
@@ -78,45 +82,38 @@ CRITICAL INSTRUCTIONS:
             active_hours = self.profile.schedule.weekdays_active_hours
             
         is_active = current_hour in active_hours
+        status_code = 'ACTIVE' if is_active else 'OFFLINE'
         
         # Apply randomness (Simulate Insomnia / Emergency)
-        # Use a deterministic seed based on date+hour+name so state persists for the hour
-        # Format: "2023-10-27-23-HackerNeo"
         time_seed = f"{now.strftime('%Y-%m-%d-%H')}-{self.profile.name}"
         random.seed(time_seed)
         r_val = random.random()
         
-        override_status = None
         if not is_active:
             # Chance to wake up randomly (Insomnia)
             if r_val < self.profile.schedule.random_online_chance:
                 is_active = True
-                override_status = "INSOMNIA"
+                status_code = "INSOMNIA"
         else:
             # Chance to go offline randomly (Busy)
             if r_val < self.profile.schedule.random_offline_chance:
                 is_active = False
-                override_status = "BUSY"
+                status_code = "BUSY"
                 
         # Reset seed to avoid affecting other random calls
         random.seed()
         
-        log_msg = f"[AgentCheck] {self.profile.name}: {weekday=}, Hour={current_hour}"
-        if override_status:
-            log_msg += f" -> OVERRIDE: {override_status} ({is_active})"
-        else:
-            log_msg += f" -> Online? {is_active}"
-            
-        # info(log_msg)
-        return is_active
+        # info(f"[AgentCheck] {self.profile.name}: {status_code} (Online={is_active})")
+        return {'is_online': is_active, 'status_code': status_code}
 
     async def should_speak(self, room_context: Dict) -> bool:
         """
         Decide if the agent wants to speak.
         """
         # Check online status first
-        if not self.is_online():
-            info(f"[AgentCheck] {self.profile.name} is offline (schedule).")
+        status = self.is_online()
+        if not status['is_online']:
+            info(f"[AgentCheck] {self.profile.name} is offline ({status['status_code']}).")
             return False
 
         # 1. If mentioned, high probability
@@ -153,12 +150,28 @@ CRITICAL INSTRUCTIONS:
             # Prepare messages
             messages_to_send = list(self.memory)
             
+            # Check current status for "Self Awareness"
+            status = self.is_online()
+            status_prompt = ""
+            
+            if status['status_code'] == 'INSOMNIA':
+                status_prompt = "\n[Status: INSOMNIA]\nYou are supposed to be sleeping but you are awake (insomnia). You might be tired, grumpy, or hyperactive."
+            elif status['status_code'] == 'BUSY': 
+                # Should not happen as is_online returns false, but just in case of forced call
+                status_prompt = "\n[Status: BUSY]\nYou are busy with real life work. Be brief or mention you are busy."
+            
             # Inject Room System Prompt if available to give context about WHAT group this is
+            system_inject = ""
             if room_context and room_context.get('system_prompt'):
-                room_prompt = f"\n[Current Room Context]\nTopic: {room_context.get('topic')}\n公告/规则: {room_context['system_prompt']}\n"
+                system_inject += f"\n[Current Room Context]\nTopic: {room_context.get('topic')}\n公告/规则: {room_context['system_prompt']}\n"
+            
+            if status_prompt:
+                system_inject += status_prompt
+
+            if system_inject:
                 # Insert after the agent's persona (index 0)
                 if len(messages_to_send) > 0:
-                    messages_to_send.insert(1, {"role": Role.SYSTEM, "content": room_prompt})
+                    messages_to_send.insert(1, {"role": Role.SYSTEM, "content": system_inject})
 
             # Call LLM
             response_text = ""

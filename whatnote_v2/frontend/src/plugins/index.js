@@ -85,6 +85,18 @@ async function loadPlugins() {
     console.warn('[插件系统] ⚠️ CyberIRC 插件加载失败:', error.message);
     cyberIRCPlugin = null;
   }
+
+  // 加载快捷键设置插件
+  try {
+    const shortcutSettingsModule = await import('./core/shortcut-settings-plugin');
+    const shortcutSettingsPlugin = shortcutSettingsModule?.default || shortcutSettingsModule;
+    if (shortcutSettingsPlugin) {
+      pluginRegistry.register(shortcutSettingsPlugin);
+      console.log('[插件系统] ✓ 快捷键设置插件加载成功');
+    }
+  } catch (error) {
+    console.warn('[插件系统] ⚠️ 快捷键设置插件加载失败:', error.message);
+  }
   
   pluginsLoaded = true;
 }

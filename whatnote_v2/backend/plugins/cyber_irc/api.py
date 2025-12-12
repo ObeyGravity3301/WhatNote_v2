@@ -70,12 +70,16 @@ async def get_chat_agents(room_id: Optional[str] = None):
                 agent = chat_manager.agents.get(agent_id)
                 if agent:
                     data = agent.profile.dict()
-                    data['is_online'] = agent.is_online()
+                    status = agent.is_online()
+                    data['is_online'] = status['is_online']
+                    data['status_code'] = status['status_code']
                     agents_data.append(data)
     else:
         for agent in chat_manager.agents.values():
             data = agent.profile.dict()
-            data['is_online'] = agent.is_online()
+            status = agent.is_online()
+            data['is_online'] = status['is_online']
+            data['status_code'] = status['status_code']
             agents_data.append(data)
             
     return {"agents": agents_data}

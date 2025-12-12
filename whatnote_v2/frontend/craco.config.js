@@ -82,7 +82,7 @@ module.exports = {
       webpackConfig.resolve.alias = Object.assign({}, webpackConfig.resolve.alias, {
         'nanoid/non-secure': path.resolve(__dirname, 'src/shims/nanoid-non-secure.js'),
       });
-
+      
       return webpackConfig;
     }
   }

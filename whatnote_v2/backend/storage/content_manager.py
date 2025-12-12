@@ -3169,3 +3169,59 @@ class ContentManager:
         except Exception as e:
             print(f"保存语音失败: {e}")
             return None
+
+    def get_narrator_subtitles(self, board_id: str, window_id: str, page: int) -> Optional[list]:
+        """获取PDF指定页面的字幕内容"""
+        try:
+            windows = self.get_board_windows(board_id)
+            target_window = next((w for w in windows if w.get('id') == window_id), None)
+            if not target_window: return None
+            
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'): title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+            
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            if not pdf_pages_dir: return None
+            
+            audio_dir = pdf_pages_dir / "audio"
+            if not audio_dir.exists(): return None
+            
+            sub_filename = f"audio_{page:03d}.json"
+            sub_path = audio_dir / sub_filename
+            
+            if sub_path.exists():
+                with open(sub_path, 'r') as f:
+                    return json.load(f)
+            return None
+        except Exception as e:
+            print(f"获取字幕失败: {e}")
+            return None
+
+    def save_narrator_subtitles(self, board_id: str, window_id: str, page: int, subtitles: list) -> bool:
+        """保存PDF指定页面的字幕内容"""
+        try:
+            windows = self.get_board_windows(board_id)
+            target_window = next((w for w in windows if w.get('id') == window_id), None)
+            if not target_window: return False
+            
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'): title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+            
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            if not pdf_pages_dir: return False
+            
+            audio_dir = pdf_pages_dir / "audio"
+            audio_dir.mkdir(parents=True, exist_ok=True)
+            
+            sub_filename = f"audio_{page:03d}.json"
+            sub_path = audio_dir / sub_filename
+            
+            with open(sub_path, 'w') as f:
+                json.dump(subtitles, f, ensure_ascii=False)
+                
+            return True
+        except Exception as e:
+            print(f"保存字幕失败: {e}")
+            return False

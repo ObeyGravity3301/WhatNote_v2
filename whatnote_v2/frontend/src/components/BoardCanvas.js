@@ -22,6 +22,19 @@ import PersonalizationPanel from './PersonalizationPanel';
 import CalendarPlannerWindow from './CalendarPlannerWindow';
 import PluginManager from '../plugins/PluginManager';
 import { initializePlugins, pluginRegistry } from '../plugins';
+import ShortcutManager from '../utils/ShortcutManager';
+
+// Register core shortcuts
+ShortcutManager.register('window.next', {
+  label: '切换到下一个窗口',
+  defaultKey: 'ArrowDown',
+  category: 'Window'
+});
+ShortcutManager.register('window.prev', {
+  label: '切换到上一个窗口',
+  defaultKey: 'ArrowUp',
+  category: 'Window'
+});
 
 // 配置PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -9710,11 +9723,13 @@ function BoardCanvas({
         window.id === MESSAGE_CENTER_WINDOW_ID ||
         window.id === PERSONALIZATION_WINDOW_ID ||
         window.id === PLANNER_WINDOW_ID ||
+        window.id === 'shortcut-settings-window' ||
         window.type === 'chat' || 
         window.type === 'message-center' ||
         window.type === 'personalization' ||
         window.type === 'planner' ||
-        window.type === 'plugin-manager';
+        window.type === 'plugin-manager' ||
+        window.type === 'shortcut-settings';
       
       if (isSpecialWindow) {
         console.log('🎯 跳过特殊窗口，不创建桌面图标:', window.id, window.title);
@@ -9835,12 +9850,7 @@ function BoardCanvas({
       if (isInputFocused) {
         return; // 输入状态下不触发快捷键
       }
-      
-      // 只处理上下方向键
-      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
-        return;
-      }
-      
+
       // 获取所有可见且未最小化的窗口（按创建顺序）
       const visibleWindows = windows.filter(w => 
         !minimizedWindows.has(w.id) && 
@@ -9854,23 +9864,40 @@ function BoardCanvas({
       // 找到当前焦点窗口的索引
       const currentIndex = visibleWindows.findIndex(w => w.id === focusedWindowId);
       
-      let nextIndex;
-      if (e.key === 'ArrowDown') {
+      // 使用 ShortcutManager 检查快捷键
+      if (ShortcutManager.matches('window.next', e)) {
         // 下方向键：切换到下一个窗口（循环）
         e.preventDefault();
-        nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % visibleWindows.length;
-      } else if (e.key === 'ArrowUp') {
+        const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % visibleWindows.length;
+        const targetWindow = visibleWindows[nextIndex];
+        if (targetWindow) {
+          handleWindowFocusLocal(targetWindow.id);
+          console.log(`⌨️ 快捷键切换窗口: ${targetWindow.title || targetWindow.id}`);
+        }
+        return;
+      } 
+      
+      if (ShortcutManager.matches('window.prev', e)) {
         // 上方向键：切换到上一个窗口（循环）
         e.preventDefault();
-        nextIndex = currentIndex === -1 ? visibleWindows.length - 1 : (currentIndex - 1 + visibleWindows.length) % visibleWindows.length;
+        const nextIndex = currentIndex === -1 ? visibleWindows.length - 1 : (currentIndex - 1 + visibleWindows.length) % visibleWindows.length;
+        const targetWindow = visibleWindows[nextIndex];
+        if (targetWindow) {
+          handleWindowFocusLocal(targetWindow.id);
+          console.log(`⌨️ 快捷键切换窗口: ${targetWindow.title || targetWindow.id}`);
+        }
+        return;
       }
       
-      // 切换到目标窗口
-      const targetWindow = visibleWindows[nextIndex];
-      if (targetWindow) {
-        handleWindowFocusLocal(targetWindow.id);
-        console.log(`⌨️ 快捷键切换窗口: ${targetWindow.title || targetWindow.id}`);
+      // 旧逻辑保留作为后备（或删除），但现在主要依赖 ShortcutManager
+      // 只处理上下方向键
+      /* 
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
+        return;
       }
+      
+      // ... previous implementation ...
+      */
     };
     
     // 添加键盘事件监听
@@ -10969,6 +10996,30 @@ function BoardCanvas({
   // 创建窗口的通用函数（供插件使用）
   const createWindowForPlugin = async (windowData) => {
     try {
+      // 允许使用传入的 ID（如果是本地系统窗口）
+      // 或者如果后端忽略 ID，我们可能需要特殊处理
+      // 但对于 shortcut-settings 这样的工具窗口，我们希望它是单例的
+      // 后端 api.py 强制覆盖 ID: window_data["id"] = f"window_..."
+      
+      // 临时 hack: 如果是 shortcut-settings，我们不发请求给后端？
+      // 或者我们接受后端的新 ID，但在 handleContextMenuAction 里不做重复检查？
+      // 但 handleContextMenuAction 里的 createWindow 是这个函数
+      
+      // 如果我们想要 shortcut-settings 是临时的（不保存到数据库），我们应该直接 setWindows
+      // 就像 createPluginManagerWindow 一样
+      if (windowData.type === 'shortcut-settings') {
+          const newWindow = {
+              ...windowData,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+          };
+          setWindows(prev => [...prev, newWindow]);
+          setTimeout(() => {
+            handleWindowFocusLocal(newWindow.id);
+          }, 100);
+          return newWindow;
+      }
+
       const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows`, {
         method: 'POST',
         headers: {
@@ -11016,7 +11067,10 @@ function BoardCanvas({
           await plugin.handleContextMenuAction(action, {
             boardId,
             windows,
+            minimizedWindows, // Add minimizedWindows to context
             createWindow: createWindowForPlugin,
+            focusWindow: handleWindowFocusLocal, // Add focusWindow to context
+            restoreWindow: handleWindowMinimizeLocal, // Add restoreWindow (toggle minimize) to context
             targetId
           });
         } catch (error) {

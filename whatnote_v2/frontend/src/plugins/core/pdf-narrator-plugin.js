@@ -4,7 +4,8 @@ import ReactDOM from 'react-dom';
 const NarratorPluginComponent = (props) => {
   const { windowId, boardId, pageControl } = props;
   const [showPanel, setShowPanel] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [viewMode, setViewMode] = useState('player'); // 'player' | 'editor' | 'settings'
+  const [showSubtitles, setShowSubtitles] = useState(true);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentScript, setCurrentScript] = useState('');
@@ -16,6 +17,10 @@ const NarratorPluginComponent = (props) => {
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioUrls, setAudioUrls] = useState({}); // { [page]: url }
+  const [subtitles, setSubtitles] = useState([]); // Current page subtitles
+  const [currentSubtitle, setCurrentSubtitle] = useState('');
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   
   // 模型管理
   const [gptModels, setGptModels] = useState([]);
@@ -27,6 +32,8 @@ const NarratorPluginComponent = (props) => {
   const [refText, setRefText] = useState('');
   const [refLang, setRefLang] = useState('zh');
   const [refAudioExists, setRefAudioExists] = useState(false);
+  const [refFilename, setRefFilename] = useState('');
+  const [audioTimestamp, setAudioTimestamp] = useState(Date.now());
   const [targetLang, setTargetLang] = useState('zh');
   
   // 批量处理状态
@@ -46,6 +53,8 @@ const NarratorPluginComponent = (props) => {
 2. 语言自然流畅，适合朗读。
 3. 不要念标题，而是解释核心观点。
 4. 使用第一人称。
+5. 【重要】请务必使用规范的标点符号（句号、问号、感叹号）来区分句子，确保没有超长的无标点长句。
+
 请直接输出演讲稿内容，不要包含任何 Markdown 格式或额外说明。`;
   
   const [customPrompt, setCustomPrompt] = useState(DEFAULT_PROMPT);
@@ -95,6 +104,7 @@ const NarratorPluginComponent = (props) => {
             if(data.exists) {
                 if(data.text) setRefText(data.text);
                 if(data.language) setRefLang(data.language);
+                if(data.filename) setRefFilename(data.filename);
                 // 如果本地没存，顺便存一下
                 localStorage.setItem('narrator_ref_text', data.text || '');
                 localStorage.setItem('narrator_ref_lang', data.language || 'zh');
@@ -117,10 +127,10 @@ const NarratorPluginComponent = (props) => {
   }, []);
 
   useEffect(() => {
-      if (showSettings) {
+      if (viewMode === 'settings') {
           fetchModels();
       }
-  }, [showSettings, fetchModels]);
+  }, [viewMode, fetchModels]);
 
   const changeModel = async (type, value) => {
       if (type === 'gpt') setSelectedGPT(value);
@@ -155,17 +165,16 @@ const NarratorPluginComponent = (props) => {
                 setLastSavedScript(data.content);
                 setScripts(prev => ({...prev, [page]: data.content}));
                 
+                // 1.5 获取字幕
+                fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/subtitles/${page}`)
+                    .then(r => r.json())
+                    .then(d => {
+                        if(d.subtitles) setSubtitles(d.subtitles);
+                        else setSubtitles([]);
+                    })
+                    .catch(() => setSubtitles([]));
+
                 // 2. 如果有讲稿，尝试检查/获取音频
-                // 为了解决刷新页面后音频按钮灰显的问题，我们在这里主动请求一次
-                // 后端如果存在音频文件，会直接返回，不会重新生成，速度很快
-                // 如果不存在，目前后端逻辑是生成，我们通过 frontend 传个标记位 'check_exist' 虽然目前后端可能没处理，
-                // 但基于用户反馈"再点生成就直接播放了"，说明后端有缓存机制。
-                // 我们可以利用这一点，静默请求一次。
-                // 为了保险起见，我们不在这里自动请求，而是优化 UI 显示逻辑：
-                // 如果有讲稿，即便 audioUrls 里没有，也显示“生成语音”按钮（目前就是这样）。
-                // 用户的问题是“播放按键是灰色的”，这是因为 audioUrl 是 null。
-                // 
-                // 改进：自动尝试恢复 audioUrl (使用 GET 仅检查/获取，不生成)
                 if (!audioUrls[page]) {
                     fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/audio/${page}`, {
                         method: 'GET'
@@ -175,10 +184,6 @@ const NarratorPluginComponent = (props) => {
                             const blob = await res.blob();
                             const url = URL.createObjectURL(blob);
                             setAudioUrls(prev => ({ ...prev, [page]: url }));
-                            // 如果当前还在这一页，就更新 current audioUrl
-                            if (pageControl.currentPage === page) {
-                                setAudioUrl(url);
-                            }
                         }
                     })
                     .catch(e => console.warn('静默加载音频失败(可能未生成)', e));
@@ -194,44 +199,58 @@ const NarratorPluginComponent = (props) => {
             setCurrentScript(cached);
             setLastSavedScript(cached);
         });
-      
-      // Reset audio for this page on mount/change if not in cache
-      // (Wait for user interaction to fetch)
-      const url = audioUrls[page];
-      setAudioUrl(url || null);
-      
-      if (audioRef.current) {
-          if(url) {
-              // Only update src if it changed to avoid reloading/interrupting
-              if (audioRef.current.src !== url) {
-                  audioRef.current.src = url;
-                  audioRef.current.load(); // Force load
-              }
+    }
+  }, [pageControl?.currentPage, showPanel, boardId, windowId]);
 
-              if(isAutoMode) {
-                  const p = audioRef.current.play();
+  // Sync audioUrl with current page's audio
+  useEffect(() => {
+      if (pageControl) {
+          const page = pageControl.currentPage;
+          const url = audioUrls[page];
+          if (url !== audioUrl) {
+              setAudioUrl(url || null);
+          }
+      }
+  }, [audioUrls, pageControl?.currentPage, audioUrl]);
+
+  // Audio Playback Control Effect
+  useEffect(() => {
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      if (audioUrl) {
+          // Sync src
+          if (audio.src !== audioUrl) {
+              audio.src = audioUrl;
+              audio.load();
+          }
+          
+          // Handle Auto Play
+          if (isAutoMode) {
+              // If we are in auto mode, we should be playing
+              if (audio.paused) {
+                  const p = audio.play();
                   if (p !== undefined) {
-                      p.catch(e => {
+                      p.then(() => setIsPlaying(true))
+                       .catch(e => {
                           console.warn("Auto-play failed", e);
+                          // Optional: keep isAutoMode true to retry or let user intervene
                           setIsPlaying(false);
                       });
                   }
-                  setIsPlaying(true);
-              } else {
-                  // Ensure stopped if not auto mode (and we just switched/loaded)
-                  if (!audioRef.current.paused) {
-                      audioRef.current.pause();
-                  }
-                  setIsPlaying(false);
               }
           } else {
-              audioRef.current.removeAttribute('src');
+              // If not in auto mode, we should pause
+              if (!audio.paused) {
+                  audio.pause();
+              }
               setIsPlaying(false);
           }
+      } else {
+          audio.removeAttribute('src');
+          setIsPlaying(false);
       }
-
-    }
-  }, [pageControl?.currentPage, showPanel, boardId, windowId]);
+  }, [audioUrl, isAutoMode]);
 
   // 自动保存讲稿
   useEffect(() => {
@@ -291,8 +310,9 @@ const NarratorPluginComponent = (props) => {
     const prevScript = scripts[page - 1] || '';
     const nextScript = scripts[page + 1] || '';
 
+    // 使用专用接口，避免污染注释
     const response = await fetch(
-      `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/${page}/generate`,
+      `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/script-generate/${page}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -344,9 +364,8 @@ const NarratorPluginComponent = (props) => {
         throw new Error(err.detail || 'TTS Failed');
     }
     
-    // response is blob
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    const data = await response.json();
+    return data; // { success, audio_url, subtitles }
   };
 
   // 批量处理
@@ -596,16 +615,16 @@ const NarratorPluginComponent = (props) => {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         text: text,
-                        prompt_lang: "zh"
+                        prompt_text: refText || "",
+                        prompt_lang: refLang || "zh",
+                        text_language: targetLang || "zh"
                       })
                    });
-                   if(response.ok) {
-                       const blob = await response.blob();
+                   const resData = await response.json();
+                   if(resData.success && resData.audio_url) {
+                       const audioRes = await fetch(`http://localhost:8081${resData.audio_url}`);
+                       const blob = await audioRes.blob();
                        const url = URL.createObjectURL(blob);
-                       const storageKey = `narrator_audios_${boardId}_${windowId}`;
-                       const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-                       saved[i] = url;
-                       localStorage.setItem(storageKey, JSON.stringify(saved));
                        setAudioUrls(prev => ({ ...prev, [i]: url }));
                    }
                 }
@@ -613,7 +632,7 @@ const NarratorPluginComponent = (props) => {
               console.error(`Page ${i} batch audio error:`, err);
             }
             setBatchProgress(prev => ({ ...prev, current: i }));
-            await new Promise(r => setTimeout(r, 50));
+            await new Promise(r => setTimeout(r, 1000));
         }
       }
     } finally {
@@ -661,32 +680,22 @@ const NarratorPluginComponent = (props) => {
     
     setIsGeneratingAudio(true);
     try {
-        const url = await fetchAudioForText(currentScript);
+        const resData = await fetchAudioForText(currentScript);
+        if(!resData.success) throw new Error('Generation failed');
+        
+        // Fetch Blob
+        const audioRes = await fetch(`http://localhost:8081${resData.audio_url}`);
+        const blob = await audioRes.blob();
+        const url = URL.createObjectURL(blob);
+        const subs = resData.subtitles || [];
+        
         const page = pageControl.currentPage;
-        const storageKey = `narrator_audios_${boardId}_${windowId}`;
-        const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-        saved[page] = url;
-        localStorage.setItem(storageKey, JSON.stringify(saved));
+        
         setAudioUrls(prev => ({ ...prev, [page]: url }));
         setAudioUrl(url);
+        setSubtitles(subs);
         
-        // Use setTimeout to allow state update and DOM to settle
-        setTimeout(() => {
-            if (audioRef.current) {
-                if (audioRef.current.src !== url) {
-                    audioRef.current.src = url;
-                    audioRef.current.load();
-                }
-                const p = audioRef.current.play();
-                if (p !== undefined) {
-                    p.catch(e => {
-                        console.warn("Auto-play after gen failed", e);
-                        setIsPlaying(false);
-                    });
-                }
-                setIsPlaying(true);
-            }
-        }, 100);
+        setIsAutoMode(true);
     } catch (e) {
         alert('语音生成失败: ' + e.message);
     } finally {
@@ -696,21 +705,10 @@ const NarratorPluginComponent = (props) => {
 
   const togglePlay = () => {
     if (audioRef.current && audioUrl) {
-      if (isPlaying) {
-        audioRef.current.pause();
+      if (isAutoMode) {
         setIsAutoMode(false);
-        setIsPlaying(false);
       } else {
-        setIsPlaying(true);
-        setIsAutoMode(true); // Manually playing implies entering the current mode
-        const playPromise = audioRef.current.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                console.warn("Playback failed/interrupted", error);
-                setIsPlaying(false);
-                setIsAutoMode(false);
-            });
-        }
+        setIsAutoMode(true);
       }
     }
   };
@@ -721,17 +719,6 @@ const NarratorPluginComponent = (props) => {
           return;
       }
       setIsAutoMode(true);
-      if (audioRef.current) {
-          setIsPlaying(true);
-          const p = audioRef.current.play();
-          if (p !== undefined) {
-              p.catch(e => {
-                  console.warn("Presentation start failed", e);
-                  setIsPlaying(false);
-                  setIsAutoMode(false);
-              });
-          }
-      }
   };
 
   const togglePlaybackMode = () => {
@@ -750,14 +737,35 @@ const NarratorPluginComponent = (props) => {
       }
   };
 
-  const handleSaveSettings = () => {
+  const saveSettingsToLocal = () => {
       localStorage.setItem('narrator_prompt_template', customPrompt);
       localStorage.setItem('narrator_gpt_model', selectedGPT);
       localStorage.setItem('narrator_sovits_model', selectedSoVITS);
       localStorage.setItem('narrator_ref_text', refText);
       localStorage.setItem('narrator_ref_lang', refLang);
       localStorage.setItem('narrator_target_lang', targetLang);
-      setShowSettings(false);
+  };
+
+  const handleSaveSettings = async () => {
+      saveSettingsToLocal();
+      
+      // Sync reference metadata to backend
+      if (refAudioExists) {
+          try {
+              await fetch('http://localhost:8081/api/tts/reference', {
+                  method: 'PUT',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({
+                      text: refText,
+                      language: refLang
+                  })
+              });
+          } catch(e) {
+              console.error("Failed to sync reference settings to backend", e);
+          }
+      }
+
+      setViewMode('player');
   };
 
   const handleUploadRef = async (file) => {
@@ -776,13 +784,15 @@ const NarratorPluginComponent = (props) => {
         const data = await res.json();
         if (data.success) {
             setRefAudioExists(true);
+            setRefFilename(file.name);
+            setAudioTimestamp(Date.now());
             // 上传成功后，如果 text 是空的，前端给个提示让用户去填，但不要弹窗阻断
             if (!refText || !refText.trim()) {
                // 可以用一个状态显示“请填写文本”的提示，或者直接聚焦到文本框
                // 这里简化处理，不做强提示，因为用户马上就会去填
             }
             // 自动保存设置（虽然 text 可能是空的，但音频已经上去了）
-            handleSaveSettings();
+            saveSettingsToLocal();
             // alert('参考音频上传成功！请确保在下方文本框中输入该音频对应的文字内容。');
         }
         else alert('上传失败: ' + (data.detail || 'Unknown error'));
@@ -799,6 +809,13 @@ const NarratorPluginComponent = (props) => {
     } catch (e) {
         alert('无法连接到后端服务');
     }
+  };
+
+  const formatTime = (seconds) => {
+      if (!seconds) return "00:00";
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
   // 获取Portal容器
@@ -832,385 +849,277 @@ const NarratorPluginComponent = (props) => {
       {showPanel && container && ReactDOM.createPortal(
           <div style={{
             width: '100%',
-            height: showSettings ? 'calc(100% - 30px)' : '180px', // 30px is roughly top bar height
-            position: showSettings ? 'absolute' : 'static',
-            bottom: 0,
-            top: showSettings ? '30px' : 'auto',
-            left: 0,
-            zIndex: showSettings ? 100 : 'auto',
+            height: viewMode === 'settings' ? '300px' : '180px',
+            position: 'static',
             backgroundColor: '#c0c0c0',
             borderTop: '2px outset #ffffff',
             fontFamily: 'MS Sans Serif, sans-serif',
             fontSize: '12px',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            overflow: 'hidden',
+            transition: 'height 0.3s ease'
           }}>
-            {/* 内容区域 */}
-            <div style={{ padding: '8px', display: 'flex', gap: '10px', flex: 1, overflow: 'hidden' }}>
-               {/* 左侧：Settings OR Script */}
-               {showSettings ? (
-                   <div style={{ 
-                     flex: 1,
-                     border: '2px inset #ffffff', 
-                     padding: '6px', 
-                     backgroundColor: '#d4d0c8',
-                     display: 'flex',
-                     flexDirection: 'column',
-                     gap: '8px', // Increased gap
-                     overflowY: 'auto' // Scrollable
-                   }}>
-                       <div style={{fontWeight: 'bold', color: '#000080'}}>讲稿生成设置 (Prompt)</div>
-                       <textarea 
-                           value={customPrompt}
-                           onChange={(e) => setCustomPrompt(e.target.value)}
-                           style={{
-                               height: '80px', // Fixed height
-                               minHeight: '80px',
-                               width: '100%',
-                               resize: 'none',
-                               fontFamily: 'monospace',
-                               fontSize: '11px'
-                           }}
-                       />
-                       <div style={{display: 'flex', gap: '5px', justifyContent: 'flex-end'}}>
-                           <button onClick={() => setCustomPrompt(DEFAULT_PROMPT)}>恢复默认</button>
-                           <button onClick={handleSaveSettings} style={{fontWeight: 'bold'}}>保存设置</button>
-                       </div>
-                       
-                       <div style={{ borderTop: '1px solid #999', paddingTop: '4px' }}>
-                            <div style={{fontWeight: 'bold', color: '#000080', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                                <span>参考音色 (Reference Audio)</span>
-                                <span style={{fontSize: '10px', color: refAudioExists ? 'green' : 'red', fontWeight: 'normal'}}>
-                                    {refAudioExists ? '✅ 已上传' : '❌ 未上传'}
-                                </span>
+            
+            {/* --- VIEW: SETTINGS --- */}
+            {viewMode === 'settings' && (
+               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '8px', overflowY: 'auto' }}>
+                   <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px', alignItems:'center'}}>
+                       <span style={{fontWeight:'bold', color: '#000080'}}>⚙️ 设置</span>
+                       <button onClick={() => setViewMode('player')}>🔙 返回</button>
+                   </div>
+                   
+                   <div style={{fontWeight: 'bold', color: '#444', marginBottom:'2px'}}>讲稿生成提示词 (Prompt)</div>
+                   <textarea 
+                       value={customPrompt}
+                       onChange={(e) => setCustomPrompt(e.target.value)}
+                       style={{ height: '50px', width: '100%', resize: 'none', marginBottom:'8px', fontSize:'11px' }}
+                   />
+                   
+                   <div style={{display:'flex', gap:'10px'}}>
+                       <div style={{flex:1, border:'1px dotted #888', padding:'4px', backgroundColor:'#ece9d8'}}>
+                            <div style={{fontWeight:'bold', fontSize:'11px'}}>🗣️ 参考音色 (Reference)</div>
+                            <div style={{display:'flex', gap:'4px', marginTop:'4px', alignItems:'center'}}>
+                                <select value={refLang} onChange={e => setRefLang(e.target.value)} style={{width:'60px'}}>
+                                    <option value="zh">中文</option>
+                                    <option value="en">EN</option>
+                                    <option value="ja">JP</option>
+                                </select>
+                                
+                                {!refAudioExists ? (
+                                    <button onClick={() => document.getElementById(`ref-up-${windowId}`).click()} style={{flex:1}}>📤 上传参考音频</button>
+                                ) : (
+                                    <>
+                                        <div style={{flex:1, border:'1px inset #fff', background:'#fff', padding:'2px', height:'20px', display:'flex', alignItems:'center', overflow:'hidden'}}>
+                                            <span style={{fontSize:'10px', color:'#000080', whiteSpace:'nowrap', textOverflow:'ellipsis', overflow:'hidden'}} title={refFilename}>
+                                                {refFilename || 'default.wav'}
+                                            </span>
+                                        </div>
+                                        <button onClick={() => document.getElementById(`ref-up-${windowId}`).click()} style={{width:'auto', padding:'0 6px'}} title="更换参考音频">📂</button>
+                                    </>
+                                )}
+                                
+                                <input type="file" accept=".wav,.mp3" id={`ref-up-${windowId}`} style={{display:'none'}} 
+                                    onChange={(e) => { if(e.target.files[0]) handleUploadRef(e.target.files[0]); }} />
                             </div>
                             
-                            {/* Step 1: Language & Upload */}
-                            <div style={{marginBottom: '8px', border: '1px dotted #666', padding: '4px', backgroundColor: '#ece9d8'}}>
-                                <div style={{fontSize: '11px', fontWeight: 'bold', color: '#444', marginBottom: '4px'}}>第一步：选择语种并上传音频</div>
-                                <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px'}}>
-                                    <label style={{fontSize: '11px', color: '#444'}}>语种:</label>
-                                    <select 
-                                        value={refLang} 
-                                        onChange={e => setRefLang(e.target.value)}
-                                        style={{fontSize: '11px'}}
-                                    >
-                                        <option value="zh">中文 (Chinese)</option>
-                                        <option value="en">英文 (English)</option>
-                                        <option value="ja">日文 (Japanese)</option>
-                                    </select>
-                                </div>
-
-                                <div style={{display: 'flex', gap: '4px', alignItems: 'center'}}>
-                                    <input 
-                                        type="file" 
-                                        accept=".wav,.mp3" 
-                                        id={`ref-audio-upload-${windowId}`} 
-                                        style={{display: 'none'}} 
-                                        onChange={(e) => {
-                                            if(e.target.files[0]) handleUploadRef(e.target.files[0]);
-                                            e.target.value = null; // reset
-                                        }}
-                                    />
-                                    <button 
-                                        onClick={() => {
-                                            // 如果没有填写文本，先提示但不阻止选择文件
-                                            // 但 handleUploadRef 内部会检查
-                                            // 既然反过来了，我们允许先选文件，但最好是点击按钮只选文件，然后保存时再上传
-                                            // 为了简化逻辑，我们保持现有的 flow，但是如果点击上传时没文本，提示输入文本
-                                            document.getElementById(`ref-audio-upload-${windowId}`).click();
-                                        }} 
-                                        style={{
-                                            flex:1, 
-                                            padding: '4px 8px', 
-                                            fontWeight: 'bold'
-                                        }}
-                                    >
-                                        📤 上传音频 (5-10s)
-                                    </button>
-                                    <button onClick={checkTTSStatus} title="检查服务状态">📡</button>
-                                </div>
-                            </div>
-
-                            {/* Step 2: Text Input */}
-                            <div style={{marginBottom: '8px', border: '1px dotted #666', padding: '4px', backgroundColor: '#fff'}}>
-                                <div style={{fontSize: '11px', fontWeight: 'bold', color: '#444', marginBottom: '4px'}}>第二步：输入音频中说的话 (上传后会自动保存)</div>
-                                <textarea 
-                                    value={refText}
-                                    onChange={(e) => setRefText(e.target.value)}
-                                    placeholder="请在这里输入您刚才上传的音频中的文字内容..."
-                                    style={{
-                                        width: '100%',
-                                        height: '60px',
-                                        fontSize: '12px',
-                                        resize: 'none',
-                                        fontFamily: 'sans-serif',
-                                        border: '1px solid #ccc'
-                                    }}
-                                />
-                            </div>
+                            {refAudioExists && (
+                                <audio controls src={`http://localhost:8081/api/tts/reference/audio?t=${audioTimestamp}`} style={{width:'100%', height:'25px', marginTop:'4px'}} />
+                            )}
                             
-                            <div style={{fontSize: '10px', color: '#666', marginTop: '2px'}}>
-                                * 上传成功后，参考音色将自动保存，无需再次点击底部的保存按钮。
-                            </div>
+                            <textarea value={refText} onChange={e => setRefText(e.target.value)} placeholder="输入参考音频的文字内容..." 
+                                style={{width:'100%', height: refAudioExists ? '30px' : '55px', marginTop:'4px', fontSize:'10px', resize:'none'}} />
                        </div>
 
-                       <div style={{ borderTop: '1px solid #999', paddingTop: '4px' }}>
-                            <div style={{fontWeight: 'bold', color: '#000080', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                                <span>模型选择 (Model)</span>
-                                <button onClick={fetchModels} title="刷新模型列表" style={{fontSize: '10px', padding: '0 4px', cursor: 'pointer'}}>🔄</button>
-                            </div>
-                            <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
-                                <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
-                                    <label style={{width: '50px'}}>输出语言:</label>
-                                    <select 
-                                        style={{flex: 1}} 
-                                        value={targetLang} 
-                                        onChange={e => setTargetLang(e.target.value)}
-                                    >
-                                        <option value="zh">中英混合 (Chinese-English)</option>
-                                        <option value="en">纯英文 (English)</option>
-                                        <option value="ja">日英混合 (Japanese-English)</option>
-                                        <option value="auto">多语种混合 (Auto)</option>
+                       <div style={{flex:1, border:'1px dotted #888', padding:'4px', backgroundColor:'#fff'}}>
+                            <div style={{fontWeight:'bold', fontSize:'11px'}}>🧠 模型 (Model)</div>
+                            <div style={{display:'flex', flexDirection:'column', gap:'4px', marginTop:'4px'}}>
+                                <div style={{display:'flex', alignItems:'center'}}>
+                                    <span style={{width:'40px'}}>输出:</span>
+                                    <select value={targetLang} onChange={e => setTargetLang(e.target.value)} style={{flex:1}}>
+                                        <option value="zh">中英混合</option>
+                                        <option value="en">纯英文</option>
+                                        <option value="ja">日英混合</option>
+                                        <option value="auto">自动</option>
                                     </select>
                                 </div>
-                                <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
-                                    <label style={{width: '50px'}}>GPT:</label>
-                                    <select 
-                                        style={{flex: 1}} 
-                                        value={selectedGPT} 
-                                        onChange={e => changeModel('gpt', e.target.value)}
-                                    >
-                                        <option value="">使用默认预训练模型</option>
+                                <div style={{display:'flex', alignItems:'center'}}>
+                                    <span style={{width:'40px'}}>GPT:</span>
+                                    <select value={selectedGPT} onChange={e => changeModel('gpt', e.target.value)} style={{flex:1}}>
+                                        <option value="">Default</option>
                                         {gptModels.map(m => <option key={m} value={m}>{m}</option>)}
                                     </select>
                                 </div>
-                                <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
-                                    <label style={{width: '50px'}}>SoVITS:</label>
-                                    <select 
-                                        style={{flex: 1}} 
-                                        value={selectedSoVITS} 
-                                        onChange={e => changeModel('sovits', e.target.value)}
-                                    >
-                                        <option value="">使用默认预训练模型</option>
+                                <div style={{display:'flex', alignItems:'center'}}>
+                                    <span style={{width:'40px'}}>SoVITS:</span>
+                                    <select value={selectedSoVITS} onChange={e => changeModel('sovits', e.target.value)} style={{flex:1}}>
+                                        <option value="">Default</option>
                                         {sovitsModels.map(m => <option key={m} value={m}>{m}</option>)}
                                     </select>
                                 </div>
                             </div>
                        </div>
                    </div>
-               ) : (
-                   <div style={{ 
-                     flex: 1,
-                     border: '2px inset #ffffff', 
-                     padding: '0px', 
-                     backgroundColor: '#ffffff',
-                     overflowY: 'hidden',
-                     fontSize: '12px',
-                     position: 'relative',
-                     display: 'flex',
-                     flexDirection: 'column'
-                   }}>
-                     <div style={{ 
-                       fontWeight: 'bold', 
-                       color: '#000080',
-                       backgroundColor: '#f0f0f0',
-                       padding: '2px 6px',
-                       borderBottom: '1px solid #ccc',
-                       fontSize: '11px',
-                       flexShrink: 0
-                     }}>
-                       [第 {pageControl.currentPage} 页讲稿]
-                     </div>
-                     <textarea
+                   
+                   <div style={{marginTop:'8px', textAlign:'right'}}>
+                       <button onClick={fetchModels} style={{marginRight:'8px'}}>🔄 刷新模型</button>
+                       <button onClick={handleSaveSettings} style={{fontWeight:'bold', padding:'2px 8px'}}>💾 保存设置</button>
+                   </div>
+               </div>
+            )}
+
+            {/* --- VIEW: EDITOR --- */}
+            {viewMode === 'editor' && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '8px' }}>
+                    <div style={{display:'flex', justifyContent:'space-between', marginBottom:'4px', alignItems:'center'}}>
+                       <span style={{fontWeight:'bold', color: '#000080'}}>📝 第 {pageControl.currentPage} 页讲稿</span>
+                       <button onClick={() => setViewMode('player')}>🔙 返回播放器</button>
+                    </div>
+                    <textarea
                         value={currentScript}
                         onChange={(e) => setCurrentScript(e.target.value)}
-                        placeholder={isGenerating ? "正在生成..." : "在这里输入或编辑讲稿..."}
-                        style={{
-                            flex: 1,
-                            width: '100%',
-                            border: 'none',
-                            outline: 'none',
-                            resize: 'none',
-                            padding: '6px',
-                            fontFamily: 'inherit',
-                            fontSize: '12px',
-                            lineHeight: '1.4',
-                            color: '#333'
-                        }}
-                     />
-                   </div>
-               )}
-    
-               {/* 右侧：控制按钮 */}
-               <div style={{ 
-                 width: '180px', 
-                 display: 'flex', 
-                 flexDirection: 'column', 
-                 gap: '6px',
-                 justifyContent: 'center' 
-               }}>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px', gap: '4px' }}>
-                    <button
-                      onClick={() => setShowSettings(!showSettings)}
-                      title="设置"
-                      style={{
-                        backgroundColor: showSettings ? '#a0a0a0' : '#c0c0c0',
-                        border: '1px outset #ffffff',
-                        width: '16px',
-                        height: '16px',
-                        fontSize: '10px',
-                        lineHeight: '10px',
-                        cursor: 'pointer',
-                        padding: 0,
-                        textAlign: 'center'
-                      }}
-                    >
-                      ⚙️
-                    </button>
-                    <button
-                      onClick={() => { setShowPanel(false); setIsAutoMode(false); }}
-                      title="关闭讲解"
-                      style={{
-                        backgroundColor: '#c0c0c0',
-                        border: '1px outset #ffffff',
-                        width: '16px',
-                        height: '16px',
-                        fontSize: '10px',
-                        lineHeight: '10px',
-                        cursor: 'pointer',
-                        padding: 0,
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-    
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <button
-                        onClick={generateScript}
-                        disabled={isGenerating || isBatchProcessing}
-                        style={{
-                        flex: 1,
-                        padding: '4px',
-                        backgroundColor: isGenerating ? '#a0a0a0' : '#c0c0c0',
-                        border: '2px outset #ffffff',
-                        cursor: (isGenerating || isBatchProcessing) ? 'wait' : 'pointer'
-                        }}
-                    >
-                        📝生成讲稿
-                    </button>
-                    <button
-                        onClick={generateAudio}
-                        disabled={isGeneratingAudio || !currentScript || isBatchProcessing}
-                        style={{
-                        flex: 1,
-                        padding: '4px',
-                        backgroundColor: (isGeneratingAudio || !currentScript) ? '#a0a0a0' : '#c0c0c0',
-                        border: '2px outset #ffffff',
-                        cursor: (isGeneratingAudio || !currentScript || isBatchProcessing) ? 'not-allowed' : 'pointer'
-                        }}
-                    >
-                        🔊生成语音
-                    </button>
-                  </div>
-    
-                  <div style={{ 
-                      marginTop: '4px', 
-                      border: '1px dotted #808080', 
-                      padding: '4px',
-                      backgroundColor: '#d4d0c8'
-                  }}>
-                    <div style={{ fontSize: '10px', marginBottom: '2px', color: '#444' }}>批量操作 (全文档):</div>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                        <button 
-                            onClick={() => startBatch('script')}
-                            disabled={isBatchProcessing}
-                            style={{ flex: 1, fontSize: '10px', cursor: 'pointer' }}>
-                            {isBatchProcessing && batchProgress.type === 'script' ? '停止' : '全部讲稿'}
-                        </button>
-                        <button 
-                            onClick={() => startBatch('audio')}
-                            disabled={isBatchProcessing}
-                            style={{ flex: 1, fontSize: '10px', cursor: 'pointer' }}>
-                            {isBatchProcessing && batchProgress.type === 'audio' ? '停止' : '全部语音'}
-                        </button>
+                        style={{ flex: 1, resize: 'none', padding: '4px', fontFamily:'inherit', fontSize:'12px' }}
+                        placeholder="在此处输入或修改讲稿..."
+                    />
+                    <div style={{textAlign:'right', fontSize:'10px', color:'#666', marginTop:'2px'}}>
+                        {currentScript !== lastSavedScript ? '💾 正在自动保存...' : '✅ 已保存'}
                     </div>
-                  </div>
-    
-                  <div style={{ height: '4px' }}></div>
-    
-                  <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                    <button
-                      title="上一页"
-                      onClick={() => { setIsAutoMode(false); pageControl.goToPreviousPage(); }}
-                      style={{ minWidth: '30px', border: '2px outset #ffffff', background: '#c0c0c0', cursor: 'pointer' }}
-                    >
-                      ⏮
-                    </button>
-                    
-                    <button
-                        onClick={togglePlaybackMode}
-                        title={`切换播放模式: ${getPlaybackModeIcon()}`}
-                        style={{
-                            border: '2px outset #ffffff',
-                            background: '#c0c0c0',
-                            cursor: 'pointer',
-                            fontSize: '10px',
-                            minWidth: '24px',
-                            padding: '0 2px'
-                        }}
-                    >
-                        {getPlaybackModeIcon().split(' ')[0]}
-                    </button>
+                </div>
+            )}
 
-                    <button
-                      onClick={isAutoMode ? togglePlay : startPresentation}
-                      disabled={!audioUrl}
-                      title={isAutoMode ? "暂停" : "开始播放"}
-                      style={{ 
-                        flex: 1, 
-                        border: '2px outset #ffffff', 
-                        background: isAutoMode ? '#a0ffcd' : '#c0c0c0', 
-                        cursor: !audioUrl ? 'not-allowed' : 'pointer',
-                        fontWeight: 'bold',
-                        fontSize: '11px'
-                      }}
-                    >
-                      {isPlaying ? '⏸' : '▶'}
-                    </button>
-                    <button
-                      title="下一页"
-                      onClick={() => { setIsAutoMode(false); pageControl.goToNextPage(); }}
-                      style={{ minWidth: '30px', border: '2px outset #ffffff', background: '#c0c0c0', cursor: 'pointer' }}
-                    >
-                      ⏭
-                    </button>
-                  </div>
-               </div>
-            </div>
-            
-            <div style={{ 
-              borderTop: '1px inset #ffffff', 
-              padding: '2px 4px', 
-              color: '#666',
-              fontSize: '11px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              flexShrink: 0
-            }}>
-              <span>
-                {isBatchProcessing 
-                    ? (batchProgress.message || `批量处理中: ${batchProgress.current} / ${batchProgress.total}`)
-                    : (isGenerating ? '正在生成讲稿...' : (isGeneratingAudio ? '正在合成语音...' : (isAutoMode ? `正在播放 (${getPlaybackModeIcon()})` : '就绪')))
-                }
-              </span>
-              <span>{currentScript !== lastSavedScript ? '💾 正在保存...' : '✅ 已保存'} {audioUrl ? '🔊 有语音' : ''}</span>
-            </div>
-            
+            {/* --- VIEW: PLAYER --- */}
+            {viewMode === 'player' && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    
+                    {/* 1. Subtitle Bar */}
+                    {showSubtitles && (
+                        <div style={{
+                            flex: 1, // Takes remaining space
+                            backgroundColor: 'rgba(0,0,0,0.85)',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0 30px',
+                            position: 'relative',
+                            textAlign: 'center',
+                            fontSize: '15px',
+                            fontWeight: 'bold',
+                            lineHeight: '1.4',
+                            overflowY: 'auto'
+                        }}>
+                            {currentSubtitle || (audioUrl ? (isPlaying ? "..." : "点击播放") : "暂无语音")}
+                            <button 
+                                onClick={() => setShowSubtitles(false)}
+                                style={{
+                                    position: 'absolute', right: '4px', top: '4px', 
+                                    background:'transparent', border:'none', color:'#888', cursor:'pointer', fontSize:'10px'
+                                }}
+                                title="隐藏字幕"
+                            >✕</button>
+                        </div>
+                    )}
+                    {!showSubtitles && <div style={{flex:1, background:'#333'}}></div>}
+                    
+                    {/* 2. Progress Bar */}
+                    <div style={{
+                        height: '28px', 
+                        backgroundColor: '#e0e0e0', 
+                        borderTop: '1px solid #999',
+                        borderBottom: '1px solid #999',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '0 8px',
+                        gap: '8px',
+                        fontSize: '11px',
+                        fontFamily: 'monospace',
+                        color: '#333'
+                    }}>
+                        <span style={{minWidth:'35px', textAlign:'right'}}>{formatTime(audioProgress)}</span>
+                        <input 
+                              type="range" 
+                              min="0" 
+                              max={audioDuration || 100} 
+                              value={audioProgress || 0} 
+                              onChange={(e) => {
+                                  const val = parseFloat(e.target.value);
+                                  if (audioRef.current) {
+                                      audioRef.current.currentTime = val;
+                                      setAudioProgress(val);
+                                  }
+                              }}
+                              style={{flex: 1, height: '4px', cursor: 'pointer'}}
+                              disabled={!audioUrl}
+                        />
+                        <span style={{minWidth:'35px'}}>{formatTime(audioDuration)}</span>
+                        {!showSubtitles && (
+                            <button onClick={() => setShowSubtitles(true)} style={{border:'1px solid #999', background:'#fff', cursor:'pointer', fontSize:'10px', padding:'0 4px'}}>字幕</button>
+                        )}
+                    </div>
+
+                    {/* 3. Controls Bar */}
+                    <div style={{
+                        height: '46px',
+                        backgroundColor: '#c0c0c0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0 6px'
+                    }}>
+                        {/* Left: Generators */}
+                        <div style={{display: 'flex', gap: '4px', alignItems:'center'}}>
+                            <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
+                                <button onClick={generateScript} title="生成本页讲稿" disabled={isGenerating} style={{fontSize:'10px', padding:'0 4px'}}>📝 文</button>
+                                <button onClick={generateAudio} title="生成本页语音" disabled={isGeneratingAudio} style={{fontSize:'10px', padding:'0 4px'}}>🔊 音</button>
+                            </div>
+                            <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
+                                <button onClick={() => startBatch('script')} title="生成全部讲稿" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>📚 批量文</button>
+                                <button onClick={() => startBatch('audio')} title="生成全部语音" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>💿 批量音</button>
+                            </div>
+                            <span style={{fontSize:'10px', color:'#666', marginLeft:'2px'}}>
+                                {isBatchProcessing ? batchProgress.current + '/' + batchProgress.total : ''}
+                            </span>
+                        </div>
+
+                        {/* Center: Playback (The STAR) */}
+                        <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
+                            <button 
+                                onClick={() => { setIsAutoMode(false); pageControl.goToPreviousPage(); }} 
+                                title="上一页"
+                                style={{fontSize:'18px', background:'transparent', border:'none', cursor:'pointer', color:'#000'}}
+                            >⏮</button>
+                            <button 
+                                onClick={isAutoMode ? togglePlay : startPresentation}
+                                disabled={!audioUrl}
+                                style={{ 
+                                    width: '36px', height: '36px', borderRadius:'50%', 
+                                    fontSize: '18px', fontWeight:'bold', 
+                                    background: isPlaying ? '#fff' : '#000080', 
+                                    color: isPlaying ? '#000' : '#fff',
+                                    border: '2px outset #fff', cursor: 'pointer',
+                                    display:'flex', alignItems:'center', justifyContent:'center'
+                                }}
+                            >
+                                {isPlaying ? '⏸' : '▶'}
+                            </button>
+                            <button 
+                                onClick={() => { setIsAutoMode(false); pageControl.goToNextPage(); }} 
+                                title="下一页"
+                                style={{fontSize:'18px', background:'transparent', border:'none', cursor:'pointer', color:'#000'}}
+                            >⏭</button>
+                            <button 
+                                onClick={togglePlaybackMode} 
+                                title={`模式: ${getPlaybackModeIcon()}`} 
+                                style={{width:'24px', background:'transparent', border:'none', cursor:'pointer', fontSize:'14px'}}
+                            >
+                                {getPlaybackModeIcon().split(' ')[0]}
+                            </button>
+                        </div>
+
+                        {/* Right: Tools */}
+                        <div style={{display: 'flex', gap: '6px', alignItems:'center'}}>
+                            <button onClick={() => setViewMode('editor')} title="编辑讲稿" style={{padding:'4px'}}>✏️ 编辑</button>
+                            <button onClick={() => setViewMode('settings')} title="设置" style={{padding:'4px'}}>⚙️</button>
+                            <div style={{width:'1px', height:'20px', background:'#888', margin:'0 2px'}}></div>
+                            <button onClick={() => setShowPanel(false)} title="关闭" style={{padding:'4px', fontWeight:'bold', color:'red'}}>✕</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <audio 
                 ref={audioRef} 
+                onTimeUpdate={(e) => {
+                    const t = e.target.currentTime;
+                    const d = e.target.duration;
+                    setAudioProgress(t);
+                    setAudioDuration(d);
+                    
+                    if (subtitles && subtitles.length > 0) {
+                        const sub = subtitles.find(s => t >= s.start && t <= s.end);
+                        if (sub) setCurrentSubtitle(sub.text);
+                    }
+                }}
                 onEnded={() => {
                     // setIsPlaying(false); // Don't stop immediately, logic below decides
                     

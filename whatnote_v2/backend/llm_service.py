@@ -28,7 +28,7 @@ class LLMService:
         # 注册待办工具（简化版，不需要状态管理器）
         register_todo_tools(tool_registry)
         # 注册视觉工具
-        register_vision_tools(tool_registry, api_config_manager)
+        register_vision_tools(tool_registry, api_config_manager, content_manager)
     
     def get_config(self) -> Dict:
         """获取当前API配置，包含provider信息"""

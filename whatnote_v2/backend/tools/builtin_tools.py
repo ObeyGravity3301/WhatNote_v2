@@ -663,8 +663,9 @@ class WindowToolHandlers:
                 windows = [w for w in windows if not w.get("isHidden", False)]
             
             # 简化返回的数据（只返回关键信息）
-            simplified_windows = [
-                {
+            simplified_windows = []
+            for w in windows:
+                window_info = {
                     "id": w.get("id"),
                     "title": w.get("title"),
                     "type": w.get("type"),
@@ -672,8 +673,12 @@ class WindowToolHandlers:
                     "updated_at": w.get("updated_at"),
                     "isMinimized": w.get("isMinimized", False)
                 }
-                for w in windows
-            ]
+                # 对于文件类型窗口，提前暴露内容路径，方便模型直接调用分析工具
+                if w.get("type") in ["image", "pdf", "video", "audio"]:
+                    # 注意：content 字段通常存储的是相对文件路径
+                    window_info["file_path"] = w.get("content") or w.get("file_path")
+                
+                simplified_windows.append(window_info)
             
             info(f"[工具] 获取窗口列表成功: {board_id}, 共 {len(simplified_windows)} 个窗口")
             

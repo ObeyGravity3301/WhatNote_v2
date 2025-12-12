@@ -21,10 +21,10 @@ class PluginRegistry {
     if (this.plugins.has(plugin.id)) {
       console.warn(`[插件系统] 插件 ${plugin.id} 已存在，将被覆盖`);
     }
-    
+
     this.plugins.set(plugin.id, plugin);
     console.log(`[插件系统] 已注册插件: ${plugin.name} (${plugin.id})`);
-    
+
     // 如果用户偏好中已明确启用，则启用
     if (this.enabledPlugins.has(plugin.id)) {
       this.enable(plugin.id, false); // false 表示不保存（因为已经在 enabledPlugins 中）
@@ -65,10 +65,10 @@ class PluginRegistry {
         return false;
       }
     }
-    
+
     this.enabledPlugins.add(pluginId);
     if (savePreferences) {
-      this.saveUserPreferences();
+    this.saveUserPreferences();
     }
     console.log(`[插件系统] 已启用插件: ${plugin.name}`);
     return true;
@@ -92,7 +92,7 @@ class PluginRegistry {
         console.error(`[插件系统] 禁用插件 ${pluginId} 时出错:`, error);
       }
     }
-    
+
     this.enabledPlugins.delete(pluginId);
     // 记录用户明确禁用的插件
     if (!this.disabledPlugins) {
@@ -136,8 +136,8 @@ class PluginRegistry {
     return this.getEnabled()
       .filter(p => 
         p.type === 'toolbar-feature' && 
-        p.targetWindowTypes && 
-        p.targetWindowTypes.includes(windowType)
+          p.targetWindowTypes &&
+          p.targetWindowTypes.includes(windowType)
       );
   }
 

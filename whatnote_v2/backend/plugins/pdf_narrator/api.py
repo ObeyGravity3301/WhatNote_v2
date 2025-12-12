@@ -6,6 +6,9 @@ import json
 import shutil
 import uuid
 import os
+import wave
+import io
+import re
 from pathlib import Path
 from datetime import datetime
 from logger import info, error
@@ -122,7 +125,8 @@ async def get_tts_reference():
         return {
             "exists": True,
             "text": meta.get("text", ""),
-            "language": meta.get("language", "zh")
+            "language": meta.get("language", "zh"),
+            "filename": meta.get("filename", "default.wav")
         }
     except Exception as e:
         error(f"获取参考音频信息失败: {e}")
@@ -147,7 +151,11 @@ async def upload_tts_reference(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        meta_data = {"text": text, "language": language}
+        meta_data = {
+            "text": text, 
+            "language": language,
+            "filename": file.filename
+        }
         # 如果传入的text是空的，尝试保留旧的text
         if not text and meta_path.exists():
             try:
@@ -161,9 +169,56 @@ async def upload_tts_reference(
         with open(meta_path, "w") as f:
             json.dump(meta_data, f)
             
-        return {"success": True, "message": "参考音频已更新"}
+        return {"success": True, "message": "参考音频已更新", "filename": file.filename}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
+
+@router.put("/tts/reference")
+async def update_tts_reference_meta(request: Request):
+    """更新参考音频的元数据（文本、语言）而不上传新文件"""
+    check_enabled()
+    try:
+        data = await request.json()
+        text = data.get("text")
+        language = data.get("language")
+        
+        ref_dir = DATA_DIR / "ref_audio"
+        meta_path = ref_dir / "default.json"
+        
+        if not meta_path.exists():
+             # If no meta file, but maybe directory exists?
+             # If completely new, we can't update meta without file.
+             # But let's allow creating meta if it's missing but user wants to set it 
+             # (though without audio it's useless).
+             raise HTTPException(status_code=404, detail="参考音频配置不存在，请先上传音频")
+            
+        with open(meta_path, 'r') as f:
+            meta_data = json.load(f)
+            
+        if text is not None:
+            meta_data["text"] = text
+        if language is not None:
+            meta_data["language"] = language
+            
+        with open(meta_path, "w") as f:
+            json.dump(meta_data, f)
+            
+        return {"success": True, "message": "配置已更新"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/tts/reference/audio")
+async def get_tts_reference_audio():
+    """获取参考音频文件进行试听"""
+    check_enabled()
+    try:
+        ref_dir = DATA_DIR / "ref_audio"
+        wav_path = ref_dir / "default.wav"
+        if wav_path.exists():
+            return FileResponse(wav_path, media_type="audio/wav", headers={"Cache-Control": "no-cache"})
+        raise HTTPException(status_code=404, detail="No reference audio found")
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/tts/status")
@@ -468,6 +523,83 @@ async def save_narrator_script(board_id: str, window_id: str, page: int, request
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/boards/{board_id}/windows/{window_id}/narrator/script-generate/{page}")
+async def generate_narrator_script_single(
+    board_id: str, 
+    window_id: str, 
+    page: int, 
+    request: Request
+):
+    """单页讲稿生成（独立接口，不污染注释）"""
+    check_enabled()
+    try:
+        request_body = await request.json()
+        custom_prompt = request_body.get('promptTemplate', '')
+        previous_script = request_body.get('previous_script', '')
+        next_script = request_body.get('next_script', '')
+        
+        # 获取内容
+        page_contents = content_manager.get_pdf_page_contents(board_id, window_id, page)
+        if not page_contents.get('current'):
+            raise HTTPException(status_code=404, detail="Page content not found")
+            
+        # 构建 Prompt
+        prompt_parts = []
+        prompt_parts.append("你是一位专业的演讲者。请根据以下PDF页面内容撰写一份口语化的演讲稿。\n")
+        
+        # 上一页（参考）
+        if page_contents.get('previous'):
+            prompt_parts.append(f"【上一页原文内容（第{page-1}页）】\n{page_contents['previous']}\n")
+        if previous_script:
+            prompt_parts.append(f"【上一页已生成讲稿参考】\n{previous_script}\n")
+            
+        # 当前页（重点）
+        prompt_parts.append(f"【当前页原文内容（第{page}页）】\n{page_contents['current']}\n")
+        
+        # 下一页（参考）
+        if next_script:
+            prompt_parts.append(f"【下一页已生成讲稿参考】\n{next_script}\n")
+        if page_contents.get('next'):
+            prompt_parts.append(f"【下一页原文内容（第{page+1}页）】\n{page_contents['next']}\n")
+            
+        if page == 1:
+            prompt_parts.append("\n注意：这是演示文档的第一页，请直接开始开场白，无需回顾前文。")
+
+        if custom_prompt:
+            prompt_parts.append(f"\n{custom_prompt}")
+        else:
+            prompt_parts.append("\n要求：\n1. 时间控制在 30-60 秒。\n2. 语言自然流畅。\n3. 不要念标题，而是解释核心观点。\n4. 使用第一人称。")
+            
+        prompt = "\n".join(prompt_parts)
+        
+        messages = [{
+            "role": "user",
+            "content": prompt,
+            "timestamp": datetime.now().isoformat()
+        }]
+        
+        async def generate_stream():
+            accumulated_content = ""
+            async for chunk in llm_service.chat_completion(messages, stream=True):
+                if chunk:
+                    accumulated_content += chunk
+                    yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+            
+            # 自动保存到 *讲稿* 文件 (使用 save_narrator_script)
+            content_manager.save_narrator_script(board_id, window_id, page, accumulated_content)
+            
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+    except Exception as e:
+        error(f"生成讲稿失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/boards/{board_id}/windows/{window_id}/narrator/audio/{page}")
 async def get_narrator_audio(
@@ -487,6 +619,39 @@ async def get_narrator_audio(
     except Exception as e:
         error(f"获取语音失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取语音失败: {str(e)}")
+
+@router.get("/boards/{board_id}/windows/{window_id}/narrator/subtitles/{page}")
+async def get_narrator_subtitles_api(
+    board_id: str,
+    window_id: str,
+    page: int
+):
+    """获取PDF指定页面的字幕文件"""
+    check_enabled()
+    try:
+        subs = content_manager.get_narrator_subtitles(board_id, window_id, page)
+        return {"subtitles": subs or []}
+    except Exception as e:
+        error(f"获取字幕失败: {e}")
+        return {"subtitles": []}
+
+
+
+def split_text_smartly(text: str) -> List[str]:
+    """智能分句：保留标点符号"""
+    pattern = r'([。！？.!?])'
+    parts = re.split(pattern, text)
+    sentences = []
+    current = ""
+    for part in parts:
+        current += part
+        if re.match(pattern, part):
+             if len(current.strip()) > 0:
+                 sentences.append(current)
+                 current = ""
+    if current.strip():
+        sentences.append(current)
+    return sentences
 
 @router.post("/boards/{board_id}/windows/{window_id}/narrator/audio/{page}")
 async def generate_narrator_audio(
@@ -533,32 +698,76 @@ async def generate_narrator_audio(
         if not ref_audio_path:
              raise HTTPException(status_code=400, detail="未设置参考音频，请在设置中上传一段5-10秒的参考音频")
 
-        # 4. 调用 TTS 服务
-        payload = {
-            "text": text,
+        # 4. 调用 TTS 服务 (Split & Merge Strategy)
+        sentences = split_text_smartly(text)
+        info(f"TTS Split: {len(sentences)} sentences")
+
+        base_payload = {
             "text_language": text_language,
             "refer_wav_path": ref_audio_path,
             "prompt_text": prompt_text,
             "prompt_language": prompt_lang,
-            "cut_punc": "，。！"
+            "cut_punc": "，" # Only cut on commas internally
         }
         
-        info(f"调用TTS: {GPT_SOVITS_URL}, text len: {len(text)}")
+        full_audio_buffer = io.BytesIO()
+        subtitles = []
+        current_time = 0.0
+        wave_writer = None
         
         async with aiohttp.ClientSession() as session:
-            async with session.post(f"{GPT_SOVITS_URL}/", json=payload) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    error(f"TTS API Error: {error_text}")
-                    raise HTTPException(status_code=response.status, detail=f"TTS服务错误: {error_text}")
+            for sentence in sentences:
+                if not sentence.strip(): continue
                 
-                audio_content = await response.read()
+                payload = base_payload.copy()
+                payload["text"] = sentence
+                
+                async with session.post(f"{GPT_SOVITS_URL}/", json=payload) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        error(f"TTS Segment Error: {error_text}")
+                        continue
+                    
+                    audio_content = await response.read()
+                    
+                    try:
+                        with wave.open(io.BytesIO(audio_content), 'rb') as wav_in:
+                            if wave_writer is None:
+                                wave_writer = wave.open(full_audio_buffer, 'wb')
+                                wave_writer.setparams(wav_in.getparams())
+                            
+                            frames = wav_in.getnframes()
+                            rate = wav_in.getframerate()
+                            duration = frames / float(rate)
+                            
+                            subtitles.append({
+                                "start": current_time,
+                                "end": current_time + duration,
+                                "text": sentence
+                            })
+                            current_time += duration
+                            
+                            wave_writer.writeframes(wav_in.readframes(frames))
+                    except Exception as e:
+                        error(f"Error processing audio chunk: {e}")
+        
+        if wave_writer:
+            wave_writer.close()
+            final_audio = full_audio_buffer.getvalue()
+        else:
+            raise HTTPException(status_code=500, detail="生成音频失败 (No valid chunks)")
                 
         # 5. 保存并返回
-        saved_path = content_manager.save_narrator_audio(board_id, window_id, page, audio_content)
+        saved_path = content_manager.save_narrator_audio(board_id, window_id, page, final_audio)
+        content_manager.save_narrator_subtitles(board_id, window_id, page, subtitles)
         
         if saved_path:
-            return FileResponse(saved_path, media_type="audio/wav")
+            # Return JSON response
+            return {
+                "success": True,
+                "audio_url": f"/api/boards/{board_id}/windows/{window_id}/narrator/audio/{page}",
+                "subtitles": subtitles
+            }
         else:
             raise HTTPException(status_code=500, detail="保存音频失败")
 

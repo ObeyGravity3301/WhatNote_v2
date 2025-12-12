@@ -36,7 +36,7 @@ class ToolExecutor:
             return
         
         self.max_concurrent = 3  # 最大并发执行数
-        self.default_timeout = 30  # 默认超时（秒）
+        self.default_timeout = 120  # 默认超时（秒）
         self._initialized = True
         
         info("⚙️ 工具执行引擎初始化完成")
