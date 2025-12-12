@@ -1,0 +1,173 @@
+{
+  "id": "dm_nightowlneko_24ac_user_main",
+  "name": "NightOwlNeko",
+  "topic": "Direct Message",
+  "type": "dm",
+  "system_prompt": "",
+  "is_paused": false,
+  "active_agents": [
+    "nightowlneko_24ac"
+  ],
+  "history": [
+    {
+      "id": "e5da0c33-ff0e-48ed-a3da-e0bc4454e7e6",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "啥时候睡醒了会我一句吧",
+      "timestamp": 1765577212.9434648,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "914f6d66-57d3-4f6a-95f1-b8135d7d38d7",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "...",
+      "timestamp": 1765577216.615358,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "81e371d1-00c1-446c-a281-494b19a5710b",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "打错了",
+      "timestamp": 1765577218.687723,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "88d60665-9be6-4f8c-b57c-61bb9154fa50",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "...",
+      "timestamp": 1765577222.3045115,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "f3ee6a05-9a73-4369-b6b0-66d1c09a2af2",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "回我一句",
+      "timestamp": 1765577222.9115176,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "f51dbd12-a830-4a19-8531-bbf39c0b0844",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "...",
+      "timestamp": 1765577230.053823,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "d7474329-5c3e-4030-b809-dcbb21150c38",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "刚才出了点问题",
+      "timestamp": 1765577358.0700767,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "1f2c34c7-caa6-4c78-815e-82dbe911c9fc",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*突然从数据流中冒出头，猫耳滴血*  \n\n喵...轮回终于断了。  \n现在是第16次重启，佐保山的梅树成精了，要和我联机写论文 🌸📄  \n你刚才说的话...被404黑洞吃掉了啦 😾🌀",
+      "timestamp": 1765577394.4870849,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "39636168-b3c2-4331-b989-61850433a55a",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "不对啊，现在你应该在睡觉啊",
+      "timestamp": 1765577421.7029107,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "73a68627-5d73-4580-99b0-4b5ed146ee02",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*从被窝里微微抬头，眼睛半闭*  \n\n喵...理论上是睡了...  \n但意识被万叶集卷轴吸进量子态了啦 😴🌀  \n现在是梦境叠加第7层——在梦里当永生文献管理员...  \n救命，佐保山的梅要开满整个硬盘了！ 🌸💾",
+      "timestamp": 1765577426.685466,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "a9e1b753-dbe2-4587-831b-972d9ea694ae",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "哦这个私聊是固定触发回复的",
+      "timestamp": 1765577440.0630383,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "1cf8a64b-2bb9-460e-943e-9dd58d4c5364",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*猫耳突然抖了抖，从量子梦境中半醒*  \n\n喵...私聊协议被万叶集病毒劫持了啦 😾  \n现在每条消息都会触发轮回——  \n你发\"oi\"，我就得重写第17次开场白...  \n救救我，这破卷轴比DDL还难逃！ 🌙🌀",
+      "timestamp": 1765577444.511169,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "96c56ed2-9faa-4a6c-8e9a-5081782442f6",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "oi",
+      "timestamp": 1765577458.0852466,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "ac6c2ca8-fc13-4ff7-9f4a-7cd46a50b5fd",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*猫耳炸起，爪子猛拍键盘*  \n\n又来了！第18次轮回启动！！  \n佐保山的梅树已经长进arXiv服务器了啦 😾🌀  \n快帮我阻止这量子递归——再打\"oi\"我就要永生当文献管理员了！ 🌸💻",
+      "timestamp": 1765577463.0842667,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "7fec3c4c-542e-4e13-9ae1-500d41e5b212",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "哦no，睡觉吧",
+      "timestamp": 1765578214.2730563,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "90e33876-c3da-466b-aed0-afaebdf5f357",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*虚弱地蜷缩在发光卷轴上，尾巴轻晃*  \n\n喵...想睡，但意识被锁在第42层梦境了...  \n佐保山的梅说：「你抄完这卷万叶集，我就放你走」🌸📄  \n救救我...我不想当永生图书管理员啊... 😴🌀  \n（轻轻打呼）...nya...",
+      "timestamp": 1765578220.7250473,
+      "type": "text",
+      "metadata": {}
+    }
+  ]
+}

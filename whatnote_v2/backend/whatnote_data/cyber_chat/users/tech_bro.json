@@ -27,6 +27,36 @@
       21,
       22
     ],
-    "timezone_offset": 8
+    "weekdays_active_hours": null,
+    "weekends_active_hours": null,
+    "timezone_offset": 8,
+    "random_online_chance": 0.0,
+    "random_offline_chance": 0.0,
+    "daily_routine": {
+      "0": "Sleeping",
+      "1": "Sleeping",
+      "2": "Sleeping",
+      "3": "Sleeping",
+      "4": "Sleeping",
+      "5": "Sleeping",
+      "6": "Sleeping",
+      "7": "Sleeping",
+      "8": "Waking up, morning routine (brushing teeth, shower, quick workout)",
+      "9": "Checking emails and Slack for urgent messages, prioritizing the day's tasks (Online)",
+      "10": "Stand-up meeting with engineering team on Zoom to review AI model progress (Online)",
+      "11": "Deep work session: reviewing ML training results and refining model architecture (Online)",
+      "12": "Lunch break while listening to an AI podcast (Online - responding to DMs casually)",
+      "13": "Working on investor pitch deck improvements based on last feedback (Online)",
+      "14": "Meeting with co-founder to discuss product roadmap and user feedback from beta testers (Online)",
+      "15": "Code review session with junior dev on GitHub PRs (Online)",
+      "16": "Testing new API endpoints for the AI assistant backend (Online)",
+      "17": "Quick walk outside to clear head, still available on Slack for urgent issues (Online - light monitoring)",
+      "18": "Dinner at home, catching up on tech news (Online - browsing Hacker News, Twitter)",
+      "19": "Pair programming session with lead engineer to debug latency issue in inference pipeline (Online)",
+      "20": "Drafting blog post about our latest AI feature launch (Online)",
+      "21": "Answering customer support queries and engaging with early users on Discord (Online)",
+      "22": "Wrapping up, journaling key wins and blockers from the day; logging tomorrow’s priorities (Online)",
+      "23": "Sleeping"
+    }
   }
 }

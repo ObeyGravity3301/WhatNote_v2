@@ -67,6 +67,15 @@ class CyberChatManager:
         except Exception as e:
             error(f"[CyberChat] Failed to load agents: {e}")
 
+    def save_agent(self, agent: BaseAgent):
+        """Save agent profile to disk."""
+        try:
+            file_path = self.users_dir / f"{agent.profile.id}.json"
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(agent.profile.dict(), f, ensure_ascii=False, indent=2, default=str)
+        except Exception as e:
+            error(f"[CyberChat] Failed to save agent {agent.profile.id}: {e}")
+
     async def ensure_all_routines(self):
         """Called typically at startup to ensure all agents have routines."""
         tasks = []
@@ -88,6 +97,16 @@ class CyberChatManager:
             self.save_agent(agent)
         except Exception as e:
             error(f"[CyberChat] Failed to generate routine for {agent.profile.name}: {e}")
+
+    async def regenerate_agent_routine(self, agent_id: str):
+        """Force regenerate an agent's routine."""
+        agent = self.agents.get(agent_id)
+        if not agent:
+            raise ValueError("Agent not found")
+            
+        await agent.ensure_daily_routine(force_regenerate=True)
+        self.save_agent(agent)
+        return agent.profile.schedule.daily_routine
 
     async def load_agents(self):
         """Legacy async loader - calls ensure_all_routines."""
@@ -114,6 +133,7 @@ class CyberChatManager:
                                 id=room_id,
                                 name=data.get('name', 'Unknown Room'),
                                 topic=data.get('topic', ''),
+                                type=data.get('type', 'group'), # Load type
                                 system_prompt=data.get('system_prompt', ''),
                                 is_paused=data.get('is_paused', False),
                                 active_agents=data.get('active_agents', [])
@@ -141,6 +161,7 @@ class CyberChatManager:
                 "id": room.id,
                 "name": room.name,
                 "topic": room.topic,
+                "type": room.type, # Save type
                 "system_prompt": room.system_prompt,
                 "is_paused": room.is_paused,
                 "active_agents": room.active_agents,
@@ -152,7 +173,7 @@ class CyberChatManager:
         except Exception as e:
             error(f"[CyberChat] Failed to save room {room_id}: {e}")
 
-    def create_room(self, id: str, name: str, topic: str) -> RoomState:
+    def create_room(self, id: str, name: str, topic: str, room_type: str = "group") -> RoomState:
         if id in self.rooms:
             return self.rooms[id]
         
@@ -160,12 +181,33 @@ class CyberChatManager:
             id=id,
             name=name,
             topic=topic,
+            type=room_type,
             active_agents=[],
             is_paused=False
         )
         self.rooms[id] = room
         self.save_room(id)
-        info(f"[CyberChat] Created room: {id}")
+        info(f"[CyberChat] Created room: {id} (Type: {room_type})")
+        return room
+
+    def create_dm_room(self, user_id: str, agent_id: str) -> RoomState:
+        """Get or create a DM room between user and agent."""
+        # Ensure consistent ID
+        ids = sorted([user_id, agent_id])
+        room_id = f"dm_{ids[0]}_{ids[1]}"
+        
+        if room_id in self.rooms:
+            return self.rooms[room_id]
+            
+        agent = self.agents.get(agent_id)
+        agent_name = agent.profile.name if agent else "Unknown Agent"
+        
+        # Create DM room
+        room = self.create_room(room_id, name=agent_name, topic="Direct Message", room_type="dm")
+        
+        # Add agent implicitly (don't need explicit join for DM usually, but helps logic)
+        self.add_agent_to_room(agent_id, room_id)
+        
         return room
 
     def toggle_pause_room(self, room_id: str, paused: bool):
@@ -209,6 +251,11 @@ class CyberChatManager:
         info(f"[CyberChat] Agent created: {profile.name}")
         if save:
             self.save_agent(agent)
+            
+        # Trigger routine generation in background immediately
+        if not agent.profile.schedule.daily_routine:
+            asyncio.create_task(self._generate_and_save_routine(agent))
+            
         return agent
 
     async def generate_agent_profile(self, description: str) -> AgentProfile:
@@ -218,6 +265,8 @@ class CyberChatManager:
         
         Return ONLY a JSON object with the following fields:
         - name: A creative username (no spaces preferred).
+        - gender: Gender identity (Male/Female/Non-binary/AI).
+        - language: Primary language (e.g. Chinese).
         - personality: A concise description of their personality.
         - interests: A list of 3-5 topics they are interested in.
         - style: A description of their speaking style (e.g., slang, formal, emoji usage).
@@ -273,6 +322,8 @@ class CyberChatManager:
             profile = AgentProfile(
                 id=agent_id,
                 name=data.get('name', 'NewUser'),
+                gender=data.get('gender', 'Unknown'),
+                language=data.get('language', 'Chinese'),
                 personality=data.get('personality', 'A generic user.'),
                 interests=data.get('interests', []),
                 style=data.get('style', 'Normal conversation.'),
@@ -306,6 +357,24 @@ class CyberChatManager:
         """
         Post a message to a specific room.
         """
+        # System messages like 'typing_start' are not saved to history
+        if msg_type == "typing_start":
+            msg = ChatMessage(
+                id=str(uuid.uuid4()),
+                room_id=room_id,
+                sender_id=sender_id,
+                sender_name=sender_name,
+                content="",
+                type=msg_type
+            )
+            # Just notify subscribers
+            for q in self.subscribers:
+                try:
+                    q.put_nowait(msg)
+                except asyncio.QueueFull:
+                    pass
+            return msg
+
         room = self.rooms.get(room_id)
         if not room:
             error(f"[CyberChat] Post failed: Room {room_id} not found")
@@ -382,6 +451,50 @@ class CyberChatManager:
                     agent_ids = list(room.active_agents)
                     random.shuffle(agent_ids)
                     
+                    # DM LOGIC
+                    if room.type == 'dm':
+                        # In DM, agent responds if User spoke last
+                        if not room.history:
+                            continue
+                        last_msg = room.history[-1]
+                        
+                        # Assuming user_main is the only user for now
+                        if last_msg.sender_id.startswith("user") and last_msg.sender_id not in room.active_agents:
+                            # It's a user message. Find the agent.
+                            # DM usually has 1 agent.
+                            target_agent = None
+                            for aid in room.active_agents:
+                                if aid in self.agents:
+                                    target_agent = self.agents[aid]
+                                    break
+                            
+                            if target_agent:
+                                # Respond immediately (ignoring chance, but checking offline status?)
+                                # For DM, we might want them to respond even if busy, or say "I'm busy".
+                                # Let's respect is_online but with HIGH priority.
+                                status = target_agent.is_online()
+                                
+                                # Only speak if NOT already thinking/speaking (simple lock)
+                                if target_agent.status == "idle":
+                                    info(f"[CyberChat][DM] {target_agent.profile.name} replying to DM.")
+                                    # Notify Typing
+                                    await self.post_message(room_id, target_agent.profile.id, target_agent.profile.name, "", msg_type="typing_start")
+                                    
+                                    response = await target_agent.speak(room.dict())
+                                    
+                                    # Notify Typing End (implicit in next message or explicit)
+                                    # We don't need explicit end if we send the message right after
+                                    
+                                    if response:
+                                        await self.post_message(
+                                            room_id=room_id,
+                                            sender_id=target_agent.profile.id,
+                                            sender_name=target_agent.profile.name,
+                                            content=response
+                                        )
+                        continue # Skip standard logic for DM rooms
+
+                    # GROUP LOGIC (Standard)
                     for agent_id in agent_ids:
                         agent = self.agents.get(agent_id)
                         if not agent: continue
@@ -391,6 +504,10 @@ class CyberChatManager:
                         
                         if should_speak:
                             info(f"[CyberChat][{room_id}] {agent.profile.name} decided to speak.")
+                            
+                            # Notify Typing
+                            await self.post_message(room_id, agent.profile.id, agent.profile.name, "", msg_type="typing_start")
+                            
                             response = await agent.speak(room.dict()) # Pass room context
                             if response:
                                 await self.post_message(

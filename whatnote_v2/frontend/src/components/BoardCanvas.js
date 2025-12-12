@@ -9864,8 +9864,12 @@ function BoardCanvas({
         e.preventDefault();
         const existing = windows.find(w => w.id === CHAT_WINDOW_ID);
         if (existing) {
+           // Ensure it's not hidden
+           if (hiddenWindows && hiddenWindows.has(CHAT_WINDOW_ID)) {
+               if (onWindowShow) onWindowShow(CHAT_WINDOW_ID); 
+           }
            handleWindowFocusLocal(CHAT_WINDOW_ID);
-           if (minimizedWindows.has(CHAT_WINDOW_ID)) handleWindowMinimizeLocal(CHAT_WINDOW_ID);
+           if (minimizedWindows && minimizedWindows.has(CHAT_WINDOW_ID)) handleWindowMinimizeLocal(CHAT_WINDOW_ID);
         } else {
            // Create Chat Window if not exists
            const chatWindow = createChatWindow();
@@ -9874,6 +9878,10 @@ function BoardCanvas({
            // Force show immediately (in case hidden logic interferes) and focus
            setTimeout(() => {
                if (onWindowShow) onWindowShow(CHAT_WINDOW_ID); // Ensure removed from hidden list
+               // Check if it's somehow stuck in minimized state
+               if (minimizedWindows && minimizedWindows.has(CHAT_WINDOW_ID)) {
+                   handleWindowMinimizeLocal(CHAT_WINDOW_ID); // Toggle to restore
+               }
                handleWindowFocusLocal(CHAT_WINDOW_ID);
            }, 50);
         }
@@ -9885,14 +9893,21 @@ function BoardCanvas({
         e.preventDefault();
         const existing = windows.find(w => w.id === PLANNER_WINDOW_ID);
         if (existing) {
+           // Ensure it's not hidden
+           if (hiddenWindows && hiddenWindows.has(PLANNER_WINDOW_ID)) {
+               if (onWindowShow) onWindowShow(PLANNER_WINDOW_ID); 
+           }
            handleWindowFocusLocal(PLANNER_WINDOW_ID);
-           if (minimizedWindows.has(PLANNER_WINDOW_ID)) handleWindowMinimizeLocal(PLANNER_WINDOW_ID);
+           if (minimizedWindows && minimizedWindows.has(PLANNER_WINDOW_ID)) handleWindowMinimizeLocal(PLANNER_WINDOW_ID);
         } else {
            // Create Planner Window if not exists
            const plannerWindow = createPlannerWindow();
            setWindows(prev => [...prev, plannerWindow]);
            setTimeout(() => {
                if (onWindowShow) onWindowShow(PLANNER_WINDOW_ID);
+               if (minimizedWindows && minimizedWindows.has(PLANNER_WINDOW_ID)) {
+                   handleWindowMinimizeLocal(PLANNER_WINDOW_ID); // Toggle to restore
+               }
                handleWindowFocusLocal(PLANNER_WINDOW_ID);
            }, 50);
         }

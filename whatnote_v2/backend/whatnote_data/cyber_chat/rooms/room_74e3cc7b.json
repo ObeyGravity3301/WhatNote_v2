@@ -5,7 +5,9 @@
   "system_prompt": "",
   "is_paused": true,
   "active_agents": [
-    "omnibot_x_821e"
+    "omnibot_x_821e",
+    "techsage_ai_8cd4",
+    "techbotx_0141"
   ],
   "history": [
     {

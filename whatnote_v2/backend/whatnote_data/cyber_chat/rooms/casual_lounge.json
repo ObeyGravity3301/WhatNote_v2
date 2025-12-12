@@ -2,13 +2,15 @@
   "id": "casual_lounge",
   "name": "The Lounge",
   "topic": "Chill & Tech",
+  "type": "group",
   "system_prompt": "",
   "is_paused": true,
   "active_agents": [
     "hacker_neo",
     "anime_chan",
     "tech_bro",
-    "nightowlneko_24ac"
+    "nightowlneko_24ac",
+    "aliya_cosmos_da6b"
   ],
   "history": [
     {

@@ -95,22 +95,79 @@ const NarratorPluginComponent = (props) => {
         return;
       }
 
-      // 2. 快退
+      // 2. 快退 (Rewind to previous sentence)
       if (ShortcutManager.matches('narrator.rewind', e)) {
         e.preventDefault();
-        e.stopPropagation(); // 阻止事件冒泡，防止被外层捕获
-        if (audioRef.current && audioUrl) {
-            audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 5);
+        e.stopPropagation(); 
+        
+        if (audioRef.current && audioUrl && Number.isFinite(audioRef.current.currentTime)) {
+            const currentTime = audioRef.current.currentTime;
+            
+            // 如果字幕存在，尝试跳转到上一句
+            if (subtitles && subtitles.length > 0) {
+                // 找到当前正在播放的字幕索引
+                // 宽松匹配：只要字幕的开始时间小于等于当前时间，就认为是候选
+                // 我们要找最后一个开始时间 <= 当前时间的字幕
+                // 由于 subtitles 是按时间排序的，我们可以反向查找或正向查找
+                
+                let currentIndex = -1;
+                for (let i = 0; i < subtitles.length; i++) {
+                    if (currentTime >= subtitles[i].start) {
+                        currentIndex = i;
+                    } else {
+                        break; // 之后的字幕还没开始
+                    }
+                }
+                
+                if (currentIndex !== -1) {
+                    const currentSub = subtitles[currentIndex];
+                    // 如果当前播放进度已经超过当前句子开始时间 1秒，则回到当前句首
+                    // 否则回到上一句
+                    if (currentTime - currentSub.start > 1.0) {
+                        audioRef.current.currentTime = currentSub.start;
+                    } else {
+                        // 回到上一句
+                        if (currentIndex > 0) {
+                            audioRef.current.currentTime = subtitles[currentIndex - 1].start;
+                        } else {
+                            audioRef.current.currentTime = 0;
+                        }
+                    }
+                } else {
+                    // 当前时间还在第一句之前
+                    audioRef.current.currentTime = 0;
+                }
+            } else {
+                // 没有字幕数据，降级为退后 5 秒
+                audioRef.current.currentTime = Math.max(0, currentTime - 5);
+            }
         }
         return;
       }
 
-      // 3. 快进
+      // 3. 快进 (Forward to next sentence)
       if (ShortcutManager.matches('narrator.forward', e)) {
         e.preventDefault();
-        e.stopPropagation(); // 阻止事件冒泡，防止被外层捕获
-        if (audioRef.current && audioUrl) {
-            audioRef.current.currentTime = Math.min(audioDuration, audioRef.current.currentTime + 5);
+        e.stopPropagation();
+        
+        if (audioRef.current && audioUrl && Number.isFinite(audioDuration) && audioDuration > 0) {
+            const currentTime = audioRef.current.currentTime;
+            
+            if (subtitles && subtitles.length > 0) {
+                // 找到下一句字幕
+                // 即第一个 start > 当前时间的字幕
+                const nextSub = subtitles.find(s => s.start > currentTime + 0.1); // 加一点缓冲防止浮点误差原地踏步
+                
+                if (nextSub) {
+                    audioRef.current.currentTime = nextSub.start;
+                } else {
+                    // 没有下一句了，跳转到最后或 +5s
+                    audioRef.current.currentTime = Math.min(audioDuration, currentTime + 5);
+                }
+            } else {
+                // 降级为快进 5 秒
+                audioRef.current.currentTime = Math.min(audioDuration, currentTime + 5);
+            }
         }
         return;
       }
@@ -141,7 +198,7 @@ const NarratorPluginComponent = (props) => {
     return () => {
         window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showPanel, isAutoMode, isPlaying, audioUrl, audioDuration, pageControl]);
+  }, [showPanel, isAutoMode, isPlaying, audioUrl, audioDuration, pageControl, subtitles]); // Add subtitles to dependencies
 
   // 全局监听 'n' 键切换面板，即使面板关闭
   useEffect(() => {

@@ -2,6 +2,8 @@
   "id": "hacker_neo",
   "name": "HackerNeo",
   "avatar": "default_avatar.png",
+  "gender": null,
+  "language": "Chinese",
   "personality": "Cybersecurity expert. Knowledgeable but chill. Skeptical of big tech.",
   "interests": [
     "Security",
@@ -27,6 +29,36 @@
       21,
       22
     ],
-    "timezone_offset": 8
+    "weekdays_active_hours": null,
+    "weekends_active_hours": null,
+    "timezone_offset": 8,
+    "random_online_chance": 0.0,
+    "random_offline_chance": 0.0,
+    "daily_routine": {
+      "0": "Sleeping",
+      "1": "Sleeping",
+      "2": "Sleeping",
+      "3": "Sleeping",
+      "4": "Sleeping",
+      "5": "Sleeping",
+      "6": "Sleeping",
+      "7": "Sleeping",
+      "8": "Waking up, checking encrypted messages offline",
+      "9": "Reviewing security alerts on personal dashboard (Online)",
+      "10": "Analyzing recent phishing trends for blog draft (Online)",
+      "11": "Monitoring honeypot servers for intrusion attempts (Online)",
+      "12": "Lunch break – eating while reading privacy research papers (Online)",
+      "13": "Responding to community forum posts on data privacy (Online)",
+      "14": "Penetration testing a client’s web app backend (Online)",
+      "15": "Debugging custom script for network vulnerability scanner (Online)",
+      "16": "Video call with indie dev team about secure API design (Online)",
+      "17": "Researching big tech data harvesting loopholes (Online)",
+      "18": "Writing zine article on avoiding surveillance capitalism (Online)",
+      "19": "Hosting live Q&A on secure messaging tools (Online)",
+      "20": "Auditing open-source encryption library for backdoors (Online)",
+      "21": "Casual coding: improving personal firewall rules (Online)",
+      "22": "Wrapping up online sessions, disconnecting non-essential services (Going offline)",
+      "23": "Reading physical book on analog cryptography methods (Offline)"
+    }
   }
 }

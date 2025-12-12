@@ -96,8 +96,21 @@ async def get_agent_details(agent_id: str):
     data['is_online'] = status['is_online']
     data['status_code'] = status['status_code']
     data['current_activity'] = status['activity']
+    data['is_generating_routine'] = agent.is_generating_routine
     
     return {"agent": data}
+
+@router.post("/agents/{agent_id}/regenerate_routine")
+async def regenerate_agent_routine(agent_id: str):
+    """Force regeneration of daily routine."""
+    try:
+        routine = await chat_manager.regenerate_agent_routine(agent_id)
+        return {"status": "success", "daily_routine": routine}
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    except Exception as e:
+        error(f"Routine regeneration failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/agents/generate")
 async def generate_agent(request: Request):
@@ -172,6 +185,7 @@ async def list_rooms():
             "id": r.id, 
             "name": r.name, 
             "topic": r.topic, 
+            "type": r.type, # Include type
             "system_prompt": r.system_prompt,
             "is_paused": r.is_paused,
             "active_agents_count": len(r.active_agents)
@@ -196,6 +210,23 @@ async def join_room(room_id: str, request: Request):
 @router.post("/rooms/{room_id}/invite") # Alias for join
 async def invite_agent(room_id: str, request: Request):
     return await join_room(room_id, request)
+
+@router.post("/dm/create")
+async def create_dm(request: Request):
+    """Create or get a DM room."""
+    try:
+        data = await request.json()
+        agent_id = data.get("agent_id")
+        user_id = "user_main" # Hardcoded for now
+        
+        if not agent_id:
+            raise HTTPException(status_code=400, detail="Agent ID required")
+            
+        room = chat_manager.create_dm_room(user_id, agent_id)
+        return {"status": "success", "room": room.dict(exclude={'history'})}
+    except Exception as e:
+        error(f"Failed to create DM: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/rooms/{room_id}/pause")
 async def pause_room(room_id: str, request: Request):

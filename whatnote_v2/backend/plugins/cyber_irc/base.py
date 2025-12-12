@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional, Any, Callable
 import time
 import uuid
+import json
 from logger import info, error
 from .schemas import AgentProfile, ChatMessage, Role, AgentStatus
 from llm_service import LLMService
@@ -12,6 +13,7 @@ class BaseAgent:
         self.status = AgentStatus.IDLE
         self.memory: List[Dict[str, Any]] = []
         self.last_active_time = time.time()
+        self.is_generating_routine = False
         
         # Initialize system prompt
         self._init_system_prompt()
@@ -20,6 +22,8 @@ class BaseAgent:
         """Construct the foundational persona for the agent."""
         base_prompt = f"""
 You are {self.profile.name}.
+Gender: {self.profile.gender or 'Unknown'}
+Language: {self.profile.language or 'Chinese'}
 Personality: {self.profile.personality}
 Speaking Style: {self.profile.style}
 Interests: {', '.join(self.profile.interests)}
@@ -38,49 +42,78 @@ CRITICAL INSTRUCTIONS:
         else:
             self.memory.append({"role": Role.SYSTEM, "content": base_prompt})
 
-    async def ensure_daily_routine(self):
+    async def ensure_daily_routine(self, force_regenerate: bool = False):
         """
-        If daily_routine is empty, generate it using the Agent's own persona.
+        Ensure both Weekday and Weekend routines are generated.
         """
-        if self.profile.schedule.daily_routine:
+        if self.is_generating_routine:
             return
-
-        info(f"[Agent] Generating daily routine for {self.profile.name}...")
-        
-        # Get appropriate active hours for reference
-        # We just use generic active_hours for the prompt context
-        active_str = str(self.profile.schedule.active_hours)
-        
-        prompt = f"""
+            
+        self.is_generating_routine = True
+        try:
+            # 1. Weekday Routine
+            if force_regenerate or not self.profile.schedule.daily_routine:
+                info(f"[Agent] Generating WEEKDAY routine for {self.profile.name}...")
+                active_str = str(self.profile.schedule.weekdays_active_hours or self.profile.schedule.active_hours)
+                
+                prompt = f"""
 You are {self.profile.name}.
 Your personality: {self.profile.personality}
-Your typical active hours (Online in chat): {active_str}
+Your typical WEEKDAY active hours (Online in chat): {active_str}
 
-Please create a DETAILED daily routine for yourself for a typical day (24 hours).
+Please create a DETAILED daily routine for yourself for a typical WEEKDAY (Mon-Fri).
 For EVERY hour from 0 to 23, describe what you are doing.
 
-- If you are OFFLINE, describe your real-life activity (e.g., Sleeping, Commuting, Working at office, In class).
-- If you are ONLINE, describe the context (e.g., Chilling on sofa, Procrastinating at work, Late night gaming).
+CRITICAL INSTRUCTIONS:
+1. STRICTLY FOLLOW your active hours. 
+   - If an hour is in {active_str}, you MUST be somewhat available/online.
+   - If an hour is NOT in that list, you are likely sleeping or busy offline.
+2. If you are a Night Owl (active late at night), ensure you are sleeping during the DAY.
+3. Be specific to your persona (e.g., work, school, commute).
 
 Return ONLY a JSON object mapping hour (string "0" to "23") to the activity description (string).
-Example:
-{{
-    "0": "Sleeping",
-    "1": "Sleeping",
-    ...
-    "9": "Commuting to work, checking messages on phone",
-    "10": "Working on spreadsheets (Secretly chatting)"
-}}
 JSON ONLY:
 """
-        
+                routine = await self._generate_routine_json(prompt)
+                if routine:
+                    self.profile.schedule.daily_routine = routine
+
+            # 2. Weekend Routine
+            # If no weekend active hours specified, we assume same as general active hours, 
+            # but the activity content should be different (less work, more leisure).
+            if force_regenerate or not self.profile.schedule.daily_routine_weekend:
+                info(f"[Agent] Generating WEEKEND routine for {self.profile.name}...")
+                active_str = str(self.profile.schedule.weekends_active_hours or self.profile.schedule.active_hours)
+                
+                prompt = f"""
+You are {self.profile.name}.
+Your personality: {self.profile.personality}
+Your typical WEEKEND active hours (Online in chat): {active_str}
+
+Please create a DETAILED daily routine for yourself for a typical WEEKEND (Sat-Sun).
+For EVERY hour from 0 to 23, describe what you are doing.
+
+CRITICAL INSTRUCTIONS:
+1. STRICTLY FOLLOW your active hours: {active_str}
+2. Focus on LEISURE, HOBBIES, or Socializing (unless you are a workaholic).
+3. If you are a Night Owl, you might sleep in even later.
+
+Return ONLY a JSON object mapping hour (string "0" to "23") to the activity description (string).
+JSON ONLY:
+"""
+                routine = await self._generate_routine_json(prompt)
+                if routine:
+                    self.profile.schedule.daily_routine_weekend = routine
+        finally:
+            self.is_generating_routine = False
+
+    async def _generate_routine_json(self, prompt: str) -> Optional[Dict[str, str]]:
         try:
             messages = [{"role": Role.SYSTEM, "content": prompt}]
             response_text = ""
             async for chunk in self.llm_service.chat_completion(messages, stream=False):
                 response_text += chunk
                 
-            # Parse JSON
             import json
             import re
             
@@ -91,12 +124,11 @@ JSON ONLY:
                     clean_text = match.group(1)
             
             routine = json.loads(clean_text)
-            # Ensure keys are strings
-            self.profile.schedule.daily_routine = {str(k): str(v) for k, v in routine.items()}
-            info(f"[Agent] Generated routine for {self.profile.name}: {len(self.profile.schedule.daily_routine)} entries.")
-            
+            return {str(k): str(v) for k, v in routine.items()}
         except Exception as e:
             error(f"[Agent] Failed to generate routine: {e}")
+            return None
+
 
 
     def observe(self, message: ChatMessage):
@@ -135,7 +167,12 @@ JSON ONLY:
         is_weekend = weekday >= 5
         
         # Get Activity Description
-        activity = self.profile.schedule.daily_routine.get(str(current_hour), "Unknown activity")
+        # Determine if it's weekend
+        routine = self.profile.schedule.daily_routine
+        if is_weekend and self.profile.schedule.daily_routine_weekend:
+            routine = self.profile.schedule.daily_routine_weekend
+            
+        activity = routine.get(str(current_hour), "Unknown activity")
 
         # Determine base active hours
         active_hours = self.profile.schedule.active_hours
@@ -220,7 +257,23 @@ JSON ONLY:
             import datetime
             now_hour = (datetime.datetime.utcnow().hour + 8) % 24 # Mock time
             
+            # Prepare Future Schedule (simplified)
+            # We select a few key points to give context
+            schedule_context = ""
+            
+            # Use current day's routine
+            weekday = datetime.datetime.utcnow().weekday()
+            is_weekend_now = weekday >= 5
+            
+            current_routine = self.profile.schedule.daily_routine
+            if is_weekend_now and self.profile.schedule.daily_routine_weekend:
+                current_routine = self.profile.schedule.daily_routine_weekend
+                
+            if self.profile.schedule and current_routine:
+                schedule_context = json.dumps(current_routine, indent=None, ensure_ascii=False)
+
             context_block = f"\n[Real-time Context]\nCurrent Time: {now_hour}:00\nYour Current Activity: {activity}\n"
+            context_block += f"Your Full Daily Routine (Today): {schedule_context}\n"
             
             if status['status_code'] == 'INSOMNIA':
                 context_block += "Status: INSOMNIA (You should be sleeping but are awake)\n"

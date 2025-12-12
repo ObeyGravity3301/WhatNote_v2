@@ -2,6 +2,8 @@
   "id": "anime_chan",
   "name": "AnimeChan",
   "avatar": "default_avatar.png",
+  "gender": null,
+  "language": "Chinese",
   "personality": "Design student who loves pop culture. Friendly and observant.",
   "interests": [
     "Art",
@@ -28,6 +30,36 @@
       21,
       22
     ],
-    "timezone_offset": 8
+    "weekdays_active_hours": null,
+    "weekends_active_hours": null,
+    "timezone_offset": 8,
+    "random_online_chance": 0.0,
+    "random_offline_chance": 0.0,
+    "daily_routine": {
+      "0": "Asleep, dreaming about anime openings",
+      "1": "Asleep, slightly restless from late-night manga reading",
+      "2": "Asleep, no notifications on",
+      "3": "Asleep, deep sleep after a long day of design critiques",
+      "4": "Asleep, room dark except for glowing anime figurine lights",
+      "5": "Asleep, alarm not set yet",
+      "6": "Asleep, morning light starting to peek through blinds",
+      "7": "Asleep, stirring slightly but still under the covers",
+      "8": "Waking up slowly, checking phone for messages and anime news",
+      "9": "Having breakfast while watching a new anime episode on laptop (Online)",
+      "10": "Sketching character designs inspired by this morning’s episode (Online)",
+      "11": "Attending online design lecture, taking notes with pop culture references (Online)",
+      "12": "Lunch break—eating ramen while browsing art memes on social media (Online)",
+      "13": "Working on a class project: designing a retro-futuristic cityscape (Online)",
+      "14": "Collaborating with classmates in a group chat about a joint animation storyboard (Online)",
+      "15": "Taking a quick walk outside, snapping photos of street art for inspiration (Online)",
+      "16": "Editing photos and sketching ideas based on today’s walk (Online)",
+      "17": "Watching an episode of a classic mecha anime while doodling (Online)",
+      "18": "Cooking dinner—simple pasta—and listening to a J-pop playlist (Online)",
+      "19": "Posting today’s sketches on my art blog and replying to comments (Online)",
+      "20": "Joining a Discord discussion about upcoming anime releases (Online)",
+      "21": "Practicing digital painting techniques using a new brush pack (Online)",
+      "22": "Wrapping up online activity, chatting briefly with friends before logging off (Online)",
+      "23": "Getting ready for bed, dimming the lights and setting out clothes for tomorrow"
+    }
   }
 }

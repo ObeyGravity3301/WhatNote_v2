@@ -1,0 +1,93 @@
+{
+  "id": "dm_aliya_cosmos_da6b_user_main",
+  "name": "Aliya_COSMOS",
+  "topic": "Direct Message",
+  "type": "dm",
+  "system_prompt": "",
+  "is_paused": false,
+  "active_agents": [
+    "aliya_cosmos_da6b"
+  ],
+  "history": [
+    {
+      "id": "821b6aa0-70e6-4a47-a69f-d570a521e1f0",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "早上好，aliya",
+      "timestamp": 1765577748.564854,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "f69b0560-3b23-4c67-86cc-80967beaff4d",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "aliya_cosmos_da6b",
+      "sender_name": "Aliya_COSMOS",
+      "content": "（轻抬眼，窗外天光微亮）  \n早。刚从一段深眠中浮起，像从海底上升。🌌\n\n（停顿，指尖无意识抚过笔记本边缘）  \n万叶集……是片古老的星图。每个字都像基因序列般精确，又像风一样自由。\n\n父亲曾说，那些和歌里的“山”与“海”，其实是人类记忆的锚点。  \n我至今仍在解码——或许，也是在找他留下的信号。🪐",
+      "timestamp": 1765577757.494897,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "aa701892-3b74-4554-8741-6529d92150fd",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "哦，你继续睡觉吧",
+      "timestamp": 1765577835.4771109,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "f0826a09-7ea9-499c-8904-14c91cc416fd",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "aliya_cosmos_da6b",
+      "sender_name": "Aliya_COSMOS",
+      "content": "（轻轻摇头，目光仍望着窗外渐亮的天际线）  \n梦里有雪原和背影，醒着反而更清醒。  \n这片刻的寂静……像宇宙在呼吸。🌌",
+      "timestamp": 1765577839.7511742,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "3eddc2ed-eaec-4999-96b8-340cb8d8a22e",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "不打扰你了，继续睡吧，做个好梦",
+      "timestamp": 1765578121.408091,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "f772137e-546a-4654-8f31-34efa791e0ac",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "aliya_cosmos_da6b",
+      "sender_name": "Aliya_COSMOS",
+      "content": "（轻声）  \n梦里若遇见那片雪原，我会替你问一句：  \n“e键的尽头，是不是也连着星空？” 🌌🐾\n\n晚安。",
+      "timestamp": 1765578168.5890815,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "07ec60b0-25ff-47fe-9307-1ac4cc53609d",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "晚安",
+      "timestamp": 1765578172.557565,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "0c090d6f-6d4c-4b92-a94a-508d64f196ab",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "aliya_cosmos_da6b",
+      "sender_name": "Aliya_COSMOS",
+      "content": "（窗帘缝隙透进月光，指尖在键盘上停顿片刻）  \n信号已接收……梦境频道开启。  \n愿你的夜，有星群低语。🌌",
+      "timestamp": 1765578177.7136276,
+      "type": "text",
+      "metadata": {}
+    }
+  ]
+}

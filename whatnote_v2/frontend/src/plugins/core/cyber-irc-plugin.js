@@ -209,9 +209,11 @@ const Modal = ({ title, children, onClose, onConfirm, confirmText = "OK", isLoad
 
 const CyberIRCWindow = ({ window: windowData }) => {
   // State
-  const [currentRoom, setCurrentRoom] = useState({ id: 'casual_lounge', name: 'The Lounge' });
+  const [currentRoom, setCurrentRoom] = useState({ id: 'casual_lounge', name: 'The Lounge', type: 'group' });
   const [rooms, setRooms] = useState([]);
+  const [dms, setDms] = useState([]); // Direct Messages
   const [messages, setMessages] = useState([]);
+  const [typingUsers, setTypingUsers] = useState([]); // [Name, Name]
   const [agents, setAgents] = useState([]); // Agents IN current room
   const [allAgents, setAllAgents] = useState([]); // All agents for invite
   const [inputValue, setInputValue] = useState('');
@@ -223,6 +225,7 @@ const CyberIRCWindow = ({ window: windowData }) => {
   const [showCreateAgent, setShowCreateAgent] = useState(false);
   const [showInviteAgent, setShowInviteAgent] = useState(false);
   const [showProfile, setShowProfile] = useState(null); // { agent data }
+  const [viewWeekendRoutine, setViewWeekendRoutine] = useState(false); // Toggle for profile view
   
   // Form State
   const [newRoomName, setNewRoomName] = useState('');
@@ -233,18 +236,33 @@ const CyberIRCWindow = ({ window: windowData }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState('');
 
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
   // --- Data Fetching ---
+
+  const fetchAgentDetails = async (agentId) => {
+    try {
+        const res = await fetch(`${API_BASE}/agents/${agentId}`);
+        const data = await res.json();
+        return data.agent;
+    } catch (e) { 
+        console.error(e); 
+        return null;
+    }
+  };
 
   const fetchRooms = async () => {
     try {
       const res = await fetch(`${API_BASE}/rooms`);
       const data = await res.json();
-      setRooms(data.rooms || []);
+      const allRooms = data.rooms || [];
       
-      // Sync currentRoom state (e.g. is_paused status) without breaking object ref if possible, 
-      // but here we just update it. Note: Effect dependency on currentRoom.id prevents reload.
+      setRooms(allRooms.filter(r => r.type !== 'dm'));
+      setDms(allRooms.filter(r => r.type === 'dm'));
+      
+      // Sync currentRoom state (e.g. is_paused status)
       if (currentRoom?.id) {
-         const updated = (data.rooms || []).find(r => r.id === currentRoom.id);
+         const updated = allRooms.find(r => r.id === currentRoom.id);
          if (updated) setCurrentRoom(prev => ({...prev, ...updated}));
       }
     } catch (e) { console.error(e); }
@@ -288,6 +306,7 @@ const CyberIRCWindow = ({ window: windowData }) => {
   useEffect(() => {
     if (currentRoom?.id) {
       setMessages([]); // Clear previous msgs visually first
+      setTypingUsers([]); // Clear typing status
       fetchHistory(currentRoom.id);
       fetchAgentsInRoom(currentRoom.id);
     }
@@ -309,8 +328,28 @@ const CyberIRCWindow = ({ window: windowData }) => {
     eventSource.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
+        
+        // Typing Event
+        if (msg.type === 'typing_start') {
+            if (msg.room_id === currentRoom.id) {
+                setTypingUsers(prev => {
+                    if (!prev.includes(msg.sender_name)) return [...prev, msg.sender_name];
+                    return prev;
+                });
+                // Auto-clear typing after 10s (failsafe)
+                setTimeout(() => {
+                    setTypingUsers(prev => prev.filter(u => u !== msg.sender_name));
+                }, 10000);
+            }
+            return;
+        }
+
+        // Regular Message
         // Only show if belongs to current room OR is a system broadcast
         if (msg.room_id === currentRoom.id || !msg.room_id) {
+          // Remove from typing list
+          setTypingUsers(prev => prev.filter(u => u !== msg.sender_name));
+          
           setMessages(prev => {
              // Dedup
              if (prev.some(m => m.id === msg.id)) return prev;
@@ -323,6 +362,24 @@ const CyberIRCWindow = ({ window: windowData }) => {
     eventSource.onerror = () => setIsConnected(false);
     return () => eventSource.close();
   }, [currentRoom.id]); // Re-bind not strictly needed if logic inside checks room_id, but safer
+
+  // Auto-refresh profile if generating
+  useEffect(() => {
+    let interval;
+    if (showProfile && (showProfile.is_generating_routine || isRegenerating)) {
+        interval = setInterval(async () => {
+            const updated = await fetchAgentDetails(showProfile.id);
+            if (updated) {
+                // Check if generation finished
+                if (!updated.is_generating_routine && showProfile.is_generating_routine) {
+                    setIsRegenerating(false);
+                }
+                setShowProfile(updated);
+            }
+        }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [showProfile, isRegenerating]);
 
   // --- Actions ---
 
@@ -409,11 +466,8 @@ const CyberIRCWindow = ({ window: windowData }) => {
   };
 
   const handleShowProfile = async (agentId) => {
-    try {
-        const res = await fetch(`${API_BASE}/agents/${agentId}`);
-        const data = await res.json();
-        setShowProfile(data.agent);
-    } catch (e) { alert(e.message); }
+    const agent = await fetchAgentDetails(agentId);
+    if (agent) setShowProfile(agent);
   };
 
   const handleTogglePause = async () => {
@@ -426,6 +480,48 @@ const CyberIRCWindow = ({ window: windowData }) => {
         });
         fetchRooms(); // Sync state
     } catch (e) { console.error(e); }
+  };
+
+  const handleRegenerateRoutine = async () => {
+    if (!showProfile) return;
+    setIsRegenerating(true);
+    try {
+        console.log('[CyberIRC] Regenerating routine for:', showProfile.id);
+        const res = await fetch(`${API_BASE}/agents/${showProfile.id}/regenerate_routine`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            console.log('[CyberIRC] Regeneration success:', data.daily_routine);
+            // Deep merge to ensure React detects change
+            const newProfile = JSON.parse(JSON.stringify(showProfile));
+            newProfile.schedule.daily_routine = data.daily_routine;
+            setShowProfile(newProfile);
+        } else {
+            console.error('[CyberIRC] Regeneration failed:', data);
+            alert("Failed: " + JSON.stringify(data));
+        }
+    } catch (e) { 
+        console.error('[CyberIRC] Error:', e);
+        alert("Regeneration failed: " + e.message); 
+    }
+    setIsRegenerating(false);
+  };
+
+  const handleCreateDm = async (agentId) => {
+    try {
+        const res = await fetch(`${API_BASE}/dm/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agent_id: agentId })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            setShowProfile(null);
+            fetchRooms(); // Refresh list to show new DM
+            setCurrentRoom(data.room);
+        }
+    } catch (e) { alert("Failed to start DM: " + e.message); }
   };
 
   // --- Helpers ---
@@ -486,6 +582,24 @@ const CyberIRCWindow = ({ window: windowData }) => {
             </div>
           </div>
 
+          {/* DMs */}
+          <div style={{...styles.sidebarSection, maxHeight: '30%'}}>
+            <div style={styles.sidebarTitle}>
+              <span>DIRECT MESSAGES</span>
+            </div>
+            <div style={styles.sidebarList}>
+              {dms.map(r => (
+                <div 
+                  key={r.id} 
+                  style={{...styles.listItem, ...(r.id === currentRoom.id ? styles.listItemActive : {})}}
+                  onClick={() => setCurrentRoom(r)}
+                >
+                  <span style={{color: '#00aaaa'}}>@</span> {r.name}
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Agents */}
           <div style={{...styles.sidebarSection, flex: 1, borderBottom: 'none'}}>
             <div style={styles.sidebarTitle}>
@@ -496,11 +610,11 @@ const CyberIRCWindow = ({ window: windowData }) => {
               </div>
             </div>
             <div style={styles.sidebarList}>
-              <div style={styles.listItem}><div style={{...styles.statusDot, backgroundColor: '#fff'}}></div>User</div>
+              <div style={styles.listItem}><div style={{...styles.statusDot, backgroundColor: '#00ff00'}}></div>User</div>
               {agents.map(a => (
                 <div key={a.id} style={styles.listItem} title={a.personality} onClick={() => handleShowProfile(a.id)}>
-                  <div style={{...styles.statusDot, backgroundColor: getSenderColor(a.name)}}></div>
-                  {a.name}
+                  <div style={{...styles.statusDot, backgroundColor: a.is_online ? '#00ff00' : '#555555'}}></div>
+                  <span style={{color: a.is_online ? '#fff' : '#888'}}>{a.name}</span>
                 </div>
               ))}
             </div>
@@ -525,6 +639,13 @@ const CyberIRCWindow = ({ window: windowData }) => {
             </div>
           ))}
           <div ref={chatEndRef} />
+          
+          {/* Typing Indicator */}
+          {typingUsers.length > 0 && (
+            <div style={{padding: '4px', fontSize: '10px', color: '#00aaaa', fontStyle: 'italic'}}>
+                {typingUsers.join(', ')} is typing...
+            </div>
+          )}
         </div>
       </div>
 
@@ -558,10 +679,22 @@ const CyberIRCWindow = ({ window: windowData }) => {
                         <div style={{fontSize:'10px', color:'#aaa'}}>{showProfile.status_code}</div>
                     </div>
                 </div>
+                
+                <div style={{marginBottom:'12px', display:'flex', justifyContent:'center'}}>
+                    <button 
+                        style={{...styles.button, width: '100%', backgroundColor:'#003300'}}
+                        onClick={() => handleCreateDm(showProfile.id)}
+                    >
+                        [ SEND MESSAGE ]
+                    </button>
+                </div>
 
                 <div style={{marginBottom:'12px', borderBottom:'1px solid #333', paddingBottom:'8px'}}>
                     <strong style={{color:'#00aa00', fontSize:'11px'}}>PERSONALITY</strong>
                     <div style={{fontSize:'12px', marginTop:'4px'}}>{showProfile.personality}</div>
+                    <div style={{fontSize:'11px', color:'#888', marginTop:'4px'}}>
+                        {showProfile.gender} | {showProfile.language}
+                    </div>
                 </div>
 
                 <div style={{marginBottom:'12px', borderBottom:'1px solid #333', paddingBottom:'8px'}}>
@@ -572,9 +705,41 @@ const CyberIRCWindow = ({ window: windowData }) => {
                 </div>
 
                 <div>
-                    <strong style={{color:'#00aa00', fontSize:'11px'}}>DAILY ROUTINE</strong>
-                    <div style={{marginTop:'8px', marginLeft:'4px', borderLeft:'1px solid #333', paddingLeft:'8px'}}>
-                        {Object.entries(showProfile.schedule?.daily_routine || {})
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                        <strong style={{color:'#00aa00', fontSize:'11px'}}>
+                            DAILY ROUTINE ({viewWeekendRoutine ? 'WEEKEND' : 'WEEKDAY'})
+                        </strong>
+                        <div>
+                            <button 
+                                style={{...styles.actionButton, border:'1px solid #444', fontSize:'9px', padding:'2px 6px', marginRight:'4px', color: '#fff'}}
+                                onClick={() => setViewWeekendRoutine(!viewWeekendRoutine)}
+                            >
+                                {viewWeekendRoutine ? 'SHOW WEEKDAY' : 'SHOW WEEKEND'}
+                            </button>
+                            <button 
+                                style={{...styles.actionButton, border:'1px solid #004400', fontSize:'9px', padding:'2px 6px'}}
+                                onClick={handleRegenerateRoutine}
+                                disabled={isRegenerating || showProfile.is_generating_routine}
+                            >
+                                {(isRegenerating || showProfile.is_generating_routine) ? 'GENERATING...' : 'REGENERATE'}
+                            </button>
+                        </div>
+                    </div>
+                    <div style={{marginTop:'8px', marginLeft:'4px', borderLeft:'1px solid #333', paddingLeft:'8px', position: 'relative'}}>
+                        {(isRegenerating || showProfile.is_generating_routine) && (
+                            <div style={{
+                                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                                backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', 
+                                alignItems: 'center', justifyContent: 'center', zIndex: 10
+                            }}>
+                                <span style={{color: '#00ff00', fontWeight: 'bold'}}>Thinking...</span>
+                            </div>
+                        )}
+                        {Object.entries(
+                            (viewWeekendRoutine 
+                                ? showProfile.schedule?.daily_routine_weekend 
+                                : showProfile.schedule?.daily_routine) || {}
+                            )
                             .sort((a,b) => parseInt(a[0]) - parseInt(b[0]))
                             .map(([hour, activity]) => (
                             <div key={hour} style={{fontSize:'11px', marginBottom:'4px', display:'flex'}}>
@@ -629,6 +794,8 @@ const CyberIRCWindow = ({ window: windowData }) => {
           ) : (
             <div style={{fontSize: '12px', color: '#ccc', maxHeight: '300px', overflowY: 'auto'}}>
               <p><strong style={{color: '#fff'}}>Name:</strong> {generatedAgent.name}</p>
+              <p><strong style={{color: '#fff'}}>Gender:</strong> {generatedAgent.gender || 'Unknown'}</p>
+              <p><strong style={{color: '#fff'}}>Language:</strong> {generatedAgent.language || 'Chinese'}</p>
               <p><strong style={{color: '#fff'}}>Role:</strong> {generatedAgent.personality}</p>
               <p><strong style={{color: '#fff'}}>Style:</strong> {generatedAgent.style}</p>
               
