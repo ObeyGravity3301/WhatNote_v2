@@ -209,7 +209,15 @@ const Modal = ({ title, children, onClose, onConfirm, confirmText = "OK", isLoad
 
 const CyberIRCWindow = ({ window: windowData }) => {
   // State
-  const [currentRoom, setCurrentRoom] = useState({ id: 'casual_lounge', name: 'The Lounge', type: 'group' });
+  // Try to load last room from localStorage, default to null
+  const [currentRoom, setCurrentRoom] = useState(() => {
+    try {
+        const saved = localStorage.getItem('cyber_irc_last_room');
+        if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    // Safe default instead of null
+    return { id: null, name: 'Connecting...', topic: '', type: 'group' };
+  });
   const [rooms, setRooms] = useState([]);
   const [dms, setDms] = useState([]); // Direct Messages
   const [messages, setMessages] = useState([]);
@@ -219,6 +227,8 @@ const CyberIRCWindow = ({ window: windowData }) => {
   const [inputValue, setInputValue] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const chatEndRef = useRef(null);
+  const chatAreaRef = useRef(null); // Ref for scrolling container
+  const shouldScrollRef = useRef(true); // Track if we should auto-scroll
 
   // UI State
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -260,11 +270,25 @@ const CyberIRCWindow = ({ window: windowData }) => {
       setRooms(allRooms.filter(r => r.type !== 'dm'));
       setDms(allRooms.filter(r => r.type === 'dm'));
       
-      // Sync currentRoom state (e.g. is_paused status)
-      if (currentRoom?.id) {
-         const updated = allRooms.find(r => r.id === currentRoom.id);
-         if (updated) setCurrentRoom(prev => ({...prev, ...updated}));
-      }
+      // Sync currentRoom state
+      // Use functional update to ensure we check against the LATEST currentRoom
+      setCurrentRoom(prev => {
+          if (!prev?.id) return prev;
+          
+          // Find the room in the fresh list that matches the CURRENTLY selected room ID
+          const updated = allRooms.find(r => r.id === prev.id);
+          
+          if (updated) {
+             // Only update if properties changed
+             if (prev.is_paused === updated.is_paused && 
+                 prev.active_agents_count === updated.active_agents_count &&
+                 prev.topic === updated.topic) {
+                 return prev;
+             }
+             return {...prev, ...updated};
+          }
+          return prev;
+      });
     } catch (e) { console.error(e); }
   };
 
@@ -298,24 +322,64 @@ const CyberIRCWindow = ({ window: windowData }) => {
 
   // Initial Load
   useEffect(() => {
-    fetchRooms();
-    fetchAllAgents();
-  }, []);
+    // Wrap async init in a function
+    const init = async () => {
+        await fetchAllAgents();
+        
+        try {
+          const res = await fetch(`${API_BASE}/rooms`);
+          const data = await res.json();
+          const allRooms = data.rooms || [];
+          
+          setRooms(allRooms.filter(r => r.type !== 'dm'));
+          setDms(allRooms.filter(r => r.type === 'dm'));
+          
+          // Only set default room if we have NONE selected (first load ever)
+          // currentRoom is initialized with { id: null ... } if nothing in localStorage
+          if (!currentRoom.id && allRooms.length > 0) {
+            const defaultRoom = allRooms.find(r => r.type === 'group') || allRooms[0];
+            setCurrentRoom(defaultRoom);
+          }
+        } catch(e) { console.error(e); }
+    };
+    init();
+  }, []); // Run ONCE
 
   // Room Switch
   useEffect(() => {
+    console.log("[CyberIRC] Room switched to:", currentRoom?.id, currentRoom?.name);
     if (currentRoom?.id) {
       setMessages([]); // Clear previous msgs visually first
       setTypingUsers([]); // Clear typing status
       fetchHistory(currentRoom.id);
       fetchAgentsInRoom(currentRoom.id);
+      
+      // Save to localStorage
+      localStorage.setItem('cyber_irc_last_room', JSON.stringify(currentRoom));
     }
-  }, [currentRoom.id]);
+  }, [currentRoom?.id]);
 
-  // Auto-scroll
+  // Auto-scroll logic
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // If it's a room switch (messages cleared or changed completely), force scroll
+    // But for incremental messages, check shouldScrollRef
+    if (shouldScrollRef.current) {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
+
+  // Handle Scroll Event to update shouldScrollRef
+  const handleChatScroll = (e) => {
+      const { scrollTop, scrollHeight, clientHeight } = e.target;
+      // If within 50px of bottom, enable auto-scroll
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+      shouldScrollRef.current = isNearBottom;
+  };
+  
+  // Reset auto-scroll on room switch
+  useEffect(() => {
+      shouldScrollRef.current = true;
+  }, [currentRoom?.id]);
 
   // SSE Connection
   useEffect(() => {
@@ -510,18 +574,44 @@ const CyberIRCWindow = ({ window: windowData }) => {
 
   const handleCreateDm = async (agentId) => {
     try {
+        console.log("[CyberIRC] Creating DM with:", agentId);
         const res = await fetch(`${API_BASE}/dm/create`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ agent_id: agentId })
         });
         const data = await res.json();
+        console.log("[CyberIRC] Create DM response:", data);
+        
         if (data.status === 'success') {
+            const newRoom = data.room;
+            
+            // 1. Force update DMs list immediately
+            setDms(prev => {
+                const exists = prev.find(r => r.id === newRoom.id);
+                if (exists) return prev;
+                return [...prev, newRoom];
+            });
+
+            // 2. Set Current Room immediately
+            console.log("[CyberIRC] Setting current room to:", newRoom);
+            
+            // Use setTimeout to break out of batching/render cycle issues
+            setTimeout(() => {
+                setCurrentRoom(newRoom);
+                console.log("[CyberIRC] setCurrentRoom called inside timeout");
+            }, 0);
+            
+            // 3. Close Modal
             setShowProfile(null);
-            fetchRooms(); // Refresh list to show new DM
-            setCurrentRoom(data.room);
+            
+            // 4. Fetch latest data in background
+            fetchRooms();
         }
-    } catch (e) { alert("Failed to start DM: " + e.message); }
+    } catch (e) { 
+        console.error("[CyberIRC] Failed to start DM:", e);
+        alert("Failed to start DM: " + e.message); 
+    }
   };
 
   // --- Helpers ---
@@ -622,7 +712,11 @@ const CyberIRCWindow = ({ window: windowData }) => {
         </div>
 
         {/* Chat Log */}
-        <div style={styles.chatArea}>
+        <div 
+            style={styles.chatArea} 
+            ref={chatAreaRef}
+            onScroll={handleChatScroll}
+        >
           {messages.map((msg, idx) => (
             <div key={msg.id || idx} style={styles.message}>
               <span style={styles.timestamp}>[{formatTime(msg.timestamp)}]</span>
