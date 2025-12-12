@@ -3,7 +3,33 @@ class ShortcutManager {
     this.actions = {}; // { id: { label, defaultKey, category, description } }
     this.overrides = {}; // { id: keyString }
     this.listeners = new Set();
+    this.initDefaults(); // Add this line
     this.load();
+  }
+
+  initDefaults() {
+    // 1. System
+    this.register('system.start_menu', { label: '打开开始菜单', defaultKey: 'Alt+S', category: '系统', description: '打开左下角开始菜单' });
+    this.register('system.ai_assistant', { label: '打开AI助手', defaultKey: 'Alt+C', category: '系统', description: '打开AI助手聊天窗口' });
+    this.register('system.calendar', { label: '打开日历', defaultKey: 'Alt+D', category: '系统', description: '打开日历与计划窗口' });
+    
+    // 2. Window Management
+    this.register('window.minimize', { label: '最小化当前窗口', defaultKey: 'Ctrl+M', category: '窗口', description: '最小化当前获得焦点的窗口' });
+    // this.register('window.close', { label: '关闭当前窗口', defaultKey: 'Alt+W', category: '窗口', description: '关闭当前获得焦点的窗口' });
+    
+    // 3. Desktop
+    this.register('desktop.rename', { label: '重命名', defaultKey: 'F2', category: '桌面', description: '重命名选中的桌面图标' });
+    this.register('desktop.delete', { label: '删除', defaultKey: 'Delete', category: '桌面', description: '删除选中的桌面图标或窗口' });
+    
+    // 4. PDF Reader
+    this.register('pdf.prev_page', { label: '上一页', defaultKey: 'ArrowLeft', category: 'PDF阅读器', description: 'PDF 翻到上一页' });
+    this.register('pdf.next_page', { label: '下一页', defaultKey: 'ArrowRight', category: 'PDF阅读器', description: 'PDF 翻到下一页' });
+    this.register('pdf.toggle_narrator', { label: '切换讲解模式', defaultKey: 'n', category: 'PDF阅读器', description: '打开/关闭讲解控制台' });
+    
+    // 5. Narrator Player
+    this.register('narrator.play_pause', { label: '播放/暂停', defaultKey: 'Space', category: 'PDF讲解', description: '播放或暂停讲解语音' });
+    this.register('narrator.rewind', { label: '快退', defaultKey: 'Ctrl+ArrowLeft', category: 'PDF讲解', description: '快退 5 秒' });
+    this.register('narrator.forward', { label: '快进', defaultKey: 'Ctrl+ArrowRight', category: 'PDF讲解', description: '快进 5 秒' });
   }
 
   load() {
@@ -57,9 +83,13 @@ class ShortcutManager {
     if (!targetKey) return false;
     
     const eventKey = this.getEventKeyString(event);
-    // Normalize comparison (case insensitive for single letters?)
-    // targetKey might be "Ctrl+S", eventKey might be "Ctrl+s"
-    return eventKey.toLowerCase() === targetKey.toLowerCase();
+    const isMatch = eventKey.toLowerCase() === targetKey.toLowerCase();
+    
+    if (isMatch || event.key === 'n' || event.key === 'N' || event.altKey) {
+        console.log(`[ShortcutManager] Checking '${id}': Target='${targetKey}', Event='${eventKey}', Match=${isMatch}`);
+    }
+    
+    return isMatch;
   }
 
   getEventKeyString(event) {

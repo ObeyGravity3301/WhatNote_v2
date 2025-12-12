@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
+import ShortcutManager from '../utils/ShortcutManager';
 import { createRoot } from 'react-dom/client';
 import './BoardCanvas.css';
 import ReactMarkdown from 'react-markdown';
@@ -22,7 +23,6 @@ import PersonalizationPanel from './PersonalizationPanel';
 import CalendarPlannerWindow from './CalendarPlannerWindow';
 import PluginManager from '../plugins/PluginManager';
 import { initializePlugins, pluginRegistry } from '../plugins';
-import ShortcutManager from '../utils/ShortcutManager';
 
 // Register core shortcuts
 ShortcutManager.register('window.next', {
@@ -8728,7 +8728,9 @@ function BoardCanvas({
   onWindowHide,
   onBatchWindowHide,
   onClearHiddenWindows,
-  onWindowDelete
+  onWindowDelete,
+  setShowStartMenu,
+  showStartMenu // Add this prop
 }) {
   const [windows, setWindows] = useState([]);
   
@@ -9838,76 +9840,124 @@ function BoardCanvas({
     });
   };
   
-  // 快捷键：上下方向键切换窗口
+  // 全局快捷键处理
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      // 检查是否在输入状态
+    const handleGlobalKeyDown = (e) => {
+      console.log(`[BoardCanvas] Global KeyDown: ${e.key}, Alt:${e.altKey}, Ctrl:${e.ctrlKey}`);
+      
+      // 如果正在输入，通常不触发快捷键，除非是功能键
       const isInputFocused = 
         document.activeElement.tagName === 'INPUT' ||
         document.activeElement.tagName === 'TEXTAREA' ||
         document.activeElement.isContentEditable;
-      
-      if (isInputFocused) {
-        return; // 输入状态下不触发快捷键
+
+      // 1. System Shortcuts (Always active unless captured?)
+      // Start Menu
+      if (ShortcutManager.matches('system.start_menu', e)) {
+        e.preventDefault();
+        setShowStartMenu(prev => !prev);
+        return;
       }
 
-      // 获取所有可见且未最小化的窗口（按创建顺序）
-      const visibleWindows = windows.filter(w => 
-        !minimizedWindows.has(w.id) && 
-        !hiddenWindows.has(w.id)
-      );
-      
-      if (visibleWindows.length === 0) {
-        return; // 没有可见窗口
-      }
-      
-      // 找到当前焦点窗口的索引
-      const currentIndex = visibleWindows.findIndex(w => w.id === focusedWindowId);
-      
-      // 使用 ShortcutManager 检查快捷键
-      if (ShortcutManager.matches('window.next', e)) {
-        // 下方向键：切换到下一个窗口（循环）
+      // AI Assistant
+      if (ShortcutManager.matches('system.ai_assistant', e)) {
         e.preventDefault();
-        const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % visibleWindows.length;
-        const targetWindow = visibleWindows[nextIndex];
-        if (targetWindow) {
-          handleWindowFocusLocal(targetWindow.id);
-          console.log(`⌨️ 快捷键切换窗口: ${targetWindow.title || targetWindow.id}`);
-        }
-        return;
-      } 
-      
-      if (ShortcutManager.matches('window.prev', e)) {
-        // 上方向键：切换到上一个窗口（循环）
-        e.preventDefault();
-        const nextIndex = currentIndex === -1 ? visibleWindows.length - 1 : (currentIndex - 1 + visibleWindows.length) % visibleWindows.length;
-        const targetWindow = visibleWindows[nextIndex];
-        if (targetWindow) {
-          handleWindowFocusLocal(targetWindow.id);
-          console.log(`⌨️ 快捷键切换窗口: ${targetWindow.title || targetWindow.id}`);
+        const existing = windows.find(w => w.id === CHAT_WINDOW_ID);
+        if (existing) {
+           handleWindowFocusLocal(CHAT_WINDOW_ID);
+           if (minimizedWindows.has(CHAT_WINDOW_ID)) handleWindowMinimizeLocal(CHAT_WINDOW_ID);
+        } else {
+           // Create Chat Window if not exists
+           const chatWindow = createChatWindow();
+           // Add to local state
+           setWindows(prev => [...prev, chatWindow]);
+           // Force show immediately (in case hidden logic interferes) and focus
+           setTimeout(() => {
+               if (onWindowShow) onWindowShow(CHAT_WINDOW_ID); // Ensure removed from hidden list
+               handleWindowFocusLocal(CHAT_WINDOW_ID);
+           }, 50);
         }
         return;
       }
       
-      // 旧逻辑保留作为后备（或删除），但现在主要依赖 ShortcutManager
-      // 只处理上下方向键
-      /* 
-      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
+      // Calendar
+      if (ShortcutManager.matches('system.calendar', e)) {
+        e.preventDefault();
+        const existing = windows.find(w => w.id === PLANNER_WINDOW_ID);
+        if (existing) {
+           handleWindowFocusLocal(PLANNER_WINDOW_ID);
+           if (minimizedWindows.has(PLANNER_WINDOW_ID)) handleWindowMinimizeLocal(PLANNER_WINDOW_ID);
+        } else {
+           // Create Planner Window if not exists
+           const plannerWindow = createPlannerWindow();
+           setWindows(prev => [...prev, plannerWindow]);
+           setTimeout(() => {
+               if (onWindowShow) onWindowShow(PLANNER_WINDOW_ID);
+               handleWindowFocusLocal(PLANNER_WINDOW_ID);
+           }, 50);
+        }
         return;
       }
+
+      // 2. Window/Desktop Shortcuts
       
-      // ... previous implementation ...
-      */
+      // Minimize Current Window
+      if (ShortcutManager.matches('window.minimize', e)) {
+         e.preventDefault();
+         if (focusedWindowId) {
+             handleWindowMinimizeLocal(focusedWindowId);
+         }
+         return;
+      }
+
+      // Rename (F2) - Check context
+      if (ShortcutManager.matches('desktop.rename', e)) {
+          // If on desktop (icon selected)
+          if (selectedIconId && !isInputFocused) {
+              e.preventDefault();
+              // Trigger rename logic (needs to expose rename function or set state)
+              // Currently rename is triggered via Context Menu 'rename' action
+              // We need to simulate that
+              handleContextMenuAction('rename', selectedIconId);
+          } 
+          // If window focused? Maybe rename window title?
+          else if (focusedWindowId && !isInputFocused) {
+              e.preventDefault();
+              handleContextMenuAction('rename', focusedWindowId);
+          }
+          return;
+      }
+      
+      // Delete - Check context
+      if (ShortcutManager.matches('desktop.delete', e)) {
+          if (isInputFocused) return; // Allow normal delete in text
+
+          if (selectedIconId) {
+              e.preventDefault();
+              handleWindowDelete(selectedIconId);
+          } else if (focusedWindowId) {
+              // Should Delete key close/delete the window? 
+              // Windows behavior: Delete on desktop icon -> delete. Delete on window -> nothing usually.
+              // But user asked for "Delete: Delete" under "Desktop/File Operations"
+              // So only for icons? Or focused window too?
+              // "删除选中的桌面图标或窗口"
+              // Let's support window delete too if it's not a special window
+              const target = windows.find(w => w.id === focusedWindowId);
+              if (target && target.type !== 'chat' && target.type !== 'message-center') {
+                 e.preventDefault();
+                 // Show confirm dialog? handleWindowDelete usually has confirm
+                 handleWindowDelete(focusedWindowId);
+              }
+          }
+          return;
+      }
+      
     };
-    
-    // 添加键盘事件监听
-    window.addEventListener('keydown', handleKeyDown);
-    
-    // 清理监听器
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [windows, minimizedWindows, hiddenWindows, focusedWindowId]); // 依赖所有相关状态
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [windows, focusedWindowId, selectedIconId, minimizedWindows, showStartMenu]); // Dependencies
+
 
   // 获取窗口的z-index
   const getWindowZIndex = (windowId) => {

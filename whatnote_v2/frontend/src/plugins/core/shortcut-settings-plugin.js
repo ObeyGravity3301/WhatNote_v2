@@ -98,9 +98,23 @@ const ShortcutSettingsWindow = () => {
                   <button 
                     onClick={() => handleRecord(action.id)}
                     disabled={!!recordingId}
-                    style={{ fontSize: '10px', cursor: 'pointer' }}
+                    style={{ fontSize: '10px', cursor: 'pointer', marginRight: '4px' }}
                   >
                     修改
+                  </button>
+                  <button 
+                    onClick={() => ShortcutManager.reset(action.id)}
+                    disabled={!!recordingId || !action.currentKey}
+                    title="清除快捷键"
+                    style={{ 
+                      fontSize: '10px', 
+                      cursor: 'pointer', 
+                      color: 'red',
+                      fontWeight: 'bold',
+                      padding: '0 4px'
+                    }}
+                  >
+                    ✕
                   </button>
                 </td>
               </tr>
@@ -109,7 +123,7 @@ const ShortcutSettingsWindow = () => {
         </table>
       </div>
       <div style={{ marginTop: '8px', fontSize: '11px', color: '#666' }}>
-        * 点击“修改”后按下新快捷键。按 Backspace 或 Delete 可清除/重置。
+        * 点击“修改”后按下新快捷键。按 Backspace 或 Delete 可清除。
       </div>
     </div>
   );

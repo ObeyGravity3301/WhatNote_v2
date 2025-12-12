@@ -28,6 +28,11 @@ class AgentSchedule(BaseModel):
     # Randomness
     random_online_chance: float = Field(default=0.0, description="Chance (0-1) to be online during offline hours (e.g. Insomnia)")
     random_offline_chance: float = Field(default=0.0, description="Chance (0-1) to be offline during active hours (e.g. Busy)")
+    
+    # Detailed 24h Routine (0-23 -> "Activity description")
+    # Using string keys "0".."23" for easier JSON serialization
+    daily_routine: Dict[str, str] = Field(default_factory=dict, description="Activity description for each hour (0-23)")
+
 
 class AgentProfile(BaseModel):
     id: str
@@ -54,5 +59,6 @@ class RoomState(BaseModel):
     name: str
     topic: str
     system_prompt: str = "" # Room-specific context/rules
+    is_paused: bool = False # If true, agents won't auto-speak
     active_agents: List[str]
     history: List[ChatMessage] = []

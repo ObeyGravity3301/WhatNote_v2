@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
+import ShortcutManager from '../../utils/ShortcutManager';
 
 const NarratorPluginComponent = (props) => {
   const { windowId, boardId, pageControl } = props;
@@ -60,6 +61,133 @@ const NarratorPluginComponent = (props) => {
   const [customPrompt, setCustomPrompt] = useState(DEFAULT_PROMPT);
 
   const audioRef = useRef(null);
+
+  // 快捷键处理
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      console.log(`[NarratorPlugin] KeyDown: ${e.key}, PanelOpen:${showPanel}`);
+      // 只有当面板显示时才处理
+      // 或者如果用户希望即使面板关闭也能翻页？通常讲解模式是打开面板的
+      // 且当前窗口必须是活动窗口（由 BoardCanvas 处理焦点，但这里无法直接知道是否聚焦）
+      // 实际上，事件监听是挂在 window 上的，需要判断是否聚焦了当前 PDF 窗口
+      // 但 NarratorPluginComponent 是渲染在 Toolbar 里的，可能拿不到窗口焦点状态
+      // 这里的 props 只有 windowId。
+      // 简单的判断：如果面板开启 (showPanel)，则接管快捷键
+      
+      if (!showPanel) return;
+      
+      const isInputFocused = 
+        document.activeElement.tagName === 'INPUT' ||
+        document.activeElement.tagName === 'TEXTAREA' ||
+        document.activeElement.isContentEditable;
+        
+      if (isInputFocused) return;
+
+      // 1. 播放/暂停
+      if (ShortcutManager.matches('narrator.play_pause', e)) {
+        e.preventDefault();
+        if (isAutoMode || isPlaying) {
+             togglePlay();
+        } else {
+             // 如果没在播放，尝试开始演示
+             startPresentation();
+        }
+        return;
+      }
+
+      // 2. 快退
+      if (ShortcutManager.matches('narrator.rewind', e)) {
+        e.preventDefault();
+        e.stopPropagation(); // 阻止事件冒泡，防止被外层捕获
+        if (audioRef.current && audioUrl) {
+            audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 5);
+        }
+        return;
+      }
+
+      // 3. 快进
+      if (ShortcutManager.matches('narrator.forward', e)) {
+        e.preventDefault();
+        e.stopPropagation(); // 阻止事件冒泡，防止被外层捕获
+        if (audioRef.current && audioUrl) {
+            audioRef.current.currentTime = Math.min(audioDuration, audioRef.current.currentTime + 5);
+        }
+        return;
+      }
+      
+      // 4. PDF 翻页 (如果 BoardCanvas 没有处理，或者这里想覆盖)
+      // BoardCanvas 应该处理通用的 PDF 翻页。但如果我们在讲解模式，可能需要特殊的翻页逻辑（如停止播放）
+      // Narrator 翻页逻辑：
+      if (ShortcutManager.matches('pdf.prev_page', e)) {
+          e.preventDefault();
+          setIsAutoMode(false);
+          if (pageControl && pageControl.goToPreviousPage) pageControl.goToPreviousPage();
+          return;
+      }
+      
+      if (ShortcutManager.matches('pdf.next_page', e)) {
+          e.preventDefault();
+          setIsAutoMode(false);
+          if (pageControl && pageControl.goToNextPage) pageControl.goToNextPage();
+          return;
+      }
+    };
+    
+    // 只在显示面板时监听
+    if (showPanel) {
+        window.addEventListener('keydown', handleKeyDown);
+    }
+    
+    return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showPanel, isAutoMode, isPlaying, audioUrl, audioDuration, pageControl]);
+
+  // 全局监听 'n' 键切换面板，即使面板关闭
+  useEffect(() => {
+     // 这个监听器需要在任何时候都生效，只要窗口存在
+     // 但为了避免所有 PDF 窗口同时响应，我们需要判断焦点
+     // 这是一个难点，因为组件不知道自己是否被聚焦。
+     // 解决办法：BoardCanvas 传递 isFocused 属性给 renderToolbarButton
+     // 目前 PdfNarratorPlugin.renderToolbarButton 没有接收 isFocused
+     // 
+     // 替代方案：在 window 级别监听，检查 document.activeElement 是否在当前窗口内
+     // 或者依赖 BoardCanvas 传递的消息。
+     
+     // 暂时先只在组件挂载时监听，如果用户有多个 PDF 窗口，按 N 可能会同时打开所有窗口的讲解模式
+     // 这是一个已知限制，除非 BoardCanvas 传递 focus 状态。
+     
+     const handleToggle = (e) => {
+         console.log(`[NarratorPlugin] Toggle Check: ${e.key}, Code:${e.code}`);
+         // 检查输入框
+         const isInputFocused = 
+            document.activeElement.tagName === 'INPUT' ||
+            document.activeElement.tagName === 'TEXTAREA' ||
+            document.activeElement.isContentEditable;
+         if (isInputFocused) return;
+         
+         if (ShortcutManager.matches('pdf.toggle_narrator', e)) {
+             // 简单的焦点检查：看当前焦点元素是否在对应的 window div 内
+             const windowEl = document.getElementById(`window-${windowId}`);
+             if (windowEl && windowEl.contains(document.activeElement)) {
+                 e.preventDefault();
+                 setShowPanel(prev => !prev);
+             } else {
+                 // 放宽限制：如果当前没有输入框聚焦，且按下了 n，尝试切换
+                 // 为了避免多窗口冲突，理想情况下应该检查是否是当前激活窗口
+                 // 但作为插件组件，很难获取全局激活状态。
+                 // 既然用户已经在操作这个窗口（虽然焦点可能在 body），我们假设意图是切换当前窗口。
+                 // 如果有多个 PDF 窗口，这确实是个问题。
+                 // 但考虑到用户体验，先让它能工作。
+                 e.preventDefault();
+                 setShowPanel(prev => !prev);
+             }
+         }
+     };
+     
+     window.addEventListener('keydown', handleToggle);
+     return () => window.removeEventListener('keydown', handleToggle);
+  }, [windowId]);
 
   // 初始化加载
   useEffect(() => {

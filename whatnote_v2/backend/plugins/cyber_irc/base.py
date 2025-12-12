@@ -38,6 +38,67 @@ CRITICAL INSTRUCTIONS:
         else:
             self.memory.append({"role": Role.SYSTEM, "content": base_prompt})
 
+    async def ensure_daily_routine(self):
+        """
+        If daily_routine is empty, generate it using the Agent's own persona.
+        """
+        if self.profile.schedule.daily_routine:
+            return
+
+        info(f"[Agent] Generating daily routine for {self.profile.name}...")
+        
+        # Get appropriate active hours for reference
+        # We just use generic active_hours for the prompt context
+        active_str = str(self.profile.schedule.active_hours)
+        
+        prompt = f"""
+You are {self.profile.name}.
+Your personality: {self.profile.personality}
+Your typical active hours (Online in chat): {active_str}
+
+Please create a DETAILED daily routine for yourself for a typical day (24 hours).
+For EVERY hour from 0 to 23, describe what you are doing.
+
+- If you are OFFLINE, describe your real-life activity (e.g., Sleeping, Commuting, Working at office, In class).
+- If you are ONLINE, describe the context (e.g., Chilling on sofa, Procrastinating at work, Late night gaming).
+
+Return ONLY a JSON object mapping hour (string "0" to "23") to the activity description (string).
+Example:
+{{
+    "0": "Sleeping",
+    "1": "Sleeping",
+    ...
+    "9": "Commuting to work, checking messages on phone",
+    "10": "Working on spreadsheets (Secretly chatting)"
+}}
+JSON ONLY:
+"""
+        
+        try:
+            messages = [{"role": Role.SYSTEM, "content": prompt}]
+            response_text = ""
+            async for chunk in self.llm_service.chat_completion(messages, stream=False):
+                response_text += chunk
+                
+            # Parse JSON
+            import json
+            import re
+            
+            clean_text = response_text.strip()
+            if "```" in clean_text:
+                match = re.search(r"```(?:json)?(.*?)```", clean_text, re.DOTALL)
+                if match:
+                    clean_text = match.group(1)
+            
+            routine = json.loads(clean_text)
+            # Ensure keys are strings
+            self.profile.schedule.daily_routine = {str(k): str(v) for k, v in routine.items()}
+            info(f"[Agent] Generated routine for {self.profile.name}: {len(self.profile.schedule.daily_routine)} entries.")
+            
+        except Exception as e:
+            error(f"[Agent] Failed to generate routine: {e}")
+
+
     def observe(self, message: ChatMessage):
         """
         Receive a message from the room.
@@ -58,11 +119,10 @@ CRITICAL INSTRUCTIONS:
     def is_online(self) -> Dict[str, Any]:
         """
         Check if agent is online based on schedule.
-        Returns: {'is_online': bool, 'status_code': str}
-        status_code: 'ACTIVE', 'OFFLINE', 'INSOMNIA', 'BUSY'
+        Returns: {'is_online': bool, 'status_code': str, 'activity': str}
         """
         if not self.profile.schedule:
-            return {'is_online': True, 'status_code': 'ACTIVE'}
+            return {'is_online': True, 'status_code': 'ACTIVE', 'activity': 'Unknown'}
             
         import datetime
         import random
@@ -74,6 +134,9 @@ CRITICAL INSTRUCTIONS:
         weekday = now.weekday() # 0=Mon, 6=Sun
         is_weekend = weekday >= 5
         
+        # Get Activity Description
+        activity = self.profile.schedule.daily_routine.get(str(current_hour), "Unknown activity")
+
         # Determine base active hours
         active_hours = self.profile.schedule.active_hours
         if is_weekend and self.profile.schedule.weekends_active_hours:
@@ -103,8 +166,7 @@ CRITICAL INSTRUCTIONS:
         # Reset seed to avoid affecting other random calls
         random.seed()
         
-        # info(f"[AgentCheck] {self.profile.name}: {status_code} (Online={is_active})")
-        return {'is_online': is_active, 'status_code': status_code}
+        return {'is_online': is_active, 'status_code': status_code, 'activity': activity}
 
     async def should_speak(self, room_context: Dict) -> bool:
         """
@@ -135,7 +197,7 @@ CRITICAL INSTRUCTIONS:
                 break
                 
         r = random.random()
-        info(f"[AgentCheck] {self.profile.name} roll: {r:.2f} < {chance:.2f}?")
+        # info(f"[AgentCheck] {self.profile.name} roll: {r:.2f} < {chance:.2f}?")
         if r < chance: 
             return True
             
@@ -152,26 +214,30 @@ CRITICAL INSTRUCTIONS:
             
             # Check current status for "Self Awareness"
             status = self.is_online()
+            activity = status['activity']
+            
             status_prompt = ""
+            import datetime
+            now_hour = (datetime.datetime.utcnow().hour + 8) % 24 # Mock time
+            
+            context_block = f"\n[Real-time Context]\nCurrent Time: {now_hour}:00\nYour Current Activity: {activity}\n"
             
             if status['status_code'] == 'INSOMNIA':
-                status_prompt = "\n[Status: INSOMNIA]\nYou are supposed to be sleeping but you are awake (insomnia). You might be tired, grumpy, or hyperactive."
+                context_block += "Status: INSOMNIA (You should be sleeping but are awake)\n"
             elif status['status_code'] == 'BUSY': 
-                # Should not happen as is_online returns false, but just in case of forced call
-                status_prompt = "\n[Status: BUSY]\nYou are busy with real life work. Be brief or mention you are busy."
-            
-            # Inject Room System Prompt if available to give context about WHAT group this is
-            system_inject = ""
-            if room_context and room_context.get('system_prompt'):
-                system_inject += f"\n[Current Room Context]\nTopic: {room_context.get('topic')}\n公告/规则: {room_context['system_prompt']}\n"
-            
-            if status_prompt:
-                system_inject += status_prompt
+                context_block += "Status: BUSY (You are distracted by real life work)\n"
+            else:
+                context_block += "Status: ACTIVE\n"
+                
+            context_block += "INSTRUCTION: Incorporate your current activity/status into your tone if relevant. If you are doing something distracting (e.g. gaming, driving), be brief."
 
-            if system_inject:
-                # Insert after the agent's persona (index 0)
-                if len(messages_to_send) > 0:
-                    messages_to_send.insert(1, {"role": Role.SYSTEM, "content": system_inject})
+            # Inject Room System Prompt if available to give context about WHAT group this is
+            if room_context and room_context.get('system_prompt'):
+                context_block += f"\n\n[Room Info]\nTopic: {room_context.get('topic')}\nRules: {room_context['system_prompt']}"
+            
+            # Insert after the agent's persona (index 0)
+            if len(messages_to_send) > 0:
+                messages_to_send.insert(1, {"role": Role.SYSTEM, "content": context_block})
 
             # Call LLM
             response_text = ""

@@ -84,6 +84,21 @@ async def get_chat_agents(room_id: Optional[str] = None):
             
     return {"agents": agents_data}
 
+@router.get("/agents/{agent_id}")
+async def get_agent_details(agent_id: str):
+    """Get detailed info for a single agent including routine."""
+    agent = chat_manager.agents.get(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+        
+    data = agent.profile.dict()
+    status = agent.is_online()
+    data['is_online'] = status['is_online']
+    data['status_code'] = status['status_code']
+    data['current_activity'] = status['activity']
+    
+    return {"agent": data}
+
 @router.post("/agents/generate")
 async def generate_agent(request: Request):
     """Generate an agent profile using LLM (Dry Run)."""
@@ -158,6 +173,7 @@ async def list_rooms():
             "name": r.name, 
             "topic": r.topic, 
             "system_prompt": r.system_prompt,
+            "is_paused": r.is_paused,
             "active_agents_count": len(r.active_agents)
         } 
         for r in chat_manager.rooms.values()
@@ -180,6 +196,21 @@ async def join_room(room_id: str, request: Request):
 @router.post("/rooms/{room_id}/invite") # Alias for join
 async def invite_agent(room_id: str, request: Request):
     return await join_room(room_id, request)
+
+@router.post("/rooms/{room_id}/pause")
+async def pause_room(room_id: str, request: Request):
+    """Pause or resume a room."""
+    try:
+        data = await request.json()
+        paused = data.get("paused", True) # Default to pause if not specified
+        
+        if chat_manager.toggle_pause_room(room_id, paused):
+            status_str = "paused" if paused else "resumed"
+            return {"status": "success", "message": f"Room {status_str}"}
+        else:
+            raise HTTPException(status_code=404, detail="Room not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/history")
 async def get_chat_history(room_id: str = "casual_lounge"):
@@ -233,4 +264,3 @@ async def debug_trigger_speech(request: Request):
     except Exception as e:
         error(f"Debug trigger failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-

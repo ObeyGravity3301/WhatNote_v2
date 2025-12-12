@@ -222,6 +222,7 @@ const CyberIRCWindow = ({ window: windowData }) => {
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showCreateAgent, setShowCreateAgent] = useState(false);
   const [showInviteAgent, setShowInviteAgent] = useState(false);
+  const [showProfile, setShowProfile] = useState(null); // { agent data }
   
   // Form State
   const [newRoomName, setNewRoomName] = useState('');
@@ -239,6 +240,13 @@ const CyberIRCWindow = ({ window: windowData }) => {
       const res = await fetch(`${API_BASE}/rooms`);
       const data = await res.json();
       setRooms(data.rooms || []);
+      
+      // Sync currentRoom state (e.g. is_paused status) without breaking object ref if possible, 
+      // but here we just update it. Note: Effect dependency on currentRoom.id prevents reload.
+      if (currentRoom?.id) {
+         const updated = (data.rooms || []).find(r => r.id === currentRoom.id);
+         if (updated) setCurrentRoom(prev => ({...prev, ...updated}));
+      }
     } catch (e) { console.error(e); }
   };
 
@@ -283,7 +291,7 @@ const CyberIRCWindow = ({ window: windowData }) => {
       fetchHistory(currentRoom.id);
       fetchAgentsInRoom(currentRoom.id);
     }
-  }, [currentRoom]);
+  }, [currentRoom.id]);
 
   // Auto-scroll
   useEffect(() => {
@@ -400,6 +408,26 @@ const CyberIRCWindow = ({ window: windowData }) => {
     } catch (e) { alert(e.message); }
   };
 
+  const handleShowProfile = async (agentId) => {
+    try {
+        const res = await fetch(`${API_BASE}/agents/${agentId}`);
+        const data = await res.json();
+        setShowProfile(data.agent);
+    } catch (e) { alert(e.message); }
+  };
+
+  const handleTogglePause = async () => {
+    try {
+        const newStatus = !currentRoom.is_paused;
+        await fetch(`${API_BASE}/rooms/${currentRoom.id}/pause`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paused: newStatus })
+        });
+        fetchRooms(); // Sync state
+    } catch (e) { console.error(e); }
+  };
+
   // --- Helpers ---
   
   const formatTime = (ts) => {
@@ -423,7 +451,17 @@ const CyberIRCWindow = ({ window: windowData }) => {
       <div style={styles.toolbar}>
         <div style={{fontWeight: 'bold'}}>#{currentRoom.name}</div>
         <div style={{fontSize: '10px', color: '#aaaaaa'}}>{currentRoom.topic}</div>
-        <div>{isConnected ? '[ONLINE]' : '[CONNECTING...]'}</div>
+        
+        <div style={{display:'flex', alignItems:'center'}}>
+            {currentRoom.is_paused && <span style={{color:'orange', marginRight:'8px', fontSize:'10px'}}>[PAUSED]</span>}
+            <button 
+                style={{...styles.actionButton, marginRight:'8px', color: currentRoom.is_paused ? '#00ff00' : '#ffaa00', border: '1px solid currentColor'}} 
+                onClick={handleTogglePause}
+            >
+                {currentRoom.is_paused ? 'RESUME' : 'PAUSE'}
+            </button>
+            <div>{isConnected ? '[ONLINE]' : '[CONNECTING...]'}</div>
+        </div>
       </div>
 
       <div style={styles.mainArea}>
@@ -460,7 +498,7 @@ const CyberIRCWindow = ({ window: windowData }) => {
             <div style={styles.sidebarList}>
               <div style={styles.listItem}><div style={{...styles.statusDot, backgroundColor: '#fff'}}></div>User</div>
               {agents.map(a => (
-                <div key={a.id} style={styles.listItem} title={a.personality}>
+                <div key={a.id} style={styles.listItem} title={a.personality} onClick={() => handleShowProfile(a.id)}>
                   <div style={{...styles.statusDot, backgroundColor: getSenderColor(a.name)}}></div>
                   {a.name}
                 </div>
@@ -504,6 +542,55 @@ const CyberIRCWindow = ({ window: windowData }) => {
       </div>
 
       {/* Modals */}
+      {showProfile && (
+        <Modal title={`USER PROFILE: ${showProfile.name.toUpperCase()}`} onClose={() => setShowProfile(null)} onConfirm={() => setShowProfile(null)} confirmText="CLOSE">
+            <div style={{maxHeight: '400px', overflowY: 'auto'}}>
+                <div style={{display:'flex', alignItems:'center', marginBottom:'12px'}}>
+                    <div style={{width:'40px', height:'40px', borderRadius:'50%', backgroundColor: getSenderColor(showProfile.name), marginRight:'12px'}}></div>
+                    <div>
+                        <div style={{fontWeight:'bold', fontSize:'14px'}}>{showProfile.name}</div>
+                        <div style={{fontSize:'10px', color:'#aaa'}}>{showProfile.id}</div>
+                    </div>
+                    <div style={{marginLeft:'auto', textAlign:'right'}}>
+                        <div style={{color: showProfile.is_online ? '#00ff00' : '#ff0000', fontWeight:'bold'}}>
+                            {showProfile.is_online ? 'ONLINE' : 'OFFLINE'}
+                        </div>
+                        <div style={{fontSize:'10px', color:'#aaa'}}>{showProfile.status_code}</div>
+                    </div>
+                </div>
+
+                <div style={{marginBottom:'12px', borderBottom:'1px solid #333', paddingBottom:'8px'}}>
+                    <strong style={{color:'#00aa00', fontSize:'11px'}}>PERSONALITY</strong>
+                    <div style={{fontSize:'12px', marginTop:'4px'}}>{showProfile.personality}</div>
+                </div>
+
+                <div style={{marginBottom:'12px', borderBottom:'1px solid #333', paddingBottom:'8px'}}>
+                    <strong style={{color:'#00aa00', fontSize:'11px'}}>CURRENT STATUS</strong>
+                    <div style={{fontSize:'12px', marginTop:'4px', fontStyle:'italic', color:'#00ffff'}}>
+                        "{showProfile.current_activity || 'Unknown activity'}"
+                    </div>
+                </div>
+
+                <div>
+                    <strong style={{color:'#00aa00', fontSize:'11px'}}>DAILY ROUTINE</strong>
+                    <div style={{marginTop:'8px', marginLeft:'4px', borderLeft:'1px solid #333', paddingLeft:'8px'}}>
+                        {Object.entries(showProfile.schedule?.daily_routine || {})
+                            .sort((a,b) => parseInt(a[0]) - parseInt(b[0]))
+                            .map(([hour, activity]) => (
+                            <div key={hour} style={{fontSize:'11px', marginBottom:'4px', display:'flex'}}>
+                                <span style={{color:'#aaa', width:'40px', flexShrink:0}}>{hour.padStart(2,'0')}:00</span>
+                                <span style={{color: '#fff'}}>{activity}</span>
+                            </div>
+                        ))}
+                        {(!showProfile.schedule?.daily_routine || Object.keys(showProfile.schedule.daily_routine).length === 0) && (
+                            <div style={{color:'#666', fontStyle:'italic'}}>Generating routine... (Check back later)</div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </Modal>
+      )}
+
       {showCreateRoom && (
         <Modal title="CREATE NEW ROOM" onClose={() => setShowCreateRoom(false)} onConfirm={handleCreateRoom} confirmText="CREATE">
           <div style={styles.formGroup}>

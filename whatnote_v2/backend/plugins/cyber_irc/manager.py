@@ -30,42 +30,74 @@ class CyberChatManager:
         self.is_running = False
         
         # Attempt to load state
-        self.load_agents()
-        self.load_state()
+        # We need to run _init_data, but since we might be in a thread where no loop is running (during init),
+        # we should be careful. However, FastAPI startup event runs in a loop.
+        # But this class is initialized inside init_plugin which is called at module level or during import.
         
-    def load_agents(self):
-        """Load persisted agents."""
+        # FIX: Don't schedule async task in __init__ if loop isn't ready.
+        # Instead, call a sync load_state for rooms (fast) and defer agent loading or handle it in startup().
+        
+        # 1. Load Rooms Sync (Safe)
+        self.load_state_sync()
+        
+        # 2. Agents will be loaded when needed or via explicit startup call
+        # But for now, let's try to just load them sync too to ensure data is there.
+        # The 'ensure_daily_routine' part IS async, so we'll skip that in the sync load
+        # and trigger it later.
+        self.load_agents_sync()
+
+    def load_agents_sync(self):
+        """Sync load of agents (without generating routines)."""
         try:
             if self.users_dir.exists():
                 for agent_file in self.users_dir.glob("*.json"):
                     try:
                         with open(agent_file, 'r', encoding='utf-8') as f:
                             data = json.load(f)
-                            # Check for minimal required fields
                             if 'id' not in data or 'name' not in data: continue
                             
-                            # Handle schedule if present
                             from .schemas import AgentSchedule
                             if 'schedule' in data and data['schedule']:
                                 data['schedule'] = AgentSchedule(**data['schedule'])
                             
                             profile = AgentProfile(**data)
-                            self.create_agent(profile, save=False) # Already saved
+                            self.create_agent(profile, save=False)
                     except Exception as e:
                         error(f"[CyberChat] Failed to load agent {agent_file}: {e}")
         except Exception as e:
             error(f"[CyberChat] Failed to load agents: {e}")
 
-    def save_agent(self, agent: BaseAgent):
-        """Save agent profile to disk."""
+    async def ensure_all_routines(self):
+        """Called typically at startup to ensure all agents have routines."""
+        tasks = []
+        for agent in self.agents.values():
+            if not agent.profile.schedule.daily_routine:
+                # Wrap in a task to allow concurrent execution
+                tasks.append(self._generate_and_save_routine(agent))
+        
+        if tasks:
+            info(f"[CyberChat] Generating routines for {len(tasks)} agents in background...")
+            # Run concurrently but limit concurrency to avoid LLM rate limits?
+            # For local models, maybe sequential is safer, but let's try gather with a semaphore if needed.
+            # Assuming LLMService handles queuing, we can just gather.
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _generate_and_save_routine(self, agent: BaseAgent):
         try:
-            file_path = self.users_dir / f"{agent.profile.id}.json"
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(agent.profile.dict(), f, ensure_ascii=False, indent=2, default=str)
+            await agent.ensure_daily_routine()
+            self.save_agent(agent)
         except Exception as e:
-            error(f"[CyberChat] Failed to save agent {agent.profile.id}: {e}")
+            error(f"[CyberChat] Failed to generate routine for {agent.profile.name}: {e}")
+
+    async def load_agents(self):
+        """Legacy async loader - calls ensure_all_routines."""
+        self.load_agents_sync()
+        await self.ensure_all_routines()
 
     def load_state(self):
+        self.load_state_sync()
+        
+    def load_state_sync(self):
         """Load all rooms."""
         try:
             # Scan directory for json files
@@ -82,6 +114,8 @@ class CyberChatManager:
                                 id=room_id,
                                 name=data.get('name', 'Unknown Room'),
                                 topic=data.get('topic', ''),
+                                system_prompt=data.get('system_prompt', ''),
+                                is_paused=data.get('is_paused', False),
                                 active_agents=data.get('active_agents', [])
                             )
                             
@@ -107,6 +141,8 @@ class CyberChatManager:
                 "id": room.id,
                 "name": room.name,
                 "topic": room.topic,
+                "system_prompt": room.system_prompt,
+                "is_paused": room.is_paused,
                 "active_agents": room.active_agents,
                 "history": [msg.dict() for msg in room.history]
             }
@@ -124,12 +160,22 @@ class CyberChatManager:
             id=id,
             name=name,
             topic=topic,
-            active_agents=[]
+            active_agents=[],
+            is_paused=False
         )
         self.rooms[id] = room
         self.save_room(id)
         info(f"[CyberChat] Created room: {id}")
         return room
+
+    def toggle_pause_room(self, room_id: str, paused: bool):
+        room = self.rooms.get(room_id)
+        if room:
+            room.is_paused = paused
+            self.save_room(room_id)
+            info(f"[CyberChat] Room {room_id} paused: {paused}")
+            return True
+        return False
     
     def get_room(self, room_id: str) -> Optional[RoomState]:
         return self.rooms.get(room_id)
@@ -299,6 +345,10 @@ class CyberChatManager:
     async def start_loop(self):
         if self.is_running:
             return
+        
+        # Ensure routines are generated when loop starts
+        asyncio.create_task(self.ensure_all_routines())
+        
         self.is_running = True
         asyncio.create_task(self._loop())
         info("[CyberChat] Autonomous loop started.")
@@ -320,6 +370,10 @@ class CyberChatManager:
                 
                 # Check each room independently
                 for room_id, room in self.rooms.items():
+                    # Skip if room is paused or empty
+                    if room.is_paused:
+                        continue
+                        
                     if not room.active_agents:
                         # info(f"[CyberChat] Room {room_id} has no active agents.")
                         continue

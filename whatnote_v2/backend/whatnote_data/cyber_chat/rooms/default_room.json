@@ -2,6 +2,8 @@
   "id": "default_room",
   "name": "Unknown Room",
   "topic": "",
+  "system_prompt": "",
+  "is_paused": false,
   "active_agents": [],
   "history": [
     {

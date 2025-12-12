@@ -976,6 +976,8 @@ function App() {
               onBatchWindowHide={handleBatchWindowHide}
               onClearHiddenWindows={handleClearHiddenWindows}
               onWindowDelete={handleWindowDelete}
+              setShowStartMenu={setShowStartMenu}
+              showStartMenu={showStartMenu} // Add this prop
             />
           ) : (
             <div className="welcome-screen">
