@@ -10822,6 +10822,15 @@ function BoardCanvas({
     }
   };
 
+  const handleWindowShowLocal = async (windowId) => {
+    console.log('显示隐藏窗口:', windowId);
+    if (onWindowShow) {
+      onWindowShow(windowId);
+      // 立即保存显示状态到后端，明确设置hidden为false
+      await saveWindowState(windowId, { hidden: false });
+    }
+  };
+
   // 桌面图标交互函数
   const handleIconDoubleClick = async (iconId) => {
     const window = windows.find(w => w.id === iconId);
@@ -10995,6 +11004,7 @@ function BoardCanvas({
 
   // 创建窗口的通用函数（供插件使用）
   const createWindowForPlugin = async (windowData) => {
+    console.log('👉 [BoardCanvas] createWindowForPlugin called with:', windowData);
     try {
       // 允许使用传入的 ID（如果是本地系统窗口）
       // 或者如果后端忽略 ID，我们可能需要特殊处理
@@ -11008,12 +11018,16 @@ function BoardCanvas({
       // 如果我们想要 shortcut-settings 是临时的（不保存到数据库），我们应该直接 setWindows
       // 就像 createPluginManagerWindow 一样
       if (windowData.type === 'shortcut-settings') {
+          console.log('👉 [BoardCanvas] Creating local shortcut-settings window');
           const newWindow = {
               ...windowData,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
           };
-          setWindows(prev => [...prev, newWindow]);
+          setWindows(prev => {
+              console.log('👉 [BoardCanvas] Updating windows state with new window');
+              return [...prev, newWindow];
+          });
           setTimeout(() => {
             handleWindowFocusLocal(newWindow.id);
           }, 100);
@@ -11054,6 +11068,7 @@ function BoardCanvas({
 
   // 右键菜单项点击处理
   const handleContextMenuAction = async (action, targetId = null) => {
+    console.log('👉 [BoardCanvas] handleContextMenuAction triggered:', action);
     hideContextMenu();
     
     // 检查是否是插件菜单项
@@ -11061,18 +11076,23 @@ function BoardCanvas({
       // 找到对应的插件并调用其处理函数
       const pluginId = action.split(':')[1];
       const plugin = pluginRegistry.get(pluginId);
+      console.log(`👉 [BoardCanvas] Plugin action. PluginId: ${pluginId}, Found:`, !!plugin);
       
       if (plugin && plugin.handleContextMenuAction) {
         try {
+          console.log('👉 [BoardCanvas] Calling plugin.handleContextMenuAction...');
           await plugin.handleContextMenuAction(action, {
             boardId,
             windows,
             minimizedWindows, // Add minimizedWindows to context
+            hiddenWindows, // Add hiddenWindows to context
             createWindow: createWindowForPlugin,
             focusWindow: handleWindowFocusLocal, // Add focusWindow to context
             restoreWindow: handleWindowMinimizeLocal, // Add restoreWindow (toggle minimize) to context
+            showWindow: handleWindowShowLocal, // Add showWindow (remove from hidden) to context
             targetId
           });
+          console.log('👉 [BoardCanvas] Plugin action executed successfully');
         } catch (error) {
           console.error(`[插件系统] 处理插件菜单项 ${action} 时出错:`, error);
         }

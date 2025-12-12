@@ -197,3 +197,4 @@ async def extract_image_content(board_id: str, window_id: str):
 
 
 
+

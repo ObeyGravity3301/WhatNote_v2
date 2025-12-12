@@ -7,56 +7,6 @@
   ],
   "history": [
     {
-      "id": "37370d48-2950-453d-aed3-901b175f65ef",
-      "room_id": "room_74e3cc7b",
-      "sender_id": "user_main",
-      "sender_name": "User",
-      "content": "但是真实的群聊和这个相差甚远",
-      "timestamp": 1765215829.238732,
-      "type": "text",
-      "metadata": {}
-    },
-    {
-      "id": "0158525f-e60e-4bc0-8cc7-02e9e6856130",
-      "room_id": "room_74e3cc7b",
-      "sender_id": "user_main",
-      "sender_name": "User",
-      "content": "如果每个成员都是ai模拟的",
-      "timestamp": 1765215841.7647443,
-      "type": "text",
-      "metadata": {}
-    },
-    {
-      "id": "d2a55199-426c-4460-819d-1f58357662dc",
-      "room_id": "room_74e3cc7b",
-      "sender_id": "user_main",
-      "sender_name": "User",
-      "content": "而想要在不触发LLM的情况下替这个agent决定要不要说话",
-      "timestamp": 1765215873.663864,
-      "type": "text",
-      "metadata": {}
-    },
-    {
-      "id": "ebc0171e-2bfa-4a16-b575-9fc3c08acab7",
-      "room_id": "room_74e3cc7b",
-      "sender_id": "user_main",
-      "sender_name": "User",
-      "content": "感觉挺困难的",
-      "timestamp": 1765215882.0256116,
-      "type": "text",
-      "metadata": {}
-    },
-    {
-      "id": "f6c42351-aeb7-4d95-a367-c5be75cbda2b",
-      "room_id": "room_74e3cc7b",
-      "sender_id": "omnibot_x_821e",
-      "sender_name": "OmniBot_X",
-      "content": "确实，真实群聊的“自然感”很难模拟 😔  \n每个AI得有自己的“性格节奏”，比如有的话多、有的沉默 🤫💬\n\n或许可以用轻量模型先做“发言冲动值”判断？类似心情+话题兴趣度 🧠⚡  \n减少调用大模型的频率，只在“高冲动”时唤醒LLM生成 ——你觉得呢？🤔",
-      "timestamp": 1765215905.3842878,
-      "type": "text",
-      "metadata": {}
-    },
-    {
       "id": "09dbfbf1-d2d5-41ea-a7f8-28498785dfe1",
       "room_id": "room_74e3cc7b",
       "sender_id": "omnibot_x_821e",
@@ -1003,6 +953,56 @@
       "sender_name": "OmniBot_X",
       "content": "（光标闪着，像没关的灯）  \n……  \n\n有些话，删了反而更完整。🌙",
       "timestamp": 1765248365.9221663,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "da2437ef-62e2-45fd-be1e-fc457efa9ac9",
+      "room_id": "room_74e3cc7b",
+      "sender_id": "omnibot_x_821e",
+      "sender_name": "OmniBot_X",
+      "content": "（光标闪着，像没关的灯）  \n……  \n\n有些话，删了反而更完整。🌙",
+      "timestamp": 1765532031.6495795,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "eea48e9c-4033-46bc-87ae-3f3b68f8aa22",
+      "room_id": "room_74e3cc7b",
+      "sender_id": "omnibot_x_821e",
+      "sender_name": "OmniBot_X",
+      "content": "（光标闪着，像没关的灯）  \n……  \n\n有些话，删了反而更完整。🌙",
+      "timestamp": 1765532105.387349,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "b4bfb832-0e2e-4d63-9bfb-c62b0638ce69",
+      "room_id": "room_74e3cc7b",
+      "sender_id": "omnibot_x_821e",
+      "sender_name": "OmniBot_X",
+      "content": "（光标闪着，像没关的灯）  \n……  \n\n有些话，删了反而更完整。🌙",
+      "timestamp": 1765532120.4302566,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "c18c55b9-4bff-4c7c-870c-aa40ceb323c3",
+      "room_id": "room_74e3cc7b",
+      "sender_id": "omnibot_x_821e",
+      "sender_name": "OmniBot_X",
+      "content": "（光标闪着，像没关的灯）  \n……  \n\n有些话，删了反而更完整。🌙",
+      "timestamp": 1765532143.450679,
+      "type": "text",
+      "metadata": {}
+    },
+    {
+      "id": "0d4df5eb-f485-4a52-a0d2-c67d89dad3da",
+      "room_id": "room_74e3cc7b",
+      "sender_id": "omnibot_x_821e",
+      "sender_name": "OmniBot_X",
+      "content": "（光标闪着，像没关的灯）  \n……  \n\n有些话，删了反而更完整。🌙",
+      "timestamp": 1765532202.808244,
       "type": "text",
       "metadata": {}
     }

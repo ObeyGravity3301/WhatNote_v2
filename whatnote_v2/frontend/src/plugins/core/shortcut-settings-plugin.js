@@ -150,21 +150,37 @@ export const shortcutSettingsPlugin = {
   ],
 
   handleContextMenuAction: async (action, context) => {
+    console.log('[ShortcutSettings] handleContextMenuAction called:', action);
     if (action === 'plugin:shortcut-settings:open') {
-      const { createWindow, windows = [], focusWindow, restoreWindow, minimizedWindows } = context;
+      const { createWindow, windows = [], focusWindow, restoreWindow, minimizedWindows, hiddenWindows, showWindow } = context;
       
+      console.log('[ShortcutSettings] Context windows:', windows.map(w => w.id));
       const existing = windows.find(w => w.type === 'shortcut-settings');
       if (existing) {
-         // Focus existing window
-         if (focusWindow) focusWindow(existing.id);
+         console.log('[ShortcutSettings] Found existing window:', existing.id);
          
-         // Restore if minimized
+         // 1. If hidden, show it first
+         if (hiddenWindows && hiddenWindows.has(existing.id) && showWindow) {
+             console.log('[ShortcutSettings] Showing hidden window');
+             showWindow(existing.id);
+         }
+
+         // 2. If minimized, restore it
          if (minimizedWindows && minimizedWindows.has(existing.id) && restoreWindow) {
+             console.log('[ShortcutSettings] Restoring minimized window');
              restoreWindow(existing.id);
          }
+
+         // 3. Focus it
+         if (focusWindow) {
+             console.log('[ShortcutSettings] Focusing window');
+             focusWindow(existing.id);
+         }
+         
          return; 
       }
       
+      console.log('[ShortcutSettings] Creating new window...');
       await createWindow({
         id: 'shortcut-settings-window',
         type: 'shortcut-settings',
