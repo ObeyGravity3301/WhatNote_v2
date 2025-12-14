@@ -480,18 +480,24 @@ class CyberChatManager:
                                     # Notify Typing
                                     await self.post_message(room_id, target_agent.profile.id, target_agent.profile.name, "", msg_type="typing_start")
                                     
-                                    response = await target_agent.speak(room.dict())
+                                    responses = await target_agent.speak(room.dict())
                                     
-                                    # Notify Typing End (implicit in next message or explicit)
-                                    # We don't need explicit end if we send the message right after
-                                    
-                                    if response:
-                                        await self.post_message(
-                                            room_id=room_id,
-                                            sender_id=target_agent.profile.id,
-                                            sender_name=target_agent.profile.name,
-                                            content=response
-                                        )
+                                    if responses:
+                                        for text_msg in responses:
+                                            if not text_msg: continue
+                                            # Simulate typing delay
+                                            typing_delay = min(len(text_msg) * 0.1, 4.0) + random.uniform(0.5, 1.0)
+                                            await asyncio.sleep(typing_delay)
+                                            
+                                            await self.post_message(
+                                                room_id=room_id,
+                                                sender_id=target_agent.profile.id,
+                                                sender_name=target_agent.profile.name,
+                                                content=text_msg
+                                            )
+                                            # Burst delay
+                                            await asyncio.sleep(random.uniform(0.3, 1.0))
+
                         continue # Skip standard logic for DM rooms
 
                     # GROUP LOGIC (Standard)
@@ -508,14 +514,23 @@ class CyberChatManager:
                             # Notify Typing
                             await self.post_message(room_id, agent.profile.id, agent.profile.name, "", msg_type="typing_start")
                             
-                            response = await agent.speak(room.dict()) # Pass room context
-                            if response:
-                                await self.post_message(
-                                    room_id=room_id,
-                                    sender_id=agent.profile.id,
-                                    sender_name=agent.profile.name,
-                                    content=response
-                                )
+                            responses = await agent.speak(room.dict()) # Pass room context
+                            if responses:
+                                for text_msg in responses:
+                                    if not text_msg: continue
+                                    # Simulate typing delay
+                                    typing_delay = min(len(text_msg) * 0.1, 4.0) + random.uniform(0.5, 1.0)
+                                    await asyncio.sleep(typing_delay)
+
+                                    await self.post_message(
+                                        room_id=room_id,
+                                        sender_id=agent.profile.id,
+                                        sender_name=agent.profile.name,
+                                        content=text_msg
+                                    )
+                                    # Burst delay
+                                    await asyncio.sleep(random.uniform(0.3, 1.0))
+                                
                                 await asyncio.sleep(2) 
                                 break # One person per room per tick
                 

@@ -54,6 +54,8 @@ class ChatMessage(BaseModel):
     content: str
     timestamp: float = Field(default_factory=time.time)
     type: str = "text" # text, image, system
+    reply_to: Optional[str] = None # ID of the message being replied to
+    payload: Optional[Dict[str, Any]] = None # For structured content (e.g. image url, file path)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class RoomState(BaseModel):

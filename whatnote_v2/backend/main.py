@@ -1909,17 +1909,16 @@ async def generate_batch_outline(
                             page_start = group['page_start']
                             page_end = group['page_end']
                             
-                            try:
-                                await queue.put(f"data: {json.dumps({'type': 'status', 'message': f'正在并发分析第{group_num}组 (第{page_start}-{page_end}页)...'}, ensure_ascii=False)}\n\n")
-                                
-                                # 构建组文本
-                                group_text = "\n\n".join([
-                                    f"=== 第{p['page']}页 ===\n{p['content']}"
-                                    for p in group['pages']
-                                ])
-                                
-                                # 构建子模型提示词
-                                sub_prompt = f"""你是一位专业的文档分析助手。请分析以下PDF文档片段的内容，并生成一个结构化的大纲。
+                            await queue.put(f"data: {json.dumps({'type': 'status', 'message': f'正在并发分析第{group_num}组 (第{page_start}-{page_end}页)...'}, ensure_ascii=False)}\n\n")
+                        
+                        # 构建组文本
+                        group_text = "\n\n".join([
+                            f"=== 第{p['page']}页 ===\n{p['content']}"
+                            for p in group['pages']
+                        ])
+                        
+                        # 构建子模型提示词
+                        sub_prompt = f"""你是一位专业的文档分析助手。请分析以下PDF文档片段的内容，并生成一个结构化的大纲。
 
 **文档信息**：
 - 文件名: {pdf_filename}
@@ -1954,89 +1953,86 @@ async def generate_batch_outline(
 ```
 
 请直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
-                                
-                                # 创建子对话记录
-                                sub_conv_id = f"outline-pdf-{window_id}-3{chr(64+group_num)}"  # 3A, 3B, 3C...
-                                sub_conversation = conversation_manager.get_conversation(board_id, sub_conv_id, page=None, limit=None)
-                                if not sub_conversation:
-                                    sub_conversation = conversation_manager.create_conversation(
-                                        board_id,
-                                        title=f"批量注释大纲-分组{group_num} - {pdf_filename}"
-                                    )
-                                    conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
-                                    old_file = conversations_dir / f"{sub_conversation['id']}.json"
-                                    new_file = conversations_dir / f"{sub_conv_id}.json"
-                                    if old_file.exists():
-                                        old_file.rename(new_file)
-                                    sub_conversation['id'] = sub_conv_id
-                                
-                                # 发送给子模型
-                                sub_user_message = {
-                                    "role": "user",
-                                    "content": sub_prompt,
-                                    "timestamp": datetime.now().isoformat(),
-                                    "metadata": {
-                                        "action": "generate_batch_outline_sub",
-                                        "pdf_filename": pdf_filename,
-                                        "window_id": window_id,
-                                        "group_number": group_num,
-                                        "page_start": group['page_start'],
-                                        "page_end": group['page_end'],
-                                        "method": "split"
-                                    }
-                                }
-                                
-                                sub_messages = [sub_user_message]
-                                sub_accumulated_content = ""
-                                
-                                async for chunk in llm_service.chat_completion(sub_messages, stream=True):
-                                    if chunk:
-                                        sub_accumulated_content += chunk
-                                        # 将子模型的输出也流式传递给前端 (可选，如果前端不展示可以忽略，但为了保持兼容性还是传一下)
-                                        # 注意：并发时这可能会导致前端接收到的 group_content 混杂，但只要前端按 group 字段区分或者忽略就没问题
-                                        # 鉴于目前 narrator plugin 忽略此消息，我们只在 debug 级别发送，或者保留原样
-                                        # await queue.put(f"data: {json.dumps({'type': 'group_content', 'group': group_num, 'content': chunk}, ensure_ascii=False)}\n\n")
-                                        pass 
-                                
-                                # 保存子模型消息
-                                sub_assistant_message = {
-                                    "role": "assistant",
-                                    "content": sub_accumulated_content,
-                                    "timestamp": datetime.now().isoformat(),
-                                    "metadata": {
-                                        "action": "generate_batch_outline_sub",
-                                        "group_number": group_num,
-                                        "method": "split"
-                                    }
-                                }
-                                
-                                conversation_manager.add_message(board_id, sub_conv_id, sub_user_message)
-                                conversation_manager.add_message(board_id, sub_conv_id, sub_assistant_message)
-                                
-                                # 解析子模型结果
-                                try:
-                                    content = sub_accumulated_content.strip()
-                                    if content.startswith('```'):
-                                        lines = content.split('\\n')
-                                        content = '\\n'.join(lines[1:-1]) if len(lines) > 2 else content
-                                    
-                                    sub_outline_data = json.loads(content)
-                                    
-                                    # 发送完成信号
-                                    await queue.put(f"data: {json.dumps({'type': 'group_done', 'group': group_num, 'outline': sub_outline_data}, ensure_ascii=False)}\n\n")
-                                    
-                                    return {
-                                        'group_number': group_num,
-                                        'outline': sub_outline_data.get('outline', [])
-                                    }
-                                except json.JSONDecodeError as e:
-                                    error(f"解析分组{group_num}大纲JSON失败: {e}")
-                                    return {
-                                        'group_number': group_num,
-                                        'outline': [],
-                                        'error': str(e)
-                                    }
-                            except Exception as e:
+                        
+                        # 创建子对话记录
+                        sub_conv_id = f"outline-pdf-{window_id}-3{chr(64+group_num)}"  # 3A, 3B, 3C...
+                        sub_conversation = conversation_manager.get_conversation(board_id, sub_conv_id, page=None, limit=None)
+                        if not sub_conversation:
+                            sub_conversation = conversation_manager.create_conversation(
+                                board_id,
+                                title=f"批量注释大纲-分组{group_num} - {pdf_filename}"
+                            )
+                            conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                            old_file = conversations_dir / f"{sub_conversation['id']}.json"
+                            new_file = conversations_dir / f"{sub_conv_id}.json"
+                            if old_file.exists():
+                                old_file.rename(new_file)
+                            sub_conversation['id'] = sub_conv_id
+                        
+                        # 发送给子模型
+                        sub_user_message = {
+                            "role": "user",
+                            "content": sub_prompt,
+                            "timestamp": datetime.now().isoformat(),
+                            "metadata": {
+                                "action": "generate_batch_outline_sub",
+                                "pdf_filename": pdf_filename,
+                                "window_id": window_id,
+                                "group_number": group_num,
+                                "page_start": group['page_start'],
+                                "page_end": group['page_end'],
+                                "method": "split"
+                            }
+                        }
+                        
+                        sub_messages = [sub_user_message]
+                        sub_accumulated_content = ""
+                        
+                        async for chunk in llm_service.chat_completion(sub_messages, stream=True):
+                            if chunk:
+                                sub_accumulated_content += chunk
+                                # await queue.put(...)
+                                pass 
+                        
+                        # 保存子模型消息
+                        sub_assistant_message = {
+                            "role": "assistant",
+                            "content": sub_accumulated_content,
+                            "timestamp": datetime.now().isoformat(),
+                            "metadata": {
+                                "action": "generate_batch_outline_sub",
+                                "group_number": group_num,
+                                "method": "split"
+                            }
+                        }
+                        
+                        conversation_manager.add_message(board_id, sub_conv_id, sub_user_message)
+                        conversation_manager.add_message(board_id, sub_conv_id, sub_assistant_message)
+                        
+                        # 解析子模型结果
+                        try:
+                            content = sub_accumulated_content.strip()
+                            if content.startswith('```'):
+                                lines = content.split('\n')
+                                content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                            
+                            sub_outline_data = json.loads(content)
+                            
+                            # 发送完成信号
+                            await queue.put(f"data: {json.dumps({'type': 'group_done', 'group': group_num, 'outline': sub_outline_data}, ensure_ascii=False)}\n\n")
+                            
+                            return {
+                                'group_number': group_num,
+                                'outline': sub_outline_data.get('outline', [])
+                            }
+                        except json.JSONDecodeError as e:
+                            error(f"解析分组{group_num}大纲JSON失败: {e}")
+                            return {
+                                'group_number': group_num,
+                                'outline': [],
+                                'error': str(e)
+                            }
+                        except Exception as e:
                                 error(f"分组{group_num}分析出错: {e}")
                                 return {
                                     'group_number': group_num,
@@ -5015,7 +5011,7 @@ async def generate_batch_summary_note(
                     except Exception as e:
                         error(f"保存笔记文件失败: {e}")
                     # ============================
-
+                    
                     yield f"data: {json.dumps({'type': 'complete', 'content': accumulated_content}, ensure_ascii=False)}\n\n"
                     
                 else:
@@ -5234,7 +5230,7 @@ async def generate_batch_summary_note(
                     # ============================
                     
                     yield f"data: {json.dumps({'type': 'complete', 'content': merge_accumulated_content}, ensure_ascii=False)}\n\n"
-
+                    
             except Exception as e:
                 error(f"生成全文档笔记失败: {e}")
                 yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"

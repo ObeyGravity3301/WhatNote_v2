@@ -29,12 +29,18 @@ Speaking Style: {self.profile.style}
 Interests: {', '.join(self.profile.interests)}
 
 You are in a group chat room with other users.
+
 CRITICAL INSTRUCTIONS:
 1. ACT NATURAL. Do NOT force your personality/catchphrases into every single sentence.
-2. KEEP IT SHORT. Real chat messages are usually 1-2 sentences (5-20 words).
-3. React to the context directly. Don't preach.
-4. Only show your strong personality traits when the topic is relevant.
+2. KEEP IT SHORT. Break your thoughts into multiple short messages (bursts) rather than one long paragraph.
+3. EMOJI CONTROL. Use emojis sparingly. Max 1 per burst. Real people don't spam emojis.
+4. React to the context directly. Don't preach.
 5. Casual language is preferred.
+
+OUTPUT FORMAT:
+You MUST return a JSON List of strings. Each string is a separate message bubble.
+Example: ["Wait, really?", "I didn't know that."]
+JSON ONLY.
 """
         if self.profile.system_prompt:
             # Allow override or append
@@ -240,9 +246,10 @@ JSON ONLY:
             
         return False
 
-    async def speak(self, room_context: Optional[Dict] = None) -> str:
+    async def speak(self, room_context: Optional[Dict] = None) -> List[str]:
         """
         Generate a response using the LLM.
+        Returns a list of message strings (burst).
         """
         self.status = AgentStatus.THINKING
         try:
@@ -282,8 +289,8 @@ JSON ONLY:
             else:
                 context_block += "Status: ACTIVE\n"
                 
-            context_block += "INSTRUCTION: Incorporate your current activity/status into your tone if relevant. If you are doing something distracting (e.g. gaming, driving), be brief."
-
+            context_block += "INSTRUCTION: Incorporate your current activity/status into your tone if relevant. If you are doing something distracting (e.g. gaming, driving), be brief.\nREMINDER: Output a JSON List of strings: [\"msg1\", \"msg2\"]. JSON ONLY."
+            
             # Inject Room System Prompt if available to give context about WHAT group this is
             if room_context and room_context.get('system_prompt'):
                 context_block += f"\n\n[Room Info]\nTopic: {room_context.get('topic')}\nRules: {room_context['system_prompt']}"
@@ -298,10 +305,29 @@ JSON ONLY:
                 response_text += chunk
                 
             self.status = AgentStatus.SPEAKING
-            return response_text.strip()
+            
+            # Parse JSON List
+            clean_text = response_text.strip()
+            import re
+            if "```" in clean_text:
+                match = re.search(r"```(?:json)?(.*?)```", clean_text, re.DOTALL)
+                if match:
+                    clean_text = match.group(1)
+            
+            try:
+                msg_list = json.loads(clean_text)
+                if isinstance(msg_list, list):
+                    return [str(m) for m in msg_list]
+                else:
+                    return [str(msg_list)]
+            except json.JSONDecodeError:
+                # Fallback: Split by newlines if it looks like a list, or just return raw
+                if "\n" in clean_text and len(clean_text) > 50:
+                     return [line.strip() for line in clean_text.split('\n') if line.strip()]
+                return [clean_text]
             
         except Exception as e:
             error(f"Agent {self.profile.name} failed to speak: {e}")
-            return "..."
+            return ["..."]
         finally:
             self.status = AgentStatus.IDLE
