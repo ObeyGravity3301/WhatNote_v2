@@ -183,6 +183,27 @@ const styles = {
     display: 'flex',
     justifyContent: 'flex-end',
     marginTop: '16px',
+  },
+  replyQuote: {
+    borderLeft: '2px solid #008800',
+    marginBottom: '4px',
+    fontSize: '10px',
+    color: '#aaa',
+    backgroundColor: 'rgba(0, 50, 0, 0.3)',
+    padding: '2px 4px',
+    cursor: 'pointer',
+    opacity: 0.8
+  },
+  replyBar: {
+    backgroundColor: '#002200',
+    color: '#aaa',
+    fontSize: '11px',
+    padding: '4px 8px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTop: '1px solid #004400',
+    borderBottom: '1px solid #004400'
   }
 };
 
@@ -247,6 +268,8 @@ const CyberIRCWindow = ({ window: windowData }) => {
   const [selectedAgentId, setSelectedAgentId] = useState('');
 
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [targetAgentStatus, setTargetAgentStatus] = useState(null); // { last_processed_msg_id, ... }
+  const [replyingTo, setReplyingTo] = useState(null); // Message object being replied to
 
   // --- Data Fetching ---
 
@@ -445,17 +468,47 @@ const CyberIRCWindow = ({ window: windowData }) => {
     return () => clearInterval(interval);
   }, [showProfile, isRegenerating]);
 
+  // Poll for target agent status in DM
+  useEffect(() => {
+    let interval;
+    if (currentRoom.type === 'dm' && currentRoom.active_agents) {
+        const agentId = currentRoom.active_agents.find(id => id !== 'user_main');
+        if (agentId) {
+            const poll = async () => {
+                const data = await fetchAgentDetails(agentId);
+                if (data) {
+                    setTargetAgentStatus(data);
+                }
+            };
+            poll();
+            interval = setInterval(poll, 3000);
+        }
+    } else {
+        setTargetAgentStatus(null);
+    }
+    return () => clearInterval(interval);
+  }, [currentRoom.id, currentRoom.type, currentRoom.active_agents]);
+
   // --- Actions ---
 
   const handleSend = async () => {
     if (!inputValue.trim()) return;
     const content = inputValue;
+    const replyId = replyingTo?.id; // Capture ID
+    
     setInputValue('');
+    setReplyingTo(null); // Clear reply state immediately
+    
     try {
       await fetch(`${API_BASE}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, room_id: currentRoom.id, sender_name: "User" })
+        body: JSON.stringify({ 
+            content, 
+            room_id: currentRoom.id, 
+            sender_name: "User",
+            reply_to: replyId 
+        })
       });
     } catch (e) { console.error(e); }
   };
@@ -629,6 +682,33 @@ const CyberIRCWindow = ({ window: windowData }) => {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
   };
 
+  const isMessageUnread = (msg, index) => {
+      // Only for user messages in DM
+      if (currentRoom.type !== 'dm' || msg.sender_id !== 'user_main') return false;
+      
+      // If we don't know status yet, assume unread? Or read? Assume unread.
+      if (!targetAgentStatus?.last_processed_msg_id) return true;
+      
+      // If this message IS the last processed one, it's read.
+      if (msg.id === targetAgentStatus.last_processed_msg_id) return false;
+      
+      // If this message is AFTER the last processed one, it's unread.
+      // We need to find the index of last_processed_msg_id in messages array.
+      const lastProcessedIndex = messages.findIndex(m => m.id === targetAgentStatus.last_processed_msg_id);
+      
+      if (lastProcessedIndex === -1) {
+          // The last processed message is not in current view (maybe too old?)
+          // If we assume messages are sorted by time asc:
+          // If msg timestamp > now? Hard to say without comparing IDs.
+          // Fallback: If we can't find the processed ID, assume all recent messages are unread?
+          // Or assume read if it's very old?
+          // Let's assume unread for safety if we can't link it.
+          return true;
+      }
+      
+      return index > lastProcessedIndex;
+  };
+
   // --- Render ---
 
   return (
@@ -717,21 +797,38 @@ const CyberIRCWindow = ({ window: windowData }) => {
             ref={chatAreaRef}
             onScroll={handleChatScroll}
         >
-          {messages.map((msg, idx) => (
+          {messages.map((msg, idx) => {
+            const replyTarget = msg.reply_to ? messages.find(m => m.id === msg.reply_to) : null;
+            return (
             <div key={msg.id || idx} style={styles.message}>
               <span style={styles.timestamp}>[{formatTime(msg.timestamp)}]</span>
               {msg.type === 'system' ? (
                 <span style={styles.systemMsg}>*** {msg.content}</span>
               ) : (
-                <>
-                  <span style={{...styles.sender, color: getSenderColor(msg.sender_name)}}>
+                <div style={{display:'inline-block', width:'100%', verticalAlign:'top'}}>
+                  {replyTarget && (
+                      <div style={styles.replyQuote}>
+                          <span style={{fontWeight:'bold'}}>{replyTarget.sender_name}: </span>
+                          {replyTarget.content.length > 60 ? replyTarget.content.substring(0,60)+'...' : replyTarget.content}
+                      </div>
+                  )}
+                  <span 
+                    style={{...styles.sender, color: getSenderColor(msg.sender_name), cursor:'pointer'}}
+                    title="Click to reply"
+                    onClick={() => setReplyingTo(msg)}
+                  >
                     &lt;{msg.sender_name}&gt;
                   </span>
                   <span>{msg.content}</span>
-                </>
+                  {isMessageUnread(msg, idx) && (
+                      <span style={{marginLeft: '8px', color: '#666', fontSize: '10px', fontStyle: 'italic'}}>
+                          [Unread{targetAgentStatus && !targetAgentStatus.is_online ? ' - Offline' : ''}]
+                      </span>
+                  )}
+                </div>
               )}
             </div>
-          ))}
+          )})}
           <div ref={chatEndRef} />
           
           {/* Typing Indicator */}
@@ -740,8 +837,27 @@ const CyberIRCWindow = ({ window: windowData }) => {
                 {typingUsers.join(', ')} is typing...
             </div>
           )}
+          
+          {/* Debug Info for Unread Status */}
+          {currentRoom.type === 'dm' && (
+              <div style={{fontSize: '9px', color: '#444', marginTop: '4px'}}>
+                  DEBUG: LastProcessedID: {targetAgentStatus?.last_processed_msg_id || 'null'} | 
+                  Unread: {messages.filter((m, i) => isMessageUnread(m, i)).length}
+              </div>
+          )}
         </div>
       </div>
+
+      {/* Reply Bar */}
+      {replyingTo && (
+          <div style={styles.replyBar}>
+              <div>
+                  <span style={{color: '#00aa00'}}>Replying to {replyingTo.sender_name}: </span>
+                  <span style={{fontStyle:'italic'}}>"{replyingTo.content.substring(0, 30)}{replyingTo.content.length>30?'...':''}"</span>
+              </div>
+              <button style={styles.actionButton} onClick={() => setReplyingTo(null)}>CANCEL</button>
+          </div>
+      )}
 
       {/* Input */}
       <div style={styles.inputArea}>

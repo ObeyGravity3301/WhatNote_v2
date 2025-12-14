@@ -353,7 +353,7 @@ class CyberChatManager:
                 self.save_room(room_id)
                 info(f"[CyberChat] Removed {agent_id} from {room_id}")
 
-    async def post_message(self, room_id: str, sender_id: str, sender_name: str, content: str, msg_type: str = "text"):
+    async def post_message(self, room_id: str, sender_id: str, sender_name: str, content: str, msg_type: str = "text", reply_to: Optional[str] = None):
         """
         Post a message to a specific room.
         """
@@ -386,7 +386,8 @@ class CyberChatManager:
             sender_id=sender_id,
             sender_name=sender_name,
             content=content,
-            type=msg_type
+            type=msg_type,
+            reply_to=reply_to
         )
         
         # 1. Add to History
@@ -396,11 +397,21 @@ class CyberChatManager:
 
         self.save_room(room_id)
 
+        # Resolve Reply Context for Agents
+        reply_str = ""
+        if msg.reply_to:
+             # Look backwards in history for the target
+             target = next((m for m in reversed(room.history) if m.id == msg.reply_to), None)
+             if target:
+                 # Truncate if too long
+                 content_snippet = target.content[:50] + ("..." if len(target.content) > 50 else "")
+                 reply_str = f"(Replying to {target.sender_name}: \"{content_snippet}\") "
+
         # 2. Broadcast to Agents in this room
         for agent_id in room.active_agents:
             agent = self.agents.get(agent_id)
             if agent:
-                agent.observe(msg)
+                agent.observe(msg, reply_context=reply_str)
 
         # 3. Notify Frontend
         for q in self.subscribers:

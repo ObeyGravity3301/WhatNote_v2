@@ -154,7 +154,7 @@ JSON ONLY:
 
 
 
-    def observe(self, message: ChatMessage):
+    def observe(self, message: ChatMessage, reply_context: str = ""):
         """
         Receive a message from the room.
         """
@@ -163,7 +163,7 @@ JSON ONLY:
             self.memory.append({"role": Role.ASSISTANT, "content": message.content})
         else:
             # It's someone else (User or another Agent), add as user
-            formatted_content = f"[{message.sender_name}]: {message.content}"
+            formatted_content = f"[{message.sender_name}]: {reply_context}{message.content}"
             self.memory.append({"role": Role.USER, "content": formatted_content})
             
         # Keep memory size manageable (e.g., last 50 messages)
@@ -311,14 +311,14 @@ JSON ONLY:
             import random
             # Base chance
             chance = 0.02 
-            
+        
             # Increase chance if room topic matches interests (simple keyword match)
             topic = room_context.get('topic', '').lower()
             for interest in self.profile.interests:
                 if interest.lower() in topic:
                     chance += 0.05
                     break
-                    
+                
             r = random.random()
             if r < chance: 
                 return True

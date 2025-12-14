@@ -19,6 +19,7 @@ async def send_chat_message(request: Request):
         data = await request.json()
         content = data.get("content")
         sender_name = data.get("sender_name", "User")
+        reply_to = data.get("reply_to")
         
         if not content:
             raise HTTPException(status_code=400, detail="Content is required")
@@ -27,7 +28,13 @@ async def send_chat_message(request: Request):
         user_id = "user_main" 
         room_id = data.get("room_id", "casual_lounge") # Default to new room
         
-        msg = await chat_manager.post_message(room_id, user_id, sender_name, content)
+        msg = await chat_manager.post_message(
+            room_id, 
+            user_id, 
+            sender_name, 
+            content,
+            reply_to=reply_to
+        )
         return {"status": "success", "message": msg}
     except Exception as e:
         error(f"Error sending chat message: {e}")
