@@ -196,6 +196,7 @@ async def list_rooms():
             "type": r.type, # Include type
             "system_prompt": r.system_prompt,
             "is_paused": r.is_paused,
+            "active_agents": r.active_agents, # Include list of agents
             "active_agents_count": len(r.active_agents)
         } 
         for r in chat_manager.rooms.values()

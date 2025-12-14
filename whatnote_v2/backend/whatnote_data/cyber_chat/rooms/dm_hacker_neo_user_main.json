@@ -1,0 +1,61 @@
+{
+  "id": "dm_hacker_neo_user_main",
+  "name": "HackerNeo",
+  "topic": "Direct Message",
+  "type": "dm",
+  "system_prompt": "",
+  "is_paused": false,
+  "active_agents": [
+    "hacker_neo"
+  ],
+  "history": [
+    {
+      "id": "ff55dfa2-f219-4e09-a551-17601639b537",
+      "room_id": "dm_hacker_neo_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "你好啊",
+      "timestamp": 1765705928.1414537,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "c7d48f77-dd67-481c-a0b2-44bb804b933b",
+      "room_id": "dm_hacker_neo_user_main",
+      "sender_id": "hacker_neo",
+      "sender_name": "HackerNeo",
+      "content": "signal’s clear now — what’s your frequency? 🐾",
+      "timestamp": 1765705938.9469814,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "67737e5f-d4ac-4279-aa19-d3b42788e1f2",
+      "room_id": "dm_hacker_neo_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "没事了，我下线了",
+      "timestamp": 1765705951.8799324,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "e38a2b88-6a05-42e5-9f1c-6284b747f61a",
+      "room_id": "dm_hacker_neo_user_main",
+      "sender_id": "hacker_neo",
+      "sender_name": "HackerNeo",
+      "content": "disconnect clean — stay off-grid 🐾",
+      "timestamp": 1765705961.0320585,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    }
+  ]
+}

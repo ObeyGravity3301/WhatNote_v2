@@ -842,7 +842,8 @@ const CyberIRCWindow = ({ window: windowData }) => {
           {currentRoom.type === 'dm' && (
               <div style={{fontSize: '9px', color: '#444', marginTop: '4px'}}>
                   DEBUG: LastProcessedID: {targetAgentStatus?.last_processed_msg_id || 'null'} | 
-                  Unread: {messages.filter((m, i) => isMessageUnread(m, i)).length}
+                  Unread: {messages.filter((m, i) => isMessageUnread(m, i)).length} |
+                  Status: {targetAgentStatus?.is_online ? 'ONLINE' : 'OFFLINE'} ({targetAgentStatus?.status_code})
               </div>
           )}
         </div>
