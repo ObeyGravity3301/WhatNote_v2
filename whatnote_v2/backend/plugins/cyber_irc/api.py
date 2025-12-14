@@ -97,6 +97,7 @@ async def get_agent_details(agent_id: str):
     data['status_code'] = status['status_code']
     data['current_activity'] = status['activity']
     data['is_generating_routine'] = agent.is_generating_routine
+    data['last_processed_msg_id'] = agent.profile.last_processed_msg_id
     
     return {"agent": data}
 

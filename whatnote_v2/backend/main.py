@@ -242,6 +242,27 @@ except ImportError:
 except Exception as e:
     error(f"❌ [Plugin] PdfNarrator failed to load: {e}")
 
+@app.on_event("startup")
+async def startup_event():
+    """Application startup: Initialize plugins."""
+    try:
+        from plugins import cyber_irc
+        await cyber_irc.startup()
+        info("🚀 [Plugin] CyberIRC loop started.")
+    except Exception as e:
+        error(f"Failed to start CyberIRC loop: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Application shutdown: Cleanup plugins."""
+    try:
+        from plugins import cyber_irc
+        await cyber_irc.shutdown()
+        info("🛑 [Plugin] CyberIRC loop stopped.")
+    except Exception as e:
+        error(f"Failed to stop CyberIRC loop: {e}")
+
+
 
 # 初始化WebSocket连接管理器
 manager = ConnectionManager()

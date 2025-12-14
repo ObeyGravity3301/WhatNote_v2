@@ -45,6 +45,7 @@ class AgentProfile(BaseModel):
     style: str = Field(..., description="Speaking style, e.g., 'sarcastic', 'formal', 'slang-heavy'")
     system_prompt: Optional[str] = None # Calculated from personality and style
     schedule: Optional[AgentSchedule] = Field(default_factory=AgentSchedule) # Activity schedule
+    last_processed_msg_id: Optional[str] = None # Last message ID processed by the agent (for persistence)
 
 class ChatMessage(BaseModel):
     id: str

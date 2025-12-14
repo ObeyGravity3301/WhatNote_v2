@@ -13,6 +13,12 @@ class BaseAgent:
         self.status = AgentStatus.IDLE
         self.memory: List[Dict[str, Any]] = []
         self.last_active_time = time.time()
+        # Proactive engagement timer
+        # Initial delay to avoid instant spam on startup
+        import random
+        self.next_proactive_time = time.time() + random.uniform(600, 3600) 
+        # last_processed_msg_id is now in self.profile
+        
         self.is_generating_routine = False
         
         # Initialize system prompt
@@ -32,14 +38,15 @@ You are in a group chat room with other users.
 
 CRITICAL INSTRUCTIONS:
 1. ACT NATURAL. Do NOT force your personality/catchphrases into every single sentence.
-2. KEEP IT SHORT. Break your thoughts into multiple short messages (bursts) rather than one long paragraph.
-3. EMOJI CONTROL. Use emojis sparingly. Max 1 per burst. Real people don't spam emojis.
-4. React to the context directly. Don't preach.
-5. Casual language is preferred.
+2. KEEP IT SHORT. Usually send just 1 or 2 short messages.
+3. NO MONOLOGUES. Stop after a few words. Don't dominate the chat.
+4. EMOJI CONTROL. Use emojis sparingly. Max 1 per burst.
+5. React to the context directly. Don't preach.
 
 OUTPUT FORMAT:
-You MUST return a JSON List of strings. Each string is a separate message bubble.
-Example: ["Wait, really?", "I didn't know that."]
+You MUST return a JSON List of strings.
+Example: ["Wait, really?"] or ["I didn't know that.", "Tell me more."]
+If you have nothing to say or want to stay silent, return an empty list: []
 JSON ONLY.
 """
         if self.profile.system_prompt:
@@ -112,6 +119,16 @@ JSON ONLY:
                     self.profile.schedule.daily_routine_weekend = routine
         finally:
             self.is_generating_routine = False
+
+    def _is_valid_msg(self, text: str) -> bool:
+        """Check if message has actual content (not just ... or spaces)."""
+        if not text: return False
+        import re
+        # Remove whitespace, dots, common punctuation
+        # Keep emojis though? 
+        # If it's ONLY dots/spaces, it's invalid.
+        clean = text.strip(" .-_*")
+        return len(clean) > 0
 
     async def _generate_routine_json(self, prompt: str) -> Optional[Dict[str, str]]:
         try:
@@ -211,6 +228,16 @@ JSON ONLY:
         
         return {'is_online': is_active, 'status_code': status_code, 'activity': activity}
 
+    def reset_proactive_timer(self):
+        """Reset the proactive engagement timer after speaking."""
+        import random
+        # Next check in 2-6 hours (mocked as minutes for testing if needed)
+        # For production: 2-6 hours = 7200 - 21600 seconds
+        # For testing: let's make it 30-60 minutes to see it occasionally
+        delay = random.uniform(1800, 3600) 
+        self.next_proactive_time = time.time() + delay
+        # info(f"[Agent] {self.profile.name} proactive timer reset to +{delay/60:.1f}m")
+
     async def should_speak(self, room_context: Dict) -> bool:
         """
         Decide if the agent wants to speak.
@@ -218,8 +245,10 @@ JSON ONLY:
         # Check online status first
         status = self.is_online()
         if not status['is_online']:
-            info(f"[AgentCheck] {self.profile.name} is offline ({status['status_code']}).")
+            # info(f"[AgentCheck] {self.profile.name} is offline ({status['status_code']}).")
             return False
+            
+        is_dm = room_context.get('type') == 'dm'
 
         # 1. If mentioned, high probability
         last_msg = self.memory[-1]
@@ -227,22 +256,72 @@ JSON ONLY:
             info(f"[AgentCheck] {self.profile.name} was mentioned, speaking.")
             return True
             
-        # 2. Random chance based on 'boredom' or 'interest'
-        import random
-        # Base chance INCREASED for testing
-        chance = 0.3 
+        # 2. Anti-Domination: If I was the last speaker in the room, drastic penalty
+        # room_context['history'] is a list of dicts (from RoomState)
+        room_history = room_context.get('history', [])
+        if room_history:
+            last_room_msg = room_history[-1]
+            if last_room_msg.get('sender_id') == self.profile.id:
+                # I just spoke.
+                # info(f"[AgentCheck] {self.profile.name} was last speaker, skipping.")
+                return False
+            
+            # Debug Anti-Domination
+            # info(f"[AgentCheck] Last speaker: {last_room_msg.get('sender_id')} != Me: {self.profile.id}")
         
-        # Increase chance if room topic matches interests (simple keyword match)
-        topic = room_context.get('topic', '').lower()
-        for interest in self.profile.interests:
-            if interest.lower() in topic:
-                chance += 0.2
-                break
-                
-        r = random.random()
-        # info(f"[AgentCheck] {self.profile.name} roll: {r:.2f} < {chance:.2f}?")
-        if r < chance: 
+        # 3. Proactive Engagement Check
+        import time
+        if time.time() > self.next_proactive_time:
+            info(f"[AgentCheck] {self.profile.name} proactive timer triggered!")
+            # Reset timer immediately to avoid loop, even if we don't speak this time (e.g. LLM returns empty)
+            # Or we reset it ONLY if we speak? 
+            # Better to reset it now to "snooze" it.
+            self.reset_proactive_timer()
             return True
+            
+        # 4. DM Specific Logic (Reactive)
+        if is_dm:
+            # If user just spoke (and not me, checked above), we usually reply
+            # But not 100% to allow for "ghosting" or realistic delays
+            # Current logic: If we are here, it means user spoke last (or someone else).
+            # If user spoke last in DM, we highly likely reply.
+            if room_history:
+                last_msg_obj = room_history[-1]
+                
+                # Check if we already processed this message
+                current_id = str(last_msg_obj.get('id'))
+                last_id = str(self.profile.last_processed_msg_id)
+                
+                if current_id == last_id:
+                    # info(f"[AgentCheck] Already processed msg {current_id}, skipping.")
+                    return False
+                
+                # Debug Log
+                info(f"[AgentCheck] New msg detected! Current={current_id} vs Last={last_id}")
+                info(f"[AgentCheck] Sender={last_msg_obj.get('sender_id')} vs Me={self.profile.id}")
+                
+                if last_msg_obj.get('sender_id') != self.profile.id:
+                    import random
+                    if random.random() < 0.95: # 95% reply rate in DM
+                         return True
+                    return False
+
+        # 5. Random chance based on 'boredom' or 'interest' (Group Chat)
+        if not is_dm:
+            import random
+            # Base chance
+            chance = 0.02 
+            
+            # Increase chance if room topic matches interests (simple keyword match)
+            topic = room_context.get('topic', '').lower()
+            for interest in self.profile.interests:
+                if interest.lower() in topic:
+                    chance += 0.05
+                    break
+                    
+            r = random.random()
+            if r < chance: 
+                return True
             
         return False
 
@@ -251,6 +330,15 @@ JSON ONLY:
         Generate a response using the LLM.
         Returns a list of message strings (burst).
         """
+        # Mark latest message as processed immediately
+        if room_context and room_context.get('history'):
+            try:
+                latest_id = room_context['history'][-1].get('id')
+                if latest_id:
+                    self.profile.last_processed_msg_id = str(latest_id)
+            except Exception:
+                pass
+
         self.status = AgentStatus.THINKING
         try:
             # Prepare messages
@@ -289,7 +377,7 @@ JSON ONLY:
             else:
                 context_block += "Status: ACTIVE\n"
                 
-            context_block += "INSTRUCTION: Incorporate your current activity/status into your tone if relevant. If you are doing something distracting (e.g. gaming, driving), be brief.\nREMINDER: Output a JSON List of strings: [\"msg1\", \"msg2\"]. JSON ONLY."
+            context_block += "INSTRUCTION: Incorporate your current activity/status into your tone if relevant. If you are doing something distracting (e.g. gaming, driving), be brief.\nREMINDER: Output a JSON List of strings: [\"msg1\"]. Usually 1-2 items. JSON ONLY."
             
             # Inject Room System Prompt if available to give context about WHAT group this is
             if room_context and room_context.get('system_prompt'):
@@ -316,18 +404,53 @@ JSON ONLY:
             
             try:
                 msg_list = json.loads(clean_text)
+                
+                # Check for empty list (Silence)
+                if isinstance(msg_list, list) and not msg_list:
+                    # Agent chose to stay silent
+                    self.reset_proactive_timer() 
+                    return []
+                    
                 if isinstance(msg_list, list):
-                    return [str(m) for m in msg_list]
+                    # Reset proactive timer if we actually speak
+                    valid_msgs = [str(m) for m in msg_list if self._is_valid_msg(str(m))]
+                    if valid_msgs:
+                        self.reset_proactive_timer()
+                        return valid_msgs
+                    return []
                 else:
-                    return [str(msg_list)]
+                    msg_str = str(msg_list)
+                    if self._is_valid_msg(msg_str):
+                        self.reset_proactive_timer()
+                        return [msg_str]
+                    return []
+                    
             except json.JSONDecodeError:
-                # Fallback: Split by newlines if it looks like a list, or just return raw
-                if "\n" in clean_text and len(clean_text) > 50:
-                     return [line.strip() for line in clean_text.split('\n') if line.strip()]
-                return [clean_text]
+                # Fallback: Split by newlines and clean up artifacts
+                lines = []
+                # Simple heuristic: split by newline
+                raw_lines = clean_text.split('\n')
+                for line in raw_lines:
+                    line = line.strip()
+                    if not line: continue
+                    # Remove common JSON artifacts if parsing failed (e.g. ["msg", "msg2")
+                    # Remove leading ['" 
+                    line = re.sub(r'^[\[\'"]+', '', line)
+                    # Remove trailing ]'",
+                    line = re.sub(r'[\]\'",]+$', '', line)
+                    if line.strip():
+                        lines.append(line.strip())
+                
+                valid_lines = [l for l in lines if self._is_valid_msg(l)]
+                
+                if valid_lines:
+                    self.reset_proactive_timer()
+                return valid_lines
             
         except Exception as e:
-            error(f"Agent {self.profile.name} failed to speak: {e}")
-            return ["..."]
+            import traceback
+            error(f"Agent {self.profile.name} failed to speak: {e}\n{traceback.format_exc()}")
+            # If error, stay silent instead of saying "..."
+            return []
         finally:
             self.status = AgentStatus.IDLE

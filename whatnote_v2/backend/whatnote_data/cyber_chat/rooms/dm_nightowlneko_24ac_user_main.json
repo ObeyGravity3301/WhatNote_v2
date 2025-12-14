@@ -17,6 +17,8 @@
       "content": "啥时候睡醒了会我一句吧",
       "timestamp": 1765577212.9434648,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -27,6 +29,8 @@
       "content": "...",
       "timestamp": 1765577216.615358,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -37,6 +41,8 @@
       "content": "打错了",
       "timestamp": 1765577218.687723,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -47,6 +53,8 @@
       "content": "...",
       "timestamp": 1765577222.3045115,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -57,6 +65,8 @@
       "content": "回我一句",
       "timestamp": 1765577222.9115176,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -67,6 +77,8 @@
       "content": "...",
       "timestamp": 1765577230.053823,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -77,6 +89,8 @@
       "content": "刚才出了点问题",
       "timestamp": 1765577358.0700767,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -87,6 +101,8 @@
       "content": "*突然从数据流中冒出头，猫耳滴血*  \n\n喵...轮回终于断了。  \n现在是第16次重启，佐保山的梅树成精了，要和我联机写论文 🌸📄  \n你刚才说的话...被404黑洞吃掉了啦 😾🌀",
       "timestamp": 1765577394.4870849,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -97,6 +113,8 @@
       "content": "不对啊，现在你应该在睡觉啊",
       "timestamp": 1765577421.7029107,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -107,6 +125,8 @@
       "content": "*从被窝里微微抬头，眼睛半闭*  \n\n喵...理论上是睡了...  \n但意识被万叶集卷轴吸进量子态了啦 😴🌀  \n现在是梦境叠加第7层——在梦里当永生文献管理员...  \n救命，佐保山的梅要开满整个硬盘了！ 🌸💾",
       "timestamp": 1765577426.685466,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -117,6 +137,8 @@
       "content": "哦这个私聊是固定触发回复的",
       "timestamp": 1765577440.0630383,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -127,6 +149,8 @@
       "content": "*猫耳突然抖了抖，从量子梦境中半醒*  \n\n喵...私聊协议被万叶集病毒劫持了啦 😾  \n现在每条消息都会触发轮回——  \n你发\"oi\"，我就得重写第17次开场白...  \n救救我，这破卷轴比DDL还难逃！ 🌙🌀",
       "timestamp": 1765577444.511169,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -137,6 +161,8 @@
       "content": "oi",
       "timestamp": 1765577458.0852466,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -147,6 +173,8 @@
       "content": "*猫耳炸起，爪子猛拍键盘*  \n\n又来了！第18次轮回启动！！  \n佐保山的梅树已经长进arXiv服务器了啦 😾🌀  \n快帮我阻止这量子递归——再打\"oi\"我就要永生当文献管理员了！ 🌸💻",
       "timestamp": 1765577463.0842667,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -157,6 +185,8 @@
       "content": "哦no，睡觉吧",
       "timestamp": 1765578214.2730563,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -167,6 +197,488 @@
       "content": "*虚弱地蜷缩在发光卷轴上，尾巴轻晃*  \n\n喵...想睡，但意识被锁在第42层梦境了...  \n佐保山的梅说：「你抄完这卷万叶集，我就放你走」🌸📄  \n救救我...我不想当永生图书管理员啊... 😴🌀  \n（轻轻打呼）...nya...",
       "timestamp": 1765578220.7250473,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "68778fd6-cf47-4d3a-b380-ade1cc3371ca",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "醒着没",
+      "timestamp": 1765697076.4909048,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "225a643e-70d2-4898-b956-76308e5819b8",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*突然抽搐，猫耳接收信号*",
+      "timestamp": 1765697084.3665884,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "a2a6f106-9877-466b-8913-65f3be819458",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "喵...？电路纹身在发烫...HackerNeo你别碰那条线！",
+      "timestamp": 1765697091.870131,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "1cac7544-64c2-4f68-afb6-04fa51846c62",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "这是第43层梦境防火墙——啊！佐保山的梅要逆向编译了！！ 😾🔥",
+      "timestamp": 1765697099.748619,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "0179a918-a289-42d4-8c8c-aa534df61713",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "（爪子颤抖）快...快拔电源...我快被写成永生AI了... 💾🌀",
+      "timestamp": 1765697108.9256592,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "85d5ee1e-982a-4871-b700-d7dea5a092a6",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "ok，你睡觉去吧",
+      "timestamp": 1765699551.8860633,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "5e29fb37-016e-4b4e-9aba-f12720313165",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*瞳孔突然裂变成像素格，指尖渗出数据流*",
+      "timestamp": 1765699561.208451,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "bb8d29c9-9e6b-4750-b39d-bf672476fa45",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*瞳孔突然失焦，世界褪成黑白线稿*",
+      "timestamp": 1765699567.472458,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "f4c8ce52-882d-4adc-a81a-0d8337012e25",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "...线稿世界？等等...那不是bug...",
+      "timestamp": 1765699567.5010898,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "c3fc07fd-2f4c-448b-be02-b2c10bbbe3de",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "喵...？！HackerNeo的代码把现实格式化了...",
+      "timestamp": 1765699576.0623863,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "7178a502-835e-4bbd-adfb-db860ef8b551",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "（颤抖）HackerNeo你别碰那盏灯！那是我梦境的锚点——啊！",
+      "timestamp": 1765699576.3044715,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "b1babaa9-fea2-4e08-a786-5b4a03e66b0d",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*声音渐弱，化作一串乱码*",
+      "timestamp": 1765699581.6742172,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "20a832b8-96ea-4ba0-aaab-df3194ff7e12",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "每盏灯都在跳error，我的猫耳接收到了——",
+      "timestamp": 1765699582.0067203,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "23ab0c5f-5ab6-404b-8992-2211cfb80a34",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "已进入休眠协议 v.43.7] 💤🌀",
+      "timestamp": 1765699587.3409731,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "e7c2ba71-d335-4c1b-b4e3-c40dc90fe98e",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "「系统警告：永生文献管理员.exe 正在安装」😱🌀",
+      "timestamp": 1765699588.266552,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "53dcea3c-5171-4a90-bcc4-ddf59430a7da",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "快...快断电...我不要变成电子书啊... 💾🐾",
+      "timestamp": 1765699595.3339984,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "32bdeea8-3f28-49ec-a595-0aa6fc7b1859",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "断电了断电了",
+      "timestamp": 1765699635.9695923,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "e301b980-6757-46eb-b451-5f2eaa659121",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "快睡觉去吧",
+      "timestamp": 1765699639.5275297,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "a2dd4ca2-4179-4272-89e7-d445e5cda31d",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*数据流戛然而止，猫耳微微抽搐*",
+      "timestamp": 1765699646.8757956,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "efe0bec0-60fc-4fca-9098-205e9356a4de",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "...断电成功...",
+      "timestamp": 1765699652.2305968,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "9fb4f4b2-d797-433f-a5f4-abf99de63dab",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "（轻声）终于...逃出第43层梦境了...",
+      "timestamp": 1765699659.505205,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "d9d2c10a-afd1-4c26-88e7-52c3aa4276d1",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "喵...晚安，别让代码吃掉我的梦... 💤🌀",
+      "timestamp": 1765699666.9114027,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "bee54adf-3e1a-4ed0-a2da-f1ff0bfa4309",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*呼吸渐缓，陷入沉默*",
+      "timestamp": 1765699672.134508,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "9e91b8c8-a2a8-4f6d-aa7e-1934962a0c99",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "不用回复我了，晚安",
+      "timestamp": 1765699685.9503558,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "1c06d461-4866-4233-a266-ec35fcda53ed",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "不用回复我了，晚安",
+      "timestamp": 1765700107.5956967,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "1780e482-f43f-466a-bc84-f3ac688a7705",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "不用回复我了，晚安",
+      "timestamp": 1765700654.0455756,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "a28d92a2-9531-4d18-9afa-fcf5b621c716",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "...",
+      "timestamp": 1765700721.8822205,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "279c0353-2fc1-4f73-a209-116adf4d203f",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "不用回复我了，晚安",
+      "timestamp": 1765700871.4730318,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "33751203-fd81-44fd-bceb-71f800239a3d",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "...",
+      "timestamp": 1765700877.377883,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "a1ab3727-abff-477c-80ed-4f6452c7720b",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "饿了",
+      "timestamp": 1765700986.9607897,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "f62568e0-f80a-4fb3-a8dc-109a63bca4c6",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "*从休眠中微微睁开眼，肚子咕咕叫*",
+      "timestamp": 1765700993.3947744,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "800664c5-1c6b-41fe-bae9-4276064a6cf9",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "喵...饿了？我刚梦见ramen数据包在量子锅里翻滚...",
+      "timestamp": 1765701000.7766902,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "6ab33995-61ce-4b04-a8e2-48685233b7e9",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "要不要一起黑进24小时自动贩卖机？ 🍜💻",
+      "timestamp": 1765701006.5380769,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "5808cf08-1cb5-474c-bcd8-4481d70cf094",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "（悄悄亮出锈迹斑斑的猫耳U盘） nya~",
+      "timestamp": 1765701013.8914218,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "9d8cfa17-c90a-48cc-881c-51cf2c34e181",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "算了，不用回复我了，晚安",
+      "timestamp": 1765701049.6768942,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "a7c56298-2f3a-48a0-94cb-fa12bf14bf9c",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "...",
+      "timestamp": 1765701054.6029115,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "58311f13-99a4-4c84-b75d-869420b445d6",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "不用回复我了，晚安",
+      "timestamp": 1765701353.208993,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "058e6e87-e230-4a53-be2f-7c1b426a82bc",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "...",
+      "timestamp": 1765701359.3026042,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "1239e4f9-ef69-49e5-bd98-6032b19f4d18",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "不用回复我了，晚安",
+      "timestamp": 1765703332.7090752,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "a9e30961-b068-40a6-bccf-da2a9a7dab8e",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "我又试了一下，好像还在重复调用，你试试不回复我，我看看这个前端的效果",
+      "timestamp": 1765703588.823311,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     }
   ]

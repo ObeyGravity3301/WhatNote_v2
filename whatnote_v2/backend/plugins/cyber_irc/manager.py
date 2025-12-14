@@ -426,6 +426,50 @@ class CyberChatManager:
         self.is_running = False
         info("[CyberChat] Autonomous loop stopped.")
 
+    async def _handle_agent_burst(self, room_id: str, agent: BaseAgent, responses: List[str]):
+        """
+        Handle sending a burst of messages from an agent asynchronously.
+        """
+        try:
+            for i, text_msg in enumerate(responses):
+                if not text_msg: continue
+                
+                # Dynamic Typing Delay
+                # Base: 1.5s, Char: 0.15s, Max: 6s
+                # First message is faster
+                char_delay = 0.15
+                base_delay = 1.5
+                if i == 0:
+                    base_delay = 0.5
+                    
+                typing_delay = min(len(text_msg) * char_delay, 6.0) + base_delay
+                
+                # Check if agent is still "online" or allowed to speak? 
+                # Ideally yes, but for now we assume burst commits.
+                
+                # Simulate Typing
+                # We can broadcast typing_start again if we want "..." to appear between bubbles
+                # But usually just waiting is fine.
+                await asyncio.sleep(typing_delay)
+                
+                await self.post_message(
+                    room_id=room_id,
+                    sender_id=agent.profile.id,
+                    sender_name=agent.profile.name,
+                    content=text_msg
+                )
+                
+                # Gap between bubbles in a burst
+                await asyncio.sleep(random.uniform(1.0, 3.0))
+                
+        except Exception as e:
+            error(f"[CyberChat] Burst error for {agent.profile.name}: {e}")
+        finally:
+            # Ensure agent status is reset if we were tracking it
+            # But BaseAgent resets status immediately after 'speak' returns.
+            # We might want to mark agent as "speaking" during this burst to prevent overlap?
+            pass
+
     async def _loop(self):
         """
         The Heartbeat.
@@ -457,11 +501,11 @@ class CyberChatManager:
                         if not room.history:
                             continue
                         last_msg = room.history[-1]
+                        last_msg_id = str(last_msg.id)
                         
                         # Assuming user_main is the only user for now
                         if last_msg.sender_id.startswith("user") and last_msg.sender_id not in room.active_agents:
                             # It's a user message. Find the agent.
-                            # DM usually has 1 agent.
                             target_agent = None
                             for aid in room.active_agents:
                                 if aid in self.agents:
@@ -469,34 +513,40 @@ class CyberChatManager:
                                     break
                             
                             if target_agent:
+                                # CHECK 1: Already processed?
+                                if str(target_agent.profile.last_processed_msg_id) == last_msg_id:
+                                    # We already tried to reply to this message. Skip.
+                                    continue
+
                                 # Respond immediately (ignoring chance, but checking offline status?)
-                                # For DM, we might want them to respond even if busy, or say "I'm busy".
-                                # Let's respect is_online but with HIGH priority.
                                 status = target_agent.is_online()
+                                
+                                # Enforce offline status
+                                # If agent is offline, we DO NOT mark message as processed.
+                                # We just skip. When agent comes online later, they will see this message as "new" and reply.
+                                if not status['is_online']:
+                                    # Optional: Small chance to "wake up" for DM is already handled inside is_online (random_online_chance)
+                                    # So we just respect the result.
+                                    # info(f"[CyberChat] {target_agent.profile.name} is offline, skipping DM reply.")
+                                    continue
                                 
                                 # Only speak if NOT already thinking/speaking (simple lock)
                                 if target_agent.status == "idle":
-                                    info(f"[CyberChat][DM] {target_agent.profile.name} replying to DM.")
+                                    # info(f"[CyberChat][DM] {target_agent.profile.name} replying to DM.")
+                                    
+                                    # Mark as processed immediately to prevent loops
+                                    target_agent.profile.last_processed_msg_id = last_msg_id
+                                    # Save agent state to persist processed ID
+                                    self.save_agent(target_agent)
+                                    
                                     # Notify Typing
                                     await self.post_message(room_id, target_agent.profile.id, target_agent.profile.name, "", msg_type="typing_start")
                                     
                                     responses = await target_agent.speak(room.dict())
                                     
                                     if responses:
-                                        for text_msg in responses:
-                                            if not text_msg: continue
-                                            # Simulate typing delay
-                                            typing_delay = min(len(text_msg) * 0.1, 4.0) + random.uniform(0.5, 1.0)
-                                            await asyncio.sleep(typing_delay)
-                                            
-                                            await self.post_message(
-                                                room_id=room_id,
-                                                sender_id=target_agent.profile.id,
-                                                sender_name=target_agent.profile.name,
-                                                content=text_msg
-                                            )
-                                            # Burst delay
-                                            await asyncio.sleep(random.uniform(0.3, 1.0))
+                                        # Spawn async task for burst
+                                        asyncio.create_task(self._handle_agent_burst(room_id, target_agent, responses))
 
                         continue # Skip standard logic for DM rooms
 
@@ -516,23 +566,13 @@ class CyberChatManager:
                             
                             responses = await agent.speak(room.dict()) # Pass room context
                             if responses:
-                                for text_msg in responses:
-                                    if not text_msg: continue
-                                    # Simulate typing delay
-                                    typing_delay = min(len(text_msg) * 0.1, 4.0) + random.uniform(0.5, 1.0)
-                                    await asyncio.sleep(typing_delay)
-
-                                    await self.post_message(
-                                        room_id=room_id,
-                                        sender_id=agent.profile.id,
-                                        sender_name=agent.profile.name,
-                                        content=text_msg
-                                    )
-                                    # Burst delay
-                                    await asyncio.sleep(random.uniform(0.3, 1.0))
+                                # Spawn async task for burst
+                                asyncio.create_task(self._handle_agent_burst(room_id, agent, responses))
                                 
+                                # We don't wait for burst to finish, but we might want to wait a BIT
+                                # to prevent everyone starting to speak at EXACTLY the same second.
                                 await asyncio.sleep(2) 
-                                break # One person per room per tick
+                                break # One person per room per tick (initiation)
                 
             except Exception as e:
                 error(f"[CyberChat] Loop error: {e}")
