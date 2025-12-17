@@ -314,6 +314,25 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [searchQuery, setSearchQuery] = useState(''); // 搜索查询
   const [searchResults, setSearchResults] = useState(null); // 搜索结果
   const [isSearching, setIsSearching] = useState(false); // 是否正在搜索
+  const [searchHistory, setSearchHistory] = useState([]); // 搜索历史记录
+
+  // 加载搜索历史
+  useEffect(() => {
+    if (showSearchPanel && boardId && windowId) {
+      const fetchHistory = async () => {
+        try {
+          const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/search-history`);
+          if (response.ok) {
+            const data = await response.json();
+            setSearchHistory(data.history || []);
+          }
+        } catch (error) {
+          console.error('获取搜索历史失败:', error);
+        }
+      };
+      fetchHistory();
+    }
+  }, [showSearchPanel, boardId, windowId]);
   
   // 页面提取功能状态
   const [showPageExtractPanel, setShowPageExtractPanel] = useState(false); // 显示页面提取面板
@@ -482,27 +501,31 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         }
         
         // 尝试加载细分数据
-        const subdivResponse = await fetch(
-          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
-        );
-        if (subdivResponse.ok) {
-          const subdivData = await subdivResponse.json();
-          setBatchSubdivisions(subdivData);
-          setStage2Completed(true);
-          console.log('加载已有细分数据:', subdivData);
-        }
+        try {
+          const subdivResponse = await fetch(
+            `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
+          );
+          if (subdivResponse.ok) {
+            const subdivData = await subdivResponse.json();
+            setBatchSubdivisions(subdivData);
+            setStage2Completed(true);
+            console.log('加载已有细分数据:', subdivData);
+          }
+        } catch(e) { /* ignore 404 */ }
       
       // 尝试加载全文档笔记
-      const summaryResponse = await fetch(
-        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/summary-note`
-      );
-      if (summaryResponse.ok) {
-        const summaryData = await summaryResponse.json();
-        if (summaryData.success && summaryData.content) {
-          setSummaryNote(summaryData.content);
-          console.log('加载已有全文档笔记');
+      try {
+        const summaryResponse = await fetch(
+          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/summary-note`
+        );
+        if (summaryResponse.ok) {
+          const summaryData = await summaryResponse.json();
+          if (summaryData.success && summaryData.content) {
+            setSummaryNote(summaryData.content);
+            console.log('加载已有全文档笔记');
+          }
         }
-      }
+      } catch(e) { /* ignore 404 */ }
       } catch (error) {
       console.log('未找到批量数据（首次使用）');
       }
@@ -1455,10 +1478,32 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             >
               {isSearching ? '搜索中...' : '搜索'}
             </button>
+            <button
+              onClick={() => {
+                setShowSearchPanel(false);
+                setSearchResults(null);
+                setSearchQuery('');
+              }}
+              style={{
+                padding: '4px 8px',
+                fontSize: '11px',
+                backgroundColor: '#c0c0c0',
+                color: '#000000',
+                border: '2px outset #ffffff',
+                borderRadius: '0px',
+                cursor: 'pointer',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                fontWeight: 'bold',
+                minWidth: '40px'
+              }}
+              title="关闭搜索"
+            >
+              关闭
+            </button>
           </div>
           
           {/* 搜索结果显示 */}
-          {searchResults && (
+          {searchResults ? (
             <div style={{
               backgroundColor: '#ffffff',
               border: '2px inset #c0c0c0',
@@ -1467,13 +1512,40 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               overflowY: 'auto'
             }}>
               <div style={{
-                fontSize: '11px',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                marginBottom: '8px',
-                fontWeight: 'bold',
-                color: '#000080'
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '8px'
               }}>
-                搜索: "{searchResults.query}"
+                <div style={{
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  fontWeight: 'bold',
+                  color: '#000080'
+                }}>
+                  搜索: "{searchResults.query}"
+                </div>
+                <button
+                  onClick={() => {
+                    setSearchResults(null);
+                    // 刷新历史记录
+                    if (boardId && windowId) {
+                      fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/search-history`)
+                        .then(res => res.json())
+                        .then(data => setSearchHistory(data.history || []))
+                        .catch(err => console.error(err));
+                    }
+                  }}
+                  style={{
+                    fontSize: '10px',
+                    padding: '2px 6px',
+                    cursor: 'pointer',
+                    backgroundColor: '#e0e0e0',
+                    border: '1px outset #fff'
+                  }}
+                >
+                  返回历史
+                </button>
               </div>
               
               {searchResults.results && searchResults.results.length > 0 ? (
@@ -1507,33 +1579,99 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       </div>
                       <div style={{
                         fontSize: '10px',
-                        color: '#666',
-                        marginBottom: '2px'
+                        color: '#404040',
+                        marginBottom: '4px'
                       }}>
-                        📄 第 {result.pages.join(', ')} 页
+                        {result.section_title} - {result.subdivision_title}
                       </div>
-                      {result.section_title && (
-                        <div style={{
-                          fontSize: '10px',
-                          color: '#666'
-                        }}>
-                          📂 {result.section_title}
-                        </div>
-                      )}
+                      <div style={{
+                        fontSize: '9px',
+                        color: '#606060',
+                        display: 'flex',
+                        justifyContent: 'space-between'
+                      }}>
+                        <span>第 {result.pages.join(', ')} 页</span>
+                        <span>{result.relevance}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div style={{
-                  fontSize: '11px',
-                  color: '#666',
+                  padding: '12px',
                   textAlign: 'center',
-                  padding: '12px'
+                  color: '#808080',
+                  fontSize: '11px'
                 }}>
                   未找到相关内容
                 </div>
               )}
             </div>
+          ) : (
+            /* 搜索历史列表 */
+            searchHistory.length > 0 && (
+              <div style={{
+                marginTop: '8px',
+                backgroundColor: '#ffffff',
+                border: '2px inset #c0c0c0',
+                padding: '8px',
+                maxHeight: '200px',
+                overflowY: 'auto'
+              }}>
+                <div style={{
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  marginBottom: '8px',
+                  fontWeight: 'bold',
+                  color: '#000000',
+                  borderBottom: '1px solid #e0e0e0',
+                  paddingBottom: '4px'
+                }}>
+                  📜 搜索历史
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {searchHistory.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        setSearchQuery(item.query);
+                        setSearchResults({
+                          query: item.query,
+                          results: item.results
+                        });
+                      }}
+                      style={{
+                        padding: '6px',
+                        cursor: 'pointer',
+                        borderBottom: '1px dotted #eeeeee',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '2px'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f8ff'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    >
+                      <div style={{
+                        fontSize: '11px',
+                        color: '#000080',
+                        fontWeight: 'bold'
+                      }}>
+                        {item.query}
+                      </div>
+                      <div style={{
+                        fontSize: '9px',
+                        color: '#808080',
+                        display: 'flex',
+                        justifyContent: 'space-between'
+                      }}>
+                        <span>{new Date(item.timestamp).toLocaleString()}</span>
+                        <span>{item.results.length} 个结果</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
           )}
         </div>
       )}
@@ -1719,6 +1857,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 setIsExtracting(true);
                 setExtractionProgress({ current: 0, total: selectedPages.size });
                 
+                // 本地统计变量
+                let successCount = 0;
+                let errorCount = 0;
+                
                 try {
                   const response = await fetch(
                     `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/extract`,
@@ -1755,6 +1897,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             total: data.total 
                           }));
                         } else if (data.type === 'page_complete') {
+                          successCount++;
                           console.log(`✅ 页面 ${data.page} 提取完成`);
                           console.log('  完整数据:', data);
                           console.log('  textContent长度:', data.textContent?.length);
@@ -1787,16 +1930,32 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           
                           // 更新页面信息
                           setPagesInfo(prev => prev.map(p =>
-                            p.page === data.page ? { ...p, extracted: true, char_count: data.content?.length || 0 } : p
+                            p.page === data.page ? { 
+                              ...p, 
+                              extracted: true, 
+                              char_count: data.content?.length || 0,
+                              // 清除错误状态
+                              error: false,
+                              errorMessage: null
+                            } : p
                           ));
                         } else if (data.type === 'complete') {
                           console.log('✅ 全部提取完成');
-                          addMessageWithSource(
-                            '✅ 页面提取完成',
-                            `成功提取 ${data.total} 个页面的内容`,
-                            'success'
-                          );
+                          if (errorCount > 0) {
+                            addMessageWithSource(
+                              '⚠️ 页面提取完成(含错误)',
+                              `共处理 ${data.total} 页\n✅ 成功: ${successCount} 页\n❌ 失败: ${errorCount} 页\n请点击“未提取”按钮查看失败页面并重试。`,
+                              'warning'
+                            );
+                          } else {
+                            addMessageWithSource(
+                              '✅ 页面提取完成',
+                              `成功提取 ${data.total} 个页面的内容`,
+                              'success'
+                            );
+                          }
                         } else if (data.type === 'error') {
+                          errorCount++;
                           console.error(`❌ 页面 ${data.page} 提取失败:`, data.error);
                           
                           // 错误也算完成，更新进度
@@ -1804,6 +1963,50 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             current: prev.current + 1, 
                             total: prev.total 
                           }));
+
+                          // 检查是否为限流错误，并标记状态
+                          if (data.error && (data.error.includes("429") || data.error.includes("速率限制"))) {
+                            // 在页面上显示错误状态
+                            setPagesInfo(prev => prev.map(p =>
+                              p.page === data.page ? { 
+                                ...p, 
+                                extracted: false, 
+                                error: true, 
+                                errorMessage: "❌ 限流 (429)" 
+                              } : p
+                            ));
+                            
+                            // 显示系统提示（只需显示一次）
+                            // addMessageWithSource 可能会刷屏，这里控制一下频率或不弹窗
+                          } else {
+                            // 普通错误
+                             setPagesInfo(prev => prev.map(p =>
+                              p.page === data.page ? { 
+                                ...p, 
+                                extracted: false, 
+                                error: true, 
+                                errorMessage: "❌ 提取失败" 
+                              } : p
+                            ));
+                          }
+                          
+                        } else if (data.type === 'page_error') { // 处理新的错误类型
+                          errorCount++;
+                          console.error(`❌ 页面 ${data.page} 提取错误:`, data.message);
+                          setExtractionProgress(prev => ({ 
+                            current: prev.current + 1, 
+                            total: prev.total 
+                          }));
+                          
+                          setPagesInfo(prev => prev.map(p =>
+                              p.page === data.page ? { 
+                                ...p, 
+                                extracted: false, 
+                                error: true, 
+                                errorMessage: data.error_code === 'RATE_LIMIT' ? "❌ 限流 (429)" : 
+                                             (data.error_code === 'NETWORK_ERROR' ? "❌ 网络错误" : "❌ 出错")
+                              } : p
+                            ));
                         }
                         } catch (parseError) {
                           console.error('❌ SSE数据解析失败:', parseError);
@@ -1872,14 +2075,16 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 }}
                 style={{
                   width: '100%',
+                  height: '100%',  // 强制占满 Grid 单元格高度
                   aspectRatio: '0.7',
-                  backgroundColor: selectedPages.has(pageInfo.page) ? '#e0e0ff' : '#ffffff',
-                  border: selectedPages.has(pageInfo.page) ? '3px solid #0000ff' : '2px solid #808080',
+                  backgroundColor: pageInfo.error ? '#ffe0e0' : (selectedPages.has(pageInfo.page) ? '#e0e0ff' : '#ffffff'),
+                  border: selectedPages.has(pageInfo.page) ? '3px solid #0000ff' : (pageInfo.error ? '2px solid #ff0000' : '2px solid #808080'),
                   borderRadius: '4px',
                   cursor: 'pointer',
                   position: 'relative',
                   transition: 'all 0.2s',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  boxSizing: 'border-box' // 防止边框导致尺寸变化和布局重叠
                 }}
                 onMouseEnter={(e) => {
                   if (!selectedPages.has(pageInfo.page)) {
@@ -1955,6 +2160,86 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       未渲染
                     </div>
                   </div>
+
+                  {/* 错误标记 */}
+                  {pageInfo.error && (
+                    <div
+                      onClick={async (e) => {
+                        e.stopPropagation(); // 阻止触发卡片的选择事件
+                        
+                        // 尝试获取LLM提取内容（可能是错误信息）
+                        try {
+                          const llmContentUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${pageInfo.page}/llm-content`;
+                          const llmResponse = await fetch(llmContentUrl);
+                          
+                          if (!llmResponse.ok) {
+                            if (addMessageWithSource) {
+                                addMessageWithSource(
+                                    '提示',
+                                    '该页面没有已保存的提取内容',
+                                    'info'
+                                );
+                            }
+                            return;
+                          }
+                          
+                          const llmContent = await llmResponse.json();
+                          
+                          // 获取PyPDF原始文字用于对比
+                          let pdfText = '';
+                          try {
+                            const pdfTextUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${pageInfo.page}/text`;
+                            const pdfTextResponse = await fetch(pdfTextUrl);
+                            if (pdfTextResponse.ok) {
+                              const pdfTextData = await pdfTextResponse.json();
+                              pdfText = pdfTextData.text || '';
+                            }
+                          } catch (error) {
+                            console.error('❌ PyPDF文字获取失败:', error);
+                          }
+                          
+                          setShowResultCompare({
+                            page: pageInfo.page,
+                            pdfText: pdfText,
+                            textContent: llmContent.textContent || llmContent.content,
+                            imageContent: llmContent.imageContent || '',
+                            fullContent: llmContent.content
+                          });
+                          
+                        } catch (error) {
+                          console.error('❌ 获取提取内容失败:', error);
+                          if (addMessageWithSource) {
+                                addMessageWithSource(
+                                    '错误',
+                                    '获取提取内容失败: ' + error.message,
+                                    'error'
+                                );
+                          }
+                        }
+                      }}
+                      style={{
+                      position: 'absolute',
+                      bottom: '4px',
+                      right: '4px',
+                      backgroundColor: '#ff0000',
+                      color: 'white',
+                      padding: '2px 6px',
+                      borderRadius: '3px',
+                      fontSize: '9px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold',
+                      zIndex: 10,
+                      cursor: 'help',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '2px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                    }}
+                    title={pageInfo.errorMessage || "提取失败"}
+                    >
+                      ❌ 错误
+                    </div>
+                  )}
                 </div>
                 
                 {/* 页码标签（左上角） */}
@@ -2002,7 +2287,32 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   <div
                     onClick={async (e) => {
                       e.stopPropagation(); // 阻止触发卡片的选择事件
-                      const content = extractedContents[pageInfo.page];
+                      
+                      let content = extractedContents[pageInfo.page];
+                      
+                      // 如果本地状态中没有，尝试从后端获取（支持刷新后查看）
+                      if (!content) {
+                          try {
+                              const llmContentUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${pageInfo.page}/llm-content`;
+                              const llmResponse = await fetch(llmContentUrl);
+                              if (llmResponse.ok) {
+                                  const llmContent = await llmResponse.json();
+                                  content = {
+                                    text: llmContent.textContent || llmContent.content,
+                                    image: llmContent.imageContent || '',
+                                    full: llmContent.content
+                                  };
+                                  // 更新本地状态缓存
+                                  setExtractedContents(prev => ({
+                                    ...prev,
+                                    [pageInfo.page]: content
+                                  }));
+                              }
+                          } catch (err) {
+                              console.error("获取后端内容失败", err);
+                          }
+                      }
+                      
                       if (content) {
                         // 获取PyPDF原始文字
                         let pdfText = '';
@@ -2026,6 +2336,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         });
                       } else {
                         console.warn(`⚠️ 页面 ${pageInfo.page} 内容未找到`);
+                        if (addMessageWithSource) {
+                            addMessageWithSource('提示', '无法加载该页面的提取内容', 'warning');
+                        }
                       }
                     }}
                     style={{

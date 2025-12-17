@@ -242,6 +242,58 @@ except ImportError:
 except Exception as e:
     error(f"❌ [Plugin] PdfNarrator failed to load: {e}")
 
+# 文件服务API
+@app.get("/api/boards/{board_id}/files/{file_path:path}")
+async def get_board_file(board_id: str, file_path: str):
+    """获取展板文件（支持子目录，如 pages/doc/thumbnails/page_001.png）"""
+    try:
+        # 查找 board 目录
+        board_dir = None
+        for course_dir in file_manager.courses_dir.iterdir():
+            if course_dir.is_dir():
+                potential_board_dir = course_dir / board_id
+                if potential_board_dir.exists():
+                    board_dir = potential_board_dir
+                    break
+        
+        if not board_dir:
+            # 兼容：如果找不到，尝试直接在 DATA_DIR 下查找（某些旧数据）
+            potential_board_dir = Path(DATA_DIR) / board_id
+            if potential_board_dir.exists():
+                board_dir = potential_board_dir
+            else:
+                raise HTTPException(status_code=404, detail="展板不存在")
+            
+        # 安全地解析目标文件路径
+        # 默认在 files 目录下查找
+        files_dir = board_dir / "files"
+        if not files_dir.exists():
+            files_dir.mkdir(exist_ok=True)
+            
+        target_file = (files_dir / file_path).resolve()
+        
+        # 确保文件在 board 目录下，防止目录遍历攻击
+        if not str(target_file).startswith(str(board_dir.resolve())):
+             raise HTTPException(status_code=403, detail="非法路径访问")
+             
+        if not target_file.exists() or not target_file.is_file():
+            # 尝试在 board 根目录下查找（兼容旧数据）
+            target_file_root = (board_dir / file_path).resolve()
+            if target_file_root.exists() and target_file_root.is_file():
+                target_file = target_file_root
+            else:
+                raise HTTPException(status_code=404, detail=f"文件不存在: {file_path}")
+            
+        # 获取 MIME 类型
+        mime_type, _ = mimetypes.guess_type(str(target_file))
+        return FileResponse(target_file, media_type=mime_type or "application/octet-stream")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取文件失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.on_event("startup")
 async def startup_event():
     """Application startup: Initialize plugins."""
@@ -3252,6 +3304,67 @@ async def semantic_search_annotations(
             # 返回空结果而不是报错
             results = []
         
+        # 保存搜索历史
+        try:
+            # 获取窗口信息以确定本地文件路径
+            windows = content_manager.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if target_window:
+                # 尝试解析本地PDF路径
+                pdf_content = target_window.get('content', '')
+                if pdf_content:
+                    pdf_path = Path(pdf_content)
+                    if not pdf_path.is_absolute():
+                        board_dir = Path(storage_base_dir) / board_id
+                        pdf_path = board_dir / pdf_content
+                    
+                    if not pdf_path.exists():
+                        # 尝试相对于board目录查找
+                        board_dir = Path(storage_base_dir) / board_id
+                        potential_path = board_dir / pdf_content
+                        if potential_path.exists():
+                            pdf_path = potential_path
+                    
+                    if pdf_path.exists():
+                        pdf_name = pdf_path.stem
+                        pages_dir = pdf_path.parent / "pages" / pdf_name
+                        pages_dir.mkdir(parents=True, exist_ok=True)
+                        history_file = pages_dir / "search_history.json"
+                        
+                        # 构建历史记录条目
+                        history_entry = {
+                            "id": str(uuid.uuid4()),
+                            "query": query,
+                            "timestamp": datetime.now().isoformat(),
+                            "results": results
+                        }
+                        
+                        existing_history = []
+                        if history_file.exists():
+                            try:
+                                with open(history_file, 'r', encoding='utf-8') as f:
+                                    existing_history = json.load(f)
+                            except:
+                                pass
+                        
+                        # 插入到最前面
+                        existing_history.insert(0, history_entry)
+                        # 限制历史记录数量（例如保留最近50条）
+                        existing_history = existing_history[:50]
+                        
+                        with open(history_file, 'w', encoding='utf-8') as f:
+                            json.dump(existing_history, f, ensure_ascii=False, indent=2)
+                        
+                        info(f"已保存搜索历史: {history_file}")
+        except Exception as e:
+            error(f"保存搜索历史失败: {e}")
+            # 不影响主流程
+        
         return {
             "success": True,
             "query": query,
@@ -3265,6 +3378,61 @@ async def semantic_search_annotations(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"语义搜索失败: {str(e)}")
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/search-history")
+async def get_search_history(board_id: str, window_id: str):
+    """获取语义搜索历史记录"""
+    try:
+        # 获取窗口信息以确定本地文件路径
+        windows = content_manager.get_board_windows(board_id)
+        target_window = None
+        for window in windows:
+            if window.get('id') == window_id:
+                target_window = window
+                break
+        
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        # 尝试解析本地PDF路径
+        pdf_content = target_window.get('content', '')
+        if not pdf_content:
+            return {"history": []}
+            
+        pdf_path = Path(pdf_content)
+        if not pdf_path.is_absolute():
+            board_dir = Path(storage_base_dir) / board_id
+            pdf_path = board_dir / pdf_content
+        
+        if not pdf_path.exists():
+            # 尝试相对于board目录查找
+            board_dir = Path(storage_base_dir) / board_id
+            potential_path = board_dir / pdf_content
+            if potential_path.exists():
+                pdf_path = potential_path
+        
+        if not pdf_path.exists():
+            return {"history": []}
+            
+        pdf_name = pdf_path.stem
+        pages_dir = pdf_path.parent / "pages" / pdf_name
+        history_file = pages_dir / "search_history.json"
+        
+        if not history_file.exists():
+            return {"history": []}
+            
+        try:
+            with open(history_file, 'r', encoding='utf-8') as f:
+                history = json.load(f)
+            return {"history": history}
+        except Exception as e:
+            error(f"读取搜索历史文件失败: {e}")
+            return {"history": []}
+            
+    except Exception as e:
+        error(f"获取搜索历史失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取搜索历史失败: {str(e)}")
 
 # ============================================
 # PDF页面内容提取API（多模态LLM）
@@ -3288,8 +3456,20 @@ async def render_pages_thumbnails(board_id: str, window_id: str):
             raise HTTPException(status_code=404, detail="窗口不存在")
         
         pdf_path = Path(window_data['content'])
+        if not pdf_path.is_absolute():
+            board_dir = Path(storage_base_dir) / board_id
+            pdf_path = board_dir / window_data['content']
+            
         if not pdf_path.exists():
-            raise HTTPException(status_code=404, detail="PDF文件不存在")
+            # 尝试相对于board目录查找 (如果content本身就是相对路径但上面拼接没找到，可能逻辑有误，这里作为保险)
+            if not Path(window_data['content']).exists():
+                 # 再尝试相对于项目根目录（兼容旧数据）
+                if (Path(DATA_DIR) / board_id / window_data['content']).exists():
+                    pdf_path = Path(DATA_DIR) / board_id / window_data['content']
+                else:
+                    raise HTTPException(status_code=404, detail="PDF文件不存在")
+            else:
+                pdf_path = Path(window_data['content'])
         
         # 获取PDF总页数
         import fitz
@@ -3482,19 +3662,46 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                         # 简单统计：去除空白后的字符数
                         char_count = len(content.strip())
                         
-                        # 尝试提取版本信息
-                        version_info = {
-                            'has_text': '文本提取' in content or '## 文本内容' in content,
-                            'has_description': '图片描述' in content or '## 图片描述' in content
-                        }
+                        # 检查内容是否包含错误信息（之前的错误可能被保存了）
+                        is_error_content = False
+                        error_markers = [
+                            "Cannot connect to host", 
+                            "API调用异常", 
+                            "RATE_LIMIT", 
+                            "429", 
+                            "ClientConnectorError",
+                            "limit_requests",
+                            "Connection refused"
+                        ]
+                        for marker in error_markers:
+                            if marker in content:
+                                is_error_content = True
+                                break
                         
-                        pages_info.append({
-                            'page': page_num,
-                            'extracted': True,
-                            'char_count': char_count,
-                            'versions': version_info,
-                            'file_path': str(page_file)
-                        })
+                        if is_error_content:
+                            # 如果是错误内容，标记为未提取，并在UI显示错误
+                            pages_info.append({
+                                'page': page_num,
+                                'extracted': False,
+                                'char_count': 0,
+                                'versions': {'has_text': False, 'has_description': False},
+                                'error': True,
+                                'errorMessage': "❌ 之前的提取包含错误，请重试"
+                            })
+                        else:
+                            # 尝试提取版本信息
+                            version_info = {
+                                'has_text': '文本提取' in content or '## 文本内容' in content,
+                                'has_description': '图片描述' in content or '## 图片描述' in content
+                            }
+                            
+                            pages_info.append({
+                                'page': page_num,
+                                'extracted': True,
+                                'char_count': char_count,
+                                'versions': version_info,
+                                'file_path': str(page_file)
+                            })
                 except Exception as e:
                     error(f"读取页面文件失败: {e}")
                     pages_info.append({
@@ -3537,7 +3744,8 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                         'large_image_count': large_image_count,
                         'baseline_count': baseline_count,  # 新增：基准值
                         'extra_images': max(0, image_count - baseline_count),  # 新增：超出基准的图片数
-                        'needs_llm_extraction': needs_llm
+                        'needs_llm_extraction': needs_llm,
+                        'error': False  # 明确标记为无错误
                     })
                 except Exception as e:
                     error(f"提取原始文字失败: {e}")
@@ -3549,7 +3757,8 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                         'original_text_available': False,
                         'image_count': 0,
                         'total_image_size': 0,
-                        'needs_llm_extraction': True
+                        'needs_llm_extraction': True,
+                        'error': False  # 提取原始文字失败不算LLM提取错误
                     })
         
         return {
@@ -3565,6 +3774,79 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取页面提取信息失败: {str(e)}")
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/pages/{page_num}/llm-content")
+async def get_page_llm_content(board_id: str, window_id: str, page_num: int):
+    """
+    获取指定页面已保存的LLM提取内容（直接读取_llm.md文件）
+    用于回显已提取的内容，包括错误信息（如果被保存了的话）
+    """
+    try:
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        window_data = None
+        for window in windows:
+            if window.get('id') == window_id:
+                window_data = window
+                break
+        
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+            
+        window_content = window_data.get('content', '')
+        if not window_content:
+            raise HTTPException(status_code=404, detail="窗口内容为空")
+            
+        # 转换为绝对路径
+        pdf_path = Path(window_content)
+        if not pdf_path.is_absolute():
+            board_dir = Path(storage_base_dir) / board_id
+            pdf_path = board_dir / window_content
+            
+        if not pdf_path.exists():
+             # 尝试相对于board目录查找
+            board_dir = Path(storage_base_dir) / board_id
+            pdf_path = board_dir / window_content
+            
+            if not pdf_path.exists():
+                raise HTTPException(status_code=404, detail="PDF文件不存在")
+
+        # 获取PDF文件名
+        pdf_name = pdf_path.stem
+        
+        # 获取pages目录
+        pages_dir = pdf_path.parent / "pages" / pdf_name
+        
+        # LLM提取的文件
+        page_file = pages_dir / f"{pdf_name}_page_{page_num:03d}_llm.md"
+        
+        if not page_file.exists():
+            raise HTTPException(status_code=404, detail="该页面的提取内容不存在")
+            
+        # 读取内容
+        with open(page_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # 尝试解析JSON（如果是标准格式）
+        # 我们的保存格式可能是纯JSON，也可能是包含错误信息的文本
+        try:
+            # 尝试作为JSON解析
+            import json
+            data = json.loads(content)
+            return data
+        except:
+            # 解析失败，可能是纯文本或错误信息，构造成标准结构返回
+            return {
+                "content": content,
+                "textContent": content,
+                "imageContent": ""
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取页面LLM内容失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取页面LLM内容失败: {str(e)}")
 
 @app.post("/api/boards/{board_id}/windows/{window_id}/pages/extract")
 async def extract_pages_content(
@@ -3606,8 +3888,13 @@ async def extract_pages_content(
             pdf_path = board_dir / window_content
         
         if not pdf_path.exists():
-            raise HTTPException(status_code=404, detail="PDF文件不存在")
-        
+             # 尝试相对于board目录查找
+            board_dir = Path(storage_base_dir) / board_id
+            pdf_path = board_dir / window_content
+            
+            if not pdf_path.exists():
+                raise HTTPException(status_code=404, detail="PDF文件不存在")
+
         # 获取PDF文件名（不含扩展名），用于统一命名
         pdf_name = pdf_path.stem
         
@@ -3736,11 +4023,66 @@ async def extract_pages_content(
                 # 非流式调用LLM（并行任务不使用流式）
                 # 使用视觉模型
                 accumulated_content = ""
-                async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
-                    accumulated_content += chunk
+                try:
+                    async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
+                        accumulated_content += chunk
+                except Exception as llm_error:
+                    error_msg = str(llm_error)
+                    info(f"❌ [任务{page_num}] LLM调用失败: {error_msg}")
+                    # 检查是否为限流错误 (429) 或其他特定API错误
+                    if "429" in error_msg or "limit_requests" in error_msg or "rate limit" in error_msg.lower():
+                        return {
+                            'success': False,
+                            'page': page_num,
+                            'error': "RATE_LIMIT",
+                            'message': "API请求速率限制 (429)",
+                            'detail': error_msg
+                        }
+                    elif "Cannot connect to host" in error_msg or "ConnectCallFailed" in error_msg or "ClientConnectorError" in error_msg:
+                        # 网络连接错误
+                        return {
+                            'success': False,
+                            'page': page_num,
+                            'error': "NETWORK_ERROR",
+                            'message': "网络连接失败",
+                            'detail': error_msg
+                        }
+                    else:
+                        return {
+                            'success': False,
+                            'page': page_num,
+                            'error': "API_ERROR",
+                            'message': "LLM API调用错误",
+                            'detail': error_msg
+                        }
                 
                 info(f"✅ [任务{page_num}] LLM提取完成: {len(accumulated_content)} 字")
                 
+                # 检查内容是否包含错误信息（之前的错误可能被保存了）
+                is_error_content = False
+                error_markers = [
+                    "Cannot connect to host", 
+                    "API调用异常", 
+                    "RATE_LIMIT", 
+                    "429", 
+                    "ClientConnectorError",
+                    "limit_requests",
+                    "Connection refused"
+                ]
+                for marker in error_markers:
+                    if marker in accumulated_content:
+                        is_error_content = True
+                        break
+                
+                if is_error_content:
+                    return {
+                        'success': False,
+                        'page': page_num,
+                        'error': "CONTENT_ERROR",
+                        'message': "提取内容包含错误信息",
+                        'detail': accumulated_content[:200]
+                    }
+
                 # 解析JSON格式的返回内容
                 text_content = ""
                 image_content = ""
@@ -3821,9 +4163,18 @@ async def extract_pages_content(
             
         # 并行执行所有页面提取任务
         import asyncio
-        tasks = [extract_single_page(page_num) for page_num in pages_to_extract]
         
-        info(f"🚀 启动 {len(tasks)} 个并行任务")
+        # 限制并发数（默认40，避免触发太频繁的限流）
+        CONCURRENCY_LIMIT = 40
+        sem = asyncio.Semaphore(CONCURRENCY_LIMIT)
+        
+        async def extract_single_page_with_semaphore(page_num):
+            async with sem:
+                return await extract_single_page(page_num)
+        
+        tasks = [extract_single_page_with_semaphore(page_num) for page_num in pages_to_extract]
+        
+        info(f"🚀 启动 {len(tasks)} 个并行任务 (并发限制: {CONCURRENCY_LIMIT})")
         
         # 准备SSE流式响应
         async def generate_extraction_stream():
@@ -3842,7 +4193,7 @@ async def extract_pages_content(
                     yield f"data: {json.dumps({'type': 'page_complete', 'page': result['page'], 'content': result['content'], 'textContent': result['textContent'], 'imageContent': result['imageContent']}, ensure_ascii=False)}\n\n"
                 else:
                     error(f"❌ 页面 {result['page']} 失败")
-                    yield f"data: {json.dumps({'type': 'error', 'page': result['page'], 'error': result['error']}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'page_error', 'page': result['page'], 'error_code': result.get('error'), 'message': result.get('message'), 'detail': result.get('detail')}, ensure_ascii=False)}\n\n"
             
             # 发送总体完成信号
             info(f"🎉 全部完成: {completed}/{total_to_extract}")
@@ -3946,9 +4297,48 @@ async def get_page_content(board_id: str, window_id: str, page: int):
         with open(page_file, 'r', encoding='utf-8') as f:
             content = f.read()
         
+        # 检查内容是否包含错误信息
+        error_markers = [
+            "Cannot connect to host", 
+            "API调用异常", 
+            "RATE_LIMIT", 
+            "429", 
+            "ClientConnectorError",
+            "limit_requests",
+            "Connection refused"
+        ]
+        for marker in error_markers:
+            if marker in content:
+                # 如果包含错误信息，视为未提取（或者是错误内容）
+                # 这里我们返回特定的错误结构，或者直接抛出404让前端回退
+                # 为了让前端知道是错误而不是不存在，我们可以返回特定状态码或字段
+                return {
+                    'success': False,
+                    'page': page,
+                    'error': True,
+                    'message': "该页面的提取结果包含错误，请重新提取",
+                    'content': content # 返回错误内容供调试（可选）
+                }
+
         # 尝试从文件内容中提取数据（跳过元数据）
         # 文件格式：元数据头 + --- + 实际内容
         actual_content = content
+        
+        # 检查内容是否包含错误信息
+        error_markers = [
+            "Cannot connect to host", 
+            "API调用异常", 
+            "RATE_LIMIT", 
+            "429", 
+            "ClientConnectorError",
+            "limit_requests",
+            "Connection refused"
+        ]
+        for marker in error_markers:
+            if marker in content:
+                # 包含错误信息，返回404（视为未提取），让前端回退
+                raise HTTPException(status_code=404, detail="页面提取内容无效(包含错误信息)")
+
         if "---\n\n" in content:
             parts = content.split("---\n\n", 1)
             if len(parts) == 2:

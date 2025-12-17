@@ -481,11 +481,31 @@ async def generate_narrator_script_section(
                     yield f"data: {json.dumps({'type': 'complete', 'total': len(scripts)}, ensure_ascii=False)}\n\n"
                     
                 except json.JSONDecodeError as e:
-                    error(f"解析讲稿JSON失败: {e}")
+                    error_msg = f"解析讲稿JSON失败: {e}\nRaw content preview: {content[:200]}..."
+                    error(error_msg)
+                    
+                    # Log to dedicated file
+                    try:
+                        with open("narrator_error.log", "a", encoding="utf-8") as f:
+                            f.write(f"\n{'='*30}\n[{datetime.now().isoformat()}] JSON Decode Error (Section {section_index}, Target {target_start}-{target_end})\n")
+                            f.write(f"Error: {e}\n")
+                            f.write(f"Raw Content:\n{content}\n")
+                            f.write(f"{'='*30}\n")
+                    except Exception as log_err:
+                        error(f"Failed to write to log file: {log_err}")
+
                     yield f"data: {json.dumps({'type': 'error', 'error': f'JSON解析失败: {str(e)}'}, ensure_ascii=False)}\n\n"
 
             except Exception as e:
                 error(f"批量生成讲稿失败: {e}")
+                # Log to dedicated file
+                try:
+                    with open("narrator_error.log", "a", encoding="utf-8") as f:
+                        f.write(f"\n{'='*30}\n[{datetime.now().isoformat()}] General Error (Section {section_index})\n")
+                        f.write(f"Error: {e}\n")
+                        f.write(f"{'='*30}\n")
+                except: pass
+                
                 yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(
@@ -638,20 +658,41 @@ async def get_narrator_subtitles_api(
 
 
 def split_text_smartly(text: str) -> List[str]:
-    """智能分句：保留标点符号"""
+    """智能分句：保留标点符号，同时支持换行符作为分隔"""
+    # 预处理：将连续的换行符替换为特殊的占位符，或者视为一种“句末”
+    # 也可以直接将换行符加入分隔符集合
+    # pattern = r'([。！？.!?]|\n+)' # 这样写会导致 \n 也被当作标点保留，可能会有空行问题
+    
+    # 策略：先用换行符切开，因为换行符通常意味着段落结束
+    # 然后对每一段再进行标点切分
+    
+    lines = text.split('\n')
+    final_sentences = []
+    
     pattern = r'([。！？.!?])'
-    parts = re.split(pattern, text)
-    sentences = []
-    current = ""
-    for part in parts:
-        current += part
-        if re.match(pattern, part):
-             if len(current.strip()) > 0:
-                 sentences.append(current)
-                 current = ""
-    if current.strip():
-        sentences.append(current)
-    return sentences
+    
+    for line in lines:
+        line = line.strip()
+        if not line: continue
+        
+        # 即使行尾没有标点，换行符本身就暗示了语义的中断
+        # 但我们希望尽可能按照标点切，如果一行很长且没标点，那就把它当成一句话
+        
+        parts = re.split(pattern, line)
+        current = ""
+        for part in parts:
+            current += part
+            if re.match(pattern, part):
+                 if len(current.strip()) > 0:
+                     final_sentences.append(current)
+                     current = ""
+        
+        # 如果这一行最后一部分没有标点（例如：标题，或者LLM生成的无标点列表项）
+        # 也应该把它作为一个独立的句子加入，因为它被换行符切断了
+        if current.strip():
+            final_sentences.append(current)
+            
+    return final_sentences
 
 @router.post("/boards/{board_id}/windows/{window_id}/narrator/audio/{page}")
 async def generate_narrator_audio(
@@ -755,6 +796,10 @@ async def generate_narrator_audio(
             wave_writer.close()
             final_audio = full_audio_buffer.getvalue()
         else:
+            # Fallback for single chunk or empty content handled above
+            # If nothing was written, it's an error unless text was empty
+            if not sentences:
+                 raise HTTPException(status_code=400, detail="Text split resulted in no sentences")
             raise HTTPException(status_code=500, detail="生成音频失败 (No valid chunks)")
                 
         # 5. 保存并返回
@@ -775,6 +820,9 @@ async def generate_narrator_audio(
         raise
     except Exception as e:
         error(f"生成语音失败: {e}")
+        # Only log '404' if it's a NotFound exception, otherwise 500
+        if isinstance(e, HTTPException):
+             raise e
         raise HTTPException(status_code=500, detail=f"生成语音失败: {str(e)}")
 
 

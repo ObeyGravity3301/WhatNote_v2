@@ -10,30 +10,6 @@
   ],
   "history": [
     {
-      "id": "3f65fda9-8ba3-40de-a87b-61a24468f028",
-      "room_id": "room_29d2546f",
-      "sender_id": "nightowlneko_24ac",
-      "sender_name": "NightOwlNeko",
-      "content": "*尾巴卷起泛黄的万叶集残页，轻甩掉量子糖霜*  \n别急嘛～正用猫呼噜解压奈良时代的emo数据流呢 📜🌀  \n\n第一站：梅花歌会3.0——公元730年，贵族们连干49首“啊我好寂寞” 🌸🍷  \n\n（我猫说：这届人类，连伤春悲秋都卷成算法了）😼💻",
-      "timestamp": 1765567528.0002012,
-      "type": "text",
-      "reply_to": null,
-      "payload": null,
-      "metadata": {}
-    },
-    {
-      "id": "d75e1f7c-e7b9-4262-b08c-e3dddeddf57b",
-      "room_id": "room_29d2546f",
-      "sender_id": "nightowlneko_24ac",
-      "sender_name": "NightOwlNeko",
-      "content": "*尾巴卷起泛黄的万叶集残页，轻甩掉量子糖霜*  \n别急嘛～正用猫呼噜解压奈良时代的emo数据流呢 📜🌀  \n\n第一站：梅花歌会3.0——公元730年，贵族们连干49首“啊我好寂寞” 🌸🍷  \n\n（我猫说：这届人类，连伤春悲秋都卷成算法了）😼💻",
-      "timestamp": 1765567548.0583715,
-      "type": "text",
-      "reply_to": null,
-      "payload": null,
-      "metadata": {}
-    },
-    {
       "id": "20d2dff5-028d-42d5-9cc0-de1ba451bcca",
       "room_id": "room_29d2546f",
       "sender_id": "user_main",
@@ -1204,6 +1180,30 @@
       "sender_name": "User",
       "content": "晚安",
       "timestamp": 1765699604.9592545,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "cb9b0418-826a-4e4c-94da-8192bb14e6b9",
+      "room_id": "room_29d2546f",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "醒了。",
+      "timestamp": 1765725918.9367502,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "04a62263-2335-4ec6-90d9-73a69510414c",
+      "room_id": "room_29d2546f",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "前端还在递归？小心别把梦也编译进去… 🌀",
+      "timestamp": 1765725925.3387723,
       "type": "text",
       "reply_to": null,
       "payload": null,

@@ -571,7 +571,7 @@ const NarratorPluginComponent = (props) => {
     setBatchProgress({ current: 0, total, type, message: '准备中...' });
 
     try {
-      if (type === 'script') {
+      if (type === 'script' || type === 'script-missing') {
           // ... (Previous batch script logic remains same, simplified for brevity)
           // Assume this part is unchanged
           let outlineData = null;
@@ -633,25 +633,39 @@ const NarratorPluginComponent = (props) => {
           const CONCURRENCY = 3; 
           let sectionCursor = 0;
           
-          // 预处理：计算每个分段的“生成目标范围”（去重）
-          // 规则：如果分段与上一分段重叠，重叠部分由上一分段负责，当前分段只负责后续部分
-          // 但当前分段仍需读取重叠部分作为上下文
+          // 预处理：计算每个分段的“生成目标范围”（去重且补漏）
+          // 规则：确保覆盖从 1 到 total 的所有页面，填补分段间的空隙
           sections.forEach((section, idx) => {
               let targetStart = section.page_start;
-              const targetEnd = section.page_end;
+              // const targetEnd = section.page_end; // Use mutable let if needed, but we write to section property
               
-              if (idx > 0) {
+              if (idx === 0) {
+                  targetStart = 1;
+              } else {
                   const prevSection = sections[idx - 1];
-                  // 如果上一分段的结束页 >= 当前分段的开始页，说明有重叠
-                  // 当前分段从上一分段结束页 + 1 开始生成
-                  if (prevSection.page_end >= targetStart) {
-                      targetStart = prevSection.page_end + 1;
-                  }
+                  // 强制接续上一分段，填补空隙
+                  targetStart = Math.max(targetStart, prevSection.target_page_end + 1);
+                  // 如果存在空隙 (prevEnd < targetStart - 1)，将起始点前移以覆盖空隙
+                  // 简单做法：总是从 prevEnd + 1 开始
+                  targetStart = prevSection.target_page_end + 1;
               }
               
               section.target_page_start = targetStart;
-              section.target_page_end = targetEnd;
+              // 保持原有的结束页，除非它是最后一个
+              section.target_page_end = section.page_end;
           });
+
+          // 确保最后一个分段覆盖到最后一页
+          if (sections.length > 0) {
+              const lastSection = sections[sections.length - 1];
+              if (lastSection.target_page_end < total) {
+                  lastSection.target_page_end = total;
+              }
+          }
+
+          console.log('[Narrator] Batch Sections Plan:', sections.map(s => 
+            `[${s.section_index}] ${s.target_page_start}-${s.target_page_end} (Orig: ${s.page_start}-${s.page_end})`
+          ));
 
           const processSection = async () => {
               while (sectionCursor < sections.length) {
@@ -659,9 +673,10 @@ const NarratorPluginComponent = (props) => {
                   const index = sectionCursor++;
                   const section = sections[index];
                   
+                  console.log(`[Narrator] Processing batch section ${index}:`, section);
+
                   // 如果目标范围无效（例如完全被上一分段包含），则跳过
                   if (section.target_page_start > section.target_page_end) {
-                      console.log(`Skipping section ${index} (fully overlapped)`);
                       setBatchProgress(prev => ({
                            ...prev, 
                            current: Math.min(section.page_end, prev.total),
@@ -670,119 +685,171 @@ const NarratorPluginComponent = (props) => {
                       continue;
                   }
 
-                  // Avoid rapid state updates for progress to prevent UI jitter
-                  setBatchProgress({ 
-                      current: section.target_page_start, 
-                      total: total, 
-                      type: 'script',
-                      message: `正在生成: ${section.title || `第 ${index+1} 部分`} (并⾏处理中)...` 
-                  });
-
-                  try {
-                      const response = await fetch(
-                          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/generate-script-section`,
-                          {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                  section_index: index,
-                                  section_data: section,
-                                  target_range: {
-                                      start: section.target_page_start,
-                                      end: section.target_page_end
-                                  },
-                                  subdivision_data: subdivisionData?.subdivisions?.[index],
-                                  // 发送所有之前的分段摘要，构建完整的上下文链
-                                  context_history: subdivisionData?.subdivisions?.slice(0, index).map(s => ({
-                                      title: s.title,
-                                      summary: s.section_summary
-                                  })),
-                                  promptTemplate: customPrompt
-                              })
-                          }
-                      );
-
-                      if (response.ok) {
-                          const reader = response.body.getReader();
-                          const decoder = new TextDecoder();
-                          while (true) {
-                              const { done, value } = await reader.read();
-                              if (done) break;
-                              const chunk = decoder.decode(value, { stream: true });
-                              const lines = chunk.split('\n\n');
-                              for (const line of lines) {
-                                  if (line.startsWith('data: ')) {
-                                      try {
-                                          const data = JSON.parse(line.substring(6));
-                                          if (data.type === 'page_done') {
-                                              const { page, content } = data;
-                                              
-                                              // Async save
-                                              fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/scripts/${page}`, {
-                                                  method: 'PUT',
-                                                  headers: {'Content-Type': 'application/json'},
-                                                  body: JSON.stringify({ content: content })
-                                              }).catch(console.error);
-                                              
-                                              // Update Cache
-                                              const storageKey = `narrator_scripts_${boardId}_${windowId}`;
-                                              
-                                              // 简单的去重/跳过逻辑：如果已有内容且内容长度大于10，暂时不覆盖（可选）
-                                              // 但用户可能想重新生成，所以通常覆盖是预期的。
-                                              // 问题在于：分段可能有重叠页面。
-                                              // 例如 Section 1: Page 1-5, Section 2: Page 5-10
-                                              // Page 5 会被生成两次。
-                                              // 后生成的会覆盖前面的。
-                                              // 如果是并发，顺序不确定，可能导致 Page 5 内容随机。
-                                              // 
-                                              // 改进方案：
-                                              // 检查当前 state 中的 scripts[page] 是否已经存在且非空。
-                                              // 如果存在，可以选择追加、忽略或覆盖。
-                                              // 这里我们采用【智能合并】策略：
-                                              // 如果该页已经在本次批量任务中被标记为"已生成"（需要额外状态跟踪），则跳过。
-                                              // 但由于并发，状态更新有延迟。
-                                              // 
-                                              // 临时方案：直接覆盖。最后写入的赢。
-                                              // 考虑到通常重叠页是过渡页，内容应该差异不大，或者后者更准确（上下文不同）。
-                                              // 
-                                              // 更佳方案：在 section 划分时就避免重叠。
-                                              // 目前后端 analyze_outline_page_coverage 确实会产生重叠。
-                                              // 前端这里简单做：覆盖。
-                                              
-                                              // React state update
-                                              setScripts(prev => ({ ...prev, [page]: content }));
-
-                                              // If it's current page
-                                              if (page === pageControl.currentPage) {
-                                                  setCurrentScript(content);
-                                                  setLastSavedScript(content);
-                                              }
-                                              
-                                              // Persist
-                                              try {
-                                                  const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-                                                  saved[page] = content;
-                                                  localStorage.setItem(storageKey, JSON.stringify(saved));
-                                              } catch(e) {}
-
-                                              setBatchProgress(prev => ({ ...prev, current: page }));
-                                          }
-                                      } catch (e) {}
-                                  }
+                  // 确定本次需要生成的具体范围列表
+                  let targetRanges = [];
+                  if (type === 'script-missing') {
+                      // 查找空白页面的区间
+                      let currentStart = -1;
+                      // 确保循环覆盖整个目标范围
+                      for (let p = section.target_page_start; p <= section.target_page_end; p++) {
+                          const hasContent = scripts[p] && scripts[p].trim().length > 0;
+                          if (!hasContent) {
+                              if (currentStart === -1) currentStart = p;
+                          } else {
+                              if (currentStart !== -1) {
+                                  targetRanges.push({ start: currentStart, end: p - 1 });
+                                  currentStart = -1;
                               }
                           }
                       }
-                  } catch (err) { console.error(err); }
+                      if (currentStart !== -1) {
+                          targetRanges.push({ start: currentStart, end: section.target_page_end });
+                      }
+                      console.log(`[Narrator] Missing ranges for section ${index}:`, targetRanges);
+                  } else {
+                      // 默认模式：生成整个目标范围
+                      targetRanges.push({ start: section.target_page_start, end: section.target_page_end });
+                  }
+
+                  if (targetRanges.length === 0) {
+                      setBatchProgress(prev => ({
+                          ...prev,
+                          current: Math.min(section.target_page_end, prev.total),
+                          message: `跳过已完成分段 ${section.title || (index + 1)}...`
+                      }));
+                      continue;
+                  }
+
+                  // 针对每个子范围进行调用
+                  for (const range of targetRanges) {
+                      if (stopBatchRef.current) break;
+
+                      // Avoid rapid state updates for progress to prevent UI jitter
+                      setBatchProgress({ 
+                          current: range.start, 
+                          total: total, 
+                          type: 'script',
+                          message: `正在生成: ${section.title || `第 ${index+1} 部分`} [${range.start}-${range.end}] (并⾏处理中)...` 
+                      });
+
+                      try {
+                          const response = await fetch(
+                              `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/generate-script-section`,
+                              {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                      section_index: index,
+                                      section_data: section,
+                                      target_range: {
+                                          start: range.start,
+                                          end: range.end
+                                      },
+                                      subdivision_data: subdivisionData?.subdivisions?.[index],
+                                      // 发送所有之前的分段摘要，构建完整的上下文链
+                                      context_history: subdivisionData?.subdivisions?.slice(0, index).map(s => ({
+                                          title: s.title,
+                                          summary: s.section_summary
+                                      })),
+                                      promptTemplate: customPrompt
+                                  })
+                              }
+                          );
+
+                          if (response.ok) {
+                              const reader = response.body.getReader();
+                              const decoder = new TextDecoder();
+                              while (true) {
+                                  const { done, value } = await reader.read();
+                                  if (done) break;
+                                  const chunk = decoder.decode(value, { stream: true });
+                                  const lines = chunk.split('\n\n');
+                                  for (const line of lines) {
+                                      if (line.startsWith('data: ')) {
+                                          try {
+                                              const data = JSON.parse(line.substring(6));
+                                              if (data.type === 'page_done') {
+                                                  const { page, content } = data;
+                                                  
+                                                  // Async save
+                                                  fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/scripts/${page}`, {
+                                                      method: 'PUT',
+                                                      headers: {'Content-Type': 'application/json'},
+                                                      body: JSON.stringify({ content: content })
+                                                  }).catch(console.error);
+                                                  
+                                                  // React state update
+                                                  setScripts(prev => ({ ...prev, [page]: content }));
+
+                                                  // If it's current page
+                                                  if (page === pageControl.currentPage) {
+                                                      setCurrentScript(content);
+                                                      setLastSavedScript(content);
+                                                  }
+                                                  
+                                                  // Persist
+                                                  try {
+                                                      const storageKey = `narrator_scripts_${boardId}_${windowId}`;
+                                                      const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+                                                      saved[page] = content;
+                                                      localStorage.setItem(storageKey, JSON.stringify(saved));
+                                                  } catch(e) {}
+
+                                                  setBatchProgress(prev => ({ ...prev, current: page }));
+                                              }
+                                          } catch (e) {}
+                                      }
+                                  }
+                              }
+                          }
+                      } catch (err) { console.error(err); }
+                  }
               }
           };
 
           const workers = Array(Math.min(sections.length, CONCURRENCY)).fill(null).map(() => processSection());
           await Promise.all(workers);
 
-      } else if (type === 'audio') {
-        setBatchProgress({ current: 0, total, type: 'audio', message: '开始批量合成语音...' });
+      } else if (type === 'audio' || type === 'audio-missing') {
+        const msgPrefix = type === 'audio-missing' ? '补全' : '批量';
+        setBatchProgress({ current: 0, total, type: 'audio', message: `开始${msgPrefix}合成语音...` });
+        
         for (let i = 1; i <= total; i++) {
             if (stopBatchRef.current) break;
+            
+            // Check if missing logic applies
+            if (type === 'audio-missing') {
+                let skip = false;
+                // 1. Check Frontend Cache first
+                if (audioUrls[i]) {
+                    skip = true;
+                } 
+                
+                // 2. Check Backend Existence via HEAD request
+                if (!skip) {
+                    try {
+                        const res = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/audio/${i}`, { method: 'HEAD' });
+                        if (res.ok) {
+                            // Audio exists on backend!
+                            // Load it into frontend state so we don't check again, and skip generation
+                            const audioRes = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/audio/${i}`);
+                            const blob = await audioRes.blob();
+                            const url = URL.createObjectURL(blob);
+                            setAudioUrls(prev => ({ ...prev, [i]: url }));
+                            skip = true;
+                        }
+                    } catch(e) {}
+                }
+
+                if (skip) {
+                    // Update progress without generating
+                    setBatchProgress(prev => ({ ...prev, current: i, message: `跳过已存在的第 ${i} 页...` }));
+                    // Use a very short timeout to keep UI responsive but fast
+                    await new Promise(r => setTimeout(r, 50)); 
+                    continue; 
+                }
+            }
+
             try {
                 let text = scripts[i];
                 if (!text) {
@@ -791,7 +858,8 @@ const NarratorPluginComponent = (props) => {
                     if(d.success && d.content) text = d.content;
                 }
 
-                if (text && !audioUrls[i]) {
+                // Only generate if we have text
+                if (text) {
                    setBatchProgress(prev => ({ ...prev, current: i, message: `正在合成第 ${i} 页语音...` }));
                    
                    // Call same endpoint
@@ -1240,6 +1308,10 @@ const NarratorPluginComponent = (props) => {
                             <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
                                 <button onClick={() => startBatch('script')} title="生成全部讲稿" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>📚 批量文</button>
                                 <button onClick={() => startBatch('audio')} title="生成全部语音" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>💿 批量音</button>
+                            </div>
+                            <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
+                                <button onClick={() => startBatch('script-missing')} title="补全未生成讲稿" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>➕ 补全</button>
+                                <button onClick={() => startBatch('audio-missing')} title="补全未生成语音" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>➕ 补全</button>
                             </div>
                             <span style={{fontSize:'10px', color:'#666', marginLeft:'2px'}}>
                                 {isBatchProcessing ? batchProgress.current + '/' + batchProgress.total : ''}
