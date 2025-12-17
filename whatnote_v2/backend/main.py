@@ -3319,17 +3319,33 @@ async def semantic_search_annotations(
                 pdf_content = target_window.get('content', '')
                 if pdf_content:
                     pdf_path = Path(pdf_content)
+                    
+                    # 使用config.DATA_DIR作为基础目录，确保storage_base_dir已定义
+                    storage_base_dir = DATA_DIR
+                    
                     if not pdf_path.is_absolute():
-                        board_dir = Path(storage_base_dir) / board_id
-                        pdf_path = board_dir / pdf_content
+                        # 兼容处理：尝试构建绝对路径
+                        board_dir = None
+                        # 遍历查找board所在的目录
+                        for course_dir in (Path(storage_base_dir) / "courses").iterdir():
+                            if course_dir.is_dir():
+                                potential_board_dir = course_dir / board_id
+                                if potential_board_dir.exists():
+                                    board_dir = potential_board_dir
+                                    break
+                        
+                        if not board_dir and (Path(storage_base_dir) / board_id).exists():
+                            board_dir = Path(storage_base_dir) / board_id
+                            
+                        if board_dir:
+                            pdf_path = board_dir / pdf_content
                     
+                    # 如果仍然不存在，尝试直接检查
                     if not pdf_path.exists():
-                        # 尝试相对于board目录查找
-                        board_dir = Path(storage_base_dir) / board_id
-                        potential_path = board_dir / pdf_content
-                        if potential_path.exists():
-                            pdf_path = potential_path
-                    
+                        # 可能是相对路径，尝试在常见位置查找
+                        # 这里复用get_search_history中的查找逻辑
+                        pass
+
                     if pdf_path.exists():
                         pdf_name = pdf_path.stem
                         pages_dir = pdf_path.parent / "pages" / pdf_name
@@ -3361,8 +3377,12 @@ async def semantic_search_annotations(
                             json.dump(existing_history, f, ensure_ascii=False, indent=2)
                         
                         info(f"已保存搜索历史: {history_file}")
+                    else:
+                        error(f"保存搜索历史失败: 无法定位PDF文件 {pdf_content}")
         except Exception as e:
             error(f"保存搜索历史失败: {e}")
+            import traceback
+            traceback.print_exc()
             # 不影响主流程
         
         return {
@@ -3380,7 +3400,7 @@ async def semantic_search_annotations(
         raise HTTPException(status_code=500, detail=f"语义搜索失败: {str(e)}")
 
 
-@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/search-history")
+@app.get("/api/boards/{board_id}/windows/{window_id}/search-history")
 async def get_search_history(board_id: str, window_id: str):
     """获取语义搜索历史记录"""
     try:
@@ -3401,16 +3421,46 @@ async def get_search_history(board_id: str, window_id: str):
             return {"history": []}
             
         pdf_path = Path(pdf_content)
+        # 使用config.DATA_DIR作为基础目录
+        storage_base_dir = DATA_DIR
+        
         if not pdf_path.is_absolute():
-            board_dir = Path(storage_base_dir) / board_id
-            pdf_path = board_dir / pdf_content
+            board_dir = Path(storage_base_dir) / "courses" / "course-xxx" / board_id # 这里的course-xxx是占位符，实际上应该从board_id反推或者遍历
+            # 更稳妥的方式是遍历查找board所在的目录
+            found_board = False
+            for course_dir in (Path(storage_base_dir) / "courses").iterdir():
+                if course_dir.is_dir():
+                    potential_board_dir = course_dir / board_id
+                    if potential_board_dir.exists():
+                        board_dir = potential_board_dir
+                        pdf_path = board_dir / pdf_content
+                        found_board = True
+                        break
+            
+            if not found_board:
+                # 兼容旧路径结构（直接在DATA_DIR下）
+                if (Path(storage_base_dir) / board_id).exists():
+                    board_dir = Path(storage_base_dir) / board_id
+                    pdf_path = board_dir / pdf_content
         
         if not pdf_path.exists():
             # 尝试相对于board目录查找
-            board_dir = Path(storage_base_dir) / board_id
-            potential_path = board_dir / pdf_content
-            if potential_path.exists():
-                pdf_path = potential_path
+            # 复用上面的查找逻辑找到board_dir
+            board_dir = None
+            for course_dir in (Path(storage_base_dir) / "courses").iterdir():
+                if course_dir.is_dir():
+                    potential_board_dir = course_dir / board_id
+                    if potential_board_dir.exists():
+                        board_dir = potential_board_dir
+                        break
+            
+            if not board_dir and (Path(storage_base_dir) / board_id).exists():
+                board_dir = Path(storage_base_dir) / board_id
+                
+            if board_dir:
+                potential_path = board_dir / pdf_content
+                if potential_path.exists():
+                    pdf_path = potential_path
         
         if not pdf_path.exists():
             return {"history": []}

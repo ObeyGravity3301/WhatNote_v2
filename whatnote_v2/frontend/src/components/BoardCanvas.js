@@ -321,7 +321,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     if (showSearchPanel && boardId && windowId) {
       const fetchHistory = async () => {
         try {
-          const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/search-history`);
+          const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/search-history`);
           if (response.ok) {
             const data = await response.json();
             setSearchHistory(data.history || []);
@@ -1530,7 +1530,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     setSearchResults(null);
                     // 刷新历史记录
                     if (boardId && windowId) {
-                      fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/search-history`)
+                      fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/search-history`)
                         .then(res => res.json())
                         .then(data => setSearchHistory(data.history || []))
                         .catch(err => console.error(err));
