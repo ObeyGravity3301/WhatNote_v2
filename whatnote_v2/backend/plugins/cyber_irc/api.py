@@ -1,16 +1,21 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
-from typing import Optional
+from typing import Optional, Dict, Any
 import json
 import uuid
 import asyncio
+import shutil
+import os
+from pathlib import Path
 from logger import error, info
 from .schemas import AgentProfile, AgentSchedule
+from tools.vision_tools import VisionToolHandlers, ToolStatus
 
 router = APIRouter()
 
 # This will be populated by __init__.py
 chat_manager = None
+api_config_manager = None
 
 @router.post("/send")
 async def send_chat_message(request: Request):
@@ -292,15 +297,99 @@ async def debug_trigger_speech(request: Request):
             
         response = await agent.speak(room.dict())
         if response:
-            await chat_manager.post_message(
-                room_id=room_id,
-                sender_id=agent.profile.id,
-                sender_name=agent.profile.name,
-                content=response
-            )
+            for msg_obj in response:
+                content = msg_obj.get("content", "")
+                reply_to = msg_obj.get("reply_to")
+                await chat_manager.post_message(
+                    room_id=room_id,
+                    sender_id=agent.profile.id,
+                    sender_name=agent.profile.name,
+                    content=content,
+                    reply_to=reply_to
+                )
             return {"status": "success", "response": response}
         else:
             return {"status": "failed", "reason": "No response"}
     except Exception as e:
         error(f"Debug trigger failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/upload_image")
+async def upload_chat_image(
+    file: UploadFile = File(...),
+    room_id: str = Form(...),
+    sender_name: str = Form("User")
+):
+    """Upload image, analyze it, and post as a message."""
+    try:
+        # 1. Save Image
+        # Ensure directory exists
+        images_dir = Path(chat_manager.data_dir) / "images"
+        images_dir.mkdir(exist_ok=True, parents=True)
+        
+        file_ext = Path(file.filename).suffix
+        if not file_ext:
+            file_ext = ".jpg"
+            
+        filename = f"img_{uuid.uuid4().hex[:8]}{file_ext}"
+        file_path = images_dir / filename
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # 2. Analyze Image
+        description = "[Image analysis skipped]"
+        
+        if api_config_manager:
+            try:
+                handlers = VisionToolHandlers(api_config_manager)
+                # Mock args and context
+                args = {"image_path": str(file_path), "query": "Please describe this image in detail for a chat context. If it contains text, please extract it. Keep it concise."}
+                context = {"call_id": "upload_trigger"}
+                
+                info(f"[CyberChat] Analyzing uploaded image: {filename}")
+                result = await handlers.analyze_image(args, context)
+                
+                if result.status == ToolStatus.SUCCESS:
+                    raw_desc = result.data.get("description", "")
+                    description = f"[User uploaded an image. Visual description: {raw_desc}]"
+                else:
+                    description = f"[User uploaded an image. Analysis error: {result.error}]"
+            except Exception as e:
+                error(f"[CyberChat] Vision analysis failed: {e}")
+                description = f"[User uploaded an image. Analysis failed.]"
+        else:
+             error(f"[CyberChat] Vision analysis skipped: api_config_manager not available")
+
+        # 3. Post Message
+        # Content = Description (for LLM)
+        # Payload = URL + Description (for UI)
+        
+        # URL construction: Assuming /static/files maps to DATA_DIR
+        # images_dir is in DATA_DIR/cyber_chat/images
+        # So relative path from DATA_DIR is cyber_chat/images/filename
+        rel_path = f"cyber_chat/images/{filename}"
+        image_url = f"/static/files/{rel_path}"
+        
+        payload = {
+            "type": "image",
+            "url": image_url,
+            "description": description
+        }
+        
+        msg = await chat_manager.post_message(
+            room_id,
+            "user_main",
+            sender_name,
+            content=description,
+            msg_type="image",
+            payload=payload
+        )
+        
+        return {"status": "success", "message": msg}
+        
+    except Exception as e:
+        error(f"Error uploading image: {e}")
+        import traceback
+        error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))

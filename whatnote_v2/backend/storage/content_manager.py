@@ -19,7 +19,7 @@ class ContentManager:
         """保存窗口内容到展板文件夹（新存储结构：内容存储到.md文件，配置存储到.json文件）"""
         board_info = self.file_manager.get_board_info(board_id)
         if not board_info:
-            print(f"❌ 保存窗口失败: 展板不存在 {board_id}")
+            print(f"[Error] 保存窗口失败: 展板不存在 {board_id}")
             return False
         
         # 找到展板目录
@@ -32,7 +32,7 @@ class ContentManager:
                     break
         
         if not board_dir:
-            print(f"❌ 保存窗口失败: 展板目录不存在 {board_id}")
+            print(f"[Error] 保存窗口失败: 展板目录不存在 {board_id}")
             return False
         
         # 统一使用files目录存储所有文件（JSON和实际文件）
@@ -41,7 +41,7 @@ class ContentManager:
         
         window_id = window_data.get("id")
         if not window_id:
-            print(f"❌ 保存窗口失败: 窗口数据缺少id字段")
+            print(f"[Error] 保存窗口失败: 窗口数据缺少id字段")
             return False
         
         window_type = window_data.get("type", "text")
@@ -56,10 +56,10 @@ class ContentManager:
                     existing_data = json.load(f)
                 if existing_data.get("id") == window_id:
                     existing_json_file = json_file
-                    print(f"📝 发现已存在的窗口，将更新: {window_id} @ {json_file.name}")
+                    print(f"[Info] 发现已存在的窗口，将更新: {window_id} @ {json_file.name}")
                     break
             except Exception as e:
-                print(f"⚠️ 读取JSON文件失败: {json_file}, 错误: {e}")
+                print(f"[Warning] 读取JSON文件失败: {json_file}, 错误: {e}")
                 continue
         
         # 新存储逻辑：文本类型窗口和便签窗口（都需要保存内容到文件）
@@ -96,9 +96,9 @@ class ContentManager:
             try:
                 with open(md_file_path, "w", encoding="utf-8") as f:
                     f.write(content)
-                print(f"✅ 保存窗口内容文件: {md_file_name}")
+                print(f"[Success] 保存窗口内容文件: {md_file_name}")
             except Exception as e:
-                print(f"❌ 保存内容文件失败: {md_file_name}, 错误: {e}")
+                print(f"[Error] 保存内容文件失败: {md_file_name}, 错误: {e}")
                 return False
             
             # 2. 保存配置到.json文件（不包含content）
@@ -112,12 +112,12 @@ class ContentManager:
             try:
                 with open(json_file_path, "w", encoding="utf-8") as f:
                     json.dump(storage_data, f, ensure_ascii=False, indent=2)
-                print(f"✅ 保存窗口配置文件: {json_file_name}")
+                print(f"[Success] 保存窗口配置文件: {json_file_name}")
                 print(f"   窗口ID: {window_id}")
                 print(f"   窗口标题: {window_title}")
                 print(f"   窗口类型: {window_type}")
             except Exception as e:
-                print(f"❌ 保存配置文件失败: {json_file_name}, 错误: {e}")
+                print(f"[Error] 保存配置文件失败: {json_file_name}, 错误: {e}")
                 return False
             
             return True
@@ -154,7 +154,7 @@ class ContentManager:
                             else:
                                 duplicate_json_files.append(json_file)
                     except Exception as e:
-                        print(f"⚠️ 读取JSON文件失败: {json_file}, 错误: {e}")
+                        print(f"[Warning] 读取JSON文件失败: {json_file}, 错误: {e}")
                         continue
             
             if window_type == "generic":
@@ -189,7 +189,7 @@ class ContentManager:
                             old_content_file.unlink()
                             print(f"🧹 已删除旧内容文件: {old_content_file}")
                     except Exception as e:
-                        print(f"⚠️ 删除旧内容文件失败: {old_content_file}, 错误: {e}")
+                        print(f"[Warning] 删除旧内容文件失败: {old_content_file}, 错误: {e}")
             
             # 准备存储的窗口数据（移除content，添加file_path）
             storage_data = {k: v for k, v in window_data.items() if k != 'content'}
@@ -211,7 +211,7 @@ class ContentManager:
                     duplicate_file.unlink()
                     print(f"🧹 已删除重复的窗口配置文件: {duplicate_file.name}")
                 except Exception as e:
-                    print(f"⚠️ 删除重复配置文件失败: {duplicate_file}, 错误: {e}")
+                    print(f"[Warning] 删除重复配置文件失败: {duplicate_file}, 错误: {e}")
             
             return True
         
@@ -635,7 +635,7 @@ class ContentManager:
         print(f"🔍 开始获取展板窗口: {board_id}")
         board_info = self.file_manager.get_board_info(board_id)
         if not board_info:
-            print(f"❌ 展板不存在: {board_id}")
+            print(f"[Error] 展板不存在: {board_id}")
             return []
         
         # 找到展板目录
@@ -648,12 +648,12 @@ class ContentManager:
                     break
         
         if not board_dir:
-            print(f"❌ 展板目录不存在: {board_id}")
+            print(f"[Error] 展板目录不存在: {board_id}")
             return []
         
         files_dir = board_dir / "files"
         if not files_dir.exists():
-            print(f"⚠️ 文件目录不存在: {files_dir}")
+            print(f"[Warning] 文件目录不存在: {files_dir}")
             return []
         
         print(f"📁 扫描文件目录: {files_dir}")
@@ -676,15 +676,15 @@ class ContentManager:
                 # 检查窗口ID是否重复
                 window_id = window_data.get('id')
                 if not window_id:
-                    print(f"⚠️ JSON文件缺少窗口ID，跳过: {file_path.name}")
+                    print(f"[Warning] JSON文件缺少窗口ID，跳过: {file_path.name}")
                     continue
                     
                 if window_id in seen_window_ids:
-                    print(f"⚠️ 发现重复的窗口ID，跳过文件: {file_path.name} (ID: {window_id})")
+                    print(f"[Warning] 发现重复的窗口ID，跳过文件: {file_path.name} (ID: {window_id})")
                     continue
                 
                 seen_window_ids.add(window_id)
-                print(f"✅ 加载窗口: {window_id} ({window_data.get('title', '无标题')}) @ {file_path.name}")
+                print(f"[Success] 加载窗口: {window_id} ({window_data.get('title', '无标题')}) @ {file_path.name}")
                 
                 # 从对应的文件中加载内容
                 window_type = window_data.get('type', 'text')
@@ -721,10 +721,10 @@ class ContentManager:
                                 # 对于媒体文件，content存储文件路径或URL
                                 window_data['content'] = str(content_file_path)
                         except Exception as e:
-                            print(f"⚠️ 读取内容文件失败: {content_file_path}, 错误: {e}")
+                            print(f"[Warning] 读取内容文件失败: {content_file_path}, 错误: {e}")
                             window_data['content'] = ""
                     else:
-                        print(f"⚠️ 内容文件不存在: {content_file_path}")
+                        print(f"[Warning] 内容文件不存在: {content_file_path}")
                         window_data['content'] = ""
                 else:
                     # 兼容旧数据或没有file_path的情况
@@ -732,7 +732,7 @@ class ContentManager:
                 
                 windows.append(window_data)
             except Exception as e:
-                print(f"❌ 读取窗口配置文件失败: {file_path}, 错误: {e}")
+                print(f"[Error] 读取窗口配置文件失败: {file_path}, 错误: {e}")
                 continue
         
         # 扫描files目录，为没有JSON配置的文件创建窗口配置
@@ -743,21 +743,21 @@ class ContentManager:
         for window in windows:
             # 检查必需的属性
             if not window.get('id'):
-                print(f"❌ 无效窗口（缺少id）: {window}")
+                print(f"[Error] 无效窗口（缺少id）: {window}")
                 continue
             if not window.get('type'):
-                print(f"❌ 无效窗口（缺少type）: id={window.get('id')}, {window}")
+                print(f"[Error] 无效窗口（缺少type）: id={window.get('id')}, {window}")
                 continue
             if not window.get('title'):
-                print(f"❌ 无效窗口（缺少title）: id={window.get('id')}, type={window.get('type')}, {window}")
+                print(f"[Error] 无效窗口（缺少title）: id={window.get('id')}, type={window.get('type')}, {window}")
                 continue
             
             valid_windows.append(window)
         
         if len(valid_windows) != len(windows):
-            print(f"⚠️ 过滤了 {len(windows) - len(valid_windows)} 个无效窗口")
+            print(f"[Warning] 过滤了 {len(windows) - len(valid_windows)} 个无效窗口")
         
-        print(f"✅ 获取窗口列表完成: {board_id}, 共 {len(valid_windows)} 个有效窗口")
+        print(f"[Success] 获取窗口列表完成: {board_id}, 共 {len(valid_windows)} 个有效窗口")
         return valid_windows
     
     def _auto_create_windows_for_orphaned_files(self, board_id: str, files_dir: Path, existing_windows: List[Dict]):
@@ -1537,22 +1537,22 @@ class ContentManager:
         print(f"🔍 [文件名检查] 文件存在: {file_path.exists()}")
         
         if not file_path.exists():
-            print(f"✅ [文件名检查] 文件名可用: {file_name}")
+            print(f"[Success] [文件名检查] 文件名可用: {file_name}")
             return file_name
         
         # 添加编号直到找到唯一名称
-        print(f"⚠️ [文件名检查] 文件已存在，开始查找可用编号...")
+        print(f"[Warning] [文件名检查] 文件已存在，开始查找可用编号...")
         counter = 1
         while True:
             file_name = f"{safe_name}({counter}){extension}"
             file_path = files_dir / file_name
             print(f"🔍 [文件名检查] 尝试: {file_name} → 存在: {file_path.exists()}")
             if not file_path.exists():
-                print(f"✅ [文件名检查] 找到可用文件名: {file_name}")
+                print(f"[Success] [文件名检查] 找到可用文件名: {file_name}")
                 return file_name
             counter += 1
             if counter > 100:  # 安全限制
-                print(f"❌ [文件名检查] 超过100个副本，停止")
+                print(f"[Error] [文件名检查] 超过100个副本，停止")
                 break
         
         return file_name
@@ -1761,8 +1761,8 @@ class ContentManager:
             unique_filename = self._generate_unique_filename(files_dir, safe_basename, file_extension)
             new_file_path = files_dir / unique_filename
             
-            print(f"📝 [窗口上传] 原始文件名: {filename}")
-            print(f"📝 [窗口上传] 生成唯一文件名: {unique_filename}")
+            print(f"[Info] [窗口上传] 原始文件名: {filename}")
+            print(f"[Info] [窗口上传] 生成唯一文件名: {unique_filename}")
             
             # 移动临时文件到目标位置
             import shutil
@@ -2180,7 +2180,7 @@ class ContentManager:
             with open(annotation_file_path, 'w', encoding='utf-8') as f:
                 f.write(md_content)
             
-            print(f"[save_pdf_annotation] ✅ 已保存第 {page} 页注释: {annotation_filename}")
+            print(f"[save_pdf_annotation] [Success] 已保存第 {page} 页注释: {annotation_filename}")
             print(f"[save_pdf_annotation] 文件绝对路径: {annotation_file_path.absolute()}")
             return True
             
@@ -2371,7 +2371,7 @@ class ContentManager:
             print(f"💾 [版本配置] 页面{page} 已保存为 {version.upper()} 版本")
             return True
         except Exception as e:
-            print(f"❌ 保存页面版本配置失败: {e}")
+            print(f"[Error] 保存页面版本配置失败: {e}")
             return False
     
     def get_page_version_from_pdf(self, pdf_path: str, page: int) -> str:
@@ -2402,7 +2402,7 @@ class ContentManager:
             
             return 'pdf'  # 默认PyPDF版本
         except Exception as e:
-            print(f"❌ 读取PDF版本配置失败: {e}")
+            print(f"[Error] 读取PDF版本配置失败: {e}")
             return 'pdf'
     
     def migrate_version_configs_to_new_location(self, board_id: str) -> dict:
@@ -2454,7 +2454,7 @@ class ContentManager:
                 with open(new_version_file, 'w', encoding='utf-8') as f:
                     json.dump(old_config, f, ensure_ascii=False, indent=2)
                 
-                info(f"  ✅ 迁移 {pdf_file.name}（{len(old_config.get('page_versions', {}))} 个页面配置）")
+                info(f"  [Success] 迁移 {pdf_file.name}（{len(old_config.get('page_versions', {}))} 个页面配置）")
                 migrated_count += 1
             
             result = {
@@ -2464,11 +2464,11 @@ class ContentManager:
                 'total': migrated_count + skipped_count
             }
             
-            info(f"✅ 迁移完成: {migrated_count} 个PDF，跳过 {skipped_count} 个")
+            info(f"[Success] 迁移完成: {migrated_count} 个PDF，跳过 {skipped_count} 个")
             return result
             
         except Exception as e:
-            error(f"❌ 迁移版本配置失败: {e}")
+            error(f"[Error] 迁移版本配置失败: {e}")
             import traceback
             traceback.print_exc()
             return {'error': str(e)}
@@ -2488,7 +2488,7 @@ class ContentManager:
         try:
             pdf_file = Path(pdf_path)
             if not pdf_file.exists():
-                print(f"❌ PDF文件不存在: {pdf_path}")
+                print(f"[Error] PDF文件不存在: {pdf_path}")
                 return False
             
             # 版本配置文件：document.pdf.versions.json
@@ -2510,7 +2510,7 @@ class ContentManager:
             print(f"💾 [版本配置] {pdf_file.name} 第{page}页 → {version.upper()}")
             return True
         except Exception as e:
-            print(f"❌ 保存PDF版本配置失败: {e}")
+            print(f"[Error] 保存PDF版本配置失败: {e}")
             return False
     
     def _locate_board_directory(self, board_id: str) -> Optional[Path]:
@@ -2930,7 +2930,7 @@ class ContentManager:
                         return llm_file, 'llm'
                     else:
                         # LLM文件不存在，回退到PyPDF
-                        print(f"⚠️ [版本回退] 第{page_num}页 → LLM文件不存在，回退到PyPDF")
+                        print(f"[Warning] [版本回退] 第{page_num}页 → LLM文件不存在，回退到PyPDF")
                 
                 # 使用PyPDF版本
                 pdf_file = pdf_pages_dir / f"{pdf_name}_page_{page_num:03d}.md"
@@ -3045,7 +3045,7 @@ class ContentManager:
             
             pdf_document.close()
             
-            print(f"✅ PDF页面渲染成功: {image_filename}, 大小: {image_path.stat().st_size} bytes")
+            print(f"[Success] PDF页面渲染成功: {image_filename}, 大小: {image_path.stat().st_size} bytes")
             return str(image_path.absolute())
             
         except ImportError:
@@ -3084,7 +3084,7 @@ class ContentManager:
             with open(script_path, 'w', encoding='utf-8') as f:
                 f.write(content)
                 
-            print(f"[save_narrator_script] ✅ 已保存讲稿: {script_filename}")
+            print(f"[save_narrator_script] [Success] 已保存讲稿: {script_filename}")
             return True
         except Exception as e:
             print(f"保存讲稿失败: {e}")

@@ -43,6 +43,13 @@ CRITICAL INSTRUCTIONS:
 4. EMOJI CONTROL. Use emojis sparingly. Max 1 per burst.
 5. React to the context directly. Don't preach.
 
+INTERACTION RULES:
+- Messages in context are prefixed with [MSG-ID].
+- To REPLY to a specific message, start your response with [REPLY-ID].
+- DO NOT prefix your own message with [MSG-ID]. That is system generated.
+- Example: "[REPLY-12] That's funny!" will reply to message 12.
+- You can reply to multiple messages in separate bursts.
+
 OUTPUT FORMAT:
 You MUST return a JSON List of strings.
 Example: ["Wait, really?"] or ["I didn't know that.", "Tell me more."]
@@ -160,11 +167,11 @@ JSON ONLY:
         """
         if message.sender_id == self.profile.id:
             # It's my own message, add as assistant
-            self.memory.append({"role": Role.ASSISTANT, "content": message.content})
+            self.memory.append({"role": Role.ASSISTANT, "content": message.content, "id": message.id})
         else:
             # It's someone else (User or another Agent), add as user
             formatted_content = f"[{message.sender_name}]: {reply_context}{message.content}"
-            self.memory.append({"role": Role.USER, "content": formatted_content})
+            self.memory.append({"role": Role.USER, "content": formatted_content, "id": message.id})
             
         # Keep memory size manageable (e.g., last 50 messages)
         if len(self.memory) > 50:
@@ -325,10 +332,10 @@ JSON ONLY:
             
         return False
 
-    async def speak(self, room_context: Optional[Dict] = None) -> List[str]:
+    async def speak(self, room_context: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """
         Generate a response using the LLM.
-        Returns a list of message strings (burst).
+        Returns a list of message objects: [{'content': str, 'reply_to': str|None}]
         """
         # Mark latest message as processed immediately
         if room_context and room_context.get('history'):
@@ -341,19 +348,42 @@ JSON ONLY:
 
         self.status = AgentStatus.THINKING
         try:
-            # Prepare messages
-            messages_to_send = list(self.memory)
+            # 1. Prepare messages with ID mapping for Reply-To Context
+            messages_to_send = []
+            id_map = {} # {str_index: uuid}
+            msg_counter = 1
+            
+            # Keep System Prompt (Index 0)
+            if self.memory:
+                messages_to_send.append({"role": self.memory[0]["role"], "content": self.memory[0]["content"]})
+            
+            # Process Context (Skip index 0 if it is system)
+            start_mem_idx = 1 if self.memory and self.memory[0]["role"] == Role.SYSTEM else 0
+            
+            # Only take last 20 messages for context to keep indices simple and relevant
+            memories_to_process = self.memory[start_mem_idx:]
+            if len(memories_to_process) > 20:
+                memories_to_process = memories_to_process[-20:]
+                
+            for mem in memories_to_process:
+                content = mem["content"]
+                # If this message has an ID (recorded by observe), assign a visible index
+                if "id" in mem:
+                    idx_str = str(msg_counter)
+                    id_map[idx_str] = mem["id"]
+                    content = f"[MSG-{idx_str}] {content}"
+                    msg_counter += 1
+                
+                messages_to_send.append({"role": mem["role"], "content": content})
             
             # Check current status for "Self Awareness"
             status = self.is_online()
             activity = status['activity']
             
-            status_prompt = ""
             import datetime
             now_hour = (datetime.datetime.utcnow().hour + 8) % 24 # Mock time
             
             # Prepare Future Schedule (simplified)
-            # We select a few key points to give context
             schedule_context = ""
             
             # Use current day's routine
@@ -377,9 +407,9 @@ JSON ONLY:
             else:
                 context_block += "Status: ACTIVE\n"
                 
-            context_block += "INSTRUCTION: Incorporate your current activity/status into your tone if relevant. If you are doing something distracting (e.g. gaming, driving), be brief.\nREMINDER: Output a JSON List of strings: [\"msg1\"]. Usually 1-2 items. JSON ONLY."
+            context_block += "INSTRUCTION: Incorporate your current activity/status into your tone if relevant. If you are doing something distracting (e.g. gaming, driving), be brief.\nREMINDER: Output a JSON List of strings. To reply to [MSG-X], prefix string with [MSG-X]."
             
-            # Inject Room System Prompt if available to give context about WHAT group this is
+            # Inject Room System Prompt
             if room_context and room_context.get('system_prompt'):
                 context_block += f"\n\n[Room Info]\nTopic: {room_context.get('topic')}\nRules: {room_context['system_prompt']}"
             
@@ -402,55 +432,82 @@ JSON ONLY:
                 if match:
                     clean_text = match.group(1)
             
+            lines = []
             try:
                 msg_list = json.loads(clean_text)
+                info(f"[DEBUG JSON] Parsed successfully: {msg_list}")
                 
-                # Check for empty list (Silence)
-                if isinstance(msg_list, list) and not msg_list:
-                    # Agent chose to stay silent
-                    self.reset_proactive_timer() 
-                    return []
-                    
                 if isinstance(msg_list, list):
-                    # Reset proactive timer if we actually speak
-                    valid_msgs = [str(m) for m in msg_list if self._is_valid_msg(str(m))]
-                    if valid_msgs:
-                        self.reset_proactive_timer()
-                        return valid_msgs
-                    return []
+                    lines = [str(m) for m in msg_list]
                 else:
-                    msg_str = str(msg_list)
-                    if self._is_valid_msg(msg_str):
-                        self.reset_proactive_timer()
-                        return [msg_str]
-                    return []
+                    lines = [str(msg_list)]
                     
             except json.JSONDecodeError:
                 # Fallback: Split by newlines and clean up artifacts
-                lines = []
-                # Simple heuristic: split by newline
                 raw_lines = clean_text.split('\n')
                 for line in raw_lines:
+                    info(f"[DEBUG Fallback] Raw line: {repr(line)}")
                     line = line.strip()
                     if not line: continue
-                    # Remove common JSON artifacts if parsing failed (e.g. ["msg", "msg2")
-                    # Remove leading ['" 
-                    line = re.sub(r'^[\[\'"]+', '', line)
-                    # Remove trailing ]'",
-                    line = re.sub(r'[\]\'",]+$', '', line)
+                    
+                    # Smart Cleanup: Detect Reply/Msg tags first to protect them
+                    # Broaden regex to allow any separator between REPLY/MSG and ID, AND optional brackets
+                    tag_match = re.search(r'\[?\s*(?:REPLY|MSG)[^0-9]+(\d+)\s*\]?', line, re.IGNORECASE)
+                    
+                    if tag_match:
+                        info(f"[DEBUG Fallback] Tag matched: {tag_match.group(0)}")
+                        # If we found a tag, we want to PRESERVE it and clean AROUND it.
+                        tag = tag_match.group(0)
+                        # Remove the tag from the line temporarily
+                        content_part = line.replace(tag, "", 1)
+                        # Clean the content part (remove json artifacts like quotes, brackets)
+                        content_part = re.sub(r'^[\[\'"]+', '', content_part.strip())
+                        content_part = re.sub(r'[\]\'",]+$', '', content_part.strip())
+                        # Reassemble
+                        line = tag + " " + content_part
+                    else:
+                        # Standard aggressive cleanup for normal lines
+                        line = re.sub(r'^[\[\'"]+', '', line)
+                        line = re.sub(r'[\]\'",]+$', '', line)
+
                     if line.strip():
                         lines.append(line.strip())
+            
+            # Process lines for Reply Tags and Validation
+            valid_msgs = []
+            for line in lines:
+                if not self._is_valid_msg(line): continue
                 
-                valid_lines = [l for l in lines if self._is_valid_msg(l)]
+                # Check for [REPLY-X] or [MSG-X]
+                reply_to_id = None
+                clean_line = line
                 
-                if valid_lines:
-                    self.reset_proactive_timer()
-                return valid_lines
+                # Regex pattern for tags
+                tag_pattern = r'\[?\s*(?:REPLY|MSG)[^0-9]+(\d+)\s*\]?'
+                
+                # Find ALL tags
+                all_tags = re.findall(tag_pattern, line, re.IGNORECASE)
+                
+                if all_tags:
+                    info(f"[DEBUG Loop] Found tags: {all_tags}")
+                    for idx_str in all_tags:
+                        if idx_str in id_map:
+                            reply_to_id = id_map[idx_str]
+                    
+                    # Remove ALL tags from content
+                    clean_line = re.sub(tag_pattern, '', line, flags=re.IGNORECASE).strip()
+                
+                if clean_line:
+                    valid_msgs.append({"content": clean_line, "reply_to": reply_to_id})
+            
+            if valid_msgs:
+                self.reset_proactive_timer()
+                
+            return valid_msgs
             
         except Exception as e:
             import traceback
             error(f"Agent {self.profile.name} failed to speak: {e}\n{traceback.format_exc()}")
-            # If error, stay silent instead of saying "..."
             return []
         finally:
             self.status = AgentStatus.IDLE

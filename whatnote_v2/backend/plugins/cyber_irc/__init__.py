@@ -12,6 +12,11 @@ def init_plugin(llm_service, data_dir):
     # Inject into api module
     from . import api
     api.chat_manager = _manager
+    # Inject api_config_manager if available in llm_service
+    if hasattr(llm_service, 'api_config_manager'):
+        api.api_config_manager = llm_service.api_config_manager
+    else:
+        info("[CyberChat] api_config_manager not found in llm_service, vision features disabled.")
     
     # Initialize default content
     _init_defaults(_manager)

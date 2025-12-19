@@ -250,6 +250,8 @@ const CyberIRCWindow = ({ window: windowData }) => {
   const chatEndRef = useRef(null);
   const chatAreaRef = useRef(null); // Ref for scrolling container
   const shouldScrollRef = useRef(true); // Track if we should auto-scroll
+  const fileInputRef = useRef(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // UI State
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -270,6 +272,7 @@ const CyberIRCWindow = ({ window: windowData }) => {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [targetAgentStatus, setTargetAgentStatus] = useState(null); // { last_processed_msg_id, ... }
   const [replyingTo, setReplyingTo] = useState(null); // Message object being replied to
+  const [viewingImage, setViewingImage] = useState(null); // URL of image being viewed
 
   // --- Data Fetching ---
 
@@ -587,6 +590,56 @@ const CyberIRCWindow = ({ window: windowData }) => {
     if (agent) setShowProfile(agent);
   };
 
+  const handleImageUpload = () => {
+      fileInputRef.current?.click();
+  };
+
+  const uploadImageFile = async (file) => {
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('room_id', currentRoom.id);
+      formData.append('sender_name', "User");
+      
+      try {
+          const res = await fetch(`${API_BASE}/upload_image`, {
+              method: 'POST',
+              body: formData
+          });
+          const data = await res.json();
+          if (data.status !== 'success') {
+              alert("Upload failed: " + (data.detail || "Unknown error"));
+          }
+      } catch (err) {
+          alert("Upload error: " + err.message);
+      } finally {
+          setIsUploading(false);
+      }
+  };
+
+  const handleFileSelect = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      await uploadImageFile(file);
+      e.target.value = null;
+  };
+
+  const handlePaste = async (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+              e.preventDefault();
+              const file = items[i].getAsFile();
+              if (file) {
+                  await uploadImageFile(file);
+              }
+              return; 
+          }
+      }
+  };
+
   const handleTogglePause = async () => {
     try {
         const newStatus = !currentRoom.is_paused;
@@ -819,7 +872,29 @@ const CyberIRCWindow = ({ window: windowData }) => {
                   >
                     &lt;{msg.sender_name}&gt;
                   </span>
-                  <span>{msg.content}</span>
+                  
+                  {msg.type === 'image' && msg.payload?.url ? (
+                      <div style={{marginTop: '4px', marginBottom: '4px'}}>
+                          <img 
+                              src={`http://localhost:8081${msg.payload.url}`} 
+                              alt="User uploaded" 
+                              style={{
+                                  maxWidth: '300px', 
+                                  maxHeight: '200px', 
+                                  border: '1px solid #004400', 
+                                  display: 'block',
+                                  cursor: 'pointer'
+                              }}
+                              onClick={() => setViewingImage(`http://localhost:8081${msg.payload.url}`)}
+                          />
+                          <div style={{fontSize: '10px', color: '#666', fontStyle: 'italic'}}>
+                              {msg.content}
+                          </div>
+                      </div>
+                  ) : (
+                      <span>{msg.content}</span>
+                  )}
+
                   {isMessageUnread(msg, idx) && (
                       <span style={{marginLeft: '8px', color: '#666', fontSize: '10px', fontStyle: 'italic'}}>
                           [Unread{targetAgentStatus && !targetAgentStatus.is_online ? ' - Offline' : ''}]
@@ -863,17 +938,66 @@ const CyberIRCWindow = ({ window: windowData }) => {
       {/* Input */}
       <div style={styles.inputArea}>
         <span style={{marginRight: '8px', color: '#00ff00'}}>&gt;</span>
+        
+        <input 
+            type="file" 
+            ref={fileInputRef} 
+            style={{display: 'none'}} 
+            accept="image/*"
+            onChange={handleFileSelect}
+        />
+        
+         <button 
+            style={{...styles.button, marginRight: '8px', padding: '2px 6px', fontSize: '14px'}} 
+            onClick={handleImageUpload}
+            disabled={isUploading}
+            title="Upload Image"
+         >
+            {isUploading ? '...' : '📷'}
+         </button>
+
         <input
           style={styles.input}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+          onPaste={handlePaste}
           placeholder={`Message #${currentRoom.name}...`}
         />
         <button style={styles.button} onClick={handleSend}>SEND</button>
       </div>
 
       {/* Modals */}
+      {viewingImage && (
+        <div 
+            style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.9)', 
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 200
+            }}
+            onClick={() => setViewingImage(null)}
+        >
+            <div style={{position: 'relative', maxWidth: '90%', maxHeight: '90%'}} onClick={e => e.stopPropagation()}>
+                <img 
+                    src={viewingImage} 
+                    alt="Full size" 
+                    style={{maxWidth: '100%', maxHeight: '100%', border: '2px solid #00ff00', objectFit: 'contain'}}
+                />
+                <button 
+                    style={{
+                        position: 'absolute', top: '-30px', right: 0,
+                        backgroundColor: 'transparent', color: '#00ff00', border: 'none',
+                        fontSize: '20px', cursor: 'pointer', fontFamily: 'monospace'
+                    }}
+                    onClick={() => setViewingImage(null)}
+                >
+                    [CLOSE]
+                </button>
+            </div>
+        </div>
+      )}
+
       {showProfile && (
         <Modal title={`USER PROFILE: ${showProfile.name.toUpperCase()}`} onClose={() => setShowProfile(null)} onConfirm={() => setShowProfile(null)} confirmText="CLOSE">
             <div style={{maxHeight: '400px', overflowY: 'auto'}}>

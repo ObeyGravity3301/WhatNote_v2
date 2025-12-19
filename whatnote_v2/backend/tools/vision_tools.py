@@ -219,6 +219,6 @@ def register_vision_tools(tool_registry, api_config_manager, content_manager=Non
         category="vision"
     )
     
-    info("✅ 已注册视觉工具")
+    info("[Success] 已注册视觉工具")
 
 

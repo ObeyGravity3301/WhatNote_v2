@@ -3,6 +3,17 @@ WhatNote V2 Backend API
 使用绝对导入，通过run.py设置sys.path
 """
 
+import sys
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        # For older Python versions
+        import codecs
+        sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+        sys.stderr = codecs.getwriter("utf-8")(sys.stderr.detach())
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
@@ -144,9 +155,17 @@ async def startup_event():
     try:
         from tools import tool_registry, register_builtin_tools
         register_builtin_tools(tool_registry, content_manager, file_manager, DATA_DIR)
-        info(f"✅ 当前已注册 {len(tool_registry.get_all_tools())} 个工具")
+        
+        # 注册新闻工具
+        try:
+            from tools.news_tools import register_news_tools
+            register_news_tools(tool_registry)
+        except Exception as e:
+            error(f"[Error] 注册新闻工具失败: {e}")
+
+        info(f"[Success] 当前已注册 {len(tool_registry.get_all_tools())} 个工具")
     except Exception as e:
-        error(f"❌ 注册工具失败: {e}")
+        error(f"[Error] 注册工具失败: {e}")
         import traceback
         error(traceback.format_exc())
 
@@ -226,21 +245,21 @@ try:
     from plugins import cyber_irc
     cyber_irc_router = cyber_irc.init_plugin(llm_service, DATA_DIR)
     app.include_router(cyber_irc_router, prefix="/api/chat", tags=["CyberChat"])
-    info("✅ [Plugin] CyberIRC loaded successfully.")
+    info("[Success] [Plugin] CyberIRC loaded successfully.")
 except ImportError:
-    info("⚠️ [Plugin] CyberIRC not found, skipping.")
+    info("[Warning] [Plugin] CyberIRC not found, skipping.")
 except Exception as e:
-    error(f"❌ [Plugin] CyberIRC failed to load: {e}")
+    error(f"[Error] [Plugin] CyberIRC failed to load: {e}")
 
 try:
     from plugins import pdf_narrator
     pdf_narrator_router = pdf_narrator.init_plugin(llm_service, content_manager, DATA_DIR, GPT_SOVITS_URL)
     app.include_router(pdf_narrator_router, prefix="/api", tags=["PdfNarrator"])
-    info("✅ [Plugin] PdfNarrator loaded successfully.")
+    info("[Success] [Plugin] PdfNarrator loaded successfully.")
 except ImportError:
-    info("⚠️ [Plugin] PdfNarrator not found, skipping.")
+    info("[Warning] [Plugin] PdfNarrator not found, skipping.")
 except Exception as e:
-    error(f"❌ [Plugin] PdfNarrator failed to load: {e}")
+    error(f"[Error] [Plugin] PdfNarrator failed to load: {e}")
 
 # 文件服务API
 @app.get("/api/boards/{board_id}/files/{file_path:path}")
@@ -300,7 +319,7 @@ async def startup_event():
     try:
         from plugins import cyber_irc
         await cyber_irc.startup()
-        info("🚀 [Plugin] CyberIRC loop started.")
+        info("[Start] [Plugin] CyberIRC loop started.")
     except Exception as e:
         error(f"Failed to start CyberIRC loop: {e}")
 
@@ -310,7 +329,7 @@ async def shutdown_event():
     try:
         from plugins import cyber_irc
         await cyber_irc.shutdown()
-        info("🛑 [Plugin] CyberIRC loop stopped.")
+        info("[Stop] [Plugin] CyberIRC loop stopped.")
     except Exception as e:
         error(f"Failed to stop CyberIRC loop: {e}")
 
@@ -1566,7 +1585,7 @@ async def generate_pdf_annotation_visual(
         }
         
         # 调用LLM生成注释（独立上下文）
-        # ⚠️ 视觉任务需要使用支持多模态的模型
+        # [Warning] 视觉任务需要使用支持多模态的模型
         messages = [user_message]
         
         # 准备SSE流式响应
@@ -3736,7 +3755,7 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                                 'char_count': 0,
                                 'versions': {'has_text': False, 'has_description': False},
                                 'error': True,
-                                'errorMessage': "❌ 之前的提取包含错误，请重试"
+                                'errorMessage': "[Error] 之前的提取包含错误，请重试"
                             })
                         else:
                             # 尝试提取版本信息
@@ -3948,7 +3967,7 @@ async def extract_pages_content(
         # 获取PDF文件名（不含扩展名），用于统一命名
         pdf_name = pdf_path.stem
         
-        info(f"🚀 开始并行提取 {len(pages_to_extract)} 个页面")
+        info(f"[Start] 开始并行提取 {len(pages_to_extract)} 个页面")
         
         # 检测并确定使用的模型（批量提取使用视觉模型）
         current_provider = llm_service.api_config_manager.get_current_provider()
@@ -3978,7 +3997,7 @@ async def extract_pages_content(
         async def extract_single_page(page_num: int):
             """提取单个页面的内容（独立任务，不依赖其他页面）"""
             try:
-                info(f"🚀 [任务{page_num}] 开始提取")
+                info(f"[Start] [任务{page_num}] 开始提取")
                 
                 # 渲染PDF页面为图片
                 image_path = content_manager.render_pdf_page_to_image(board_id, window_id, page_num)
@@ -3991,7 +4010,7 @@ async def extract_pages_content(
                 
                 import base64
                 img_base64 = base64.b64encode(img_bytes).decode('utf-8')
-                info(f"✅ [任务{page_num}] 图片渲染完成: {len(img_bytes)} bytes")
+                info(f"[Success] [任务{page_num}] 图片渲染完成: {len(img_bytes)} bytes")
                 
                 # 调用多模态LLM（每页独立，无历史对话）
                 messages = [
@@ -4078,7 +4097,7 @@ async def extract_pages_content(
                         accumulated_content += chunk
                 except Exception as llm_error:
                     error_msg = str(llm_error)
-                    info(f"❌ [任务{page_num}] LLM调用失败: {error_msg}")
+                    info(f"[Error] [任务{page_num}] LLM调用失败: {error_msg}")
                     # 检查是否为限流错误 (429) 或其他特定API错误
                     if "429" in error_msg or "limit_requests" in error_msg or "rate limit" in error_msg.lower():
                         return {
@@ -4106,7 +4125,7 @@ async def extract_pages_content(
                             'detail': error_msg
                         }
                 
-                info(f"✅ [任务{page_num}] LLM提取完成: {len(accumulated_content)} 字")
+                info(f"[Success] [任务{page_num}] LLM提取完成: {len(accumulated_content)} 字")
                 
                 # 检查内容是否包含错误信息（之前的错误可能被保存了）
                 is_error_content = False
@@ -4192,7 +4211,7 @@ async def extract_pages_content(
                 # 自动设置版本为LLM
                 content_manager.save_page_version(board_id, window_id, page_num, 'llm')
                 
-                info(f"✅ [任务{page_num}] 完成")
+                info(f"[Success] [任务{page_num}] 完成")
                 
                 # 返回结果
                 return {
@@ -4204,7 +4223,7 @@ async def extract_pages_content(
                 }
                 
             except Exception as e:
-                error(f"❌ [任务{page_num}] 失败: {e}")
+                error(f"[Error] [任务{page_num}] 失败: {e}")
                 return {
                     'success': False,
                     'page': page_num,
@@ -4224,7 +4243,7 @@ async def extract_pages_content(
         
         tasks = [extract_single_page_with_semaphore(page_num) for page_num in pages_to_extract]
         
-        info(f"🚀 启动 {len(tasks)} 个并行任务 (并发限制: {CONCURRENCY_LIMIT})")
+        info(f"[Start] 启动 {len(tasks)} 个并行任务 (并发限制: {CONCURRENCY_LIMIT})")
         
         # 准备SSE流式响应
         async def generate_extraction_stream():
@@ -4237,12 +4256,12 @@ async def extract_pages_content(
                 completed += 1
                 
                 if result['success']:
-                    info(f"✅ 页面 {result['page']} 完成 ({completed}/{total_to_extract})")
+                    info(f"[Success] 页面 {result['page']} 完成 ({completed}/{total_to_extract})")
                     
                     # 发送完成信号
                     yield f"data: {json.dumps({'type': 'page_complete', 'page': result['page'], 'content': result['content'], 'textContent': result['textContent'], 'imageContent': result['imageContent']}, ensure_ascii=False)}\n\n"
                 else:
-                    error(f"❌ 页面 {result['page']} 失败")
+                    error(f"[Error] 页面 {result['page']} 失败")
                     yield f"data: {json.dumps({'type': 'page_error', 'page': result['page'], 'error_code': result.get('error'), 'message': result.get('message'), 'detail': result.get('detail')}, ensure_ascii=False)}\n\n"
             
             # 发送总体完成信号
@@ -4455,7 +4474,7 @@ async def update_page_content(board_id: str, window_id: str, page: int, request_
         # 保存版本配置
         version_saved = content_manager.save_page_version(board_id, window_id, page, selected_version)
         if not version_saved:
-            info(f"⚠️ 版本配置保存失败，但继续保存内容")
+            info(f"[Warning] 版本配置保存失败，但继续保存内容")
         
         # 获取窗口信息
         windows = content_manager.get_board_windows(board_id)
@@ -5031,7 +5050,7 @@ if __name__ == "__main__":
 async def extract_image_content(board_id: str, window_id: str, force: bool = False):
     """提取图片窗口的文字内容"""
     try:
-        info(f"🚀 开始提取图片内容: window_id={window_id}, force={force}")
+        info(f"[Start] 开始提取图片内容: window_id={window_id}, force={force}")
         
         # 获取窗口信息
         windows = content_manager.get_board_windows(board_id)
@@ -5210,7 +5229,7 @@ async def extract_image_content(board_id: str, window_id: str, force: bool = Fal
         async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
             accumulated_content += chunk
         
-        info(f"✅ 图片内容提取完成: {len(accumulated_content)} 字")
+        info(f"[Success] 图片内容提取完成: {len(accumulated_content)} 字")
 
         # 解析 JSON
         text_content = ""
@@ -5465,7 +5484,7 @@ async def generate_batch_summary_note(
                             with open(summary_file_path, 'w', encoding='utf-8') as f:
                                 f.write(accumulated_content)
                             
-                            info(f"✅ 全文档笔记已保存至: {summary_file_path}")
+                            info(f"[Success] 全文档笔记已保存至: {summary_file_path}")
                             yield f"data: {json.dumps({'type': 'saved', 'path': str(summary_file_path)}, ensure_ascii=False)}\n\n"
                         else:
                             error(f"无法保存笔记文件，PDF路径不存在: {pdf_file_path}")
@@ -5679,7 +5698,7 @@ async def generate_batch_summary_note(
                             with open(summary_file_path, 'w', encoding='utf-8') as f:
                                 f.write(merge_accumulated_content)
                             
-                            info(f"✅ 全文档笔记已保存至: {summary_file_path}")
+                            info(f"[Success] 全文档笔记已保存至: {summary_file_path}")
                             yield f"data: {json.dumps({'type': 'saved', 'path': str(summary_file_path)}, ensure_ascii=False)}\n\n"
                         else:
                             error(f"无法保存笔记文件，PDF路径不存在: {pdf_file_path}")

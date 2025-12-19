@@ -39,7 +39,7 @@ class ToolExecutor:
         self.default_timeout = 120  # 默认超时（秒）
         self._initialized = True
         
-        info("⚙️ 工具执行引擎初始化完成")
+        info("[System] 工具执行引擎初始化完成")
     
     async def execute_tool_call(
         self,
@@ -64,7 +64,7 @@ class ToolExecutor:
         
         # 检查工具是否存在
         if not tool_registry.tool_exists(tool_name):
-            error(f"❌ 工具不存在: {tool_name}")
+            error(f"[Error] 工具不存在: {tool_name}")
             return ToolResult(
                 tool_call_id=tool_call.id,
                 tool_name=tool_name,
@@ -75,7 +75,7 @@ class ToolExecutor:
         # 获取工具处理器
         handler = tool_registry.get_tool_handler(tool_name)
         if not handler:
-            error(f"❌ 工具处理器不存在: {tool_name}")
+            error(f"[Error] 工具处理器不存在: {tool_name}")
             return ToolResult(
                 tool_call_id=tool_call.id,
                 tool_name=tool_name,
@@ -91,7 +91,7 @@ class ToolExecutor:
         )
         
         if validation_error:
-            error(f"❌ 参数验证失败: {validation_error}")
+            error(f"[Error] 参数验证失败: {validation_error}")
             return ToolResult(
                 tool_call_id=tool_call.id,
                 tool_name=tool_name,
@@ -107,11 +107,11 @@ class ToolExecutor:
                 timeout=timeout
             )
             
-            info(f"✅ 工具执行成功: {tool_name}")
+            info(f"[Success] 工具执行成功: {tool_name}")
             return result
             
         except asyncio.TimeoutError:
-            error(f"⏱️ 工具执行超时: {tool_name} (超时: {timeout}秒)")
+            error(f"[Timeout] 工具执行超时: {tool_name} (超时: {timeout}秒)")
             return ToolResult(
                 tool_call_id=tool_call.id,
                 tool_name=tool_name,
@@ -119,7 +119,7 @@ class ToolExecutor:
                 error=f"执行超时（>{timeout}秒）"
             )
         except Exception as e:
-            error(f"❌ 工具执行异常: {tool_name} - {str(e)}")
+            error(f"[Error] 工具执行异常: {tool_name} - {str(e)}")
             return ToolResult(
                 tool_call_id=tool_call.id,
                 tool_name=tool_name,
@@ -301,7 +301,7 @@ class ToolExecutor:
                         tool_calls.append(tool_call)
                         info(f"🔍 解析到工具调用: {tool_call.name}")
                     except Exception as e:
-                        error(f"⚠️ 解析工具调用失败: {e}")
+                        error(f"[Warning] 解析工具调用失败: {e}")
         
         return tool_calls
     

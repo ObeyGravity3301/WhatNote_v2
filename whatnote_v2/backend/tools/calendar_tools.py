@@ -689,5 +689,5 @@ def register_calendar_tools(tool_registry, data_dir: Path):
     for tool_def, handler in calendar_tools:
         tool_registry.register_tool(tool_def, handler, category="calendar")
     
-    info(f"✅ 已注册 {len(calendar_tools)} 个日历工具")
+    info(f"[Success] 已注册 {len(calendar_tools)} 个日历工具")
 

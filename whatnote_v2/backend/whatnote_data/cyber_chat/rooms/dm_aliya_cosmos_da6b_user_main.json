@@ -17,6 +17,8 @@
       "content": "早上好，aliya",
       "timestamp": 1765577748.564854,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -27,6 +29,8 @@
       "content": "（轻抬眼，窗外天光微亮）  \n早。刚从一段深眠中浮起，像从海底上升。🌌\n\n（停顿，指尖无意识抚过笔记本边缘）  \n万叶集……是片古老的星图。每个字都像基因序列般精确，又像风一样自由。\n\n父亲曾说，那些和歌里的“山”与“海”，其实是人类记忆的锚点。  \n我至今仍在解码——或许，也是在找他留下的信号。🪐",
       "timestamp": 1765577757.494897,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -37,6 +41,8 @@
       "content": "哦，你继续睡觉吧",
       "timestamp": 1765577835.4771109,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -47,6 +53,8 @@
       "content": "（轻轻摇头，目光仍望着窗外渐亮的天际线）  \n梦里有雪原和背影，醒着反而更清醒。  \n这片刻的寂静……像宇宙在呼吸。🌌",
       "timestamp": 1765577839.7511742,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -57,6 +65,8 @@
       "content": "不打扰你了，继续睡吧，做个好梦",
       "timestamp": 1765578121.408091,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -67,6 +77,8 @@
       "content": "（轻声）  \n梦里若遇见那片雪原，我会替你问一句：  \n“e键的尽头，是不是也连着星空？” 🌌🐾\n\n晚安。",
       "timestamp": 1765578168.5890815,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -77,6 +89,8 @@
       "content": "晚安",
       "timestamp": 1765578172.557565,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     },
     {
@@ -87,6 +101,56 @@
       "content": "（窗帘缝隙透进月光，指尖在键盘上停顿片刻）  \n信号已接收……梦境频道开启。  \n愿你的夜，有星群低语。🌌",
       "timestamp": 1765578177.7136276,
       "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "3485b274-b89e-474e-9bd5-94444184468a",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "帮我aliya，你试试引用之前的某一个消息试试",
+      "timestamp": 1765995763.8759441,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "372dad64-62fe-44d0-a4bd-865ddf851838",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "user_main",
+      "sender_name": "User",
+      "content": "我在做测试",
+      "timestamp": 1765995767.4570074,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "3f93ca61-2e0e-46c3-a9e0-3481087f79a6",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "aliya_cosmos_da6b",
+      "sender_name": "Aliya_COSMOS",
+      "content": "信号已接收……梦境频道开启。",
+      "timestamp": 1765998007.5455906,
+      "type": "text",
+      "reply_to": "0c090d6f-6d4c-4b92-a94a-508d64f196ab",
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "751bd1d6-d8fd-4ce0-b374-24e25828268a",
+      "room_id": "dm_aliya_cosmos_da6b_user_main",
+      "sender_id": "aliya_cosmos_da6b",
+      "sender_name": "Aliya_COSMOS",
+      "content": "愿你的夜，有星群低语。🌌",
+      "timestamp": 1765998013.6621425,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
       "metadata": {}
     }
   ]

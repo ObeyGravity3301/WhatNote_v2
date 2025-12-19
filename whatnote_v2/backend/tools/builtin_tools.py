@@ -2201,7 +2201,7 @@ def register_builtin_tools(tool_registry, content_manager: ContentManager, file_
     for tool_def, handler in window_tools:
         tool_registry.register_tool(tool_def, handler, category="window")
     
-    info(f"✅ 已注册 {len(window_tools)} 个窗口工具")
+    info(f"[Success] 已注册 {len(window_tools)} 个窗口工具")
     
     # PDF工具
     pdf_handlers = PDFToolHandlers(content_manager)
@@ -2214,7 +2214,7 @@ def register_builtin_tools(tool_registry, content_manager: ContentManager, file_
     for tool_def, handler in pdf_tools:
         tool_registry.register_tool(tool_def, handler, category="pdf")
     
-    info(f"✅ 已注册 {len(pdf_tools)} 个PDF工具")
+    info(f"[Success] 已注册 {len(pdf_tools)} 个PDF工具")
     
     # 课程和展板工具
     if file_manager:
@@ -2227,7 +2227,7 @@ def register_builtin_tools(tool_registry, content_manager: ContentManager, file_
         for tool_def, handler in course_tools:
             tool_registry.register_tool(tool_def, handler, category="course")
         
-        info(f"✅ 已注册 {len(course_tools)} 个课程工具")
+        info(f"[Success] 已注册 {len(course_tools)} 个课程工具")
     
     # 日历工具
     if data_dir:

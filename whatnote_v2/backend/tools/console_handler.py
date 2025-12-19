@@ -1367,7 +1367,7 @@ class ConsoleHandler:
         if partial_errors:
             lines.extend([
                 "",
-                "⚠️ 部分页面出现错误:",
+                "[Warning] 部分页面出现错误:",
                 "-" * 60
             ])
             lines.extend([f"- {err}" for err in partial_errors])

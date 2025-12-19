@@ -156,11 +156,11 @@ class ToolResult:
     def get_summary(self) -> str:
         """获取执行摘要（用于日志）"""
         if self.status == ToolStatus.SUCCESS:
-            return f"✅ {self.tool_name}: 成功"
+            return f"[Success] {self.tool_name}: 成功"
         elif self.status == ToolStatus.ERROR:
-            return f"❌ {self.tool_name}: {self.error}"
+            return f"[Error] {self.tool_name}: {self.error}"
         else:
-            return f"⚠️ {self.tool_name}: 部分成功"
+            return f"[Warning] {self.tool_name}: 部分成功"
 
 
 @dataclass

@@ -5,11 +5,36 @@ import random
 import json
 import os
 from pathlib import Path
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict, Optional, Callable, Any
 from .schemas import AgentProfile, ChatMessage, RoomState, Role
 from .base import BaseAgent
 from llm_service import LLMService
 from logger import info, error
+
+AVAILABLE_RSS_FEEDS = {
+    "Technology": [
+        {"name": "Hacker News", "url": "https://news.ycombinator.com/rss"},
+        {"name": "The Verge", "url": "https://www.theverge.com/rss/index.xml"},
+        {"name": "Wired", "url": "https://www.wired.com/feed/rss"},
+        {"name": "TechCrunch", "url": "https://techcrunch.com/feed/"},
+    ],
+    "Gaming": [
+        {"name": "Kotaku", "url": "https://kotaku.com/rss"},
+        {"name": "IGN", "url": "https://www.ign.com/feeds/all.xml"},
+        {"name": "Polygon", "url": "https://www.polygon.com/rss/index.xml"},
+    ],
+    "Science": [
+        {"name": "NASA Breaking", "url": "https://www.nasa.gov/rss/dyn/breaking_news.rss"},
+        {"name": "ScienceDaily", "url": "https://www.sciencedaily.com/rss/all.xml"},
+    ],
+    "General": [
+        {"name": "BBC Top Stories", "url": "http://feeds.bbci.co.uk/news/rss.xml"},
+        {"name": "CNN", "url": "http://rss.cnn.com/rss/edition.rss"},
+    ],
+    "Anime/Culture": [
+        {"name": "Anime News Network", "url": "https://www.animenewsnetwork.com/news/rss.xml"},
+    ]
+}
 
 class CyberChatManager:
     def __init__(self, llm_service: LLMService, data_dir: Path):
@@ -260,8 +285,15 @@ class CyberChatManager:
 
     async def generate_agent_profile(self, description: str) -> AgentProfile:
         """Use LLM to generate a full agent profile from a short description."""
+        
+        rss_list_str = json.dumps(AVAILABLE_RSS_FEEDS, indent=2)
+        
         prompt = f"""
         Create a detailed persona for a chatroom agent based on this description: "{description}".
+        
+        Also, select 1-3 RSS news feeds from the list below that match this agent's interests.
+        RSS LIST:
+        {rss_list_str}
         
         Return ONLY a JSON object with the following fields:
         - name: A creative username (no spaces preferred).
@@ -269,6 +301,7 @@ class CyberChatManager:
         - language: Primary language (e.g. Chinese).
         - personality: A concise description of their personality.
         - interests: A list of 3-5 topics they are interested in.
+        - subscribed_feeds: A list of selected RSS URLs (strings) from the list above. If none fit, leave empty.
         - style: A description of their speaking style (e.g., slang, formal, emoji usage).
         - system_prompt: Additional instructions for the LLM to act as this character.
         - active_hours: A list of integers (0-23) used as default fallback.
@@ -326,6 +359,7 @@ class CyberChatManager:
                 language=data.get('language', 'Chinese'),
                 personality=data.get('personality', 'A generic user.'),
                 interests=data.get('interests', []),
+                subscribed_feeds=data.get('subscribed_feeds', []),
                 style=data.get('style', 'Normal conversation.'),
                 system_prompt=data.get('system_prompt', ''),
                 schedule=schedule
@@ -353,7 +387,7 @@ class CyberChatManager:
                 self.save_room(room_id)
                 info(f"[CyberChat] Removed {agent_id} from {room_id}")
 
-    async def post_message(self, room_id: str, sender_id: str, sender_name: str, content: str, msg_type: str = "text", reply_to: Optional[str] = None):
+    async def post_message(self, room_id: str, sender_id: str, sender_name: str, content: str, msg_type: str = "text", reply_to: Optional[str] = None, payload: Optional[Dict[str, Any]] = None):
         """
         Post a message to a specific room.
         """
@@ -387,7 +421,8 @@ class CyberChatManager:
             sender_name=sender_name,
             content=content,
             type=msg_type,
-            reply_to=reply_to
+            reply_to=reply_to,
+            payload=payload
         )
         
         # 1. Add to History
@@ -437,12 +472,16 @@ class CyberChatManager:
         self.is_running = False
         info("[CyberChat] Autonomous loop stopped.")
 
-    async def _handle_agent_burst(self, room_id: str, agent: BaseAgent, responses: List[str]):
+    async def _handle_agent_burst(self, room_id: str, agent: BaseAgent, responses: List[Dict[str, Any]]):
         """
         Handle sending a burst of messages from an agent asynchronously.
+        Responses is now a list of dicts: {'content': str, 'reply_to': str|None}
         """
         try:
-            for i, text_msg in enumerate(responses):
+            for i, msg_obj in enumerate(responses):
+                text_msg = msg_obj.get("content", "")
+                reply_to_id = msg_obj.get("reply_to")
+                
                 if not text_msg: continue
                 
                 # Dynamic Typing Delay
@@ -467,7 +506,8 @@ class CyberChatManager:
                     room_id=room_id,
                     sender_id=agent.profile.id,
                     sender_name=agent.profile.name,
-                    content=text_msg
+                    content=text_msg,
+                    reply_to=reply_to_id
                 )
                 
                 # Gap between bubbles in a burst

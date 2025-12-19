@@ -128,7 +128,7 @@ class LLMService:
                 info(f"处理文件: {file_info.get('name', 'unknown')} - 路径: {file_path} - 类型: {file_info.get('type', 'unknown')}")
                 
                 if not file_path.exists():
-                    info(f"❌ 文件不存在: {file_path} (原始路径: {raw_path})")
+                    info(f"[Error] 文件不存在: {file_path} (原始路径: {raw_path})")
                     content_array.append({
                         'type': 'text',
                         'text': f"[系统提示: 文件 {file_info.get('name')} 未找到，无法发送图片内容]"
@@ -138,7 +138,7 @@ class LLMService:
                 # 针对非视觉模型的特殊处理
                 if file_info.get('type') == 'images' and not is_vl_model:
                     # 如果模型不支持视觉，只发送文件路径和提示
-                    info(f"⚠️ 模型 {current_model} 不支持视觉，发送图片路径供 analyze_image 工具使用")
+                    info(f"[Warning] 模型 {current_model} 不支持视觉，发送图片路径供 analyze_image 工具使用")
                     content_array.append({
                         'type': 'text',
                         'text': f"\n[图片文件: {file_info.get('name')}]\n路径: {file_path}\n(提示: 当前模型无法直接查看图片，请使用 analyze_image 工具进行分析)"
@@ -221,7 +221,7 @@ class LLMService:
                                         text_content += f"--- 第 {page_num} 页 ---\n{page_content}\n\n"
                                         info(f"📄 [文件读取] 第{page_num}页 ({version.upper()}) → {content_file.name}")
                             
-                            info(f"✅ [AI助手] 版本管理读取成功: {', '.join(used_versions)}")
+                            info(f"[Success] [AI助手] 版本管理读取成功: {', '.join(used_versions)}")
                             
                             if text_content.strip():
                                 # 清理文本格式
@@ -232,32 +232,32 @@ class LLMService:
                                     'type': 'text',
                                     'text': f"[PDF文件内容: {file_info.get('name', 'unknown')} - 共{total_pages}页]\n\n{text_content}"
                                 })
-                                info(f"✅ [AI助手] PDF内容发送成功，总页数: {total_pages}, 文本长度: {len(text_content)} 字符")
+                                info(f"[Success] [AI助手] PDF内容发送成功，总页数: {total_pages}, 文本长度: {len(text_content)} 字符")
                             else:
                                 # 回退：使用PyPDF直接提取
-                                info(f"⚠️ [AI助手] 版本管理未找到内容，回退到PyPDF直接提取")
+                                info(f"[Warning] [AI助手] 版本管理未找到内容，回退到PyPDF直接提取")
                                 self._extract_pdf_with_pypdf(file_path, file_info, content_array, pdf_reader)
                         
                         except Exception as e:
-                            info(f"❌ [AI助手] 版本管理读取失败: {e}，回退到PyPDF")
+                            info(f"[Error] [AI助手] 版本管理读取失败: {e}，回退到PyPDF")
                             # 回退：使用PyPDF直接提取
                             try:
                                 pdf_reader = pypdf.PdfReader(file_path)
                                 self._extract_pdf_with_pypdf(file_path, file_info, content_array, pdf_reader)
                             except Exception as e2:
-                                info(f"❌ [AI助手] PyPDF提取也失败: {e2}")
+                                info(f"[Error] [AI助手] PyPDF提取也失败: {e2}")
                                 content_array.append({
                                     'type': 'text',
                                     'text': f"[PDF文件: {file_info.get('name', 'unknown')} - 处理失败: {str(e2)}]"
                                 })
                     else:
                         # 没有content_manager，使用PyPDF直接提取
-                        info(f"⚠️ [AI助手] 无content_manager，使用PyPDF直接提取")
+                        info(f"[Warning] [AI助手] 无content_manager，使用PyPDF直接提取")
                         try:
                             pdf_reader = pypdf.PdfReader(file_path)
                             self._extract_pdf_with_pypdf(file_path, file_info, content_array, pdf_reader)
                         except Exception as e:
-                            info(f"❌ [AI助手] PDF处理失败: {e}")
+                            info(f"[Error] [AI助手] PDF处理失败: {e}")
                             content_array.append({
                                 'type': 'text',
                                 'text': f"[PDF文件: {file_info.get('name', 'unknown')} - 处理失败: {str(e)}]"
@@ -375,7 +375,7 @@ class LLMService:
                 provider_config['model'] = override_model
             
             if not provider_config or not provider_config.get('apiKey'):
-                yield f"❌ 错误：{current_provider} API未配置或密钥为空"
+                yield f"[Error] 错误：{current_provider} API未配置或密钥为空"
                 return
             
             info(f"使用 {current_provider} API 进行对话")
@@ -429,11 +429,11 @@ class LLMService:
                 async for chunk in self._call_qwen_api(provider_config, processed_messages, stream):
                     yield chunk
             else:
-                yield f"❌ 错误：不支持的服务商 {current_provider}"
+                yield f"[Error] 错误：不支持的服务商 {current_provider}"
                 
         except Exception as e:
             error(f"LLM API调用失败: {e}")
-            yield f"❌ API调用失败: {str(e)}"
+            yield f"[Error] API调用失败: {str(e)}"
     
     async def _call_openai_api(self, config: Dict, messages: List[Dict], stream: bool) -> AsyncGenerator[str, None]:
         """调用OpenAI API"""
@@ -456,7 +456,7 @@ class LLMService:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        yield f"❌ OpenAI API错误 ({response.status}): {error_text}"
+                        yield f"[Error] OpenAI API错误 ({response.status}): {error_text}"
                         return
                     
                     if stream:
@@ -482,7 +482,7 @@ class LLMService:
                             yield content
                             
         except Exception as e:
-            yield f"❌ OpenAI API调用异常: {str(e)}"
+            yield f"[Error] OpenAI API调用异常: {str(e)}"
     
     async def _call_anthropic_api(self, config: Dict, messages: List[Dict], stream: bool) -> AsyncGenerator[str, None]:
         """调用Anthropic API"""
@@ -548,7 +548,7 @@ class LLMService:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        yield f"❌ Anthropic API错误 ({response.status}): {error_text}"
+                        yield f"[Error] Anthropic API错误 ({response.status}): {error_text}"
                         return
                     
                     if stream:
@@ -573,7 +573,7 @@ class LLMService:
                             yield content
                             
         except Exception as e:
-            yield f"❌ Anthropic API调用异常: {str(e)}"
+            yield f"[Error] Anthropic API调用异常: {str(e)}"
     
     async def _call_gemini_api(self, config: Dict, messages: List[Dict], stream: bool) -> AsyncGenerator[str, None]:
         """调用Gemini API"""
@@ -633,7 +633,7 @@ class LLMService:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        yield f"❌ Gemini API错误 ({response.status}): {error_text}"
+                        yield f"[Error] Gemini API错误 ({response.status}): {error_text}"
                         return
                     
                     if stream:
@@ -661,7 +661,7 @@ class LLMService:
                                             yield part['text']
                             
         except Exception as e:
-            yield f"❌ Gemini API调用异常: {str(e)}"
+            yield f"[Error] Gemini API调用异常: {str(e)}"
     
     async def _call_qwen_api(self, config: Dict, messages: List[Dict], stream: bool) -> AsyncGenerator[str, None]:
         """调用通义千问API（OpenAI兼容模式）"""
@@ -685,7 +685,7 @@ class LLMService:
         # 记录当前模型信息
         is_vl_model = 'vl' in current_model.lower()
         if has_images and not is_vl_model:
-            info(f"ℹ️ 当前为纯文本模型 {current_model}，图片已转换为路径占位符，等待模型调用 analyze_image 工具")
+            info(f"[Info] 当前为纯文本模型 {current_model}，图片已转换为路径占位符，等待模型调用 analyze_image 工具")
 
 
         url = f"{config['baseUrl']}/chat/completions"
@@ -708,7 +708,7 @@ class LLMService:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        yield f"❌ 通义千问API错误 ({response.status}): {error_text}"
+                        yield f"[Error] 通义千问API错误 ({response.status}): {error_text}"
                         return
                     
                     if stream:
@@ -734,7 +734,7 @@ class LLMService:
                             yield content
                             
         except Exception as e:
-            yield f"❌ 通义千问API调用异常: {str(e)}"
+            yield f"[Error] 通义千问API调用异常: {str(e)}"
     
     async def chat_with_tools(
         self,
@@ -802,7 +802,7 @@ class LLMService:
             if not provider_config or not provider_config.get('apiKey'):
                 yield {
                     "type": "error",
-                    "content": f"❌ 错误：{current_provider} API未配置"
+                    "content": f"[Error] 错误：{current_provider} API未配置"
                 }
                 return
             
@@ -876,7 +876,7 @@ class LLMService:
                     async with session.post(url, headers=headers, json=payload) as response:
                         if response.status != 200:
                             error_text = await response.text()
-                            yield {"type": "error", "content": f"❌ API错误: {error_text}"}
+                            yield {"type": "error", "content": f"[Error] API错误: {error_text}"}
                             return
                         
                         chunk_count = 0
@@ -1033,13 +1033,13 @@ class LLMService:
                             except:
                                 yield {
                                     "type": "error",
-                                    "content": f"❌ 工具参数解析失败:\n```\n{arguments_str}\n```"
+                                    "content": f"[Error] 工具参数解析失败:\n```\n{arguments_str}\n```"
                                 }
                                 continue
                         else:
                             yield {
                                 "type": "error",
-                                "content": f"❌ 工具参数格式错误:\n```\n{arguments_str}\n```"
+                                "content": f"[Error] 工具参数格式错误:\n```\n{arguments_str}\n```"
                             }
                             continue
                     
@@ -1108,7 +1108,7 @@ class LLMService:
                     
                     yield {
                         "type": "tool_result",
-                        "content": f"✅ 工具执行完成: {function_name}",
+                        "content": f"[Success] 工具执行完成: {function_name}",
                         "tool_name": function_name,
                         "tool_result": result.data if tool_success else {"error": result.error}
                     }
@@ -1193,7 +1193,7 @@ class LLMService:
                         # 发送暂停提示（作为系统信息）
                         yield {
                             "type": "info",
-                            "content": "⏸️ 执行已暂停"
+                            "content": "[Pause] 执行已暂停"
                         }
 
                         # 暂停执行，结束对话
@@ -1256,7 +1256,7 @@ class LLMService:
                                 }
                                 
                                 # 告知用户还有待办项未完成，可稍后继续
-                                message = f"⏹️ 对话已结束，还有 {remaining} 项待办未完成。如需继续，请重新发送指令或让助手调用 pause_execution 后再继续。"
+                                message = f"[Stop] 对话已结束，还有 {remaining} 项待办未完成。如需继续，请重新发送指令或让助手调用 pause_execution 后再继续。"
                                 yield {
                                     "type": "info",
                                     "content": message
@@ -1275,14 +1275,14 @@ class LLMService:
             # 达到最大迭代次数
             yield {
                 "type": "warning",
-                "content": f"⚠️ 已达到最大工具调用次数 ({max_iterations})，停止执行"
+                "content": f"[Warning] 已达到最大工具调用次数 ({max_iterations})，停止执行"
             }
             
         except Exception as e:
             error(f"[LLM Tools] 工具调用失败: {e}")
             yield {
                 "type": "error",
-                "content": f"❌ 工具调用失败: {str(e)}"
+                "content": f"[Error] 工具调用失败: {str(e)}"
             }
     
     async def _call_llm_with_tools(self, config: Dict, provider: str, messages: List[Dict], tools: List[Dict]) -> Optional[Dict]:
