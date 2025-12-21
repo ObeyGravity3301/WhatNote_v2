@@ -127,7 +127,9 @@ def start_gpt_sovits():
             cwd=GPT_SOVITS_DIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            universal_newlines=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
             bufsize=1,
             env=env,
             shell=False
@@ -278,7 +280,9 @@ def start_backend():
             cwd=BACKEND_DIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            universal_newlines=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
             bufsize=1,
             env=env,
             shell=False
@@ -310,7 +314,9 @@ def start_frontend():
             cwd=FRONTEND_DIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            universal_newlines=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
             bufsize=1,
             env=env,
             shell=False
