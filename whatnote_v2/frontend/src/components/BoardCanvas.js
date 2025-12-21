@@ -10290,13 +10290,38 @@ function BoardCanvas({
   // 获取窗口的z-index
   const getWindowZIndex = (windowId) => {
     if (isDragging && dragState.current.windowId === windowId) {
-      return 9999; // 拖拽时最高
+      return 999999; // 拖拽时最高
     }
     if (isResizing && resizeState.current.windowId === windowId) {
-      return 9999; // 缩放时最高
+      return 999999; // 缩放时最高
+    }
+    // 如果是当前获得焦点的窗口，确保它至少比默认值大
+    if (windowId === focusedWindowId && (!windowZIndexes[windowId] || windowZIndexes[windowId] < maxZIndexRef.current)) {
+       // 这里不直接修改状态避免渲染循环，但返回一个较大的值
+       return maxZIndexRef.current + 1;
     }
     return windowZIndexes[windowId] || 100;
   };
+
+  // 监听外部传入的 focusedWindowId 变化，同步更新 z-index
+  useEffect(() => {
+    if (focusedWindowId) {
+      setWindowZIndexes(prev => {
+        // 如果当前窗口已经是最高层级，就不更新了，避免不必要的渲染
+        if (prev[focusedWindowId] === maxZIndexRef.current) {
+          return prev;
+        }
+
+        const newZIndex = maxZIndexRef.current + 1;
+        maxZIndexRef.current = newZIndex;
+        
+        return {
+          ...prev,
+          [focusedWindowId]: newZIndex
+        };
+      });
+    }
+  }, [focusedWindowId]);
 
   // 开始编辑窗口标题
   const startEditingTitle = (windowId, currentTitle) => {

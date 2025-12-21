@@ -441,9 +441,12 @@ JSON ONLY:
     async def speak(self, room_context: Optional[Dict] = None, available_rooms: List[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         """
         Generate a response using the LLM.
-        available_rooms: List of {'id': '...', 'name': '...'} that the agent can speak in.
-        Returns a list of message objects: [{'content': str, 'reply_to': str|None, 'target_room_id': str|None}]
         """
+        self.last_active_time = time.time() # Update activity timestamp
+        
+        room_name = room_context.get('name', 'Unknown') if room_context else 'Unknown'
+        dlog(f"[DEBUG SPEAK] Agent {self.profile.name} entering speak() for room: {room_name}")
+
         # Mark latest message as processed immediately
         if room_context and room_context.get('history'):
             try:
@@ -531,9 +534,9 @@ JSON ONLY:
             if available_rooms:
                 rooms_desc = ", ".join([f"Name: #{r['name']} (ID: \"{r['id']}\")" for r in available_rooms])
                 context_block += f"\n\n[Accessible Rooms]\nYou are currently in these rooms:\n{rooms_desc}\n"
-                context_block += "INSTRUCTION: To speak in a DIFFERENT room, use: [ACTION: SEND_TO | room_id: \"TARGET_ID\", content: \"Message\"]\n"
-                context_block += "CRITICAL: 'room_id' MUST match an ID from the list above EXACTLY. Do not invent IDs.\n"
-                context_block += "NOTE: To reply to the CURRENT conversation, just output the message normally (NO ACTION needed).\n"
+                context_block += "INSTRUCTION: To SWITCH context and speak in a different room, use: [ACTION: GO_TO | room_id: \"TARGET_ID\"]\n"
+                context_block += "Use this when asked to \"go to\" or \"speak in\" another room. You will be transported there immediately.\n"
+                context_block += "CRITICAL: 'room_id' MUST match an ID from the list above EXACTLY.\n"
             
             # Insert after the agent's persona (index 0)
             if len(messages_to_send) > 0:
@@ -561,38 +564,25 @@ JSON ONLY:
                     if match:
                         clean_text = match.group(1)
                 
-                # CHECK FOR ACTION: SEND_TO (Cross-Room)
-                send_match = re.search(r'\[ACTION: SEND_TO \| room_id: ["\']?(.+?)["\']?, content: ["\']?(.+?)["\']?\]', clean_text)
-                if send_match:
-                    target_room_id = send_match.group(1).strip()
-                    content_msg = send_match.group(2).strip()
-                    dlog(f"\n{'='*50}\n🚀 [AGENT ACTION] {self.profile.name} SENDING TO {target_room_id}: {content_msg}\n{'='*50}\n")
+                # CHECK FOR ACTION: GO_TO (Cross-Room)
+                goto_match = re.search(r'\[ACTION: GO_TO \| room_id: ["\']?(.+?)["\']?\]', clean_text)
+                if goto_match:
+                    target_room_id = goto_match.group(1).strip()
+                    dlog(f"\n{'='*50}\n🚀 [AGENT ACTION] {self.profile.name} GOING TO {target_room_id}!\n{'='*50}\n")
                     
-                    # Return immediately as a structured action
-                    # We can support mixing this with other messages, but let's keep it simple for now.
-                    # Or better, append to valid_msgs list if we want mixed output.
+                    # Return special action
+                    msg_obj = {"content": "", "reply_to": None, "target_room_id": target_room_id, "action": "GO_TO"}
                     
-                    # For now, let's treat it as a valid message with target_room_id
-                    msg_obj = {"content": content_msg, "reply_to": None, "target_room_id": target_room_id}
-                    self.reset_proactive_timer()
+                    # We might also want to leave a message in the CURRENT room (e.g. "On my way!")
+                    # So we remove the action tag and let the rest process
+                    clean_text = clean_text.replace(goto_match.group(0), "")
                     
-                    # We might also want to say something in the current context (e.g. "Okay, done.")
-                    # But the LLM might have outputted that as separate lines.
-                    # Let's remove the action string from clean_text so we can parse the rest?
-                    clean_text = clean_text.replace(send_match.group(0), "")
+                    # If nothing else is said, add a default message to clear typing indicator
+                    if not clean_text.strip():
+                        if 'valid_msgs' not in locals():
+                             valid_msgs = []
+                        valid_msgs.append({"content": "*teleports*", "reply_to": None})
                     
-                    # Add to return list
-                    # But we are inside a "while" loop for tool use (News).
-                    # This action is an EXECUTION action, not a INFO GATHERING action.
-                    # So we should probably return it.
-                    
-                    # Wait, we need to parse the REST of the text too.
-                    # So let's just add it to a list and let the JSON/Line parser handle the rest.
-                    # But clean_text is string.
-                    
-                    # Hack: let's return a list containing this action AND any other parsed lines.
-                    # We'll rely on the standard parser below for the rest, but we need to inject this obj.
-                    # Let's use a temporary list `special_actions`
                     special_actions = [msg_obj]
                 else:
                     special_actions = []

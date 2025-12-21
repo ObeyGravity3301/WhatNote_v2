@@ -452,7 +452,7 @@ class LLMService:
         
         try:
             # 不设置超时，允许长文档处理
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -544,7 +544,7 @@ class LLMService:
         
         try:
             # 不设置超时，允许长文档处理
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -629,7 +629,7 @@ class LLMService:
         
         try:
             # 不设置超时，允许长文档处理
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -704,7 +704,9 @@ class LLMService:
         
         try:
             # 不设置超时，允许长文档处理
-            async with aiohttp.ClientSession() as session:
+            # 增加30s超时避免前端一直闪烁
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False), timeout=timeout) as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -1313,7 +1315,7 @@ class LLMService:
             info(f"[LLM Tools] 调用 {provider} API，工具数: {len(tools)}")
             info(f"[LLM Tools] Payload: {json.dumps({'model': payload['model'], 'tools_count': len(tools), 'messages_count': len(payload['messages'])}, ensure_ascii=False)}")
             
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:
                         error_text = await response.text()

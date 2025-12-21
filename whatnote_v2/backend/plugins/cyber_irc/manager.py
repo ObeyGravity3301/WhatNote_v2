@@ -476,31 +476,61 @@ class CyberChatManager:
         self.is_running = False
         info("[CyberChat] Autonomous loop stopped.")
 
-    async def _handle_agent_burst(self, room_id: str, agent: BaseAgent, responses: List[Dict[str, Any]]):
+    async def _handle_agent_burst(self, room_id: str, agent: BaseAgent, responses: List[Dict[str, Any]], depth: int = 0):
         """
         Handle sending a burst of messages from an agent asynchronously.
-        Responses is now a list of dicts: {'content': str, 'reply_to': str|None, 'target_room_id': str|None}
+        Responses is now a list of dicts: {'content': str, 'reply_to': str|None, 'target_room_id': str|None, 'action': str|None}
         """
+        if depth > 2:
+            info(f"[CyberChat] Burst recursion limit reached for {agent.profile.name}")
+            return
+
         try:
             for i, msg_obj in enumerate(responses):
                 text_msg = msg_obj.get("content", "")
                 reply_to_id = msg_obj.get("reply_to")
                 target_room_id = msg_obj.get("target_room_id")
+                action_type = msg_obj.get("action")
                 
-                if not text_msg: continue
-                
-                # CROSS-ROOM ACTION HANDLING
-                effective_room_id = room_id
-                if target_room_id:
+                # CROSS-ROOM ACTION HANDLING (GO_TO)
+                if action_type == "GO_TO" and target_room_id:
                     # Authentication
                     target_room = self.rooms.get(target_room_id)
+                    
+                    # Prevent Teleporting to SAME room (Infinite Loop Protection)
+                    if target_room_id == room_id:
+                        info(f"[CyberChat] Agent {agent.profile.name} tried to GO_TO current room ({room_id}). Action ignored.")
+                        # If there is text content alongside action, let it be sent as normal message below
+                        if not text_msg: 
+                            text_msg = "*is here*"
+                    
                     # Allow if room exists AND agent is in it
-                    if target_room and agent.profile.id in target_room.active_agents:
-                         effective_room_id = target_room_id
-                         info(f"[CyberChat] Agent {agent.profile.name} remote-sending to {effective_room_id}")
+                    elif target_room and agent.profile.id in target_room.active_agents:
+                         info(f"[CyberChat] Agent {agent.profile.name} TELEPORTING to {target_room_id}")
+                         
+                         # Trigger speak in TARGET room immediately
+                         avail = self._get_agent_rooms(agent.profile.id)
+                         
+                         # Notify typing there
+                         await self.post_message(target_room_id, agent.profile.id, agent.profile.name, "", msg_type="typing_start")
+                         
+                         # Speak in new context!
+                         new_responses = await agent.speak(target_room.dict(), available_rooms=avail)
+                         
+                         if new_responses:
+                             # Recursively handle burst in new room
+                             asyncio.create_task(self._handle_agent_burst(target_room_id, agent, new_responses, depth=depth+1))
+                         
+                         continue # Successful teleport, skip local msg
+
                     else:
-                         info(f"[CyberChat] Agent {agent.profile.name} blocked from sending to {target_room_id} (Not in room or invalid)")
-                         continue # Skip this message
+                         info(f"[CyberChat] Agent {agent.profile.name} blocked from GO_TO {target_room_id}")
+                         continue # Blocked, skip local msg
+                    
+                    # If we are here, it means target_room_id == room_id (Local message fallback)
+                    # Fall through to normal posting logic below
+
+                if not text_msg: continue
                 
                 # Dynamic Typing Delay
                 # Base: 1.5s, Char: 0.15s, Max: 6s
@@ -521,7 +551,7 @@ class CyberChatManager:
                 await asyncio.sleep(typing_delay)
                 
                 await self.post_message(
-                    room_id=effective_room_id,
+                    room_id=room_id, # Standard message stays in current room
                     sender_id=agent.profile.id,
                     sender_name=agent.profile.name,
                     content=text_msg,
@@ -555,6 +585,13 @@ class CyberChatManager:
         info("[CyberChat] Heartbeat loop running...")
         while self.is_running:
             try:
+                # Watchdog: Reset stuck agents
+                now = time.time()
+                for agent in self.agents.values():
+                    if agent.status != "idle" and (now - agent.last_active_time) > 60:
+                        info(f"[Watchdog] Resetting stuck agent {agent.profile.name} to IDLE")
+                        agent.status = "idle"
+
                 await asyncio.sleep(random.uniform(3, 8))
                 # info(f"[CyberChat] Tick. Active rooms: {len(self.rooms)}") 
                 
