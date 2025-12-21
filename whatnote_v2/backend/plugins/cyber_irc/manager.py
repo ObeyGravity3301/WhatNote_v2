@@ -298,6 +298,8 @@ class CyberChatManager:
         Return ONLY a JSON object with the following fields:
         - name: A creative username (no spaces preferred).
         - gender: Gender identity (Male/Female/Non-binary/AI).
+        - birthday: Birthday in MM-DD format (e.g. "05-21").
+        - signature: A short, catchy bio or signature line (max 50 chars).
         - language: Primary language (e.g. Chinese).
         - personality: A concise description of their personality.
         - interests: A list of 3-5 topics they are interested in.
@@ -356,6 +358,8 @@ class CyberChatManager:
                 id=agent_id,
                 name=data.get('name', 'NewUser'),
                 gender=data.get('gender', 'Unknown'),
+                birthday=data.get('birthday', ''),
+                signature=data.get('signature', ''),
                 language=data.get('language', 'Chinese'),
                 personality=data.get('personality', 'A generic user.'),
                 interests=data.get('interests', []),
@@ -475,14 +479,28 @@ class CyberChatManager:
     async def _handle_agent_burst(self, room_id: str, agent: BaseAgent, responses: List[Dict[str, Any]]):
         """
         Handle sending a burst of messages from an agent asynchronously.
-        Responses is now a list of dicts: {'content': str, 'reply_to': str|None}
+        Responses is now a list of dicts: {'content': str, 'reply_to': str|None, 'target_room_id': str|None}
         """
         try:
             for i, msg_obj in enumerate(responses):
                 text_msg = msg_obj.get("content", "")
                 reply_to_id = msg_obj.get("reply_to")
+                target_room_id = msg_obj.get("target_room_id")
                 
                 if not text_msg: continue
+                
+                # CROSS-ROOM ACTION HANDLING
+                effective_room_id = room_id
+                if target_room_id:
+                    # Authentication
+                    target_room = self.rooms.get(target_room_id)
+                    # Allow if room exists AND agent is in it
+                    if target_room and agent.profile.id in target_room.active_agents:
+                         effective_room_id = target_room_id
+                         info(f"[CyberChat] Agent {agent.profile.name} remote-sending to {effective_room_id}")
+                    else:
+                         info(f"[CyberChat] Agent {agent.profile.name} blocked from sending to {target_room_id} (Not in room or invalid)")
+                         continue # Skip this message
                 
                 # Dynamic Typing Delay
                 # Base: 1.5s, Char: 0.15s, Max: 6s
@@ -503,7 +521,7 @@ class CyberChatManager:
                 await asyncio.sleep(typing_delay)
                 
                 await self.post_message(
-                    room_id=room_id,
+                    room_id=effective_room_id,
                     sender_id=agent.profile.id,
                     sender_name=agent.profile.name,
                     content=text_msg,
@@ -520,6 +538,14 @@ class CyberChatManager:
             # But BaseAgent resets status immediately after 'speak' returns.
             # We might want to mark agent as "speaking" during this burst to prevent overlap?
             pass
+
+    def _get_agent_rooms(self, agent_id: str) -> List[Dict[str, str]]:
+        """Get list of rooms this agent is in."""
+        rooms_list = []
+        for r in self.rooms.values():
+            if r.type != 'dm' and agent_id in r.active_agents: 
+                rooms_list.append({"id": r.id, "name": r.name})
+        return rooms_list
 
     async def _loop(self):
         """
@@ -593,7 +619,10 @@ class CyberChatManager:
                                     # Notify Typing
                                     await self.post_message(room_id, target_agent.profile.id, target_agent.profile.name, "", msg_type="typing_start")
                                     
-                                    responses = await target_agent.speak(room.dict())
+                                    # Get available rooms for potential cross-room action
+                                    avail_rooms = self._get_agent_rooms(target_agent.profile.id)
+                                    info(f"[CyberChat] Agent {target_agent.profile.name} sees rooms: {avail_rooms}")
+                                    responses = await target_agent.speak(room.dict(), available_rooms=avail_rooms)
                                     
                                     if responses:
                                         # Spawn async task for burst
@@ -615,7 +644,9 @@ class CyberChatManager:
                             # Notify Typing
                             await self.post_message(room_id, agent.profile.id, agent.profile.name, "", msg_type="typing_start")
                             
-                            responses = await agent.speak(room.dict()) # Pass room context
+                            # Get available rooms (though less useful in Group, still consistent)
+                            avail_rooms = self._get_agent_rooms(agent.profile.id)
+                            responses = await agent.speak(room.dict(), available_rooms=avail_rooms) 
                             if responses:
                                 # Spawn async task for burst
                                 asyncio.create_task(self._handle_agent_burst(room_id, agent, responses))

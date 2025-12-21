@@ -308,7 +308,7 @@
   gap: 1px;
 }
 
-.minimize-btn, .close-btn {
+.minimize-btn, .close-btn, .maximize-btn {
   width: 16px;
   height: 14px;
   background: #c0c0c0;
@@ -328,16 +328,21 @@
   line-height: 1;
 }
 
+.maximize-btn {
+  font-size: 9px;
+  padding-bottom: 1px;
+}
+
 .close-btn {
   font-size: 10px;
   padding-bottom: 1px;
 }
 
-.minimize-btn:hover, .close-btn:hover {
+.minimize-btn:hover, .close-btn:hover, .maximize-btn:hover {
   background: #dfdfdf;
 }
 
-.minimize-btn:active, .close-btn:active {
+.minimize-btn:active, .close-btn:active, .maximize-btn:active {
   border-top: 1px solid #404040;
   border-left: 1px solid #404040;
   border-right: 1px solid #dfdfdf;

@@ -11200,6 +11200,19 @@ function BoardCanvas({
     }
   };
 
+  const handleWindowMaximizeLocal = (windowId) => {
+    console.log('最大化/还原窗口:', windowId);
+    setWindows(prev => prev.map(w => {
+      if (w.id === windowId) {
+        const newState = !w.isMaximized;
+        // 保存状态到后端
+        saveWindowState(windowId, { isMaximized: newState });
+        return { ...w, isMaximized: newState };
+      }
+      return w;
+    }));
+  };
+
   const handleWindowShowLocal = async (windowId) => {
     console.log('显示隐藏窗口:', windowId);
     if (onWindowShow) {
@@ -11620,6 +11633,9 @@ function BoardCanvas({
     
     const windowObj = windows.find(w => w.id === windowId);
     if (!windowObj) return;
+
+    // 如果窗口已最大化，禁止拖拽
+    if (windowObj.isMaximized) return;
     
     // 拖拽时设置焦点
     handleWindowFocusLocal(windowId);
@@ -11772,6 +11788,9 @@ function BoardCanvas({
     console.log('🔴 startResize 函数被调用，窗口ID:', windowObj.id);
     e.preventDefault();
     e.stopPropagation();
+
+    // 如果窗口已最大化，禁止调整大小
+    if (windowObj.isMaximized) return;
     
     // 缩放时设置焦点
     handleWindowFocusLocal(windowObj.id);
@@ -12622,11 +12641,12 @@ function BoardCanvas({
               key={window.id}
               className={`canvas-window ${window.type} ${isDragging && dragState.current.windowId === window.id ? 'dragging' : ''} ${focusedWindowId === window.id ? 'focused' : ''}`}
               style={{
-                left: window.position?.x || 100,
-                top: window.position?.y || 100,
-                width: window.size?.width || 400,
-                height: window.size?.height || 300,
+                left: window.isMaximized ? 0 : (window.position?.x || 100),
+                top: window.isMaximized ? 0 : (window.position?.y || 100),
+                width: window.isMaximized ? '100%' : (window.size?.width || 400),
+                height: window.isMaximized ? 'calc(100% - 28px)' : (window.size?.height || 300),
                 zIndex: getWindowZIndex(window.id),
+                borderRadius: window.isMaximized ? 0 : undefined,
               }}
               onMouseDown={(e) => {
                 console.log(`窗口 ${window.id} 当前位置:`, window.position);
@@ -12681,6 +12701,7 @@ function BoardCanvas({
               <div className="window-controls">
                 {/* Chat 和消息中心窗口只显示关闭按钮，关闭时执行最小化 */}
                 {window.type !== 'chat' && window.type !== 'message-center' && window.type !== 'planner' && (
+                <>
                 <button 
                   className="minimize-btn"
                   onClick={(e) => {
@@ -12693,6 +12714,19 @@ function BoardCanvas({
                 >
                   ⁻
                 </button>
+                <button 
+                  className="maximize-btn"
+                  onClick={(e) => {
+                    console.log('点击了最大化按钮:', window.id);
+                    e.stopPropagation();
+                    e.preventDefault();
+                    handleWindowMaximizeLocal(window.id);
+                  }}
+                  title={window.isMaximized ? "还原" : "最大化"}
+                >
+                  {window.isMaximized ? '❐' : '□'}
+                </button>
+                </>
                 )}
                 <button 
                   className="close-btn"

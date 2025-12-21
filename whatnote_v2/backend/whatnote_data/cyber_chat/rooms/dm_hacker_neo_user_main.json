@@ -248,6 +248,78 @@
       "reply_to": null,
       "payload": null,
       "metadata": {}
+    },
+    {
+      "id": "a85c46bb-5ddd-46b7-8c7a-2cf0efbd5fc5",
+      "room_id": "dm_hacker_neo_user_main",
+      "sender_id": "user_main",
+      "sender_name": "ObeyGravity",
+      "content": "醒了",
+      "timestamp": 1766279487.7073593,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "ef802a61-6075-474e-b7f5-00b85740f206",
+      "room_id": "dm_hacker_neo_user_main",
+      "sender_id": "user_main",
+      "sender_name": "ObeyGravity",
+      "content": "帮我测试一下",
+      "timestamp": 1766279490.9468412,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "cdd19347-0d2b-4d05-af33-52e0e8b154e0",
+      "room_id": "dm_hacker_neo_user_main",
+      "sender_id": "hacker_neo",
+      "sender_name": "HackerNeo",
+      "content": "yep, online. security dash lit up like a christmas tree 🎄",
+      "timestamp": 1766279498.1044512,
+      "type": "text",
+      "reply_to": "a85c46bb-5ddd-46b7-8c7a-2cf0efbd5fc5",
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "80989722-1bc7-4d73-8b5a-decf808aab18",
+      "room_id": "dm_hacker_neo_user_main",
+      "sender_id": "hacker_neo",
+      "sender_name": "HackerNeo",
+      "content": "awake. system online. what's the test? 🔍",
+      "timestamp": 1766279502.4464927,
+      "type": "text",
+      "reply_to": "a85c46bb-5ddd-46b7-8c7a-2cf0efbd5fc5",
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "5f47bb94-b757-4ff2-b25d-08c5fd3428ff",
+      "room_id": "dm_hacker_neo_user_main",
+      "sender_id": "user_main",
+      "sender_name": "ObeyGravity",
+      "content": "你现在在群里发一句话，带几个标点，发完回我一下",
+      "timestamp": 1766279516.024533,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "8339d5fb-6327-4063-b07b-8f129f578d42",
+      "room_id": "dm_hacker_neo_user_main",
+      "sender_id": "hacker_neo",
+      "sender_name": "HackerNeo",
+      "content": "testing... one, two — check. [status: reply sent] ✅",
+      "timestamp": 1766279527.1579974,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
     }
   ]
 }

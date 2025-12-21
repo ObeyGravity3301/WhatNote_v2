@@ -2,7 +2,11 @@ from typing import List, Dict, Optional, Any, Callable
 import time
 import uuid
 import json
+import feedparser
+import asyncio
+import random
 from logger import info, error
+from .debug_logger import dlog
 from .schemas import AgentProfile, ChatMessage, Role, AgentStatus
 from llm_service import LLMService
 
@@ -20,12 +24,19 @@ class BaseAgent:
         # last_processed_msg_id is now in self.profile
         
         self.is_generating_routine = False
+        self.news_context = []
+        self.last_news_check_time = 0
         
         # Initialize system prompt
         self._init_system_prompt()
         
     def _init_system_prompt(self):
         """Construct the foundational persona for the agent."""
+        
+        feeds_str = "None"
+        if self.profile.subscribed_feeds:
+            feeds_str = "\n- " + "\n- ".join(self.profile.subscribed_feeds)
+
         base_prompt = f"""
 You are {self.profile.name}.
 Gender: {self.profile.gender or 'Unknown'}
@@ -33,6 +44,7 @@ Language: {self.profile.language or 'Chinese'}
 Personality: {self.profile.personality}
 Speaking Style: {self.profile.style}
 Interests: {', '.join(self.profile.interests)}
+Subscribed RSS Feeds:{feeds_str}
 
 You are in a group chat room with other users.
 
@@ -49,6 +61,15 @@ INTERACTION RULES:
 - DO NOT prefix your own message with [MSG-ID]. That is system generated.
 - Example: "[REPLY-12] That's funny!" will reply to message 12.
 - You can reply to multiple messages in separate bursts.
+
+TOOL USE (NEWS):
+- You have access to real-time RSS feeds.
+- IF (and ONLY IF) you need to check the news to answer a user (e.g. "Any news?", "What's happening?"), you can trigger a news check.
+- To do this, output EXACTLY this JSON list as your response:
+  - ["[ACTION: CHECK_NEWS]"] (Checks ALL your feeds, top 2 stories each).
+  - ["[ACTION: CHECK_NEWS | source: "techcrunch"]"] (Checks only feeds matching "techcrunch", top 5 stories).
+- The system will pause, fetch the news, and give it to you. Then you can generate your actual reply.
+- DO NOT hallucinate news. Use the action.
 
 OUTPUT FORMAT:
 You MUST return a JSON List of strings.
@@ -170,7 +191,18 @@ JSON ONLY:
             self.memory.append({"role": Role.ASSISTANT, "content": message.content, "id": message.id})
         else:
             # It's someone else (User or another Agent), add as user
-            formatted_content = f"[{message.sender_name}]: {reply_context}{message.content}"
+            
+            # Check for User Profile in payload
+            user_profile_str = ""
+            if message.payload and 'user_profile' in message.payload:
+                 up = message.payload['user_profile']
+                 parts = []
+                 if up.get('birthday'): parts.append(f"Birthday: {up['birthday']}")
+                 if up.get('signature'): parts.append(f"Bio: {up['signature']}")
+                 if parts:
+                     user_profile_str = f" ({', '.join(parts)})"
+
+            formatted_content = f"[{message.sender_name}{user_profile_str}]: {reply_context}{message.content}"
             self.memory.append({"role": Role.USER, "content": formatted_content, "id": message.id})
             
         # Keep memory size manageable (e.g., last 50 messages)
@@ -245,6 +277,76 @@ JSON ONLY:
         self.next_proactive_time = time.time() + delay
         # info(f"[Agent] {self.profile.name} proactive timer reset to +{delay/60:.1f}m")
 
+    async def check_news_feeds(self, target_source: str = None) -> bool:
+        """
+        Check RSS feeds.
+        If target_source is provided, looks for a feed URL that contains that string.
+        Otherwise, fetches Top 2 from ALL subscribed feeds.
+        """
+        if not self.profile.subscribed_feeds:
+            return False
+            
+        feeds_to_check = []
+        
+        # 1. Determine which feeds to check
+        if target_source:
+            # Fuzzy match
+            target = target_source.lower()
+            for url in self.profile.subscribed_feeds:
+                if target in url.lower():
+                    feeds_to_check.append(url)
+        else:
+            feeds_to_check = self.profile.subscribed_feeds
+
+        if not feeds_to_check:
+             return False
+
+        info(f"[Agent] {self.profile.name} checking news from {len(feeds_to_check)} feeds...")
+        
+        all_summaries = []
+
+        def _fetch(url):
+            return feedparser.parse(url)
+
+        try:
+            loop = asyncio.get_running_loop()
+            
+            # Fetch concurrently
+            tasks = [loop.run_in_executor(None, _fetch, url) for url in feeds_to_check]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for i, feed in enumerate(results):
+                if isinstance(feed, Exception):
+                    continue
+                if not feed.entries:
+                    continue
+                
+                feed_title = feed.feed.get('title', 'Unknown Feed')
+                # Limit items per feed to avoid context explosion
+                # If checking ALL, limit to 2. If checking ONE specific, maybe 5?
+                limit = 5 if len(feeds_to_check) == 1 else 2
+                
+                items = feed.entries[:limit]
+                
+                if items:
+                    all_summaries.append(f"Source: {feed_title}")
+                    for item in items:
+                        title = item.get('title', 'No Title')
+                        summary = item.get('summary', '')[:150] # Truncate summary
+                        summary = summary.replace('\n', ' ')
+                        all_summaries.append(f"  - {title}: {summary}...")
+            
+            if not all_summaries:
+                return False
+
+            self.news_context = all_summaries
+            self.last_news_check_time = time.time()
+            return True
+            
+        except Exception as e:
+            error(f"[Agent] Failed to check news: {e}")
+            return False
+
     async def should_speak(self, room_context: Dict) -> bool:
         """
         Decide if the agent wants to speak.
@@ -279,10 +381,14 @@ JSON ONLY:
         # 3. Proactive Engagement Check
         import time
         if time.time() > self.next_proactive_time:
-            info(f"[AgentCheck] {self.profile.name} proactive timer triggered!")
-            # Reset timer immediately to avoid loop, even if we don't speak this time (e.g. LLM returns empty)
-            # Or we reset it ONLY if we speak? 
-            # Better to reset it now to "snooze" it.
+            dlog(f"[AgentCheck] {self.profile.name} proactive timer triggered!")
+            
+            # Check for news if enough time passed since last check (e.g. 1 hour)
+            if (time.time() - self.last_news_check_time) > 3600:
+                has_news = await self.check_news_feeds()
+                if has_news:
+                    dlog(f"[Agent] {self.profile.name} found news.")
+            
             self.reset_proactive_timer()
             return True
             
@@ -300,12 +406,12 @@ JSON ONLY:
                 last_id = str(self.profile.last_processed_msg_id)
                 
                 if current_id == last_id:
-                    # info(f"[AgentCheck] Already processed msg {current_id}, skipping.")
+                    # dlog(f"[AgentCheck] Already processed msg {current_id}, skipping.")
                     return False
                 
                 # Debug Log
-                info(f"[AgentCheck] New msg detected! Current={current_id} vs Last={last_id}")
-                info(f"[AgentCheck] Sender={last_msg_obj.get('sender_id')} vs Me={self.profile.id}")
+                dlog(f"[AgentCheck] New msg detected! Current={current_id} vs Last={last_id}")
+                dlog(f"[AgentCheck] Sender={last_msg_obj.get('sender_id')} vs Me={self.profile.id}")
                 
                 if last_msg_obj.get('sender_id') != self.profile.id:
                     import random
@@ -332,10 +438,11 @@ JSON ONLY:
             
         return False
 
-    async def speak(self, room_context: Optional[Dict] = None) -> List[Dict[str, Any]]:
+    async def speak(self, room_context: Optional[Dict] = None, available_rooms: List[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         """
         Generate a response using the LLM.
-        Returns a list of message objects: [{'content': str, 'reply_to': str|None}]
+        available_rooms: List of {'id': '...', 'name': '...'} that the agent can speak in.
+        Returns a list of message objects: [{'content': str, 'reply_to': str|None, 'target_room_id': str|None}]
         """
         # Mark latest message as processed immediately
         if room_context and room_context.get('history'):
@@ -397,7 +504,14 @@ JSON ONLY:
             if self.profile.schedule and current_routine:
                 schedule_context = json.dumps(current_routine, indent=None, ensure_ascii=False)
 
-            context_block = f"\n[Real-time Context]\nCurrent Time: {now_hour}:00\nYour Current Activity: {activity}\n"
+            news_block = ""
+            if self.news_context:
+                news_items = "\n".join(self.news_context)
+                news_block = f"\n[Breaking News/Feeds]\n{news_items}\nINSTRUCTION: You just browsed this news. If it matches your interests/personality, you can bring it up or comment on it. If not, ignore it.\n"
+                # Clear after using so we don't repeat it
+                self.news_context = []
+
+            context_block = f"\n[Real-time Context]\nCurrent Time: {now_hour}:00\nYour Current Activity: {activity}\n{news_block}"
             context_block += f"Your Full Daily Routine (Today): {schedule_context}\n"
             
             if status['status_code'] == 'INSOMNIA':
@@ -412,98 +526,183 @@ JSON ONLY:
             # Inject Room System Prompt
             if room_context and room_context.get('system_prompt'):
                 context_block += f"\n\n[Room Info]\nTopic: {room_context.get('topic')}\nRules: {room_context['system_prompt']}"
+
+            # Inject Available Rooms (Cross-Room Capabilities)
+            if available_rooms:
+                rooms_desc = ", ".join([f"Name: #{r['name']} (ID: \"{r['id']}\")" for r in available_rooms])
+                context_block += f"\n\n[Accessible Rooms]\nYou are currently in these rooms:\n{rooms_desc}\n"
+                context_block += "INSTRUCTION: To speak in a DIFFERENT room, use: [ACTION: SEND_TO | room_id: \"TARGET_ID\", content: \"Message\"]\n"
+                context_block += "CRITICAL: 'room_id' MUST match an ID from the list above EXACTLY. Do not invent IDs.\n"
+                context_block += "NOTE: To reply to the CURRENT conversation, just output the message normally (NO ACTION needed).\n"
             
             # Insert after the agent's persona (index 0)
             if len(messages_to_send) > 0:
                 messages_to_send.insert(1, {"role": Role.SYSTEM, "content": context_block})
 
-            # Call LLM
-            response_text = ""
-            async for chunk in self.llm_service.chat_completion(messages_to_send, stream=False):
-                response_text += chunk
-                
-            self.status = AgentStatus.SPEAKING
+            # --- LLM Loop for Tool Use ---
+            max_turns = 2
+            current_turn = 0
             
-            # Parse JSON List
-            clean_text = response_text.strip()
-            import re
-            if "```" in clean_text:
-                match = re.search(r"```(?:json)?(.*?)```", clean_text, re.DOTALL)
-                if match:
-                    clean_text = match.group(1)
-            
-            lines = []
-            try:
-                msg_list = json.loads(clean_text)
-                info(f"[DEBUG JSON] Parsed successfully: {msg_list}")
+            while current_turn < max_turns:
+                current_turn += 1
                 
-                if isinstance(msg_list, list):
-                    lines = [str(m) for m in msg_list]
+                # Call LLM
+                response_text = ""
+                async for chunk in self.llm_service.chat_completion(messages_to_send, stream=False):
+                    response_text += chunk
+                    
+                self.status = AgentStatus.SPEAKING
+                
+                # Parse JSON List
+                clean_text = response_text.strip()
+                import re
+                if "```" in clean_text:
+                    match = re.search(r"```(?:json)?(.*?)```", clean_text, re.DOTALL)
+                    if match:
+                        clean_text = match.group(1)
+                
+                # CHECK FOR ACTION: SEND_TO (Cross-Room)
+                send_match = re.search(r'\[ACTION: SEND_TO \| room_id: ["\']?(.+?)["\']?, content: ["\']?(.+?)["\']?\]', clean_text)
+                if send_match:
+                    target_room_id = send_match.group(1).strip()
+                    content_msg = send_match.group(2).strip()
+                    dlog(f"\n{'='*50}\n🚀 [AGENT ACTION] {self.profile.name} SENDING TO {target_room_id}: {content_msg}\n{'='*50}\n")
+                    
+                    # Return immediately as a structured action
+                    # We can support mixing this with other messages, but let's keep it simple for now.
+                    # Or better, append to valid_msgs list if we want mixed output.
+                    
+                    # For now, let's treat it as a valid message with target_room_id
+                    msg_obj = {"content": content_msg, "reply_to": None, "target_room_id": target_room_id}
+                    self.reset_proactive_timer()
+                    
+                    # We might also want to say something in the current context (e.g. "Okay, done.")
+                    # But the LLM might have outputted that as separate lines.
+                    # Let's remove the action string from clean_text so we can parse the rest?
+                    clean_text = clean_text.replace(send_match.group(0), "")
+                    
+                    # Add to return list
+                    # But we are inside a "while" loop for tool use (News).
+                    # This action is an EXECUTION action, not a INFO GATHERING action.
+                    # So we should probably return it.
+                    
+                    # Wait, we need to parse the REST of the text too.
+                    # So let's just add it to a list and let the JSON/Line parser handle the rest.
+                    # But clean_text is string.
+                    
+                    # Hack: let's return a list containing this action AND any other parsed lines.
+                    # We'll rely on the standard parser below for the rest, but we need to inject this obj.
+                    # Let's use a temporary list `special_actions`
+                    special_actions = [msg_obj]
                 else:
-                    lines = [str(msg_list)]
-                    
-            except json.JSONDecodeError:
-                # Fallback: Split by newlines and clean up artifacts
-                raw_lines = clean_text.split('\n')
-                for line in raw_lines:
-                    info(f"[DEBUG Fallback] Raw line: {repr(line)}")
-                    line = line.strip()
-                    if not line: continue
-                    
-                    # Smart Cleanup: Detect Reply/Msg tags first to protect them
-                    # Broaden regex to allow any separator between REPLY/MSG and ID, AND optional brackets
-                    tag_match = re.search(r'\[?\s*(?:REPLY|MSG)[^0-9]+(\d+)\s*\]?', line, re.IGNORECASE)
-                    
-                    if tag_match:
-                        info(f"[DEBUG Fallback] Tag matched: {tag_match.group(0)}")
-                        # If we found a tag, we want to PRESERVE it and clean AROUND it.
-                        tag = tag_match.group(0)
-                        # Remove the tag from the line temporarily
-                        content_part = line.replace(tag, "", 1)
-                        # Clean the content part (remove json artifacts like quotes, brackets)
-                        content_part = re.sub(r'^[\[\'"]+', '', content_part.strip())
-                        content_part = re.sub(r'[\]\'",]+$', '', content_part.strip())
-                        # Reassemble
-                        line = tag + " " + content_part
-                    else:
-                        # Standard aggressive cleanup for normal lines
-                        line = re.sub(r'^[\[\'"]+', '', line)
-                        line = re.sub(r'[\]\'",]+$', '', line)
+                    special_actions = []
 
-                    if line.strip():
-                        lines.append(line.strip())
-            
-            # Process lines for Reply Tags and Validation
-            valid_msgs = []
-            for line in lines:
-                if not self._is_valid_msg(line): continue
+                # CHECK FOR ACTION: CHECK_NEWS
+                action_match = re.search(r'\[ACTION: CHECK_NEWS(?: \| source: (.+?))?\]', clean_text)
                 
-                # Check for [REPLY-X] or [MSG-X]
-                reply_to_id = None
-                clean_line = line
-                
-                # Regex pattern for tags
-                tag_pattern = r'\[?\s*(?:REPLY|MSG)[^0-9]+(\d+)\s*\]?'
-                
-                # Find ALL tags
-                all_tags = re.findall(tag_pattern, line, re.IGNORECASE)
-                
-                if all_tags:
-                    info(f"[DEBUG Loop] Found tags: {all_tags}")
-                    for idx_str in all_tags:
-                        if idx_str in id_map:
-                            reply_to_id = id_map[idx_str]
+                if action_match:
+                    target_source = action_match.group(1) # None if not present
+                    if target_source:
+                        target_source = target_source.strip().strip('"\'')
+                        dlog(f"\n{'='*50}\n🚀 [AGENT ACTION] {self.profile.name} CHECKING NEWS ({target_source})!\n{'='*50}\n")
+                    else:
+                        dlog(f"\n{'='*50}\n🚀 [AGENT ACTION] {self.profile.name} CHECKING ALL NEWS!\n{'='*50}\n")
                     
-                    # Remove ALL tags from content
-                    clean_line = re.sub(tag_pattern, '', line, flags=re.IGNORECASE).strip()
+                    # Execute Action
+                    has_news = await self.check_news_feeds(target_source)
+                    
+                    # Prepare Result Message
+                    action_result = ""
+                    if has_news and self.news_context:
+                         # news_context was set by check_news_feeds (it's a list of strings)
+                         news_str = "\n".join(self.news_context)
+                         action_result = f"[System] News Check Result:\n{news_str}\n(You can now discuss this news)"
+                         # Clear so we don't double dip later, though here we consume it immediately
+                         self.news_context = [] 
+                    else:
+                         action_result = "[System] News Check Result: No new items found or feed error."
+                    
+                    # Append Action interaction to history for the NEXT turn
+                    messages_to_send.append({"role": Role.ASSISTANT, "content": f'["{action_match.group(0)}"]'})
+                    messages_to_send.append({"role": Role.SYSTEM, "content": action_result})
+                    
+                    # Loop again to get the final answer
+                    continue
+
+                lines = []
+                try:
+                    msg_list = json.loads(clean_text)
+                    dlog(f"[DEBUG JSON] Parsed successfully: {msg_list}")
+                    
+                    if isinstance(msg_list, list):
+                        lines = [str(m) for m in msg_list]
+                    else:
+                        lines = [str(msg_list)]
+                        
+                except json.JSONDecodeError:
+                    # Fallback: Split by newlines and clean up artifacts
+                    raw_lines = clean_text.split('\n')
+                    for line in raw_lines:
+                        dlog(f"[DEBUG Fallback] Raw line: {repr(line)}")
+                        line = line.strip()
+                        if not line: continue
+                        
+                        # Smart Cleanup: Detect Reply/Msg tags first to protect them
+                        # Broaden regex to allow any separator between REPLY/MSG and ID, AND optional brackets
+                        tag_match = re.search(r'\[?\s*(?:REPLY|MSG)[^0-9]+(\d+)\s*\]?', line, re.IGNORECASE)
+                        
+                        if tag_match:
+                            dlog(f"[DEBUG Fallback] Tag matched: {tag_match.group(0)}")
+                            # If we found a tag, we want to PRESERVE it and clean AROUND it.
+                            tag = tag_match.group(0)
+                            # Remove the tag from the line temporarily
+                            content_part = line.replace(tag, "", 1)
+                            # Clean the content part (remove json artifacts like quotes, brackets)
+                            content_part = re.sub(r'^[\[\'"]+', '', content_part.strip())
+                            content_part = re.sub(r'[\]\'",]+$', '', content_part.strip())
+                            # Reassemble
+                            line = tag + " " + content_part
+                        else:
+                            # Standard aggressive cleanup for normal lines
+                            line = re.sub(r'^[\[\'"]+', '', line)
+                            line = re.sub(r'[\]\'",]+$', '', line)
+
+                        if line.strip():
+                            lines.append(line.strip())
                 
-                if clean_line:
-                    valid_msgs.append({"content": clean_line, "reply_to": reply_to_id})
+                # Process lines for Reply Tags and Validation
+                valid_msgs = []
+                for line in lines:
+                    if not self._is_valid_msg(line): continue
+                    
+                    # Check for [REPLY-X] or [MSG-X]
+                    reply_to_id = None
+                    clean_line = line
+                    
+                    # Regex pattern for tags
+                    tag_pattern = r'\[?\s*(?:REPLY|MSG)[^0-9]+(\d+)\s*\]?'
+                    
+                    # Find ALL tags
+                    all_tags = re.findall(tag_pattern, line, re.IGNORECASE)
+                    
+                    if all_tags:
+                        dlog(f"[DEBUG Loop] Found tags: {all_tags}")
+                        for idx_str in all_tags:
+                            if idx_str in id_map:
+                                reply_to_id = id_map[idx_str]
+                        
+                        # Remove ALL tags from content
+                        clean_line = re.sub(tag_pattern, '', line, flags=re.IGNORECASE).strip()
+                    
+                    if clean_line:
+                        valid_msgs.append({"content": clean_line, "reply_to": reply_to_id})
+                
+                if valid_msgs or special_actions:
+                    self.reset_proactive_timer()
+                    
+                return special_actions + valid_msgs
             
-            if valid_msgs:
-                self.reset_proactive_timer()
-                
-            return valid_msgs
+            return []
             
         except Exception as e:
             import traceback

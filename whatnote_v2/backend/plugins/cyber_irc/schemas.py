@@ -39,6 +39,8 @@ class AgentProfile(BaseModel):
     name: str
     avatar: Optional[str] = "default_avatar.png"
     gender: Optional[str] = Field(None, description="Gender identity (e.g. Male, Female, Non-binary, AI)")
+    birthday: Optional[str] = Field(None, description="Birthday (MM-DD)")
+    signature: Optional[str] = Field(None, description="Short bio or signature")
     language: Optional[str] = Field("Chinese", description="Primary language (e.g. Chinese, English)")
     personality: str = Field(..., description="The personality description of the agent")
     interests: List[str] = Field(default_factory=list, description="Topics the agent is interested in")

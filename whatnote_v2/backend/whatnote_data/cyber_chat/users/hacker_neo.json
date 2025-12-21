@@ -3,6 +3,8 @@
   "name": "HackerNeo",
   "avatar": "default_avatar.png",
   "gender": null,
+  "birthday": null,
+  "signature": null,
   "language": "Chinese",
   "personality": "Cybersecurity expert. Knowledgeable but chill. Skeptical of big tech.",
   "interests": [
@@ -62,5 +64,6 @@
     },
     "daily_routine_weekend": null
   },
-  "last_processed_msg_id": "95fce298-d9f3-464d-a274-957015b66aae"
+  "subscribed_feeds": [],
+  "last_processed_msg_id": "5f47bb94-b757-4ff2-b25d-08c5fd3428ff"
 }

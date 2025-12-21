@@ -274,6 +274,16 @@ const CyberIRCWindow = ({ window: windowData }) => {
   const [replyingTo, setReplyingTo] = useState(null); // Message object being replied to
   const [viewingImage, setViewingImage] = useState(null); // URL of image being viewed
 
+  // User Profile State
+  const [showUserProfile, setShowUserProfile] = useState(false);
+  const [userProfile, setUserProfile] = useState(() => {
+      try {
+          const saved = localStorage.getItem('cyber_irc_user_profile');
+          if (saved) return JSON.parse(saved);
+      } catch(e) {}
+      return { name: 'User', birthday: '', signature: '' };
+  });
+
   // --- Data Fetching ---
 
   const fetchAgentDetails = async (agentId) => {
@@ -494,6 +504,11 @@ const CyberIRCWindow = ({ window: windowData }) => {
 
   // --- Actions ---
 
+  const handleSaveUserProfile = () => {
+      localStorage.setItem('cyber_irc_user_profile', JSON.stringify(userProfile));
+      setShowUserProfile(false);
+  };
+
   const handleSend = async () => {
     if (!inputValue.trim()) return;
     const content = inputValue;
@@ -509,8 +524,14 @@ const CyberIRCWindow = ({ window: windowData }) => {
         body: JSON.stringify({ 
             content, 
             room_id: currentRoom.id, 
-            sender_name: "User",
-            reply_to: replyId 
+            sender_name: userProfile.name,
+            reply_to: replyId,
+            payload: {
+                user_profile: {
+                    birthday: userProfile.birthday,
+                    signature: userProfile.signature
+                }
+            }
         })
       });
     } catch (e) { console.error(e); }
@@ -599,7 +620,7 @@ const CyberIRCWindow = ({ window: windowData }) => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('room_id', currentRoom.id);
-      formData.append('sender_name', "User");
+      formData.append('sender_name', userProfile.name);
       
       try {
           const res = await fetch(`${API_BASE}/upload_image`, {
@@ -833,7 +854,10 @@ const CyberIRCWindow = ({ window: windowData }) => {
               </div>
             </div>
             <div style={styles.sidebarList}>
-              <div style={styles.listItem}><div style={{...styles.statusDot, backgroundColor: '#00ff00'}}></div>User</div>
+              <div style={{...styles.listItem, cursor:'pointer'}} onClick={() => setShowUserProfile(true)}>
+                  <div style={{...styles.statusDot, backgroundColor: '#00ff00'}}></div>
+                  {userProfile.name} (You) <span style={{fontSize:'9px', color:'#aaa', marginLeft:'4px'}}>[EDIT]</span>
+              </div>
               {agents.map(a => (
                 <div key={a.id} style={styles.listItem} title={a.personality} onClick={() => handleShowProfile(a.id)}>
                   <div style={{...styles.statusDot, backgroundColor: a.is_online ? '#00ff00' : '#555555'}}></div>
@@ -1024,16 +1048,35 @@ const CyberIRCWindow = ({ window: windowData }) => {
                     </button>
                 </div>
 
-                <div style={{marginBottom:'12px', borderBottom:'1px solid #333', paddingBottom:'8px'}}>
-                    <strong style={{color:'#00aa00', fontSize:'11px'}}>PERSONALITY</strong>
-                    <div style={{fontSize:'12px', marginTop:'4px'}}>{showProfile.personality}</div>
-                    <div style={{fontSize:'11px', color:'#888', marginTop:'4px'}}>
-                        {showProfile.gender} | {showProfile.language}
-                    </div>
-                </div>
+              <div style={{marginBottom:'12px', borderBottom:'1px solid #333', paddingBottom:'8px'}}>
+                  <strong style={{color:'#00aa00', fontSize:'11px'}}>PERSONALITY</strong>
+                  <div style={{fontSize:'12px', marginTop:'4px'}}>{showProfile.personality}</div>
+                  <div style={{fontSize:'11px', color:'#888', marginTop:'4px'}}>
+                      {showProfile.gender} | {showProfile.language}
+                      {showProfile.birthday && ` | 🎂 ${showProfile.birthday}`}
+                  </div>
+                  {showProfile.signature && (
+                      <div style={{fontSize:'11px', color:'#00aaaa', marginTop:'4px', fontStyle:'italic'}}>
+                          "{showProfile.signature}"
+                      </div>
+                  )}
+              </div>
 
-                <div style={{marginBottom:'12px', borderBottom:'1px solid #333', paddingBottom:'8px'}}>
-                    <strong style={{color:'#00aa00', fontSize:'11px'}}>CURRENT STATUS</strong>
+              {showProfile.subscribed_feeds && showProfile.subscribed_feeds.length > 0 && (
+                  <div style={{marginBottom:'12px', borderBottom:'1px solid #333', paddingBottom:'8px'}}>
+                      <strong style={{color:'#00aa00', fontSize:'11px'}}>SUBSCRIBED FEEDS</strong>
+                      <div style={{marginTop:'4px'}}>
+                          {showProfile.subscribed_feeds.map((feed, idx) => (
+                              <div key={idx} style={{fontSize:'11px', color:'#ccc', marginBottom:'2px'}}>
+                                  • {feed}
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              )}
+
+              <div style={{marginBottom:'12px', borderBottom:'1px solid #333', paddingBottom:'8px'}}>
+                  <strong style={{color:'#00aa00', fontSize:'11px'}}>CURRENT STATUS</strong>
                     <div style={{fontSize:'12px', marginTop:'4px', fontStyle:'italic', color:'#00ffff'}}>
                         "{showProfile.current_activity || 'Unknown activity'}"
                     </div>
@@ -1091,6 +1134,23 @@ const CyberIRCWindow = ({ window: windowData }) => {
         </Modal>
       )}
 
+      {showUserProfile && (
+        <Modal title="EDIT MY PROFILE" onClose={() => setShowUserProfile(false)} onConfirm={handleSaveUserProfile} confirmText="SAVE">
+            <div style={styles.formGroup}>
+                <label style={styles.label}>Nickname</label>
+                <input style={styles.formInput} value={userProfile.name} onChange={e => setUserProfile({...userProfile, name: e.target.value})} />
+            </div>
+            <div style={styles.formGroup}>
+                <label style={styles.label}>Birthday (MM-DD)</label>
+                <input style={styles.formInput} value={userProfile.birthday} onChange={e => setUserProfile({...userProfile, birthday: e.target.value})} placeholder="e.g. 05-21" />
+            </div>
+            <div style={styles.formGroup}>
+                <label style={styles.label}>Signature / Bio</label>
+                <input style={styles.formInput} value={userProfile.signature} onChange={e => setUserProfile({...userProfile, signature: e.target.value})} placeholder="Short bio..." />
+            </div>
+        </Modal>
+      )}
+
       {showCreateRoom && (
         <Modal title="CREATE NEW ROOM" onClose={() => setShowCreateRoom(false)} onConfirm={handleCreateRoom} confirmText="CREATE">
           <div style={styles.formGroup}>
@@ -1134,6 +1194,17 @@ const CyberIRCWindow = ({ window: windowData }) => {
               <p><strong style={{color: '#fff'}}>Role:</strong> {generatedAgent.personality}</p>
               <p><strong style={{color: '#fff'}}>Style:</strong> {generatedAgent.style}</p>
               
+              {generatedAgent.subscribed_feeds && generatedAgent.subscribed_feeds.length > 0 && (
+                  <div style={{marginTop: '8px', borderTop: '1px solid #333', paddingTop: '4px'}}>
+                      <strong style={{color: '#00ff00'}}>SUBSCRIBED FEEDS</strong>
+                      <div style={{marginTop:'4px'}}>
+                          {generatedAgent.subscribed_feeds.map((feed, idx) => (
+                              <div key={idx} style={{fontSize:'11px', color:'#ccc'}}>• {feed}</div>
+                          ))}
+                      </div>
+                  </div>
+              )}
+
               <div style={{marginTop: '8px', borderTop: '1px solid #333', paddingTop: '4px'}}>
                 <strong style={{color: '#00ff00'}}>SCHEDULE</strong>
                 
