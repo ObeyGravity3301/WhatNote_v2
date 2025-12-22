@@ -1053,41 +1053,6 @@ async def upload_file_to_window(
         error(f"详细错误信息: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/boards/{board_id}/files/{filename}")
-async def get_board_file(board_id: str, filename: str):
-    """获取展板文件（自动查找课程路径）"""
-    try:
-        # 查找展板目录
-        board_dir = None
-        for course_dir in content_manager.file_manager.courses_dir.iterdir():
-            if course_dir.is_dir():
-                potential_board_dir = course_dir / board_id
-                if potential_board_dir.exists():
-                    board_dir = potential_board_dir
-                    break
-        
-        if not board_dir:
-            raise HTTPException(status_code=404, detail="展板不存在")
-            
-        file_path = board_dir / "files" / filename
-        
-        if not file_path.exists():
-            # 尝试 URL 解码文件名再次查找
-            import urllib.parse
-            decoded_filename = urllib.parse.unquote(filename)
-            file_path = board_dir / "files" / decoded_filename
-            
-            if not file_path.exists():
-                raise HTTPException(status_code=404, detail="文件不存在")
-        
-        return FileResponse(file_path)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        error(f"获取文件失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 # PDF文本提取API
 @app.post("/api/boards/{board_id}/windows/{window_id}/extract-text")
 async def extract_pdf_text(board_id: str, window_id: str):
@@ -5717,10 +5682,4 @@ async def generate_batch_summary_note(
     except Exception as e:
         error(f"生成全文档笔记失败: {e}")
         raise HTTPException(status_code=500, detail=f"生成全文档笔记失败: {str(e)}")
-
-
-# ... imports ...
-from pydantic import BaseModel
-
-# ... other models ...
 
