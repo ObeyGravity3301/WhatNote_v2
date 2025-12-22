@@ -198,6 +198,43 @@ const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument }) => {
 
 // PDF分页组件
 function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter, setConfirmDialog }) {
+  const PAGINATION_TOOLBAR_ITEM_STYLE = {
+    padding: '1px 8px',
+    fontSize: '11px',
+    backgroundColor: 'transparent',
+    border: '1px solid transparent',
+    borderRadius: '0px',
+    cursor: 'pointer',
+    fontFamily: 'MS Sans Serif, sans-serif',
+    height: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#000000',
+    gap: '4px'
+  };
+
+  const handlePaginationMouseEnter = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px outset #ffffff';
+    e.currentTarget.style.backgroundColor = '#c0c0c0';
+  };
+
+  const handlePaginationMouseLeave = (e) => {
+    e.currentTarget.style.border = '1px solid transparent';
+    e.currentTarget.style.backgroundColor = 'transparent';
+  };
+
+  const handlePaginationMouseDown = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px inset #ffffff';
+  };
+
+  const handlePaginationMouseUp = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px outset #ffffff';
+  };
+
   const [pdfDocument, setPdfDocument] = useState(null);
   const [currentPage, setCurrentPage] = useState(initialPage || 1);
   const [totalPages, setTotalPages] = useState(0);
@@ -1025,15 +1062,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         <div>❌ {error}</div>
         <button 
           onClick={onClose}
-          style={{
-            padding: '4px 8px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif'
-          }}
+          style={PAGINATION_TOOLBAR_ITEM_STYLE}
+          onMouseEnter={handlePaginationMouseEnter}
+          onMouseLeave={handlePaginationMouseLeave}
+          onMouseDown={handlePaginationMouseDown}
+          onMouseUp={handlePaginationMouseUp}
         >
           关闭
         </button>
@@ -1065,19 +1098,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           onClick={goToPreviousPage}
           disabled={currentPage <= 1}
           style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: currentPage <= 1 ? '#a0a0a0' : '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '40px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+            ...PAGINATION_TOOLBAR_ITEM_STYLE,
+            backgroundColor: currentPage <= 1 ? 'transparent' : 'transparent',
+            opacity: currentPage <= 1 ? 0.5 : 1
           }}
+          onMouseEnter={handlePaginationMouseEnter}
+          onMouseLeave={handlePaginationMouseLeave}
+          onMouseDown={handlePaginationMouseDown}
+          onMouseUp={handlePaginationMouseUp}
         >
           ←
         </button>
@@ -1113,19 +1141,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           onClick={goToNextPage}
           disabled={currentPage >= totalPages}
           style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: currentPage >= totalPages ? '#a0a0a0' : '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '40px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+            ...PAGINATION_TOOLBAR_ITEM_STYLE,
+            backgroundColor: currentPage >= totalPages ? 'transparent' : 'transparent',
+            opacity: currentPage >= totalPages ? 0.5 : 1
           }}
+          onMouseEnter={handlePaginationMouseEnter}
+          onMouseLeave={handlePaginationMouseLeave}
+          onMouseDown={handlePaginationMouseDown}
+          onMouseUp={handlePaginationMouseUp}
         >
           →
         </button>
@@ -1134,20 +1157,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginLeft: '8px' }}>
           <button
             onClick={handleZoomOut}
-            style={{
-              padding: '1px 6px',
-              fontSize: '11px',
-              backgroundColor: '#c0c0c0',
-              border: '2px outset #c0c0c0',
-              borderRadius: '0px',
-              cursor: 'pointer',
-              fontFamily: 'MS Sans Serif, sans-serif',
-              height: '20px',
-              minWidth: '30px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
+            style={PAGINATION_TOOLBAR_ITEM_STYLE}
+            onMouseEnter={handlePaginationMouseEnter}
+            onMouseLeave={handlePaginationMouseLeave}
+            onMouseDown={handlePaginationMouseDown}
+            onMouseUp={handlePaginationMouseUp}
           >
             −
           </button>
@@ -1163,40 +1177,22 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           
           <button
             onClick={handleZoomIn}
-            style={{
-              padding: '1px 6px',
-              fontSize: '11px',
-              backgroundColor: '#c0c0c0',
-              border: '2px outset #c0c0c0',
-              borderRadius: '0px',
-              cursor: 'pointer',
-              fontFamily: 'MS Sans Serif, sans-serif',
-              height: '20px',
-              minWidth: '30px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
+            style={PAGINATION_TOOLBAR_ITEM_STYLE}
+            onMouseEnter={handlePaginationMouseEnter}
+            onMouseLeave={handlePaginationMouseLeave}
+            onMouseDown={handlePaginationMouseDown}
+            onMouseUp={handlePaginationMouseUp}
           >
             +
           </button>
           
           <button
             onClick={handleZoomReset}
-            style={{
-              padding: '1px 6px',
-              fontSize: '11px',
-              backgroundColor: '#c0c0c0',
-              border: '2px outset #c0c0c0',
-              borderRadius: '0px',
-              cursor: 'pointer',
-              fontFamily: 'MS Sans Serif, sans-serif',
-              height: '20px',
-              minWidth: '30px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
+            style={PAGINATION_TOOLBAR_ITEM_STYLE}
+            onMouseEnter={handlePaginationMouseEnter}
+            onMouseLeave={handlePaginationMouseLeave}
+            onMouseDown={handlePaginationMouseDown}
+            onMouseUp={handlePaginationMouseUp}
           >
             重置
           </button>
@@ -1210,21 +1206,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               console.log('大纲面板切换:', !showOutlinePanel);
             }}
             style={{
-              padding: '1px 8px',
-              fontSize: '11px',
-              backgroundColor: showOutlinePanel ? '#a0a0a0' : '#c0c0c0',
-              border: '2px outset #c0c0c0',
-              borderRadius: '0px',
-              cursor: 'pointer',
-              fontFamily: 'MS Sans Serif, sans-serif',
-              height: '20px',
-              minWidth: '50px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              ...PAGINATION_TOOLBAR_ITEM_STYLE,
+              backgroundColor: showOutlinePanel ? '#a0a0a0' : 'transparent',
               marginLeft: 'auto',
               marginRight: '8px'
             }}
+            onMouseEnter={handlePaginationMouseEnter}
+            onMouseLeave={handlePaginationMouseLeave}
+            onMouseDown={handlePaginationMouseDown}
+            onMouseUp={handlePaginationMouseUp}
             title={showOutlinePanel ? "隐藏大纲" : "显示大纲"}
           >
             大纲
@@ -1238,21 +1228,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             console.log('注释面板切换:', !showAnnotationPanel);
           }}
           style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: showAnnotationPanel ? '#a0a0a0' : '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '50px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            ...PAGINATION_TOOLBAR_ITEM_STYLE,
+            backgroundColor: showAnnotationPanel ? '#a0a0a0' : 'transparent',
             marginLeft: batchOutline ? '0' : 'auto',
             marginRight: '8px'
           }}
+          onMouseEnter={handlePaginationMouseEnter}
+          onMouseLeave={handlePaginationMouseLeave}
+          onMouseDown={handlePaginationMouseDown}
+          onMouseUp={handlePaginationMouseUp}
           title={showAnnotationPanel ? "隐藏注释" : "显示注释"}
         >
           📝 注释
@@ -1266,20 +1250,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               console.log('搜索面板切换:', !showSearchPanel);
             }}
             style={{
-              padding: '1px 8px',
-              fontSize: '11px',
-              backgroundColor: showSearchPanel ? '#a0a0a0' : '#c0c0c0',
-              border: '2px outset #c0c0c0',
-              borderRadius: '0px',
-              cursor: 'pointer',
-              fontFamily: 'MS Sans Serif, sans-serif',
-              height: '20px',
-              minWidth: '50px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              ...PAGINATION_TOOLBAR_ITEM_STYLE,
+              backgroundColor: showSearchPanel ? '#a0a0a0' : 'transparent',
               marginRight: '8px'
             }}
+            onMouseEnter={handlePaginationMouseEnter}
+            onMouseLeave={handlePaginationMouseLeave}
+            onMouseDown={handlePaginationMouseDown}
+            onMouseUp={handlePaginationMouseUp}
             title={showSearchPanel ? "隐藏搜索" : "语义搜索"}
           >
             🔍 搜索
@@ -1364,20 +1342,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             console.log('页面提取面板切换:', !showPageExtractPanel);
           }}
           style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: showPageExtractPanel ? '#a0a0a0' : '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '50px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            ...PAGINATION_TOOLBAR_ITEM_STYLE,
+            backgroundColor: showPageExtractPanel ? '#a0a0a0' : 'transparent',
             marginRight: '8px'
           }}
+          onMouseEnter={handlePaginationMouseEnter}
+          onMouseLeave={handlePaginationMouseLeave}
+          onMouseDown={handlePaginationMouseDown}
+          onMouseUp={handlePaginationMouseUp}
           title={showPageExtractPanel ? "隐藏提取面板" : "提取页面内容"}
         >
           📸 提取
@@ -1386,20 +1358,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         {/* 关闭分页模式按钮 */}
         <button
           onClick={onClose}
-          style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '60px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
+          style={PAGINATION_TOOLBAR_ITEM_STYLE}
+          onMouseEnter={handlePaginationMouseEnter}
+          onMouseLeave={handlePaginationMouseLeave}
+          onMouseDown={handlePaginationMouseDown}
+          onMouseUp={handlePaginationMouseUp}
         >
           关闭分页
         </button>
@@ -1464,17 +1427,16 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               onClick={handleSearch}
               disabled={isSearching || !searchQuery.trim()}
               style={{
-                padding: '4px 12px',
-                fontSize: '11px',
-                backgroundColor: isSearching ? '#808080' : '#0078d4',
-                color: '#ffffff',
-                border: '2px outset #0078d4',
-                borderRadius: '0px',
-                cursor: isSearching || !searchQuery.trim() ? 'not-allowed' : 'pointer',
-                fontFamily: 'MS Sans Serif, sans-serif',
+                ...PAGINATION_TOOLBAR_ITEM_STYLE,
+                backgroundColor: isSearching ? 'transparent' : 'transparent',
+                opacity: isSearching || !searchQuery.trim() ? 0.6 : 1,
                 fontWeight: 'bold',
                 minWidth: '60px'
               }}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
             >
               {isSearching ? '搜索中...' : '搜索'}
             </button>
@@ -1485,17 +1447,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 setSearchQuery('');
               }}
               style={{
-                padding: '4px 8px',
-                fontSize: '11px',
-                backgroundColor: '#c0c0c0',
-                color: '#000000',
-                border: '2px outset #ffffff',
-                borderRadius: '0px',
-                cursor: 'pointer',
-                fontFamily: 'MS Sans Serif, sans-serif',
+                ...PAGINATION_TOOLBAR_ITEM_STYLE,
                 fontWeight: 'bold',
                 minWidth: '40px'
               }}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
               title="关闭搜索"
             >
               关闭
@@ -1537,12 +1496,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     }
                   }}
                   style={{
+                    ...PAGINATION_TOOLBAR_ITEM_STYLE,
                     fontSize: '10px',
-                    padding: '2px 6px',
-                    cursor: 'pointer',
-                    backgroundColor: '#e0e0e0',
-                    border: '1px outset #fff'
+                    padding: '2px 6px'
                   }}
+                  onMouseEnter={handlePaginationMouseEnter}
+                  onMouseLeave={handlePaginationMouseLeave}
+                  onMouseDown={handlePaginationMouseDown}
+                  onMouseUp={handlePaginationMouseUp}
                 >
                   返回历史
                 </button>
@@ -1764,14 +1725,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 const allPages = new Set(pagesInfo.map(p => p.page));
                 setSelectedPages(allPages);
               }}
-              style={{
-                padding: '2px 8px',
-                fontSize: '11px',
-                backgroundColor: '#c0c0c0',
-                border: '2px outset #c0c0c0',
-                cursor: 'pointer',
-                fontFamily: 'MS Sans Serif, sans-serif'
-              }}
+              style={PAGINATION_TOOLBAR_ITEM_STYLE}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
             >
               全选
             </button>
@@ -1787,14 +1745,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 });
                 setSelectedPages(newSelected);
               }}
-              style={{
-                padding: '2px 8px',
-                fontSize: '11px',
-                backgroundColor: '#c0c0c0',
-                border: '2px outset #c0c0c0',
-                cursor: 'pointer',
-                fontFamily: 'MS Sans Serif, sans-serif'
-              }}
+              style={PAGINATION_TOOLBAR_ITEM_STYLE}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
             >
               反选
             </button>
@@ -1810,28 +1765,22 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 });
                 setSelectedPages(unextracted);
               }}
-              style={{
-                padding: '2px 8px',
-                fontSize: '11px',
-                backgroundColor: '#c0c0c0',
-                border: '2px outset #c0c0c0',
-                cursor: 'pointer',
-                fontFamily: 'MS Sans Serif, sans-serif'
-              }}
+              style={PAGINATION_TOOLBAR_ITEM_STYLE}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
             >
               未提取
             </button>
             
             <button
               onClick={() => setSelectedPages(new Set())}
-              style={{
-                padding: '2px 8px',
-                fontSize: '11px',
-                backgroundColor: '#c0c0c0',
-                border: '2px outset #c0c0c0',
-                cursor: 'pointer',
-                fontFamily: 'MS Sans Serif, sans-serif'
-              }}
+              style={PAGINATION_TOOLBAR_ITEM_STYLE}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
             >
               清空
             </button>
@@ -2029,15 +1978,17 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               }}
               disabled={isExtracting || selectedPages.size === 0}
               style={{
-                padding: '4px 16px',
-                fontSize: '11px',
-                backgroundColor: isExtracting || selectedPages.size === 0 ? '#808080' : '#008000',
-                color: '#ffffff',
-                border: '2px outset #ffffff',
-                cursor: isExtracting || selectedPages.size === 0 ? 'not-allowed' : 'pointer',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                fontWeight: 'bold'
+                ...PAGINATION_TOOLBAR_ITEM_STYLE,
+                backgroundColor: isExtracting || selectedPages.size === 0 ? 'transparent' : 'transparent',
+                opacity: isExtracting || selectedPages.size === 0 ? 0.6 : 1,
+                fontWeight: 'bold',
+                color: '#000080',
+                minWidth: '60px'
               }}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
             >
               {isExtracting ? '提取中...' : `开始提取 (${selectedPages.size}页)`}
             </button>
@@ -7350,23 +7301,11 @@ function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMess
             console.log('分页模式按钮被点击');
             setIsPaginationMode(true);
           }}
-          style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '60px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-          onMouseDown={(e) => { e.target.style.border = '2px inset #c0c0c0'; e.target.style.backgroundColor = '#a0a0a0'; }}
-          onMouseUp={(e) => { e.target.style.border = '2px outset #c0c0c0'; e.target.style.backgroundColor = '#c0c0c0'; }}
-          onMouseLeave={(e) => { e.target.style.border = '2px outset #c0c0c0'; e.target.style.backgroundColor = '#c0c0c0'; }}
+          style={PDF_TOOLBAR_ITEM_STYLE}
+          onMouseEnter={handlePdfMouseEnter}
+          onMouseLeave={handlePdfMouseLeave}
+          onMouseDown={handlePdfMouseDown}
+          onMouseUp={handlePdfMouseUp}
         >
           分页模式
         </button>
@@ -7388,6 +7327,43 @@ function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMess
 
 // PDF窗口渲染器组件
 function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter, setConfirmDialog }) {
+  const PDF_TOOLBAR_ITEM_STYLE = {
+    padding: '1px 8px',
+    fontSize: '11px',
+    backgroundColor: 'transparent',
+    border: '1px solid transparent',
+    borderRadius: '0px',
+    cursor: 'pointer',
+    fontFamily: 'MS Sans Serif, sans-serif',
+    height: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#000000',
+    gap: '4px'
+  };
+
+  const handlePdfMouseEnter = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px outset #ffffff';
+    e.currentTarget.style.backgroundColor = '#c0c0c0';
+  };
+
+  const handlePdfMouseLeave = (e) => {
+    e.currentTarget.style.border = '1px solid transparent';
+    e.currentTarget.style.backgroundColor = 'transparent';
+  };
+
+  const handlePdfMouseDown = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px inset #ffffff';
+  };
+
+  const handlePdfMouseUp = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px outset #ffffff';
+  };
+
   const [isPaginationMode, setIsPaginationMode] = useState(false);
   const [targetPage, setTargetPage] = useState(null);
 
@@ -7476,23 +7452,11 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, 
             console.log('分页模式按钮被点击');
             setIsPaginationMode(true);
           }}
-          style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '60px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-          onMouseDown={(e) => { e.target.style.border = '2px inset #c0c0c0'; e.target.style.backgroundColor = '#a0a0a0'; }}
-          onMouseUp={(e) => { e.target.style.border = '2px outset #c0c0c0'; e.target.style.backgroundColor = '#c0c0c0'; }}
-          onMouseLeave={(e) => { e.target.style.border = '2px outset #c0c0c0'; e.target.style.backgroundColor = '#c0c0c0'; }}
+          style={PDF_TOOLBAR_ITEM_STYLE}
+          onMouseEnter={handlePdfMouseEnter}
+          onMouseLeave={handlePdfMouseLeave}
+          onMouseDown={handlePdfMouseDown}
+          onMouseUp={handlePdfMouseUp}
         >
           分页模式
         </button>

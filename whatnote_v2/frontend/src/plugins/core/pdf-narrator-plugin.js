@@ -4,6 +4,44 @@ import ShortcutManager from '../../utils/ShortcutManager';
 
 const NarratorPluginComponent = (props) => {
   const { windowId, boardId, pageControl } = props;
+
+  const NARRATOR_TOOLBAR_ITEM_STYLE = {
+    padding: '1px 8px',
+    fontSize: '11px',
+    backgroundColor: 'transparent',
+    border: '1px solid transparent',
+    borderRadius: '0px',
+    cursor: 'pointer',
+    fontFamily: 'MS Sans Serif, sans-serif',
+    height: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#000000',
+    marginLeft: '8px'
+  };
+
+  const handleNarratorMouseEnter = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px outset #ffffff';
+    e.currentTarget.style.backgroundColor = '#c0c0c0';
+  };
+
+  const handleNarratorMouseLeave = (e) => {
+    e.currentTarget.style.border = '1px solid transparent';
+    e.currentTarget.style.backgroundColor = 'transparent';
+  };
+
+  const handleNarratorMouseDown = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px inset #ffffff';
+  };
+
+  const handleNarratorMouseUp = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px outset #ffffff';
+  };
+
   const [showPanel, setShowPanel] = useState(false);
   const [viewMode, setViewMode] = useState('player'); // 'player' | 'editor' | 'settings'
   const [showSubtitles, setShowSubtitles] = useState(true);
@@ -1080,20 +1118,14 @@ const NarratorPluginComponent = (props) => {
       <button
         onClick={() => setShowPanel(!showPanel)}
         style={{
-          padding: '1px 8px',
-          fontSize: '11px',
-          backgroundColor: showPanel ? '#a0a0a0' : '#c0c0c0',
-          border: '2px outset #c0c0c0',
-          borderRadius: '0px',
-          cursor: 'pointer',
-          fontFamily: 'MS Sans Serif, sans-serif',
-          height: '20px',
-          minWidth: '50px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginLeft: '8px'
+          ...NARRATOR_TOOLBAR_ITEM_STYLE,
+          backgroundColor: showPanel ? '#a0a0a0' : 'transparent',
+          minWidth: '50px'
         }}
+        onMouseEnter={handleNarratorMouseEnter}
+        onMouseLeave={handleNarratorMouseLeave}
+        onMouseDown={handleNarratorMouseDown}
+        onMouseUp={handleNarratorMouseUp}
         title="打开智能讲解控制台"
       >
         🗣️ 讲解
