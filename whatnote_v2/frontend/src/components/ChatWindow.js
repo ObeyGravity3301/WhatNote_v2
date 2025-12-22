@@ -30,6 +30,57 @@ const hasActiveTodos = (status) => {
   return false;
 };
 
+// Toolbar button style and handlers for ChatWindow
+const CHAT_TOOLBAR_ITEM_STYLE = {
+  padding: '1px 8px',
+  fontSize: '11px',
+  backgroundColor: 'transparent',
+  border: '1px solid transparent',
+  borderRadius: '0px',
+  cursor: 'pointer',
+  fontFamily: 'MS Sans Serif, sans-serif',
+  height: '20px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: '#000000',
+  gap: '4px'
+};
+
+const handleChatMouseEnter = (e) => {
+  if (e.currentTarget.disabled) return;
+  e.currentTarget.style.border = '1px outset #ffffff';
+  e.currentTarget.style.backgroundColor = '#c0c0c0';
+};
+
+const handleChatMouseLeave = (e) => {
+  const isToggledOn = e.currentTarget.getAttribute('data-toggled') === 'true';
+  if (isToggledOn) {
+    e.currentTarget.style.border = '1px inset #ffffff';
+    e.currentTarget.style.backgroundColor = '#a0a0a0';
+  } else {
+    e.currentTarget.style.border = '1px solid transparent';
+    e.currentTarget.style.backgroundColor = 'transparent';
+  }
+};
+
+const handleChatMouseDown = (e) => {
+  if (e.currentTarget.disabled) return;
+  e.currentTarget.style.border = '1px inset #ffffff';
+};
+
+const handleChatMouseUp = (e) => {
+  if (e.currentTarget.disabled) return;
+  const isToggledOn = e.currentTarget.getAttribute('data-toggled') === 'true';
+  if (isToggledOn) {
+    e.currentTarget.style.border = '1px inset #ffffff';
+    e.currentTarget.style.backgroundColor = '#a0a0a0';
+  } else {
+    e.currentTarget.style.border = '1px outset #ffffff';
+    e.currentTarget.style.backgroundColor = '#c0c0c0';
+  }
+};
+
 // 优化的消息组件 - 使用React.memo减少重渲染
 const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId, onOpenWindow, getFileIcon }) => {
   const isUser = message.role === 'user';
@@ -137,12 +188,16 @@ const MessageComponent = React.memo(({ message, isStreaming, streamingMessageId,
           onClick={() => window.open(file.url, '_blank')}
           style={{
             backgroundColor: '#c0c0c0',
-            border: '1px outset #c0c0c0',
+            border: '1px outset #ffffff',
             cursor: 'pointer',
             fontSize: '10px',
             padding: '2px 6px',
-            borderRadius: '2px'
+            fontFamily: 'MS Sans Serif, sans-serif'
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#d0d0d0'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
+          onMouseDown={(e) => { e.currentTarget.style.border = '1px inset #ffffff'; }}
+          onMouseUp={(e) => { e.currentTarget.style.border = '1px outset #ffffff'; }}
           title="打开文件"
         >
           📂
@@ -436,26 +491,22 @@ const Toolbar = React.memo(({
         padding: '2px 4px',
         display: 'flex',
         alignItems: 'center',
-        gap: '4px',
+        gap: '2px',
         height: '24px',
         flexShrink: 0
       }}>
         <button
           onClick={() => setShowSettings(!showSettings)}
           style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '50px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+            ...CHAT_TOOLBAR_ITEM_STYLE,
+            backgroundColor: showSettings ? '#a0a0a0' : 'transparent',
+            border: showSettings ? '1px inset #ffffff' : '1px solid transparent'
           }}
+          data-toggled={showSettings}
+          onMouseEnter={handleChatMouseEnter}
+          onMouseLeave={handleChatMouseLeave}
+          onMouseDown={handleChatMouseDown}
+          onMouseUp={handleChatMouseUp}
           title="LLM API 设置"
         >
           ⚙️ 设置
@@ -469,19 +520,15 @@ const Toolbar = React.memo(({
             setShowFileSelector(!showFileSelector);
           }}
           style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '50px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+            ...CHAT_TOOLBAR_ITEM_STYLE,
+            backgroundColor: showFileSelector ? '#a0a0a0' : 'transparent',
+            border: showFileSelector ? '1px inset #ffffff' : '1px solid transparent'
           }}
+          data-toggled={showFileSelector}
+          onMouseEnter={handleChatMouseEnter}
+          onMouseLeave={handleChatMouseLeave}
+          onMouseDown={handleChatMouseDown}
+          onMouseUp={handleChatMouseUp}
           title="选择文件发送"
         >
           📎 文件
@@ -491,20 +538,15 @@ const Toolbar = React.memo(({
           <button
             onClick={() => setShowTodoList(!showTodoList)}
             style={{
-              padding: '1px 8px',
-              fontSize: '11px',
-              backgroundColor: showTodoList ? '#0078d4' : '#c0c0c0',
-              color: showTodoList ? 'white' : 'black',
-              border: showTodoList ? '2px inset #c0c0c0' : '2px outset #c0c0c0',
-              borderRadius: '0px',
-              cursor: 'pointer',
-              fontFamily: 'MS Sans Serif, sans-serif',
-              height: '20px',
-              minWidth: '50px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              ...CHAT_TOOLBAR_ITEM_STYLE,
+              backgroundColor: showTodoList ? '#a0a0a0' : 'transparent',
+              border: showTodoList ? '1px inset #ffffff' : '1px solid transparent'
             }}
+            data-toggled={showTodoList}
+            onMouseEnter={handleChatMouseEnter}
+            onMouseLeave={handleChatMouseLeave}
+            onMouseDown={handleChatMouseDown}
+            onMouseUp={handleChatMouseUp}
             title="显示/隐藏任务列表"
           >
             📋 Todo
@@ -514,20 +556,16 @@ const Toolbar = React.memo(({
         <button
           onClick={() => setUseTools(!useTools)}
           style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: useTools ? '#0078d4' : '#c0c0c0',
-            color: useTools ? 'white' : 'black',
-            border: useTools ? '2px inset #c0c0c0' : '2px outset #c0c0c0',
-            borderRadius: '0px',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '50px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+            ...CHAT_TOOLBAR_ITEM_STYLE,
+            backgroundColor: useTools ? '#a0a0a0' : 'transparent',
+            border: useTools ? '1px inset #ffffff' : '1px solid transparent',
+            minWidth: '60px'
           }}
+          data-toggled={useTools}
+          onMouseEnter={handleChatMouseEnter}
+          onMouseLeave={handleChatMouseLeave}
+          onMouseDown={handleChatMouseDown}
+          onMouseUp={handleChatMouseUp}
           title={useTools ? "工具调用已启用（AI 可以创建窗口、查询任务等）" : "工具调用已禁用"}
         >
           🔧 工具{useTools ? ' ✓' : ''}
@@ -535,20 +573,11 @@ const Toolbar = React.memo(({
       
       <button
         onClick={() => scrollToBottom(true)}
-        style={{
-          padding: '1px 8px',
-          fontSize: '11px',
-          backgroundColor: '#c0c0c0',
-          border: '2px outset #c0c0c0',
-          borderRadius: '0px',
-          cursor: 'pointer',
-          fontFamily: 'MS Sans Serif, sans-serif',
-          height: '20px',
-          minWidth: '50px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}
+        style={CHAT_TOOLBAR_ITEM_STYLE}
+        onMouseEnter={handleChatMouseEnter}
+        onMouseLeave={handleChatMouseLeave}
+        onMouseDown={handleChatMouseDown}
+        onMouseUp={handleChatMouseUp}
         title="滚动到最底部"
       >
         ⬇️ 底部
@@ -556,20 +585,11 @@ const Toolbar = React.memo(({
       
       <button
         onClick={onClearMessages}
-        style={{
-          padding: '1px 8px',
-          fontSize: '11px',
-          backgroundColor: '#c0c0c0',
-          border: '2px outset #c0c0c0',
-          borderRadius: '0px',
-          cursor: 'pointer',
-          fontFamily: 'MS Sans Serif, sans-serif',
-          height: '20px',
-          minWidth: '50px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}
+        style={CHAT_TOOLBAR_ITEM_STYLE}
+        onMouseEnter={handleChatMouseEnter}
+        onMouseLeave={handleChatMouseLeave}
+        onMouseDown={handleChatMouseDown}
+        onMouseUp={handleChatMouseUp}
         title="清空聊天记录"
       >
         🗑️ 清空
@@ -787,11 +807,16 @@ const TodoListSelector = React.memo(({
           onClick={() => setShowTodoList(false)}
           style={{
             backgroundColor: '#c0c0c0',
-            border: '1px outset #c0c0c0',
+            border: '1px outset #ffffff',
             cursor: 'pointer',
             fontSize: '10px',
-            padding: '1px 4px'
+            padding: '1px 4px',
+            fontFamily: 'MS Sans Serif, sans-serif'
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#d0d0d0'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
+          onMouseDown={(e) => { e.currentTarget.style.border = '1px inset #ffffff'; }}
+          onMouseUp={(e) => { e.currentTarget.style.border = '1px outset #ffffff'; }}
         >
           ✕
         </button>
@@ -945,11 +970,16 @@ const FileSelector = React.memo(({
                 onClick={() => setShowFileSelector(false)}
                 style={{
                   backgroundColor: '#c0c0c0',
-                  border: '1px outset #c0c0c0',
+                  border: '1px outset #ffffff',
                   cursor: 'pointer',
                   fontSize: '10px',
-                  padding: '1px 4px'
+                  padding: '1px 4px',
+                  fontFamily: 'MS Sans Serif, sans-serif'
                 }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#d0d0d0'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
+                onMouseDown={(e) => { e.currentTarget.style.border = '1px inset #ffffff'; }}
+                onMouseUp={(e) => { e.currentTarget.style.border = '1px outset #ffffff'; }}
               >
                 ✕
               </button>

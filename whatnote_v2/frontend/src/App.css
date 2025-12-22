@@ -145,7 +145,7 @@ html, body {
   border-left: 1px solid #808080;
   border-right: 1px solid #ffffff;
   background: transparent;
-  margin: 0 4px;
+  margin: 0 2px; /* 减少间距，让其离开始按钮更近 */
 }
 
 /* 任务栏窗口项目样式 */

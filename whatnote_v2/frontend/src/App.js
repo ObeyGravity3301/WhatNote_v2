@@ -1050,7 +1050,8 @@ function App() {
           )}
           
           {/* 右侧聊天按钮和连接状态 */}
-          <div className="taskbar-tray" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div className="taskbar-separator" style={{ marginLeft: 'auto' }}></div>
+          <div className="taskbar-tray" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             {selectedBoard && (
               <>
                 <button 
