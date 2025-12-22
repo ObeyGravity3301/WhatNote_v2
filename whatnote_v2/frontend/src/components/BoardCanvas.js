@@ -13477,7 +13477,9 @@ function BoardCanvas({
               )}
             </div>
 
-            <div className="resize-handle" onMouseDown={(e) => startResize(e, window)} />
+            {!window.isMaximized && (
+              <div className="resize-handle" onMouseDown={(e) => startResize(e, window)} />
+            )}
           </div>
         );
           })}

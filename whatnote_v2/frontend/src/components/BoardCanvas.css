@@ -412,6 +412,7 @@
   width: 12px;
   height: 12px;
   cursor: nw-resize;
+  z-index: 1000; /* 确保在所有窗口内容之上，包括插件面板 */
   background-image: 
     linear-gradient(135deg, transparent 46%, #404040 46%, #404040 54%, transparent 54%),
     linear-gradient(45deg, transparent 46%, #404040 46%, #404040 54%, transparent 54%);
