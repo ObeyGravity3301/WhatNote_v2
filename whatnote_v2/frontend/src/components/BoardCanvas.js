@@ -7513,6 +7513,42 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, 
 }
 
 function WebWindowRenderer({ window: windowData, onUrlChange }) {
+  const WEB_TOOLBAR_ITEM_STYLE = {
+    padding: '1px 4px',
+    fontSize: '11px',
+    backgroundColor: 'transparent',
+    border: '1px solid transparent',
+    borderRadius: '0px',
+    cursor: 'pointer',
+    fontFamily: 'MS Sans Serif, sans-serif',
+    height: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#000000'
+  };
+
+  const handleWebMouseEnter = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px outset #ffffff';
+    e.currentTarget.style.backgroundColor = '#c0c0c0';
+  };
+
+  const handleWebMouseLeave = (e) => {
+    e.currentTarget.style.border = '1px solid transparent';
+    e.currentTarget.style.backgroundColor = 'transparent';
+  };
+
+  const handleWebMouseDown = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px inset #ffffff';
+  };
+
+  const handleWebMouseUp = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px outset #ffffff';
+  };
+
   // 解析初始标签页数据
   const getInitialTabs = () => {
     try {
@@ -7822,43 +7858,29 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
         padding: '2px 4px',
         display: 'flex',
         alignItems: 'center',
-        gap: '4px',
+        gap: '2px',
         flexShrink: 0,
         height: '26px'
       }}>
         <button
           onClick={handleGoBack}
           title="后退"
-          style={{
-            padding: '1px 4px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
+          style={WEB_TOOLBAR_ITEM_STYLE}
+          onMouseEnter={handleWebMouseEnter}
+          onMouseLeave={handleWebMouseLeave}
+          onMouseDown={handleWebMouseDown}
+          onMouseUp={handleWebMouseUp}
         >
           ⬅️
         </button>
         <button
           onClick={handleGoForward}
           title="前进"
-          style={{
-            padding: '1px 4px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            cursor: 'pointer',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
+          style={WEB_TOOLBAR_ITEM_STYLE}
+          onMouseEnter={handleWebMouseEnter}
+          onMouseLeave={handleWebMouseLeave}
+          onMouseDown={handleWebMouseDown}
+          onMouseUp={handleWebMouseUp}
         >
           ➡️
         </button>
@@ -7866,18 +7888,14 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
           onClick={handleReload}
           title="刷新"
           style={{
-            padding: '1px 4px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            cursor: activeTab?.url ? 'pointer' : 'not-allowed',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+            ...WEB_TOOLBAR_ITEM_STYLE,
+            opacity: activeTab?.url ? 1 : 0.6
           }}
           disabled={!activeTab?.url}
+          onMouseEnter={handleWebMouseEnter}
+          onMouseLeave={handleWebMouseLeave}
+          onMouseDown={handleWebMouseDown}
+          onMouseUp={handleWebMouseUp}
         >
           🔄
         </button>
@@ -7905,30 +7923,14 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
         <button
           onClick={handleNavigate}
           style={{
-            padding: '1px 8px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            cursor: addressBar.trim() ? 'pointer' : 'not-allowed',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '50px'
+            ...WEB_TOOLBAR_ITEM_STYLE,
+            opacity: addressBar.trim() ? 1 : 0.6
           }}
           disabled={!addressBar.trim()}
-          onMouseDown={(e) => {
-            if (addressBar.trim()) {
-              e.target.style.border = '2px inset #c0c0c0';
-              e.target.style.backgroundColor = '#a0a0a0';
-            }
-          }}
-          onMouseUp={(e) => {
-            e.target.style.border = '2px outset #c0c0c0';
-            e.target.style.backgroundColor = '#c0c0c0';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.border = '2px outset #c0c0c0';
-            e.target.style.backgroundColor = '#c0c0c0';
-          }}
+          onMouseEnter={handleWebMouseEnter}
+          onMouseLeave={handleWebMouseLeave}
+          onMouseDown={handleWebMouseDown}
+          onMouseUp={handleWebMouseUp}
         >
           转到
         </button>
@@ -7936,15 +7938,14 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
           onClick={handleDetach}
           title="在外部浏览器打开"
           style={{
-            padding: '1px 6px',
-            fontSize: '11px',
-            backgroundColor: '#c0c0c0',
-            border: '2px outset #c0c0c0',
-            cursor: activeTab?.url ? 'pointer' : 'not-allowed',
-            fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px'
+            ...WEB_TOOLBAR_ITEM_STYLE,
+            opacity: activeTab?.url ? 1 : 0.6
           }}
           disabled={!activeTab?.url}
+          onMouseEnter={handleWebMouseEnter}
+          onMouseLeave={handleWebMouseLeave}
+          onMouseDown={handleWebMouseDown}
+          onMouseUp={handleWebMouseUp}
         >
           ↗️ 分离
         </button>
