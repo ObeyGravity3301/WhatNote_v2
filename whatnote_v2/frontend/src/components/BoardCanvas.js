@@ -7962,50 +7962,50 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
             }}
           >
             {tab.url ? (
-              <>
+          <>
                 {tab.isLoading && (
-                  <div style={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    background: '#ffffe1',
-                    border: '1px solid #b5b500',
-                    padding: '2px 8px',
-                    fontSize: '11px',
-                    fontFamily: 'MS Sans Serif, sans-serif',
-                    zIndex: 2
-                  }}>
-                    正在加载…
-                  </div>
-                )}
+              <div style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                background: '#ffffe1',
+                border: '1px solid #b5b500',
+                padding: '2px 8px',
+                fontSize: '11px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                zIndex: 2
+              }}>
+                正在加载…
+              </div>
+            )}
                 {/* 如果当前标签页有错误且是激活状态，显示错误信息 */}
                 {activeTabId === tab.id && loadError ? (
-                  <div
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column',
-                      color: '#555',
-                      padding: '16px',
-                      textAlign: 'center'
-                    }}
-                  >
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'column',
+              color: '#555',
+              padding: '16px',
+              textAlign: 'center'
+            }}
+          >
                     <p>{loadError}</p>
-                    <button
-                      style={{
-                        marginTop: '8px',
-                        padding: '2px 12px',
-                        backgroundColor: '#c0c0c0',
-                        border: '2px outset #c0c0c0',
-                        cursor: 'pointer'
-                      }}
+              <button
+                style={{
+                  marginTop: '8px',
+                  padding: '2px 12px',
+                  backgroundColor: '#c0c0c0',
+                  border: '2px outset #c0c0c0',
+                  cursor: 'pointer'
+                }}
                       onClick={() => window.open(tab.url, '_blank')}
-                    >
-                      在浏览器中打开
-                    </button>
+              >
+                在浏览器中打开
+              </button>
                   </div>
                 ) : (
                   <iframe
@@ -8041,8 +8041,8 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
                 <span role="img" aria-label="web">🌐</span>
                 <p style={{ margin: 0 }}>新标签页</p>
                 <p style={{ margin: 0 }}>在上方输入框填写 URL，点击“前往”访问网页</p>
-              </div>
-            )}
+          </div>
+        )}
           </div>
         ))}
       </div>
@@ -8718,6 +8718,44 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
   };
 
   // 默认实时模式：左右分屏布局，无工具栏
+  const TOOLBAR_ITEM_STYLE = {
+    padding: '1px 8px',
+    fontSize: '11px',
+    backgroundColor: 'transparent',
+    border: '1px solid transparent',
+    borderRadius: '0px',
+    cursor: 'pointer',
+    fontFamily: 'MS Sans Serif, sans-serif',
+    height: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#000000'
+  };
+
+  const handleToolbarMouseEnter = (e) => {
+    e.target.style.border = '1px outset #ffffff';
+    e.target.style.backgroundColor = '#c0c0c0';
+  };
+
+  const handleToolbarMouseLeave = (e, extraCondition = false, extraColor = '#c0c0c0') => {
+    if (extraCondition) {
+      e.target.style.border = '1px outset #ffffff';
+      e.target.style.backgroundColor = extraColor;
+    } else {
+      e.target.style.border = '1px solid transparent';
+      e.target.style.backgroundColor = 'transparent';
+    }
+  };
+
+  const handleToolbarMouseDown = (e) => {
+    e.target.style.border = '1px inset #ffffff';
+  };
+
+  const handleToolbarMouseUp = (e) => {
+    e.target.style.border = '1px outset #ffffff';
+  };
+
   return (
     <div style={{ 
       height: '100%', 
@@ -8743,31 +8781,13 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
               handleFileUpload();
             }}
             style={{
-              padding: '1px 8px',
-              fontSize: '11px',
-              backgroundColor: '#c0c0c0',
-              border: '2px outset #c0c0c0',
-              borderRadius: '0px',
-              cursor: 'pointer',
-              fontFamily: 'MS Sans Serif, sans-serif',
-              height: '20px',
+              ...TOOLBAR_ITEM_STYLE,
               minWidth: '60px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
             }}
-            onMouseDown={(e) => {
-              e.target.style.border = '2px inset #c0c0c0';
-              e.target.style.backgroundColor = '#a0a0a0';
-            }}
-            onMouseUp={(e) => {
-              e.target.style.border = '2px outset #c0c0c0';
-              e.target.style.backgroundColor = '#c0c0c0';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.border = '2px outset #c0c0c0';
-              e.target.style.backgroundColor = '#c0c0c0';
-            }}
+            onMouseEnter={handleToolbarMouseEnter}
+            onMouseLeave={(e) => handleToolbarMouseLeave(e)}
+            onMouseDown={handleToolbarMouseDown}
+            onMouseUp={handleToolbarMouseUp}
           >
             上传...
           </button>
@@ -8853,27 +8873,26 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
               onClick={() => setShowMarpMenu((prev) => !prev)}
               title="Marp 幻灯片相关功能"
               style={{
-                padding: '1px 10px',
-                fontSize: '11px',
-                backgroundColor: showMarpMenu ? '#a0a0a0' : (useMarpPreview ? '#cfe8c0' : '#c0c0c0'),
-                border: '2px outset #c0c0c0',
-                borderRadius: '0px',
-                cursor: 'pointer',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                height: '20px',
-                minWidth: '90px'
+                ...TOOLBAR_ITEM_STYLE,
+                minWidth: '90px',
+                backgroundColor: showMarpMenu ? '#a0a0a0' : (useMarpPreview ? '#cfe8c0' : 'transparent'),
+                border: showMarpMenu ? '1px inset #ffffff' : (useMarpPreview ? '1px outset #ffffff' : '1px solid transparent')
               }}
-              onMouseDown={(e) => {
-                e.target.style.border = '2px inset #c0c0c0';
-                e.target.style.backgroundColor = '#a0a0a0';
-              }}
-              onMouseUp={(e) => {
-                e.target.style.border = '2px outset #c0c0c0';
-                e.target.style.backgroundColor = showMarpMenu ? '#a0a0a0' : (useMarpPreview ? '#cfe8c0' : '#c0c0c0');
+              onMouseEnter={(e) => {
+                e.target.style.border = '1px outset #ffffff';
+                if (!showMarpMenu && !useMarpPreview) e.target.style.backgroundColor = '#c0c0c0';
               }}
               onMouseLeave={(e) => {
-                e.target.style.border = '2px outset #c0c0c0';
-                e.target.style.backgroundColor = showMarpMenu ? '#a0a0a0' : (useMarpPreview ? '#cfe8c0' : '#c0c0c0');
+                const bg = showMarpMenu ? '#a0a0a0' : (useMarpPreview ? '#cfe8c0' : 'transparent');
+                const bd = showMarpMenu ? '1px inset #ffffff' : (useMarpPreview ? '1px outset #ffffff' : '1px solid transparent');
+                e.target.style.backgroundColor = bg;
+                e.target.style.border = bd;
+              }}
+              onMouseDown={(e) => {
+                e.target.style.border = '1px inset #ffffff';
+              }}
+              onMouseUp={(e) => {
+                e.target.style.border = '1px outset #ffffff';
               }}
             >
               {useMarpPreview ? 'Marp 预览中' : 'Marp 预览'}
@@ -9019,30 +9038,28 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
             <button
               onClick={handleConvertToWeb}
               style={{
-                padding: '1px 8px',
-                fontSize: '11px',
-                backgroundColor: '#c0c0c0',
-                border: '2px outset #c0c0c0',
-                borderRadius: '0px',
-                cursor: webUrlInput.trim() ? 'pointer' : 'not-allowed',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                height: '20px',
-                minWidth: '70px'
+                ...TOOLBAR_ITEM_STYLE,
+                minWidth: '70px',
+                opacity: webUrlInput.trim() ? 1 : 0.6,
+                cursor: webUrlInput.trim() ? 'pointer' : 'not-allowed'
               }}
               disabled={!webUrlInput.trim()}
-              onMouseDown={(e) => {
-                if (webUrlInput.trim()) {
-                  e.target.style.border = '2px inset #c0c0c0';
-                  e.target.style.backgroundColor = '#a0a0a0';
-                }
-              }}
-              onMouseUp={(e) => {
-                e.target.style.border = '2px outset #c0c0c0';
+              onMouseEnter={(e) => {
+                if (!webUrlInput.trim()) return;
+                e.target.style.border = '1px outset #ffffff';
                 e.target.style.backgroundColor = '#c0c0c0';
               }}
               onMouseLeave={(e) => {
-                e.target.style.border = '2px outset #c0c0c0';
-                e.target.style.backgroundColor = '#c0c0c0';
+                e.target.style.border = '1px solid transparent';
+                e.target.style.backgroundColor = 'transparent';
+              }}
+              onMouseDown={(e) => {
+                if (!webUrlInput.trim()) return;
+                e.target.style.border = '1px inset #ffffff';
+              }}
+              onMouseUp={(e) => {
+                if (!webUrlInput.trim()) return;
+                e.target.style.border = '1px outset #ffffff';
               }}
               title="将当前文本窗口转换为网页窗口"
             >
@@ -9056,29 +9073,32 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                 onClick={() => setShowExportMenu((prev) => !prev)}
                 disabled={isExporting}
                 style={{
-                  padding: '1px 10px',
-                  fontSize: '11px',
-                  backgroundColor: showExportMenu ? '#a0a0a0' : '#c0c0c0',
-                  border: '2px outset #c0c0c0',
-                  borderRadius: '0px',
-                  cursor: isExporting ? 'not-allowed' : 'pointer',
-                  fontFamily: 'MS Sans Serif, sans-serif',
-                  height: '20px',
-                  minWidth: '80px'
+                  ...TOOLBAR_ITEM_STYLE,
+                  minWidth: '80px',
+                  backgroundColor: showExportMenu ? '#a0a0a0' : 'transparent',
+                  border: showExportMenu ? '1px inset #ffffff' : '1px solid transparent',
+                  opacity: isExporting ? 0.6 : 1,
+                  cursor: isExporting ? 'not-allowed' : 'pointer'
                 }}
-                onMouseDown={(e) => {
-                  if (!isExporting) {
-                    e.target.style.border = '2px inset #c0c0c0';
-                    e.target.style.backgroundColor = '#a0a0a0';
-                  }
-                }}
-                onMouseUp={(e) => {
-                  e.target.style.border = '2px outset #c0c0c0';
-                  e.target.style.backgroundColor = showExportMenu ? '#a0a0a0' : '#c0c0c0';
+                onMouseEnter={(e) => {
+                  if (isExporting) return;
+                  e.target.style.border = '1px outset #ffffff';
+                  if (!showExportMenu) e.target.style.backgroundColor = '#c0c0c0';
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.border = '2px outset #c0c0c0';
-                  e.target.style.backgroundColor = showExportMenu ? '#a0a0a0' : '#c0c0c0';
+                  if (isExporting) return;
+                  const bg = showExportMenu ? '#a0a0a0' : 'transparent';
+                  const bd = showExportMenu ? '1px inset #ffffff' : '1px solid transparent';
+                  e.target.style.backgroundColor = bg;
+                  e.target.style.border = bd;
+                }}
+                onMouseDown={(e) => {
+                  if (isExporting) return;
+                  e.target.style.border = '1px inset #ffffff';
+                }}
+                onMouseUp={(e) => {
+                  if (isExporting) return;
+                  e.target.style.border = '1px outset #ffffff';
                 }}
               >
                 {isExporting ? '导出中...' : '导出'}
@@ -11413,9 +11433,9 @@ function BoardCanvas({
     if (!isJsonTabs) {
       // 只有不是 JSON 时才进行 URL 规范化
       const normalizedUrl = ensureHttpUrl(rawUrlOrTabs);
-      if (!normalizedUrl) {
-        addMessage('⚠️ 无效的地址', '请输入正确的URL，例如 https://example.com', 'warning');
-        return;
+    if (!normalizedUrl) {
+      addMessage('⚠️ 无效的地址', '请输入正确的URL，例如 https://example.com', 'warning');
+      return;
       }
       contentToSave = normalizedUrl;
     }
