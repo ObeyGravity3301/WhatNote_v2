@@ -8719,7 +8719,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
 
   // 默认实时模式：左右分屏布局，无工具栏
   const TOOLBAR_ITEM_STYLE = {
-    padding: '1px 8px',
+    padding: '1px 4px',
     fontSize: '11px',
     backgroundColor: 'transparent',
     border: '1px solid transparent',
@@ -8770,7 +8770,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
         padding: '2px 4px',
         display: 'flex',
         alignItems: 'center',
-        gap: '4px',
+        gap: '2px',
         height: '24px'
       }}>
         {/* 上传按钮 - 只在没有内容时显示 */}
@@ -8782,7 +8782,6 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
             }}
             style={{
               ...TOOLBAR_ITEM_STYLE,
-              minWidth: '60px',
             }}
             onMouseEnter={handleToolbarMouseEnter}
             onMouseLeave={(e) => handleToolbarMouseLeave(e)}
@@ -8874,7 +8873,6 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
               title="Marp 幻灯片相关功能"
               style={{
                 ...TOOLBAR_ITEM_STYLE,
-                minWidth: '90px',
                 backgroundColor: showMarpMenu ? '#a0a0a0' : (useMarpPreview ? '#cfe8c0' : 'transparent'),
                 border: showMarpMenu ? '1px inset #ffffff' : (useMarpPreview ? '1px outset #ffffff' : '1px solid transparent')
               }}
@@ -9039,7 +9037,6 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
               onClick={handleConvertToWeb}
               style={{
                 ...TOOLBAR_ITEM_STYLE,
-                minWidth: '70px',
                 opacity: webUrlInput.trim() ? 1 : 0.6,
                 cursor: webUrlInput.trim() ? 'pointer' : 'not-allowed'
               }}
@@ -9074,7 +9071,6 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                 disabled={isExporting}
                 style={{
                   ...TOOLBAR_ITEM_STYLE,
-                  minWidth: '80px',
                   backgroundColor: showExportMenu ? '#a0a0a0' : 'transparent',
                   border: showExportMenu ? '1px inset #ffffff' : '1px solid transparent',
                   opacity: isExporting ? 0.6 : 1,
