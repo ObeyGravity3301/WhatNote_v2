@@ -679,17 +679,17 @@ def split_text_smartly(text: str) -> List[str]:
         # 但我们希望尽可能按照标点切，如果一行很长且没标点，那就把它当成一句话
         
         parts = re.split(pattern, line)
-        current = ""
-        for part in parts:
-            current += part
-            if re.match(pattern, part):
-                 if len(current.strip()) > 0:
+    current = ""
+    for part in parts:
+        current += part
+        if re.match(pattern, part):
+             if len(current.strip()) > 0:
                      final_sentences.append(current)
-                     current = ""
+                 current = ""
         
         # 如果这一行最后一部分没有标点（例如：标题，或者LLM生成的无标点列表项）
         # 也应该把它作为一个独立的句子加入，因为它被换行符切断了
-        if current.strip():
+    if current.strip():
             final_sentences.append(current)
             
     return final_sentences

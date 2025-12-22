@@ -101,12 +101,12 @@ class VisionToolHandlers:
                     found = True
             
             if not found:
-                return ToolResult(
-                    tool_call_id=context.get("call_id", ""),
-                    tool_name="analyze_image",
-                    status=ToolStatus.ERROR,
-                    error=f"图片文件不存在: {image_path}"
-                )
+                    return ToolResult(
+                        tool_call_id=context.get("call_id", ""),
+                        tool_name="analyze_image",
+                        status=ToolStatus.ERROR,
+                        error=f"图片文件不存在: {image_path}"
+                    )
             
             # 2. 读取并编码图片
             try:

@@ -358,7 +358,7 @@ const NarratorPluginComponent = (props) => {
                         else setSubtitles([]);
                     })
                     .catch(() => setSubtitles([]));
-
+                
                 // 2. 如果有讲稿，尝试检查/获取音频
                 if (!audioUrls[page]) {
                     fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/audio/${page}`, {
@@ -391,9 +391,9 @@ const NarratorPluginComponent = (props) => {
   useEffect(() => {
       if (pageControl) {
           const page = pageControl.currentPage;
-          const url = audioUrls[page];
+      const url = audioUrls[page];
           if (url !== audioUrl) {
-              setAudioUrl(url || null);
+      setAudioUrl(url || null);
           }
       }
   }, [audioUrls, pageControl?.currentPage, audioUrl]);
@@ -424,17 +424,17 @@ const NarratorPluginComponent = (props) => {
                       });
                   }
               }
-          } else {
+              } else {
               // If not in auto mode, we should pause
               if (!audio.paused) {
                   audio.pause();
+                  }
+                  setIsPlaying(false);
               }
+          } else {
+          audio.removeAttribute('src');
               setIsPlaying(false);
           }
-      } else {
-          audio.removeAttribute('src');
-          setIsPlaying(false);
-      }
   }, [audioUrl, isAutoMode]);
 
   // 自动保存讲稿
@@ -674,7 +674,7 @@ const NarratorPluginComponent = (props) => {
                   const section = sections[index];
                   
                   console.log(`[Narrator] Processing batch section ${index}:`, section);
-
+                  
                   // 如果目标范围无效（例如完全被上一分段包含），则跳过
                   if (section.target_page_start > section.target_page_end) {
                       setBatchProgress(prev => ({
@@ -724,85 +724,85 @@ const NarratorPluginComponent = (props) => {
                   for (const range of targetRanges) {
                       if (stopBatchRef.current) break;
 
-                      // Avoid rapid state updates for progress to prevent UI jitter
-                      setBatchProgress({ 
+                  // Avoid rapid state updates for progress to prevent UI jitter
+                  setBatchProgress({ 
                           current: range.start, 
-                          total: total, 
-                          type: 'script',
+                      total: total, 
+                      type: 'script',
                           message: `正在生成: ${section.title || `第 ${index+1} 部分`} [${range.start}-${range.end}] (并⾏处理中)...` 
-                      });
+                  });
 
-                      try {
-                          const response = await fetch(
-                              `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/generate-script-section`,
-                              {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                      section_index: index,
-                                      section_data: section,
-                                      target_range: {
+                  try {
+                      const response = await fetch(
+                          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/generate-script-section`,
+                          {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                  section_index: index,
+                                  section_data: section,
+                                  target_range: {
                                           start: range.start,
                                           end: range.end
-                                      },
-                                      subdivision_data: subdivisionData?.subdivisions?.[index],
-                                      // 发送所有之前的分段摘要，构建完整的上下文链
-                                      context_history: subdivisionData?.subdivisions?.slice(0, index).map(s => ({
-                                          title: s.title,
-                                          summary: s.section_summary
-                                      })),
-                                      promptTemplate: customPrompt
-                                  })
-                              }
-                          );
+                                  },
+                                  subdivision_data: subdivisionData?.subdivisions?.[index],
+                                  // 发送所有之前的分段摘要，构建完整的上下文链
+                                  context_history: subdivisionData?.subdivisions?.slice(0, index).map(s => ({
+                                      title: s.title,
+                                      summary: s.section_summary
+                                  })),
+                                  promptTemplate: customPrompt
+                              })
+                          }
+                      );
 
-                          if (response.ok) {
-                              const reader = response.body.getReader();
-                              const decoder = new TextDecoder();
-                              while (true) {
-                                  const { done, value } = await reader.read();
-                                  if (done) break;
-                                  const chunk = decoder.decode(value, { stream: true });
-                                  const lines = chunk.split('\n\n');
-                                  for (const line of lines) {
-                                      if (line.startsWith('data: ')) {
-                                          try {
-                                              const data = JSON.parse(line.substring(6));
-                                              if (data.type === 'page_done') {
-                                                  const { page, content } = data;
-                                                  
-                                                  // Async save
-                                                  fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/scripts/${page}`, {
-                                                      method: 'PUT',
-                                                      headers: {'Content-Type': 'application/json'},
-                                                      body: JSON.stringify({ content: content })
-                                                  }).catch(console.error);
-                                                  
-                                                  // React state update
-                                                  setScripts(prev => ({ ...prev, [page]: content }));
+                      if (response.ok) {
+                          const reader = response.body.getReader();
+                          const decoder = new TextDecoder();
+                          while (true) {
+                              const { done, value } = await reader.read();
+                              if (done) break;
+                              const chunk = decoder.decode(value, { stream: true });
+                              const lines = chunk.split('\n\n');
+                              for (const line of lines) {
+                                  if (line.startsWith('data: ')) {
+                                      try {
+                                          const data = JSON.parse(line.substring(6));
+                                          if (data.type === 'page_done') {
+                                              const { page, content } = data;
+                                              
+                                              // Async save
+                                              fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/scripts/${page}`, {
+                                                  method: 'PUT',
+                                                  headers: {'Content-Type': 'application/json'},
+                                                  body: JSON.stringify({ content: content })
+                                              }).catch(console.error);
+                                              
+                                              // React state update
+                                              setScripts(prev => ({ ...prev, [page]: content }));
 
-                                                  // If it's current page
-                                                  if (page === pageControl.currentPage) {
-                                                      setCurrentScript(content);
-                                                      setLastSavedScript(content);
-                                                  }
-                                                  
-                                                  // Persist
-                                                  try {
-                                                      const storageKey = `narrator_scripts_${boardId}_${windowId}`;
-                                                      const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-                                                      saved[page] = content;
-                                                      localStorage.setItem(storageKey, JSON.stringify(saved));
-                                                  } catch(e) {}
-
-                                                  setBatchProgress(prev => ({ ...prev, current: page }));
+                                              // If it's current page
+                                              if (page === pageControl.currentPage) {
+                                                  setCurrentScript(content);
+                                                  setLastSavedScript(content);
                                               }
-                                          } catch (e) {}
-                                      }
+                                              
+                                              // Persist
+                                              try {
+                                                      const storageKey = `narrator_scripts_${boardId}_${windowId}`;
+                                                  const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+                                                  saved[page] = content;
+                                                  localStorage.setItem(storageKey, JSON.stringify(saved));
+                                              } catch(e) {}
+
+                                              setBatchProgress(prev => ({ ...prev, current: page }));
+                                          }
+                                      } catch (e) {}
                                   }
                               }
                           }
-                      } catch (err) { console.error(err); }
+                      }
+                  } catch (err) { console.error(err); }
                   }
               }
           };
@@ -1108,8 +1108,8 @@ const NarratorPluginComponent = (props) => {
             borderTop: '2px outset #ffffff',
             fontFamily: 'MS Sans Serif, sans-serif',
             fontSize: '12px',
-            display: 'flex',
-            flexDirection: 'column',
+                     display: 'flex',
+                     flexDirection: 'column',
             overflow: 'hidden',
             transition: 'height 0.3s ease'
           }}>
@@ -1123,11 +1123,11 @@ const NarratorPluginComponent = (props) => {
                    </div>
                    
                    <div style={{fontWeight: 'bold', color: '#444', marginBottom:'2px'}}>讲稿生成提示词 (Prompt)</div>
-                   <textarea 
-                       value={customPrompt}
-                       onChange={(e) => setCustomPrompt(e.target.value)}
+                       <textarea 
+                           value={customPrompt}
+                           onChange={(e) => setCustomPrompt(e.target.value)}
                        style={{ height: '50px', width: '100%', resize: 'none', marginBottom:'8px', fontSize:'11px' }}
-                   />
+                       />
                    
                    <div style={{display:'flex', gap:'10px'}}>
                        <div style={{flex:1, border:'1px dotted #888', padding:'4px', backgroundColor:'#ece9d8'}}>
@@ -1137,7 +1137,7 @@ const NarratorPluginComponent = (props) => {
                                     <option value="zh">中文</option>
                                     <option value="en">EN</option>
                                     <option value="ja">JP</option>
-                                </select>
+                                    </select>
                                 
                                 {!refAudioExists ? (
                                     <button onClick={() => document.getElementById(`ref-up-${windowId}`).click()} style={{flex:1}}>📤 上传参考音频</button>
@@ -1147,7 +1147,7 @@ const NarratorPluginComponent = (props) => {
                                             <span style={{fontSize:'10px', color:'#000080', whiteSpace:'nowrap', textOverflow:'ellipsis', overflow:'hidden'}} title={refFilename}>
                                                 {refFilename || 'default.wav'}
                                             </span>
-                                        </div>
+                                </div>
                                         <button onClick={() => document.getElementById(`ref-up-${windowId}`).click()} style={{width:'auto', padding:'0 6px'}} title="更换参考音频">📂</button>
                                     </>
                                 )}
@@ -1162,7 +1162,7 @@ const NarratorPluginComponent = (props) => {
                             
                             <textarea value={refText} onChange={e => setRefText(e.target.value)} placeholder="输入参考音频的文字内容..." 
                                 style={{width:'100%', height: refAudioExists ? '30px' : '55px', marginTop:'4px', fontSize:'10px', resize:'none'}} />
-                       </div>
+                            </div>
 
                        <div style={{flex:1, border:'1px dotted #888', padding:'4px', backgroundColor:'#fff'}}>
                             <div style={{fontWeight:'bold', fontSize:'11px'}}>🧠 模型 (Model)</div>
@@ -1207,8 +1207,8 @@ const NarratorPluginComponent = (props) => {
                     <div style={{display:'flex', justifyContent:'space-between', marginBottom:'4px', alignItems:'center'}}>
                        <span style={{fontWeight:'bold', color: '#000080'}}>📝 第 {pageControl.currentPage} 页讲稿</span>
                        <button onClick={() => setViewMode('player')}>🔙 返回播放器</button>
-                    </div>
-                    <textarea
+                     </div>
+                     <textarea
                         value={currentScript}
                         onChange={(e) => setCurrentScript(e.target.value)}
                         style={{ flex: 1, resize: 'none', padding: '4px', fontFamily:'inherit', fontSize:'12px' }}
@@ -1217,20 +1217,20 @@ const NarratorPluginComponent = (props) => {
                     <div style={{textAlign:'right', fontSize:'10px', color:'#666', marginTop:'2px'}}>
                         {currentScript !== lastSavedScript ? '💾 正在自动保存...' : '✅ 已保存'}
                     </div>
-                </div>
-            )}
-
+                   </div>
+               )}
+    
             {/* --- VIEW: PLAYER --- */}
             {viewMode === 'player' && (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     
                     {/* 1. Subtitle Bar */}
                     {showSubtitles && (
-                        <div style={{
+               <div style={{ 
                             flex: 1, // Takes remaining space
                             backgroundColor: 'rgba(0,0,0,0.85)',
                             color: '#fff',
-                            display: 'flex',
+                 display: 'flex', 
                             alignItems: 'center',
                             justifyContent: 'center',
                             padding: '0 30px',
@@ -1242,15 +1242,15 @@ const NarratorPluginComponent = (props) => {
                             overflowY: 'auto'
                         }}>
                             {currentSubtitle || (audioUrl ? (isPlaying ? "..." : "点击播放") : "暂无语音")}
-                            <button 
+                    <button
                                 onClick={() => setShowSubtitles(false)}
-                                style={{
+                      style={{
                                     position: 'absolute', right: '4px', top: '4px', 
                                     background:'transparent', border:'none', color:'#888', cursor:'pointer', fontSize:'10px'
-                                }}
+                      }}
                                 title="隐藏字幕"
                             >✕</button>
-                        </div>
+                  </div>
                     )}
                     {!showSubtitles && <div style={{flex:1, background:'#333'}}></div>}
                     
@@ -1288,23 +1288,23 @@ const NarratorPluginComponent = (props) => {
                         {!showSubtitles && (
                             <button onClick={() => setShowSubtitles(true)} style={{border:'1px solid #999', background:'#fff', cursor:'pointer', fontSize:'10px', padding:'0 4px'}}>字幕</button>
                         )}
-                    </div>
-
+                  </div>
+    
                     {/* 3. Controls Bar */}
-                    <div style={{
+                  <div style={{ 
                         height: '46px',
                         backgroundColor: '#c0c0c0',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         padding: '0 6px'
-                    }}>
+                  }}>
                         {/* Left: Generators */}
                         <div style={{display: 'flex', gap: '4px', alignItems:'center'}}>
                             <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
                                 <button onClick={generateScript} title="生成本页讲稿" disabled={isGenerating} style={{fontSize:'10px', padding:'0 4px'}}>📝 文</button>
                                 <button onClick={generateAudio} title="生成本页语音" disabled={isGeneratingAudio} style={{fontSize:'10px', padding:'0 4px'}}>🔊 音</button>
-                            </div>
+                    </div>
                             <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
                                 <button onClick={() => startBatch('script')} title="生成全部讲稿" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>📚 批量文</button>
                                 <button onClick={() => startBatch('audio')} title="生成全部语音" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>💿 批量音</button>
@@ -1316,31 +1316,31 @@ const NarratorPluginComponent = (props) => {
                             <span style={{fontSize:'10px', color:'#666', marginLeft:'2px'}}>
                                 {isBatchProcessing ? batchProgress.current + '/' + batchProgress.total : ''}
                             </span>
-                        </div>
-
+                  </div>
+    
                         {/* Center: Playback (The STAR) */}
                         <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
-                            <button 
-                                onClick={() => { setIsAutoMode(false); pageControl.goToPreviousPage(); }} 
+                    <button
+                      onClick={() => { setIsAutoMode(false); pageControl.goToPreviousPage(); }}
                                 title="上一页"
                                 style={{fontSize:'18px', background:'transparent', border:'none', cursor:'pointer', color:'#000'}}
                             >⏮</button>
-                            <button 
-                                onClick={isAutoMode ? togglePlay : startPresentation}
-                                disabled={!audioUrl}
-                                style={{ 
+                    <button
+                      onClick={isAutoMode ? togglePlay : startPresentation}
+                      disabled={!audioUrl}
+                      style={{ 
                                     width: '36px', height: '36px', borderRadius:'50%', 
                                     fontSize: '18px', fontWeight:'bold', 
                                     background: isPlaying ? '#fff' : '#000080', 
                                     color: isPlaying ? '#000' : '#fff',
                                     border: '2px outset #fff', cursor: 'pointer',
                                     display:'flex', alignItems:'center', justifyContent:'center'
-                                }}
-                            >
-                                {isPlaying ? '⏸' : '▶'}
-                            </button>
-                            <button 
-                                onClick={() => { setIsAutoMode(false); pageControl.goToNextPage(); }} 
+                      }}
+                    >
+                      {isPlaying ? '⏸' : '▶'}
+                    </button>
+                    <button
+                      onClick={() => { setIsAutoMode(false); pageControl.goToNextPage(); }}
                                 title="下一页"
                                 style={{fontSize:'18px', background:'transparent', border:'none', cursor:'pointer', color:'#000'}}
                             >⏭</button>
@@ -1348,10 +1348,10 @@ const NarratorPluginComponent = (props) => {
                                 onClick={togglePlaybackMode} 
                                 title={`模式: ${getPlaybackModeIcon()}`} 
                                 style={{width:'24px', background:'transparent', border:'none', cursor:'pointer', fontSize:'14px'}}
-                            >
+                    >
                                 {getPlaybackModeIcon().split(' ')[0]}
-                            </button>
-                        </div>
+                    </button>
+                  </div>
 
                         {/* Right: Tools */}
                         <div style={{display: 'flex', gap: '6px', alignItems:'center'}}>
@@ -1359,11 +1359,11 @@ const NarratorPluginComponent = (props) => {
                             <button onClick={() => setViewMode('settings')} title="设置" style={{padding:'4px'}}>⚙️</button>
                             <div style={{width:'1px', height:'20px', background:'#888', margin:'0 2px'}}></div>
                             <button onClick={() => setShowPanel(false)} title="关闭" style={{padding:'4px', fontWeight:'bold', color:'red'}}>✕</button>
-                        </div>
-                    </div>
-                </div>
+               </div>
+            </div>
+            </div>
             )}
-
+            
             <audio 
                 ref={audioRef} 
                 onTimeUpdate={(e) => {

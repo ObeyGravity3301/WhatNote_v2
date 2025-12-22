@@ -245,7 +245,7 @@ function App() {
       toastTimeoutRef.current = null;
     }, 3000);
   };
-  
+
   const hideToast = () => {
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
@@ -1053,66 +1053,35 @@ function App() {
           <div className="taskbar-tray" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
             {selectedBoard && (
               <>
-              <button 
-                className="taskbar-item"
-                onClick={() => {
-                  // 通过事件通知BoardCanvas打开聊天窗口
-                  const event = new CustomEvent('toggleChatWindow');
+                <button 
+                  className="taskbar-item"
+                  onClick={() => {
+                    // 通过事件通知BoardCanvas打开聊天窗口
+                    const event = new CustomEvent('toggleChatWindow');
                     if (typeof window !== 'undefined') {
-                  window.dispatchEvent(event);
+                      window.dispatchEvent(event);
                     }
-                }}
-                title="AI助手聊天"
-                style={{ minWidth: 'auto', width: '80px' }}
-              >
+                  }}
+                  title="AI助手聊天"
+                  style={{ minWidth: 'auto', width: '80px' }}
+                >
                   <span className="taskbar-icon win98-icon win98-icon-chat"></span>
-                <span className="taskbar-text">AI助手</span>
-              </button>
+                  <span className="taskbar-text">AI助手</span>
+                </button>
                 
                 <button 
                   className="taskbar-item message-center-taskbar-btn"
                   onClick={() => {
-                    // 通过事件通知BoardCanvas打开消息中心
                     const event = new CustomEvent('toggleMessageCenter');
                     if (typeof window !== 'undefined') {
                       window.dispatchEvent(event);
                     }
                   }}
                   title="消息中心"
-                  style={{ minWidth: 'auto', width: '80px', position: 'relative' }}
+                  style={{ minWidth: 'auto', width: '90px' }}
                 >
                   <span className="taskbar-icon win98-icon win98-icon-mail"></span>
                   <span className="taskbar-text">消息</span>
-                </button>
-
-                <button
-                  className="taskbar-item planner-taskbar-btn"
-                  onClick={() => {
-                    const event = new CustomEvent('togglePlannerWindow');
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(event);
-                    }
-                  }}
-                  title="日历与计划"
-                  style={{ minWidth: 'auto', width: '90px' }}
-                >
-                  <span className="taskbar-icon win98-icon win98-icon-calendar"></span>
-                  <span className="taskbar-text">日历</span>
-                </button>
-
-                <button
-                  className="taskbar-item plugin-manager-taskbar-btn"
-                  onClick={() => {
-                    const event = new CustomEvent('togglePluginManagerWindow');
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(event);
-                    }
-                  }}
-                  title="插件管理器"
-                  style={{ minWidth: 'auto', width: '90px' }}
-                >
-                  <span className="taskbar-icon win98-icon win98-icon-plugin"></span>
-                  <span className="taskbar-text">插件</span>
                 </button>
               </>
             )}
@@ -1126,7 +1095,17 @@ function App() {
             </div>
             
             {/* 系统时间显示 */}
-            <div className="taskbar-clock" title={currentTime.toLocaleString('zh-CN')}>
+            <div 
+              className="taskbar-clock" 
+              title={currentTime.toLocaleString('zh-CN')}
+              onClick={() => {
+                const event = new CustomEvent('togglePlannerWindow');
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(event);
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <div className="clock-time">
                 {currentTime.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}
               </div>
@@ -1134,6 +1113,7 @@ function App() {
                 {currentTime.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/')}
               </div>
             </div>
+
           </div>
         </div>
       </div>

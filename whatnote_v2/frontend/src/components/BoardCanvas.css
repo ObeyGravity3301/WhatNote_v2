@@ -95,13 +95,16 @@
 .desktop-icon {
   position: absolute;
   width: 64px;
-  height: 76px;
+  min-height: 76px; /* 改为最小高度 */
+  height: auto; /* 允许高度自动调整 */
   display: flex;
   flex-direction: column;
   align-items: center;
   cursor: pointer;
   user-select: none;
   padding: 2px;
+  /* 添加垂直对齐，确保内容从顶部开始 */
+  justify-content: flex-start;
 }
 
 .desktop-icon:hover {
@@ -112,12 +115,17 @@
 .desktop-icon.selected {
   background: #000080;
   border: 1px dotted #ffffff;
+  z-index: 50; /* 选中时提高层级，防止被下方图标遮挡 */
 }
 
-/* 选中时显示完整文件名的扩展样式 */
-.desktop-icon.selected.expanded {
-  height: auto; /* 允许高度自动调整 */
-  min-height: 76px; /* 保持最小高度 */
+/* 选中时显示完整文件名的样式 */
+.desktop-icon.selected .desktop-icon-title-text {
+  -webkit-line-clamp: unset; /* 移除行数限制 */
+  line-clamp: unset;
+  overflow: visible; /* 显示所有内容 */
+  text-overflow: clip; /* 不使用省略号 */
+  display: block; /* 改为块级显示 */
+  background-color: #000080; /* 确保背景色覆盖完整文字 */
 }
 
 .desktop-icon.hidden-window {
@@ -162,12 +170,6 @@
   position: relative; /* 为绝对定位的完整文件名提供相对定位基准 */
 }
 
-/* 扩展状态下的标签样式 */
-.desktop-icon.expanded .desktop-icon-label {
-  max-height: none; /* 移除高度限制 */
-  height: auto; /* 允许自动调整高度 */
-}
-
 .desktop-icon-title-text {
   display: -webkit-box;
   -webkit-line-clamp: 3; /* 最多显示3行 */
@@ -182,15 +184,6 @@
   padding-top: 1px; /* 添加少量顶部padding确保第一行完整显示 */
 }
 
-/* 扩展状态下显示完整文件名 */
-.desktop-icon.expanded .desktop-icon-title-text {
-  -webkit-line-clamp: none; /* 移除行数限制 */
-  line-clamp: none;
-  overflow: visible; /* 显示所有内容 */
-  text-overflow: clip; /* 不使用省略号 */
-  display: block; /* 改为块级显示 */
-}
-
 .desktop-icon-rename-input {
   background: transparent; /* 透明背景，让选中框的背景显示 */
   color: #ffffff;
@@ -198,19 +191,21 @@
   font-size: 11px;
   font-family: 'MS Sans Serif', Tahoma, sans-serif;
   text-align: center;
-  padding: 1px; /* 减少内边距 */
+  padding: 0; /* 移除内边距，完全由内容决定高度 */
+  margin: 0; /* 移除外边距 */
   width: 100%; /* 填满标签区域 */
   height: auto; /* 允许高度自动调整 */
   min-height: 17px; /* 最小高度确保可见 */
   outline: none;
   box-sizing: border-box;
   resize: none;
-  overflow: visible; /* 允许内容可见，避免滚动条 */
+  overflow: hidden; /* 隐藏滚动条，避免计算高度时的误差 */
   line-height: 13px;
   word-wrap: break-word;
   white-space: pre-wrap; /* 保留换行符 */
   vertical-align: top; /* 顶部对齐 */
   text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8); /* 添加文字阴影，与普通文本一致 */
+  display: block; /* 块级显示，避免行内元素的间隙 */
   
   /* 确保输入过程中样式稳定 */
   transition: none;

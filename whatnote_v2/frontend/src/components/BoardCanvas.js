@@ -9474,6 +9474,111 @@ function BoardCanvas({
       console.error('保存图标位置失败:', error);
     }
   };
+
+  // 监听窗口大小变化，重排越界图标
+  useEffect(() => {
+    let resizeTimeout;
+
+    const handleResize = () => {
+      // 防抖处理
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+
+      resizeTimeout = setTimeout(() => {
+        // 1. 计算新的网格限制
+        const canvasArea = document.querySelector('.canvas-area');
+        let canvasWidth, canvasHeight;
+        
+        if (canvasArea) {
+          const rect = canvasArea.getBoundingClientRect();
+          canvasWidth = rect.width;
+          canvasHeight = rect.height;
+        } else {
+          canvasWidth = window.innerWidth - 250;
+          canvasHeight = window.innerHeight - 100;
+        }
+        
+        // 计算最大行数和列数
+        // 稍微预留一点空间(-10px)防止刚好贴边
+        const maxCols = Math.floor((canvasWidth - GRID_MARGIN * 2 - 10) / GRID_SIZE);
+        const maxRows = Math.floor((canvasHeight - GRID_MARGIN * 2 - 10) / GRID_SIZE);
+
+        console.log(`📏 窗口调整: ${Math.round(canvasWidth)}x${Math.round(canvasHeight)}, 网格限制: ${maxCols}列 x ${maxRows}行`);
+
+        // 2. 检查并处理越界图标
+        setDesktopIcons(prevIcons => {
+          // 找出越界的图标
+          const validIcons = [];
+          const invalidIcons = [];
+          const tempGrid = new Set(); // 临时构建新的网格状态
+
+          let needsUpdate = false;
+
+          prevIcons.forEach(icon => {
+            if (icon.gridPosition) {
+              const { gridX, gridY } = icon.gridPosition;
+              // 检查是否在新的边界内
+              if (gridX < maxCols && gridY < maxRows) {
+                validIcons.push(icon);
+                tempGrid.add(`${gridX},${gridY}`);
+              } else {
+                console.log(`⚠️ 图标越界需重排: ${icon.title} (${gridX},${gridY})`);
+                invalidIcons.push(icon);
+                needsUpdate = true;
+              }
+            } else {
+              // 没有网格位置的图标也视为需要重新安置
+              invalidIcons.push(icon);
+              needsUpdate = true;
+            }
+          });
+
+          // 如果没有越界图标，不需要更新状态
+          if (!needsUpdate) {
+            // 同步一下ref，确保一致性
+            desktopGridRef.current = tempGrid;
+            return prevIcons;
+          }
+
+          // 更新全局网格引用，为findNextAvailableGridPosition做准备
+          // 此时 desktopGridRef 只包含合法的图标位置
+          desktopGridRef.current = tempGrid;
+
+          // 3. 为越界图标分配新位置
+          const reorderedIcons = invalidIcons.map(icon => {
+            // findNextAvailableGridPosition 会读取最新的 desktopGridRef.current
+            // 也会读取最新的 DOM 尺寸来计算边界
+            const newGridPos = findNextAvailableGridPosition();
+            const newPixelPos = gridToPixel(newGridPos.gridX, newGridPos.gridY);
+            
+            console.log(`✅ 重排图标 ${icon.title}: -> (${newGridPos.gridX},${newGridPos.gridY})`);
+            
+            return {
+              ...icon,
+              position: newPixelPos,
+              gridPosition: newGridPos
+            };
+          });
+
+          const finalIcons = [...validIcons, ...reorderedIcons];
+          
+          // 保存新的布局
+          saveIconPositions(finalIcons);
+          
+          return finalIcons;
+        });
+
+      }, 200); // 200ms 防抖延迟
+    };
+
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+    };
+  }, [boardId]); // 依赖 boardId 以确保 saveIconPositions 使用正确的 ID
   
   // 隐藏窗口状态管理
 
@@ -11309,8 +11414,19 @@ function BoardCanvas({
     const newY = Math.max(0, iconDragData.initialY + deltaY);
     
     // 限制拖拽范围在画布内
-    const canvasWidth = window.innerWidth - 250;
-    const canvasHeight = window.innerHeight - 100;
+    const canvasArea = document.querySelector('.canvas-area');
+    let canvasWidth, canvasHeight;
+    
+    if (canvasArea) {
+      const rect = canvasArea.getBoundingClientRect();
+      canvasWidth = rect.width;
+      canvasHeight = rect.height;
+    } else {
+      // 备用方案
+      canvasWidth = window.innerWidth - 250;
+      canvasHeight = window.innerHeight - 100;
+    }
+
     const clampedX = Math.min(newX, canvasWidth - ICON_SIZE);
     const clampedY = Math.min(newY, canvasHeight - ICON_SIZE);
     
@@ -12606,13 +12722,17 @@ function BoardCanvas({
             </div>
             <div className="desktop-icon-label">
               {editingTitleId === icon.id ? (
-                <input
+                <textarea
                   ref={(input) => {
                     if (input && editingTitleId === icon.id) {
                       console.log('🎯 输入框ref回调，准备聚焦:', icon.id);
                       // 只在首次聚焦时设置光标位置
                       if (!input.hasAttribute('data-focused')) {
                         input.setAttribute('data-focused', 'true');
+                        // 自动调整高度
+                        input.style.height = 'auto';
+                        input.style.height = input.scrollHeight + 'px';
+
                         setTimeout(() => {
                           console.log('🎯 执行首次聚焦操作:', icon.id);
                           input.focus();
@@ -12623,19 +12743,27 @@ function BoardCanvas({
                       }
                     }
                   }}
-                  type="text"
                   className="desktop-icon-rename-input"
                   value={editingTitleValue}
-                  onChange={(e) => setEditingTitleValue(e.target.value)}
+                  onChange={(e) => {
+                    setEditingTitleValue(e.target.value);
+                    // 自动调整高度
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
                   onBlur={finishEditingTitle}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
+                      e.preventDefault();
                       finishEditingTitle();
                     } else if (e.key === 'Escape') {
                       setEditingTitleId(null);
                       setEditingTitleValue('');
                     }
                   }}
+                  onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  rows={1}
                 />
               ) : (
                 <span className="desktop-icon-title-text">{icon.title}</span>

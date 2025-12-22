@@ -3056,7 +3056,7 @@ class ContentManager:
             print(f"渲染PDF页面失败: {e}")
             import traceback
             print(f"详细错误信息: {traceback.format_exc()}")
-            return None
+            return None 
 
     def save_narrator_script(self, board_id: str, window_id: str, page: int, content: str) -> bool:
         """保存PDF指定页面的讲稿内容"""
