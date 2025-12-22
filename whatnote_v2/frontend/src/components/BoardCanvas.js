@@ -7544,7 +7544,7 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
             key: 0,
             isLoading: false
           }));
-        }
+      }
       }
     } catch (e) {
       console.warn('解析标签页数据失败，回退到单 URL 模式', e);
@@ -13478,7 +13478,7 @@ function BoardCanvas({
             </div>
 
             {!window.isMaximized && (
-              <div className="resize-handle" onMouseDown={(e) => startResize(e, window)} />
+            <div className="resize-handle" onMouseDown={(e) => startResize(e, window)} />
             )}
           </div>
         );
