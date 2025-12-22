@@ -7517,14 +7517,26 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
   const getInitialTabs = () => {
     try {
       let content = windowData.content;
-      // 处理之前可能存在的错误格式（被错误地添加了 https:// 前缀的 JSON）
-      if (content && content.startsWith('https://[') && content.endsWith(']')) {
-        content = content.substring(8);
+      if (!content) throw new Error('Empty content');
+
+      // 1. 处理之前可能存在的错误格式（被错误地添加了 https:// 前缀的 JSON）
+      if (content.startsWith('https://[') || content.startsWith('http://[')) {
+        content = content.substring(content.indexOf('['));
+      }
+
+      // 2. 如果包含编码字符，尝试解码一次（处理被意外编码的 JSON）
+      if (content.includes('%22') || content.includes('%7B') || content.includes('%5B')) {
+        try {
+          const decoded = decodeURIComponent(content);
+          if (decoded.startsWith('[') || decoded.startsWith('{')) {
+            content = decoded;
+          }
+        } catch (e) { /* ignore */ }
       }
       
-      // 尝试从 content 解析 JSON
-      if (content && (content.startsWith('[') || content.startsWith('{'))) {
-        const parsed = JSON.parse(windowData.content);
+      // 3. 尝试从清理后的 content 解析 JSON
+      if (content.startsWith('[') || content.startsWith('{')) {
+        const parsed = JSON.parse(content);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map(t => ({
             ...t,
@@ -7537,14 +7549,17 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
     } catch (e) {
       console.warn('解析标签页数据失败，回退到单 URL 模式', e);
     }
-    // 回退：单 URL 模式或空
+    // 回退：单 URL 模式或空。如果 content 明显是损坏的 JSON，不要将其作为 URL
+    const fallbackUrl = (windowData.content && (windowData.content.includes('[{"') || windowData.content.includes('%5B%7B'))) 
+      ? '' : (windowData.content || '');
+
     return [
       { 
         id: 'default', 
-        url: windowData.content || '', 
+        url: fallbackUrl, 
         title: '新标签页',
         key: 0,
-        isLoading: !!windowData.content
+        isLoading: !!fallbackUrl
       }
     ];
   };
@@ -7636,6 +7651,11 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
 
   const handleDetach = () => {
     if (activeTab?.url) {
+      // 额外检查，防止打开损坏的 JSON URL
+      if (activeTab.url.startsWith('[') || activeTab.url.startsWith('https://[')) {
+        console.warn('检测到损坏的 URL，拒绝分离:', activeTab.url);
+        return;
+      }
       window.open(activeTab.url, '_blank');
     }
   };
