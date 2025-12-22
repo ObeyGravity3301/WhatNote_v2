@@ -160,7 +160,7 @@ async def startup_event():
         try:
             from tools.news_tools import register_news_tools
             register_news_tools(tool_registry)
-    except Exception as e:
+        except Exception as e:
             error(f"[Error] 注册新闻工具失败: {e}")
 
         info(f"[Success] 当前已注册 {len(tool_registry.get_all_tools())} 个工具")
@@ -3536,7 +3536,7 @@ async def render_pages_thumbnails(board_id: str, window_id: str):
                 if (Path(DATA_DIR) / board_id / window_data['content']).exists():
                     pdf_path = Path(DATA_DIR) / board_id / window_data['content']
                 else:
-            raise HTTPException(status_code=404, detail="PDF文件不存在")
+                    raise HTTPException(status_code=404, detail="PDF文件不存在")
             else:
                 pdf_path = Path(window_data['content'])
         
@@ -3758,19 +3758,19 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                                 'errorMessage': "[Error] 之前的提取包含错误，请重试"
                             })
                         else:
-                        # 尝试提取版本信息
-                        version_info = {
-                            'has_text': '文本提取' in content or '## 文本内容' in content,
-                            'has_description': '图片描述' in content or '## 图片描述' in content
-                        }
-                        
-                        pages_info.append({
-                            'page': page_num,
-                            'extracted': True,
-                            'char_count': char_count,
-                            'versions': version_info,
-                            'file_path': str(page_file)
-                        })
+                            # 尝试提取版本信息
+                            version_info = {
+                                'has_text': '文本提取' in content or '## 文本内容' in content,
+                                'has_description': '图片描述' in content or '## 图片描述' in content
+                            }
+                            
+                            pages_info.append({
+                                'page': page_num,
+                                'extracted': True,
+                                'char_count': char_count,
+                                'versions': version_info,
+                                'file_path': str(page_file)
+                            })
                 except Exception as e:
                     error(f"读取页面文件失败: {e}")
                     pages_info.append({
@@ -4093,8 +4093,8 @@ async def extract_pages_content(
                 # 使用视觉模型
                 accumulated_content = ""
                 try:
-                async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
-                    accumulated_content += chunk
+                    async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
+                        accumulated_content += chunk
                 except Exception as llm_error:
                     error_msg = str(llm_error)
                     info(f"[Error] [任务{page_num}] LLM调用失败: {error_msg}")

@@ -288,9 +288,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   
   // 注释设置状态
   const defaultAnnotationSettings = {
-      style: 'detailed', // 默认风格: detailed, simple, academic
-      customPrompt: ''
-    };
+    style: 'detailed', // 默认风格: detailed, simple, academic
+    customPrompt: ''
+  };
 
   const [annotationSettings, setAnnotationSettings] = useState(defaultAnnotationSettings);
 
@@ -502,15 +502,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         
         // 尝试加载细分数据
         try {
-          const subdivResponse = await fetch(
-            `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
-          );
-          if (subdivResponse.ok) {
-            const subdivData = await subdivResponse.json();
-            setBatchSubdivisions(subdivData);
-            setStage2Completed(true);
-            console.log('加载已有细分数据:', subdivData);
-          }
+        const subdivResponse = await fetch(
+          `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivision-data`
+        );
+        if (subdivResponse.ok) {
+          const subdivData = await subdivResponse.json();
+          setBatchSubdivisions(subdivData);
+          setStage2Completed(true);
+          console.log('加载已有细分数据:', subdivData);
+        }
         } catch(e) { /* ignore 404 */ }
       
       // 尝试加载全文档笔记
@@ -1516,14 +1516,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 marginBottom: '8px'
+            }}>
+              <div style={{
+                fontSize: '11px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                fontWeight: 'bold',
+                color: '#000080'
               }}>
-                <div style={{
-                  fontSize: '11px',
-                  fontFamily: 'MS Sans Serif, sans-serif',
-                  fontWeight: 'bold',
-                  color: '#000080'
-                }}>
-                  搜索: "{searchResults.query}"
+                搜索: "{searchResults.query}"
                 </div>
                 <button
                   onClick={() => {
@@ -1584,15 +1584,15 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       }}>
                         {result.section_title} - {result.subdivision_title}
                       </div>
-                      <div style={{
+                        <div style={{
                         fontSize: '9px',
                         color: '#606060',
                         display: 'flex',
                         justifyContent: 'space-between'
-                      }}>
+                        }}>
                         <span>第 {result.pages.join(', ')} 页</span>
                         <span>{result.relevance}</span>
-                      </div>
+                        </div>
                     </div>
                   ))}
                 </div>
@@ -1948,11 +1948,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                               'warning'
                             );
                           } else {
-                            addMessageWithSource(
-                              '✅ 页面提取完成',
-                              `成功提取 ${data.total} 个页面的内容`,
-                              'success'
-                            );
+                          addMessageWithSource(
+                            '✅ 页面提取完成',
+                            `成功提取 ${data.total} 个页面的内容`,
+                            'success'
+                          );
                           }
                         } else if (data.type === 'error') {
                           errorCount++;
@@ -7025,7 +7025,7 @@ const toMediaUrl = (windowOrContent, boardId) => {
 function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter }) {
   const hasContent = hasRealMediaContent(windowData);
   const imageUrl = hasContent ? toMediaUrl(windowData, boardId) : null;
-  
+
   // 新增状态
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractResult, setExtractResult] = useState(null);
@@ -7099,8 +7099,8 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
             }
         } finally {
             setIsExtracting(false);
-        }
-        return;
+      }
+      return;
     }
 
     if (typeof window !== 'undefined') {
@@ -7513,74 +7513,267 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, 
 }
 
 function WebWindowRenderer({ window: windowData, onUrlChange }) {
-  const [addressBar, setAddressBar] = useState(windowData.content || '');
-  const [currentUrl, setCurrentUrl] = useState(windowData.content || '');
-  const [frameKey, setFrameKey] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadError, setLoadError] = useState(null);
-  const blockedTimerRef = useRef(null);
-
-  useEffect(() => {
-    const incomingUrl = windowData.content || '';
-    setAddressBar(incomingUrl);
-    setCurrentUrl(incomingUrl);
-    setLoadError(null);
-  }, [windowData.content, windowData.id]);
-
-  useEffect(() => {
-    return () => {
-      if (blockedTimerRef.current) {
-        clearTimeout(blockedTimerRef.current);
+  // 解析初始标签页数据
+  const getInitialTabs = () => {
+    try {
+      let content = windowData.content;
+      // 处理之前可能存在的错误格式（被错误地添加了 https:// 前缀的 JSON）
+      if (content && content.startsWith('https://[') && content.endsWith(']')) {
+        content = content.substring(8);
       }
-    };
-  }, []);
-
-  const scheduleBlockedFallback = () => {
-    if (blockedTimerRef.current) {
-      clearTimeout(blockedTimerRef.current);
+      
+      // 尝试从 content 解析 JSON
+      if (content && (content.startsWith('[') || content.startsWith('{'))) {
+        const parsed = JSON.parse(windowData.content);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(t => ({
+            ...t,
+            id: t.id || Math.random().toString(36).substr(2, 9),
+            key: 0,
+            isLoading: false
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('解析标签页数据失败，回退到单 URL 模式', e);
     }
-    blockedTimerRef.current = setTimeout(() => {
-      setIsLoading(false);
-      setLoadError('该站点禁止在窗口中打开，请改用浏览器访问或复制链接到新标签。');
-    }, 3500);
+    // 回退：单 URL 模式或空
+    return [
+      { 
+        id: 'default', 
+        url: windowData.content || '', 
+        title: '新标签页',
+        key: 0,
+        isLoading: !!windowData.content
+      }
+    ];
   };
 
-  const clearBlockedFallback = () => {
-    if (blockedTimerRef.current) {
-      clearTimeout(blockedTimerRef.current);
-      blockedTimerRef.current = null;
+  const [tabs, setTabs] = useState(getInitialTabs);
+  const [activeTabId, setActiveTabId] = useState(() => tabs[0].id);
+  const [addressBar, setAddressBar] = useState(() => tabs[0]?.url || '');
+  const [loadError, setLoadError] = useState(null);
+
+  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
+
+  // 统一的保存函数
+  const saveStateToBackend = (updatedTabs) => {
+    if (onUrlChange) {
+      // 将整个标签页结构保存到 content
+      onUrlChange(JSON.stringify(updatedTabs.map(t => ({
+        id: t.id,
+        url: t.url,
+        title: t.title
+      }))));
     }
+  };
+
+  const updateTab = (id, updates, shouldSave = false) => {
+    setTabs(prev => {
+      const newTabs = prev.map(tab => 
+        tab.id === id ? { ...tab, ...updates } : tab
+      );
+      if (shouldSave) {
+        saveStateToBackend(newTabs);
+      }
+      return newTabs;
+    });
   };
 
   const handleNavigate = () => {
-    if (!onUrlChange) return;
     const normalized = ensureHttpUrl(addressBar);
     if (!normalized) return;
-    setAddressBar(normalized);
-    setCurrentUrl(normalized);
-    onUrlChange(normalized);
-    setFrameKey(prev => prev + 1);
+    
+    updateTab(activeTabId, { 
+      url: normalized, 
+      isLoading: true, 
+      key: (activeTab.key || 0) + 1 
+    }, true); // 保存导航后的状态
   };
 
   const handleReload = () => {
-    if (!currentUrl) return;
-    setFrameKey(prev => prev + 1);
+    if (!activeTab?.url) return;
+    updateTab(activeTabId, { 
+      isLoading: true, 
+      key: (activeTab.key || 0) + 1 
+    });
   };
 
-  useEffect(() => {
-    if (currentUrl) {
-      setIsLoading(true);
-      setLoadError(null);
-      scheduleBlockedFallback();
-    } else {
-      setIsLoading(false);
-      setLoadError(null);
-      clearBlockedFallback();
+  const handleAddTab = () => {
+    const newId = Math.random().toString(36).substr(2, 9);
+    const newTab = { 
+      id: newId, 
+      url: '', 
+      title: '新标签页', 
+      key: 0, 
+      isLoading: false 
+    };
+    const newTabs = [...tabs, newTab];
+    setTabs(newTabs);
+    setActiveTabId(newId);
+    setAddressBar('');
+    saveStateToBackend(newTabs);
+  };
+
+  const handleCloseTab = (e, id) => {
+    e.stopPropagation();
+    if (tabs.length === 1) {
+      updateTab(id, { url: '', title: '新标签页', key: 0, isLoading: false }, true);
+      setAddressBar('');
+      return;
     }
-  }, [currentUrl, frameKey]);
+
+    const newTabs = tabs.filter(t => t.id !== id);
+    setTabs(newTabs);
+    
+    if (activeTabId === id) {
+      const lastTab = newTabs[newTabs.length - 1];
+      setActiveTabId(lastTab.id);
+      setAddressBar(lastTab.url || '');
+    }
+    saveStateToBackend(newTabs);
+  };
+
+  const handleDetach = () => {
+    if (activeTab?.url) {
+      window.open(activeTab.url, '_blank');
+    }
+  };
+
+  // 监听地址栏变化
+  useEffect(() => {
+    if (activeTab) {
+      setAddressBar(activeTab.url || '');
+      setLoadError(null);
+    }
+  }, [activeTabId]);
+
+  const handleIframeLoad = (id) => {
+    updateTab(id, { isLoading: false });
+    // 尝试更新标签页标题（如果同源的话，跨域无法获取）
+    try {
+      const iframe = document.querySelector(`iframe[title="tab-${id}"]`);
+      if (iframe && iframe.contentDocument && iframe.contentDocument.title) {
+        updateTab(id, { title: iframe.contentDocument.title }, true);
+      }
+    } catch (e) {
+      // 跨域限制
+    }
+  };
+
+  const handleIframeError = (id) => {
+    updateTab(id, { isLoading: false });
+    if (id === activeTabId) {
+      setLoadError('该站点禁止在窗口中打开，请改用浏览器访问或复制链接到新标签。');
+    }
+  };
+
+  const getTabTitle = (tab) => {
+    if (tab.title && tab.title !== '新标签页') return tab.title;
+    if (!tab.url) return '新标签页';
+    try {
+      const normalized = ensureHttpUrl(tab.url);
+      if (!normalized) return tab.url || '新标签页';
+      const url = new URL(normalized);
+      return url.hostname || tab.url;
+    } catch (e) {
+      return tab.url;
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* 标签栏 */}
+      <div style={{
+        display: 'flex',
+        backgroundColor: '#c0c0c0',
+        padding: '2px 2px 0 2px',
+        gap: '2px',
+        overflowX: 'auto',
+        flexShrink: 0,
+        height: '24px',
+        alignItems: 'flex-end',
+        borderBottom: '1px solid #808080'
+      }}>
+        {tabs.map(tab => (
+          <div
+            key={tab.id}
+            onClick={() => setActiveTabId(tab.id)}
+            style={{
+              padding: '2px 8px',
+              backgroundColor: activeTabId === tab.id ? '#ffffff' : '#d4d0c8',
+              borderTop: '1px solid #ffffff',
+              borderLeft: '1px solid #ffffff',
+              borderRight: '1px solid #404040',
+              borderBottom: activeTabId === tab.id ? '1px solid #ffffff' : '1px solid #404040',
+              borderTopLeftRadius: '3px',
+              borderTopRightRadius: '3px',
+              marginBottom: activeTabId === tab.id ? '-1px' : '0',
+              fontSize: '11px',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              maxWidth: '120px',
+              minWidth: '60px',
+              height: activeTabId === tab.id ? '22px' : '20px',
+              position: 'relative',
+              zIndex: activeTabId === tab.id ? 10 : 1
+            }}
+            title={tab.url}
+          >
+            <span style={{ 
+              flex: 1, 
+              overflow: 'hidden', 
+              textOverflow: 'ellipsis', 
+              whiteSpace: 'nowrap' 
+            }}>
+              {getTabTitle(tab)}
+            </span>
+            <span 
+              onClick={(e) => handleCloseTab(e, tab.id)}
+              style={{
+                width: '12px',
+                height: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '2px',
+                fontSize: '10px',
+                color: '#555'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ffcdcd'; e.currentTarget.style.color = 'red'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#555'; }}
+            >
+              ×
+            </span>
+          </div>
+        ))}
+        <button
+          onClick={handleAddTab}
+          style={{
+            width: '20px',
+            height: '18px',
+            border: 'none',
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#555',
+            marginBottom: '2px'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e0e0e0'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          title="新建标签页"
+        >
+          +
+        </button>
+      </div>
+
+      {/* 地址栏工具栏 */}
       <div style={{
         backgroundColor: '#c0c0c0',
         borderBottom: '2px outset #c0c0c0',
@@ -7591,6 +7784,25 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
         flexShrink: 0,
         height: '26px'
       }}>
+        <button
+          onClick={handleReload}
+          title="刷新"
+          style={{
+            padding: '1px 4px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            cursor: activeTab?.url ? 'pointer' : 'not-allowed',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          disabled={!activeTab?.url}
+        >
+          🔄
+        </button>
         <span style={{ fontFamily: 'MS Sans Serif, sans-serif', fontSize: '11px' }}>地址:</span>
         <input
           type="text"
@@ -7640,131 +7852,121 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
             e.target.style.backgroundColor = '#c0c0c0';
           }}
         >
-          前往
+          转到
         </button>
         <button
-          onClick={handleReload}
+          onClick={handleDetach}
+          title="在外部浏览器打开"
           style={{
-            padding: '1px 8px',
+            padding: '1px 6px',
             fontSize: '11px',
             backgroundColor: '#c0c0c0',
             border: '2px outset #c0c0c0',
-            cursor: currentUrl ? 'pointer' : 'not-allowed',
+            cursor: activeTab?.url ? 'pointer' : 'not-allowed',
             fontFamily: 'MS Sans Serif, sans-serif',
-            height: '20px',
-            minWidth: '50px'
+            height: '20px'
           }}
-          disabled={!currentUrl}
-          onMouseDown={(e) => {
-            if (currentUrl) {
-              e.target.style.border = '2px inset #c0c0c0';
-              e.target.style.backgroundColor = '#a0a0a0';
-            }
-          }}
-          onMouseUp={(e) => {
-            e.target.style.border = '2px outset #c0c0c0';
-            e.target.style.backgroundColor = '#c0c0c0';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.border = '2px outset #c0c0c0';
-            e.target.style.backgroundColor = '#c0c0c0';
-          }}
+          disabled={!activeTab?.url}
         >
-          刷新
+          ↗️ 分离
         </button>
       </div>
-      <div style={{ flex: 1, border: '2px inset #ffffff', backgroundColor: '#ffffff', position: 'relative' }}>
-        {currentUrl && !loadError ? (
-          <>
-            {isLoading && (
-              <div style={{
-                position: 'absolute',
-                top: 8,
-                right: 8,
-                background: '#ffffe1',
-                border: '1px solid #b5b500',
-                padding: '2px 8px',
-                fontSize: '11px',
-                fontFamily: 'MS Sans Serif, sans-serif',
-                zIndex: 2
-              }}>
-                正在加载…
-              </div>
-            )}
-            <iframe
-              key={`${windowData.id}-${frameKey}`}
-              title={`${windowData.title || 'web-window'}-iframe`}
-              src={currentUrl}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-              onLoad={() => {
-                clearBlockedFallback();
-                setIsLoading(false);
-                setLoadError(null);
-              }}
-              onError={() => {
-                clearBlockedFallback();
-                setIsLoading(false);
-                setLoadError('该站点禁止在窗口中打开，请改用浏览器访问或复制链接到新标签。');
-              }}
-            />
-          </>
-        ) : (
-          <div
-            className="web-placeholder"
-            style={{
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexDirection: 'column',
-              color: '#555',
-              fontFamily: 'MS Sans Serif, sans-serif',
-              fontSize: '12px',
-              gap: '8px',
-              padding: '16px',
-              textAlign: 'center'
+
+      {/* 内容区域 - 渲染所有 iframe，但只显示激活的 */}
+      <div style={{ flex: 1, border: '2px inset #ffffff', backgroundColor: '#ffffff', position: 'relative', overflow: 'hidden' }}>
+        {tabs.map(tab => (
+          <div 
+            key={tab.id} 
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              display: activeTabId === tab.id ? 'block' : 'none' 
             }}
           >
-            <span role="img" aria-label="web">🌐</span>
-            <p style={{ margin: 0 }}>{loadError ? '无法嵌入该站点' : '尚未设置网页地址'}</p>
-            <p style={{ margin: 0 }}>
-              {loadError
-                ? '请改用浏览器打开此链接。'
-                : '在上方输入框填写 URL，点击“前往”即可加载网页'}
-            </p>
-            {loadError && currentUrl && (
-              <button
+            {tab.url ? (
+              <>
+                {tab.isLoading && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    background: '#ffffe1',
+                    border: '1px solid #b5b500',
+                    padding: '2px 8px',
+                    fontSize: '11px',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    zIndex: 2
+                  }}>
+                    正在加载…
+                  </div>
+                )}
+                {/* 如果当前标签页有错误且是激活状态，显示错误信息 */}
+                {activeTabId === tab.id && loadError ? (
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'column',
+                      color: '#555',
+                      padding: '16px',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <p>{loadError}</p>
+                    <button
+                      style={{
+                        marginTop: '8px',
+                        padding: '2px 12px',
+                        backgroundColor: '#c0c0c0',
+                        border: '2px outset #c0c0c0',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => window.open(tab.url, '_blank')}
+                    >
+                      在浏览器中打开
+                    </button>
+                  </div>
+                ) : (
+                  <iframe
+                    title={`tab-${tab.id}`}
+                    src={tab.url}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                    // 关键：key 包含 tab.key，用于强制刷新
+                    key={`${tab.id}-${tab.key}`}
+                    onLoad={() => handleIframeLoad(tab.id)}
+                    onError={() => handleIframeError(tab.id)}
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-popups"
+                  />
+                )}
+              </>
+            ) : (
+              <div
+                className="web-placeholder"
                 style={{
-                  marginTop: '8px',
-                  padding: '2px 12px',
-                  fontSize: '11px',
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'column',
+                  color: '#555',
                   fontFamily: 'MS Sans Serif, sans-serif',
-                  backgroundColor: '#c0c0c0',
-                  border: '2px outset #c0c0c0',
-                  cursor: 'pointer'
-                }}
-                onMouseDown={(e) => {
-                  e.target.style.border = '2px inset #c0c0c0';
-                  e.target.style.backgroundColor = '#a0a0a0';
-                }}
-                onMouseUp={(e) => {
-                  e.target.style.border = '2px outset #c0c0c0';
-                  e.target.style.backgroundColor = '#c0c0c0';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.border = '2px outset #c0c0c0';
-                  e.target.style.backgroundColor = '#c0c0c0';
-                }}
-                onClick={() => {
-                  window.open(currentUrl, '_blank', 'noopener,noreferrer');
+                  fontSize: '12px',
+                  gap: '8px',
+                  padding: '16px',
+                  textAlign: 'center'
                 }}
               >
-                在浏览器中打开
-              </button>
+                <span role="img" aria-label="web">🌐</span>
+                <p style={{ margin: 0 }}>新标签页</p>
+                <p style={{ margin: 0 }}>在上方输入框填写 URL，点击“前往”访问网页</p>
+              </div>
             )}
           </div>
-        )}
+        ))}
       </div>
     </div>
   );
@@ -8706,70 +8908,70 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
             )}
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {!hasContent && onConvertToWeb && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
+        {!hasContent && onConvertToWeb && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            fontSize: '11px'
+          }}>
+            <span style={{ color: '#000000' }}>或输入网址:</span>
+            <input
+              type="text"
+              value={webUrlInput}
+              onChange={(e) => setWebUrlInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleConvertToWeb();
+                }
+              }}
+              placeholder="例如 https://example.com"
+              style={{
+                padding: '2px 4px',
+                width: '200px',
+                border: '2px inset #ffffff',
                 fontFamily: 'MS Sans Serif, sans-serif',
-                fontSize: '11px'
-              }}>
-                <span style={{ color: '#000000' }}>或输入网址:</span>
-                <input
-                  type="text"
-                  value={webUrlInput}
-                  onChange={(e) => setWebUrlInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleConvertToWeb();
-                    }
-                  }}
-                  placeholder="例如 https://example.com"
-                  style={{
-                    padding: '2px 4px',
-                    width: '200px',
-                    border: '2px inset #ffffff',
-                    fontFamily: 'MS Sans Serif, sans-serif',
-                    fontSize: '11px',
-                    backgroundColor: '#ffffff',
-                    color: '#000000'
-                  }}
-                />
-                <button
-                  onClick={handleConvertToWeb}
-                  style={{
-                    padding: '1px 8px',
-                    fontSize: '11px',
-                    backgroundColor: '#c0c0c0',
-                    border: '2px outset #c0c0c0',
-                    borderRadius: '0px',
-                    cursor: webUrlInput.trim() ? 'pointer' : 'not-allowed',
-                    fontFamily: 'MS Sans Serif, sans-serif',
-                    height: '20px',
-                    minWidth: '70px'
-                  }}
-                  disabled={!webUrlInput.trim()}
-                  onMouseDown={(e) => {
-                    if (webUrlInput.trim()) {
-                      e.target.style.border = '2px inset #c0c0c0';
-                      e.target.style.backgroundColor = '#a0a0a0';
-                    }
-                  }}
-                  onMouseUp={(e) => {
-                    e.target.style.border = '2px outset #c0c0c0';
-                    e.target.style.backgroundColor = '#c0c0c0';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.border = '2px outset #c0c0c0';
-                    e.target.style.backgroundColor = '#c0c0c0';
-                  }}
-                  title="将当前文本窗口转换为网页窗口"
-                >
-                  打开网页
-                </button>
-              </div>
-            )}
+                fontSize: '11px',
+                backgroundColor: '#ffffff',
+                color: '#000000'
+              }}
+            />
+            <button
+              onClick={handleConvertToWeb}
+              style={{
+                padding: '1px 8px',
+                fontSize: '11px',
+                backgroundColor: '#c0c0c0',
+                border: '2px outset #c0c0c0',
+                borderRadius: '0px',
+                cursor: webUrlInput.trim() ? 'pointer' : 'not-allowed',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                height: '20px',
+                minWidth: '70px'
+              }}
+              disabled={!webUrlInput.trim()}
+              onMouseDown={(e) => {
+                if (webUrlInput.trim()) {
+                  e.target.style.border = '2px inset #c0c0c0';
+                  e.target.style.backgroundColor = '#a0a0a0';
+                }
+              }}
+              onMouseUp={(e) => {
+                e.target.style.border = '2px outset #c0c0c0';
+                e.target.style.backgroundColor = '#c0c0c0';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.border = '2px outset #c0c0c0';
+                e.target.style.backgroundColor = '#c0c0c0';
+              }}
+              title="将当前文本窗口转换为网页窗口"
+            >
+              打开网页
+            </button>
+          </div>
+        )}
 
             <div style={{ position: 'relative' }} ref={exportMenuRef}>
               <button
@@ -10268,7 +10470,7 @@ function BoardCanvas({
         document.activeElement.tagName === 'INPUT' ||
         document.activeElement.tagName === 'TEXTAREA' ||
         document.activeElement.isContentEditable;
-
+      
       // 1. System Shortcuts (Always active unless captured?)
       // Start Menu
       if (ShortcutManager.matches('system.start_menu', e)) {
@@ -10276,7 +10478,7 @@ function BoardCanvas({
         setShowStartMenu(prev => !prev);
         return;
       }
-
+      
       // AI Assistant
       if (ShortcutManager.matches('system.ai_assistant', e)) {
         e.preventDefault();
@@ -10336,7 +10538,7 @@ function BoardCanvas({
       
       // Minimize Current Window
       if (ShortcutManager.matches('window.minimize', e)) {
-         e.preventDefault();
+        e.preventDefault();
          if (focusedWindowId) {
              handleWindowMinimizeLocal(focusedWindowId);
          }
@@ -10347,7 +10549,7 @@ function BoardCanvas({
       if (ShortcutManager.matches('desktop.rename', e)) {
           // If on desktop (icon selected)
           if (selectedIconId && !isInputFocused) {
-              e.preventDefault();
+        e.preventDefault();
               // Trigger rename logic (needs to expose rename function or set state)
               // Currently rename is triggered via Context Menu 'rename' action
               // We need to simulate that
@@ -10380,7 +10582,7 @@ function BoardCanvas({
                  e.preventDefault();
                  // Show confirm dialog? handleWindowDelete usually has confirm
                  handleWindowDelete(focusedWindowId);
-              }
+      }
           }
           return;
       }
@@ -11123,11 +11325,21 @@ function BoardCanvas({
     }
   };
 
-  const handleWebUrlUpdate = async (windowId, rawUrl) => {
-    const normalizedUrl = ensureHttpUrl(rawUrl);
-    if (!normalizedUrl) {
-      addMessage('⚠️ 无效的地址', '请输入正确的URL，例如 https://example.com', 'warning');
-      return;
+  const handleWebUrlUpdate = async (windowId, rawUrlOrTabs) => {
+    let contentToSave = rawUrlOrTabs;
+    
+    // 检查是否是 JSON 格式的标签页数据
+    const isJsonTabs = typeof rawUrlOrTabs === 'string' && 
+                      (rawUrlOrTabs.startsWith('[') || rawUrlOrTabs.startsWith('{'));
+
+    if (!isJsonTabs) {
+      // 只有不是 JSON 时才进行 URL 规范化
+      const normalizedUrl = ensureHttpUrl(rawUrlOrTabs);
+      if (!normalizedUrl) {
+        addMessage('⚠️ 无效的地址', '请输入正确的URL，例如 https://example.com', 'warning');
+        return;
+      }
+      contentToSave = normalizedUrl;
     }
 
     const targetWindow = windows.find(w => w.id === windowId);
@@ -11136,16 +11348,17 @@ function BoardCanvas({
     const payload = {
       ...targetWindow,
       type: 'web',
-      content: normalizedUrl,
-      web_url: normalizedUrl,
+      content: contentToSave,
+      web_url: isJsonTabs ? (targetWindow.web_url || '') : contentToSave,
       file_path: null
     };
 
     try {
-      await persistWindowUpdate(windowId, payload, `已更新为 ${normalizedUrl}`);
+      // 静默保存，不弹出成功消息
+      await persistWindowUpdate(windowId, payload);
     } catch (error) {
-      console.error('❌ 更新网页URL失败:', error);
-      addMessage('✗ 更新网页地址失败', error.message, 'error');
+      console.error('❌ 更新网页窗口状态失败:', error);
+      addMessage('✗ 更新网页状态失败', error.message, 'error');
     }
   };
 
@@ -13131,7 +13344,7 @@ function BoardCanvas({
                   boardId={boardId}
                   addMessage={addMessage}
                   openMessageCenter={openMessageCenter}
-                  />
+                />
               )}
               {window.type === 'video' && (
                 <label className="video-placeholder" title={window.content || '点击上传视频'}>
