@@ -160,7 +160,7 @@ async def startup_event():
         try:
             from tools.news_tools import register_news_tools
             register_news_tools(tool_registry)
-    except Exception as e:
+        except Exception as e:
             error(f"[Error] 注册新闻工具失败: {e}")
 
         info(f"[Success] 当前已注册 {len(tool_registry.get_all_tools())} 个工具")
@@ -169,8 +169,13 @@ async def startup_event():
         import traceback
         error(traceback.format_exc())
 
-    # 默认不启动 CyberChat 循环，等待前端插件激活
-    # await cyber_irc.startup() 
+    # 启动插件
+    try:
+        from plugins import cyber_irc
+        await cyber_irc.startup()
+        info("[Start] [Plugin] CyberIRC loop started.")
+    except Exception as e:
+        error(f"Failed to start CyberIRC loop: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -182,8 +187,13 @@ async def shutdown_event():
     except Exception as e:
         info(f"停止文件监控服务时出错: {e}")
     
-    # 停止 CyberChat 循环 (安全起见)
-    await cyber_irc.shutdown()
+    # 停止插件
+    try:
+        from plugins import cyber_irc
+        await cyber_irc.shutdown()
+        info("[Stop] [Plugin] CyberIRC loop stopped.")
+    except Exception as e:
+        error(f"Failed to stop CyberIRC loop: {e}")
     
     # 等待一下让线程完全停止
     import time
@@ -312,28 +322,6 @@ async def get_board_file(board_id: str, file_path: str):
     except Exception as e:
         error(f"获取文件失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.on_event("startup")
-async def startup_event():
-    """Application startup: Initialize plugins."""
-    try:
-        from plugins import cyber_irc
-        await cyber_irc.startup()
-        info("[Start] [Plugin] CyberIRC loop started.")
-    except Exception as e:
-        error(f"Failed to start CyberIRC loop: {e}")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Application shutdown: Cleanup plugins."""
-    try:
-        from plugins import cyber_irc
-        await cyber_irc.shutdown()
-        info("[Stop] [Plugin] CyberIRC loop stopped.")
-    except Exception as e:
-        error(f"Failed to stop CyberIRC loop: {e}")
-
-
 
 # 初始化WebSocket连接管理器
 manager = ConnectionManager()
@@ -3536,7 +3524,7 @@ async def render_pages_thumbnails(board_id: str, window_id: str):
                 if (Path(DATA_DIR) / board_id / window_data['content']).exists():
                     pdf_path = Path(DATA_DIR) / board_id / window_data['content']
                 else:
-            raise HTTPException(status_code=404, detail="PDF文件不存在")
+                    raise HTTPException(status_code=404, detail="PDF文件不存在")
             else:
                 pdf_path = Path(window_data['content'])
         
@@ -3758,19 +3746,19 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
                                 'errorMessage': "[Error] 之前的提取包含错误，请重试"
                             })
                         else:
-                        # 尝试提取版本信息
-                        version_info = {
-                            'has_text': '文本提取' in content or '## 文本内容' in content,
-                            'has_description': '图片描述' in content or '## 图片描述' in content
-                        }
-                        
-                        pages_info.append({
-                            'page': page_num,
-                            'extracted': True,
-                            'char_count': char_count,
-                            'versions': version_info,
-                            'file_path': str(page_file)
-                        })
+                            # 尝试提取版本信息
+                            version_info = {
+                                'has_text': '文本提取' in content or '## 文本内容' in content,
+                                'has_description': '图片描述' in content or '## 图片描述' in content
+                            }
+                            
+                            pages_info.append({
+                                'page': page_num,
+                                'extracted': True,
+                                'char_count': char_count,
+                                'versions': version_info,
+                                'file_path': str(page_file)
+                            })
                 except Exception as e:
                     error(f"读取页面文件失败: {e}")
                     pages_info.append({
@@ -4093,8 +4081,8 @@ async def extract_pages_content(
                 # 使用视觉模型
                 accumulated_content = ""
                 try:
-                async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
-                    accumulated_content += chunk
+                    async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
+                        accumulated_content += chunk
                 except Exception as llm_error:
                     error_msg = str(llm_error)
                     info(f"[Error] [任务{page_num}] LLM调用失败: {error_msg}")

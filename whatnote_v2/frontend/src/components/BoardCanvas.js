@@ -7660,6 +7660,28 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
     }
   };
 
+  const handleGoBack = () => {
+    try {
+      const iframe = document.querySelector(`iframe[title="tab-${activeTabId}"]`);
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.history.back();
+      }
+    } catch (e) {
+      console.warn('无法后退 (可能是跨域限制):', e);
+    }
+  };
+
+  const handleGoForward = () => {
+    try {
+      const iframe = document.querySelector(`iframe[title="tab-${activeTabId}"]`);
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.history.forward();
+      }
+    } catch (e) {
+      console.warn('无法前进 (可能是跨域限制):', e);
+    }
+  };
+
   // 监听地址栏变化
   useEffect(() => {
     if (activeTab) {
@@ -7804,6 +7826,42 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
         flexShrink: 0,
         height: '26px'
       }}>
+        <button
+          onClick={handleGoBack}
+          title="后退"
+          style={{
+            padding: '1px 4px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          ⬅️
+        </button>
+        <button
+          onClick={handleGoForward}
+          title="前进"
+          style={{
+            padding: '1px 4px',
+            fontSize: '11px',
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #c0c0c0',
+            cursor: 'pointer',
+            fontFamily: 'MS Sans Serif, sans-serif',
+            height: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          ➡️
+        </button>
         <button
           onClick={handleReload}
           title="刷新"
