@@ -30,6 +30,11 @@ function App() {
   const [newCourseDesc, setNewCourseDesc] = useState('');
   const [newBoardName, setNewBoardName] = useState('');
   const [isComposing, setIsComposing] = useState(false);
+  
+  // 重命名相关状态
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editingItemName, setEditingItemName] = useState('');
+  
   const [courseBoards, setCourseBoards] = useState({});
   const courseBoardsRef = useRef({});
 
@@ -114,6 +119,26 @@ function App() {
   useEffect(() => {
     courseBoardsRef.current = courseBoards;
   }, [courseBoards]);
+
+  // 全局禁用默认右键菜单，统一系统风格
+  useEffect(() => {
+    const handleGlobalContextMenu = (e) => {
+      // 检查点击的是否是输入框或文本域，暂时允许这些地方的原生菜单以方便复制粘贴
+      const isInput = e.target.tagName === 'INPUT' || 
+                      e.target.tagName === 'TEXTAREA' || 
+                      e.target.isContentEditable ||
+                      e.target.closest('input') ||
+                      e.target.closest('textarea');
+      
+      if (isInput) return;
+
+      // 屏蔽其他所有地方的浏览器默认菜单
+      e.preventDefault();
+    };
+
+    window.addEventListener('contextmenu', handleGlobalContextMenu);
+    return () => window.removeEventListener('contextmenu', handleGlobalContextMenu);
+  }, []);
   
   // 计算子菜单位置
   const calculateSubmenuPosition = (element) => {
@@ -220,10 +245,11 @@ function App() {
     });
   };
 
-  const handleStartMenuContextMenuAction = (action) => {
-    if (startMenuContextMenu.targetData) {
-      console.log('[StartMenu ContextMenu]', action, startMenuContextMenu.targetType, startMenuContextMenu.targetData);
-    }
+  const handleStartMenuContextMenuAction = async (action) => {
+    const { targetType, targetData } = startMenuContextMenu;
+    console.log('👉 [App] handleStartMenuContextMenuAction triggered:', { action, targetType, targetData });
+    
+    // 关闭菜单
     setStartMenuContextMenu({
       visible: false,
       x: 0,
@@ -231,6 +257,73 @@ function App() {
       targetType: null,
       targetData: null,
     });
+
+    if (!targetData) {
+      console.warn('⚠️ [App] No targetData found in startMenuContextMenu');
+      return;
+    }
+
+    // 统一处理数据结构：展板的数据在 targetData.board 中
+    const actualData = targetType === 'board' ? targetData.board : targetData;
+    console.log('👉 [App] actualData:', actualData);
+
+    if (action === 'rename') {
+      const actualData = targetType === 'board' ? targetData.board : targetData;
+      setEditingItemId(actualData.id);
+      setEditingItemName(actualData.name);
+    } else if (action === 'delete') {
+      const confirmTitle = targetType === 'course' ? '删除课程' : '删除展板';
+      const confirmMsg = targetType === 'course' 
+        ? `确定要删除课程 "${actualData.name}" 吗？这会删除该课程下的所有展板和文件！`
+        : `确定要删除展板 "${actualData.name}" 吗？`;
+        
+      const confirmed = await openConfirmDialog({
+        title: confirmTitle,
+        message: confirmMsg,
+        icon: '⚠️'
+      });
+        
+      if (confirmed) {
+        try {
+          const url = targetType === 'course'
+            ? `http://localhost:8081/api/courses/${actualData.id}`
+            : `http://localhost:8081/api/boards/${actualData.id}`;
+            
+          console.log(`🚀 [App] Sending ${targetType} delete request to:`, url);
+          const response = await fetch(url, { method: 'DELETE' });
+          if (response.ok) {
+            showToast('删除成功', 'success');
+            
+            // 如果回收站窗口开着，立即刷新
+            loadTrashItems();
+            loadTrashSize();
+            
+            // 如果删除的是当前选中的展板，需要清空选中状态
+            if (targetType === 'board' && selectedBoard && selectedBoard.id === actualData.id) {
+              setSelectedBoard(null);
+            }
+            
+            await fetchCourses();
+            
+            // 如果是展板，刷新列表
+            if (targetType === 'board') {
+              const courseId = actualData.course_id || (targetData.course ? targetData.course.id : null);
+              if (courseId) {
+                const event = new CustomEvent('refresh-boards', { detail: { courseId } });
+                window.dispatchEvent(event);
+              }
+            }
+          } else {
+            const errorText = await response.text();
+            console.error('❌ [App] Delete failed:', errorText);
+            showToast('删除失败', 'error');
+          }
+        } catch (error) {
+          console.error('❌ [App] Delete request error:', error);
+          showToast('操作失败，请检查网络', 'error');
+        }
+      }
+    }
   };
 
   const showToast = (message, type = 'info') => {
@@ -252,6 +345,15 @@ function App() {
       toastTimeoutRef.current = null;
     }
     setToast(prev => ({ ...prev, visible: false }));
+  };
+
+  // 格式化文件大小
+  const formatSize = (bytes) => {
+    if (bytes === 0 || bytes === null || isNaN(bytes)) return '0 字节';
+    const k = 1024;
+    const sizes = ['字节', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
   
   const openConfirmDialog = ({ title, message, confirmText = '确定', cancelText = '取消', icon = '⚠️' }) => {
@@ -290,6 +392,20 @@ function App() {
   const [showTrash, setShowTrash] = useState(false);
   const [trashItems, setTrashItems] = useState([]);
   const [trashSize, setTrashSize] = useState(0);
+  const [selectedTrashId, setSelectedTrashId] = useState(null);
+  const [trashSortConfig, setTrashSortConfig] = useState({
+    field: 'deleted_at', // name, created_at, deleted_at, type
+    order: 'desc' // asc, desc
+  });
+  const [showTrashViewMenu, setShowTrashViewMenu] = useState(false);
+  const [showTrashProperties, setShowTrashProperties] = useState(false);
+  const [propertiesItem, setPropertiesItem] = useState(null);
+  const [trashContextMenu, setTrashContextMenu] = useState({
+    visible: false,
+    x: 0,
+    y: 0,
+    targetId: null
+  });
   
   // 窗口管理状态
   const [currentBoardWindows, setCurrentBoardWindows] = useState([]);
@@ -546,6 +662,36 @@ function App() {
     }
   };
 
+  const handleStartMenuRenameSubmit = async (targetType, targetId) => {
+    if (editingItemName && editingItemName.trim()) {
+      try {
+        const url = targetType === 'course' 
+          ? `http://localhost:8081/api/courses/${targetId}/rename?new_name=${encodeURIComponent(editingItemName.trim())}`
+          : `http://localhost:8081/api/boards/${targetId}/rename?new_name=${encodeURIComponent(editingItemName.trim())}`;
+          
+        const response = await fetch(url, { method: 'PUT' });
+        if (response.ok) {
+          showToast('重命名成功', 'success');
+          await fetchCourses();
+          if (targetType === 'board') {
+            // 刷新当前课程的展板列表
+            if (activeCourseId) {
+              const event = new CustomEvent('refresh-boards', { detail: { courseId: activeCourseId } });
+              window.dispatchEvent(event);
+            }
+          }
+        } else {
+          showToast('重命名失败', 'error');
+        }
+      } catch (error) {
+        console.error('重命名操作失败:', error);
+        showToast('操作失败', 'error');
+      }
+    }
+    setEditingItemId(null);
+    setEditingItemName('');
+  };
+
   // 窗口管理函数
   const handleWindowMinimize = (windowId) => {
     setMinimizedWindows(prev => {
@@ -658,7 +804,9 @@ function App() {
       if (response.ok) {
         await loadTrashItems();
         await loadTrashSize();
-        showToast('文件恢复成功！', 'success');
+        // 关键：恢复后立即刷新课程和展板列表，无需手动刷新浏览器
+        await fetchCourses();
+        showToast('项目恢复成功！', 'success');
       } else {
         showToast('文件恢复失败！', 'error');
       }
@@ -720,8 +868,27 @@ function App() {
         }
       } catch (error) {
         console.error('清空回收站失败:', error);
-      showToast('清空回收站失败！', 'error');
+        showToast('清空回收站失败！', 'error');
+      }
+  };
+
+  // 回收站右键菜单处理
+  const handleTrashContextMenu = (e, targetId = null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setTrashContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      targetId: targetId
+    });
+    if (targetId) {
+      setSelectedTrashId(targetId);
     }
+  };
+
+  const closeTrashContextMenu = () => {
+    setTrashContextMenu(prev => ({ ...prev, visible: false }));
   };
 
   // 当显示回收站时加载数据
@@ -912,13 +1079,15 @@ function App() {
       const clickedStartButton = event.target.closest('.start-button');
       const clickedContextMenu = event.target.closest('.start-menu-context-menu');
 
-      if (showStartMenu && !clickedInsideStartMenu && !clickedStartButton) {
+      if (showStartMenu && !clickedInsideStartMenu && !clickedStartButton && !clickedContextMenu) {
         setShowStartMenu(false);
         setShowCreateCourseInput(false); // 重置输入框状态
         setNewCourseName(''); // 清空输入内容
         setShowCreateBoardInput(false); // 重置新建展板输入框状态
         setNewBoardName(''); // 清空展板输入内容
         setActiveCourseId(null);
+        setEditingItemId(null);
+        setEditingItemName('');
         setStartMenuContextMenu({ visible: false, x: 0, y: 0, targetType: null, targetData: null });
       } else if (startMenuContextMenu.visible && !clickedContextMenu) {
         setStartMenuContextMenu({ visible: false, x: 0, y: 0, targetType: null, targetData: null });
@@ -928,13 +1097,18 @@ function App() {
       if (showTaskbarContextMenu && !event.target.closest('.taskbar-context-menu')) {
         setShowTaskbarContextMenu(false);
       }
+
+      // 关闭回收站右键菜单
+      if (trashContextMenu.visible && !event.target.closest('.trash-context-menu')) {
+        closeTrashContextMenu();
+      }
     };
 
-    if (showStartMenu || showTaskbarContextMenu || startMenuContextMenu.visible) {
+    if (showStartMenu || showTaskbarContextMenu || startMenuContextMenu.visible || trashContextMenu.visible) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [showStartMenu, showTaskbarContextMenu, startMenuContextMenu.visible]);
+  }, [showStartMenu, showTaskbarContextMenu, startMenuContextMenu.visible, trashContextMenu.visible]);
 
   useEffect(() => {
     if (!showStartMenu) {
@@ -1217,7 +1391,23 @@ function App() {
                     onContextMenu={(e) => handleStartMenuContextMenuOpen(e, 'course', course)}
                   >
                     <span className="menu-icon win98-icon win98-icon-folder"></span>
-                    <span className="menu-text">{course.name || '未命名课程'}</span>
+                    {editingItemId === course.id ? (
+                      <div className="start-menu-input-container" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          autoFocus
+                          className="start-menu-input"
+                          value={editingItemName}
+                          onChange={(e) => setEditingItemName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleStartMenuRenameSubmit('course', course.id);
+                            if (e.key === 'Escape') setEditingItemId(null);
+                          }}
+                          onBlur={() => handleStartMenuRenameSubmit('course', course.id)}
+                        />
+                      </div>
+                    ) : (
+                      <span className="menu-text">{course.name || '未命名课程'}</span>
+                    )}
                     <span className="menu-arrow">▶</span>
                   </div>
                 ))
@@ -1235,6 +1425,8 @@ function App() {
               <div 
                 className="start-menu-item"
                 onClick={() => {
+                  loadTrashItems();
+                  loadTrashSize();
                   setShowTrash(true);
                   setShowStartMenu(false);
                 }}
@@ -1337,7 +1529,23 @@ function App() {
                       onContextMenu={(e) => handleStartMenuContextMenuOpen(e, 'board', { course: courses.find(c => c.id === activeCourseId), board })}
                     >
                       <span className="submenu-icon win98-icon win98-icon-clipboard"></span>
-                      <span className="submenu-text">{board.name || '未命名展板'}</span>
+                      {editingItemId === board.id ? (
+                        <div className="start-menu-input-container" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            autoFocus
+                            className="start-menu-input"
+                            value={editingItemName}
+                            onChange={(e) => setEditingItemName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleStartMenuRenameSubmit('board', board.id);
+                              if (e.key === 'Escape') setEditingItemId(null);
+                            }}
+                            onBlur={() => handleStartMenuRenameSubmit('board', board.id)}
+                          />
+                        </div>
+                      ) : (
+                        <span className="submenu-text">{board.name || '未命名展板'}</span>
+                      )}
                     </div>
                   ))}
                   
@@ -1359,6 +1567,7 @@ function App() {
           ref={startMenuContextRef}
           className="start-menu-context-menu"
           style={{ left: `${startMenuContextMenu.x}px`, top: `${startMenuContextMenu.y}px` }}
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('rename')}>
@@ -1372,70 +1581,217 @@ function App() {
         </div>
       )}
       
-      {/* 回收站弹窗 */}
+      {/* 回收站弹窗 (2D 图标排列) */}
       {showTrash && (
-        <div className="modal-overlay" onClick={() => setShowTrash(false)}>
-          <div className="trash-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => {
+          setShowTrash(false);
+          setSelectedTrashId(null);
+        }}>
+          <div className="trash-modal" onClick={(e) => {
+            e.stopPropagation();
+            if (!e.target.closest('.trash-grid-item')) {
+              setSelectedTrashId(null);
+            }
+          }} onContextMenu={(e) => handleTrashContextMenu(e)}>
             <div className="trash-header">
-              <h3>🗑️ 回收站</h3>
-              <div className="trash-info">
-                <span>项目数: {trashItems.length}</span>
-                <span>大小: {(trashSize / 1024).toFixed(2)} KB</span>
+              <h3>
+                <span className="win98-icon win98-icon-recycle" style={{transform: 'scale(0.8)'}}></span>
+                回收站
+              </h3>
+              <button className="win98-msgbox-close" onClick={() => {
+                setShowTrash(false);
+                setSelectedTrashId(null);
+              }}>×</button>
+            </div>
+
+            <div className="trash-toolbar">
+              <button className="trash-toolbar-btn" onClick={handleEmptyTrash}>
+                清空回收站
+              </button>
+              <div style={{position: 'relative'}}>
+                <button 
+                  className={`trash-toolbar-btn ${showTrashViewMenu ? 'active' : ''}`}
+                  onClick={() => setShowTrashViewMenu(!showTrashViewMenu)}
+                >
+                  查看(V) ▼
+                </button>
+                {showTrashViewMenu && (
+                  <div className="trash-view-menu" onClick={(e) => e.stopPropagation()}>
+                    <div className={`context-menu-item ${trashSortConfig.field === 'name' ? 'active' : ''}`}
+                         onClick={() => { setTrashSortConfig(prev => ({...prev, field: 'name'})); setShowTrashViewMenu(false); }}>
+                      <span className="menu-text">{trashSortConfig.field === 'name' ? '• ' : ''}名称</span>
+                    </div>
+                    <div className={`context-menu-item ${trashSortConfig.field === 'created_at' ? 'active' : ''}`}
+                         onClick={() => { setTrashSortConfig(prev => ({...prev, field: 'created_at'})); setShowTrashViewMenu(false); }}>
+                      <span className="menu-text">{trashSortConfig.field === 'created_at' ? '• ' : ''}创建时间</span>
+                    </div>
+                    <div className={`context-menu-item ${trashSortConfig.field === 'deleted_at' ? 'active' : ''}`}
+                         onClick={() => { setTrashSortConfig(prev => ({...prev, field: 'deleted_at'})); setShowTrashViewMenu(false); }}>
+                      <span className="menu-text">{trashSortConfig.field === 'deleted_at' ? '• ' : ''}删除时间</span>
+                    </div>
+                    <div className={`context-menu-item ${trashSortConfig.field === 'type' ? 'active' : ''}`}
+                         onClick={() => { setTrashSortConfig(prev => ({...prev, field: 'type'})); setShowTrashViewMenu(false); }}>
+                      <span className="menu-text">{trashSortConfig.field === 'type' ? '• ' : ''}类型</span>
+                    </div>
+                    <div className="menu-separator"></div>
+                    <div className={`context-menu-item ${trashSortConfig.order === 'asc' ? 'active' : ''}`}
+                         onClick={() => { setTrashSortConfig(prev => ({...prev, order: 'asc'})); setShowTrashViewMenu(false); }}>
+                      <span className="menu-text">{trashSortConfig.order === 'asc' ? '• ' : ''}正序</span>
+                    </div>
+                    <div className={`context-menu-item ${trashSortConfig.order === 'desc' ? 'active' : ''}`}
+                         onClick={() => { setTrashSortConfig(prev => ({...prev, order: 'desc'})); setShowTrashViewMenu(false); }}>
+                      <span className="menu-text">{trashSortConfig.order === 'desc' ? '• ' : ''}倒序</span>
+                    </div>
+                  </div>
+                )}
               </div>
-              <button className="close-btn" onClick={() => setShowTrash(false)}>✕</button>
             </div>
             
-            <div className="trash-content">
+            <div className="trash-content" onClick={() => setShowTrashViewMenu(false)}>
               {trashItems.length > 0 ? (
-                <div className="trash-items">
-                  {trashItems.map(item => (
-                    <div key={item.id} className="trash-item">
-                      <div className="item-info">
-                        <div className="item-name">{item.original_name}</div>
-                        <div className="item-details">
-                          <span>删除时间: {new Date(item.deleted_at).toLocaleString()}</span>
-                          <span>大小: {(item.file_size / 1024).toFixed(2)} KB</span>
-                          <span className={`file-status ${item.file_exists ? 'exists' : 'missing'}`}>
-                            {item.file_exists ? '✓ 文件完整' : '✗ 文件丢失'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="item-actions">
-                        <button 
-                          className="restore-btn"
-                          onClick={() => handleRestoreFromTrash(item.id)}
-                          disabled={!item.file_exists}
-                        >
-                          恢复
-                        </button>
-                        <button 
-                          className="delete-btn"
-                          onClick={() => handlePermanentDelete(item.id)}
-                        >
-                          永久删除
-                        </button>
-                      </div>
+                [...trashItems].sort((a, b) => {
+                  let valA, valB;
+                  const config = trashSortConfig;
+                  
+                  if (config.field === 'name') {
+                    const getDisplayName = (item) => {
+                      const windowData = item.window_data || {};
+                      return (['course', 'board'].includes(windowData.type) && windowData.data?.name) 
+                        ? windowData.data.name 
+                        : item.original_name;
+                    };
+                    valA = getDisplayName(a);
+                    valB = getDisplayName(b);
+                  } else if (config.field === 'type') {
+                    valA = a.window_data?.type || 'file';
+                    valB = b.window_data?.type || 'file';
+                  } else if (config.field === 'created_at') {
+                    valA = a.window_data?.data?.created_at || 0;
+                    valB = b.window_data?.data?.created_at || 0;
+                  } else {
+                    valA = a.deleted_at;
+                    valB = b.deleted_at;
+                  }
+
+                  if (valA < valB) return config.order === 'asc' ? -1 : 1;
+                  if (valA > valB) return config.order === 'asc' ? 1 : -1;
+                  return 0;
+                }).map(item => {
+                  const windowData = item.window_data || {};
+                  const isSpecialItem = ['course', 'board'].includes(windowData.type);
+                  const displayName = isSpecialItem && windowData.data?.name 
+                    ? windowData.data.name
+                    : item.original_name;
+                  
+                  // 使用系统已有的图标类
+                  let iconClass = "win98-icon ";
+                  if (windowData.type === 'course') {
+                    iconClass += "win98-icon-folder";
+                  } else if (windowData.type === 'board') {
+                    iconClass += "win98-icon-clipboard";
+                  } else {
+                    // 根据文件名后缀判断
+                    const ext = item.original_name.toLowerCase().split('.').pop();
+                    if (ext === 'pdf') {
+                      iconClass += "win98-icon-pdf";
+                    } else if (['md', 'json', 'txt'].includes(ext)) {
+                      iconClass += "win98-icon-text";
+                    } else {
+                      iconClass += "win98-icon-default";
+                    }
+                  }
+
+                  return (
+                    <div 
+                      key={item.id} 
+                      className={`trash-grid-item ${selectedTrashId === item.id ? 'selected' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTrashId(item.id);
+                      }}
+                      onDoubleClick={() => handleRestoreFromTrash(item.id)}
+                      onContextMenu={(e) => handleTrashContextMenu(e, item.id)}
+                    >
+                      <div className={`trash-icon-img ${iconClass}`}></div>
+                      <div className="trash-icon-label">{displayName}</div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })
               ) : (
-                <div className="empty-trash">
+                <div className="empty-trash-watermark" style={{
+                  position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                  opacity: 0.1, pointerEvents: 'none', textAlign: 'center'
+                }}>
+                  <div className="win98-icon win98-icon-recycle" style={{width: '64px', height: '64px'}}></div>
                   <p>回收站为空</p>
                 </div>
               )}
             </div>
-            
-            {trashItems.length > 0 && (
-              <div className="trash-footer">
-                <button 
-                  className="empty-trash-btn"
-                  onClick={handleEmptyTrash}
-                >
-                  清空回收站
-                </button>
+
+            <div className="trash-statusbar">
+              <div className="status-field count">
+                {trashItems.length} 个对象
               </div>
-            )}
+              <div className="status-field size">
+                {formatSize(trashSize)}
+              </div>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* 回收站右键菜单 */}
+      {trashContextMenu.visible && (
+        <div 
+          className="start-menu-context-menu trash-context-menu"
+          style={{ left: `${trashContextMenu.x}px`, top: `${trashContextMenu.y}px` }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {trashContextMenu.targetId ? (
+            <>
+              <div className="context-menu-item" onClick={() => {
+                handleRestoreFromTrash(trashContextMenu.targetId);
+                closeTrashContextMenu();
+              }}>
+                <span className="menu-text">还原(R)</span>
+              </div>
+              <div className="menu-separator"></div>
+              <div className="context-menu-item" onClick={() => {
+                handlePermanentDelete(trashContextMenu.targetId);
+                closeTrashContextMenu();
+              }}>
+                <span className="menu-text">删除(D)</span>
+              </div>
+              <div className="context-menu-item" onClick={() => {
+                const item = trashItems.find(i => i.id === trashContextMenu.targetId);
+                if (item) {
+                  setPropertiesItem(item);
+                  setShowTrashProperties(true);
+                }
+                closeTrashContextMenu();
+              }}>
+                <span className="menu-text">属性(P)</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="context-menu-item" onClick={() => {
+                handleEmptyTrash();
+                closeTrashContextMenu();
+              }}>
+                <span className="menu-text">清空回收站(B)</span>
+              </div>
+              <div className="menu-separator"></div>
+              <div className="context-menu-item" onClick={() => {
+                loadTrashItems();
+                loadTrashSize();
+                closeTrashContextMenu();
+              }}>
+                <span className="menu-text">刷新(E)</span>
+              </div>
+            </>
+          )}
         </div>
       )}
       
@@ -1475,19 +1831,97 @@ function App() {
         </div>
       )}
 
-      {toast.visible && (
-        <div className="win98-toast-container">
-          <div className={`win98-toast ${toast.type}`}>
-            <div className="win98-toast-icon">
-              {(toastTypeConfig[toast.type] || toastTypeConfig.info).icon}
+      {/* 回收站属性对话框 */}
+      {showTrashProperties && propertiesItem && (
+        <div className="win98-modal-overlay" style={{zIndex: 35000}} onClick={() => setShowTrashProperties(false)}>
+          <div className="win98-properties-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="win98-msgbox-header">
+              <span className="win98-msgbox-title">属性</span>
+              <button className="win98-msgbox-close" onClick={() => setShowTrashProperties(false)}>×</button>
             </div>
-            <div className="win98-toast-content">
-              <div className="win98-toast-title">
-                {(toastTypeConfig[toast.type] || toastTypeConfig.info).title}
+            
+            <div className="properties-tabs">
+              <div className="properties-tab active">常规</div>
+            </div>
+            
+            <div className="properties-content">
+              <div className="properties-header">
+                <div className={`win98-icon ${
+                  propertiesItem.window_data?.type === 'course' ? 'win98-icon-folder' : 
+                  propertiesItem.window_data?.type === 'board' ? 'win98-icon-clipboard' : 
+                  propertiesItem.original_name.toLowerCase().endsWith('.pdf') ? 'win98-icon-pdf' : 'win98-icon-default'
+                }`} style={{width: '32px', height: '32px'}}></div>
+                <div style={{fontWeight: 'bold', fontSize: '12px'}}>
+                  {propertiesItem.window_data?.data?.name || propertiesItem.original_name}
+                </div>
               </div>
-              <div className="win98-toast-message">{toast.message}</div>
+              
+              <div className="properties-row">
+                <div className="properties-label">类型:</div>
+                <div className="properties-value">
+                  {propertiesItem.window_data?.type === 'course' ? '课程文件夹' : 
+                   propertiesItem.window_data?.type === 'board' ? '展板文件夹' : '文件'}
+                </div>
+              </div>
+              
+              <div className="properties-row">
+                <div className="properties-label">原始位置:</div>
+                <div className="properties-value">{propertiesItem.original_path}</div>
+              </div>
+              
+              <div className="menu-separator" style={{margin: '10px 0'}}></div>
+              
+              <div className="properties-row">
+                <div className="properties-label">创建时间:</div>
+                <div className="properties-value">
+                  {propertiesItem.window_data?.data?.created_at ? 
+                    new Date(propertiesItem.window_data.data.created_at).toLocaleString() : '未知'}
+                </div>
+              </div>
+              
+              <div className="properties-row">
+                <div className="properties-label">删除时间:</div>
+                <div className="properties-value">
+                  {new Date(propertiesItem.deleted_at).toLocaleString()}
+                </div>
+              </div>
+              
+              <div className="menu-separator" style={{margin: '10px 0'}}></div>
+              
+              <div className="properties-row">
+                <div className="properties-label">大小:</div>
+                <div className="properties-value">
+                  {formatSize(propertiesItem.file_size)} ({propertiesItem.file_size.toLocaleString()} 字节)
+                </div>
+              </div>
             </div>
-            <button className="win98-toast-close" onClick={hideToast} aria-label="关闭提示">×</button>
+            
+            <div className="properties-footer">
+              <button className="win98-msgbox-btn" style={{minWidth: '75px'}} onClick={() => setShowTrashProperties(false)}>确定</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 全局通知弹窗 (Win98 风格中心对话框) */}
+      {toast.visible && (
+        <div className="win98-modal-overlay">
+          <div className="win98-msgbox">
+            <div className="win98-msgbox-header">
+              <span className="win98-msgbox-title">WhatNote</span>
+              <button className="win98-msgbox-close" onClick={hideToast}>×</button>
+            </div>
+            <div className="win98-msgbox-body">
+              <div className={`win98-msgbox-icon ${toast.type}`}>
+                {toast.type === 'success' ? '✅' : toast.type === 'error' ? '⚠️' : 'ℹ️'}
+              </div>
+              <div className="win98-msgbox-content">
+                <div className="win98-msgbox-message">{toast.message}</div>
+              </div>
+            </div>
+            <div className="win98-msgbox-footer">
+              <button className="win98-msgbox-btn" onClick={hideToast}>OK</button>
+            </div>
           </div>
         </div>
       )}

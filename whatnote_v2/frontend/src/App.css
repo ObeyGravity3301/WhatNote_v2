@@ -1415,3 +1415,416 @@ html, body {
   color: black;
   font-weight: normal;
 } 
+/* Win98 风格消息框 (MsgBox) */
+.win98-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent; /* 不遮挡背景，或者用 rgba(0,0,0,0.1) */
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.win98-msgbox {
+  width: 320px;
+  background: #c0c0c0;
+  border: 2px solid #ffffff;
+  border-right-color: #000000;
+  border-bottom-color: #000000;
+  box-shadow: 1px 1px 0 #808080;
+  padding: 2px;
+  user-select: none;
+}
+
+.win98-msgbox-header {
+  background: linear-gradient(90deg, #000080, #1084d0);
+  padding: 2px 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.win98-msgbox-title {
+  color: white;
+  font-family: 'MS Sans Serif', sans-serif;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.win98-msgbox-close {
+  width: 14px;
+  height: 14px;
+  background: #c0c0c0;
+  border: 1px solid #ffffff;
+  border-right-color: #000000;
+  border-bottom-color: #000000;
+  color: black;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  padding: 0;
+  line-height: 1;
+}
+
+.win98-msgbox-body {
+  padding: 10px 20px 20px 20px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.win98-msgbox-icon {
+  font-size: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.win98-msgbox-message {
+  color: black;
+  font-family: 'MS Sans Serif', sans-serif;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.win98-msgbox-footer {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 10px;
+}
+
+.win98-msgbox-btn {
+  padding: 4px 20px;
+  background: #c0c0c0;
+  border: 1px solid #ffffff;
+  border-right-color: #000000;
+  border-bottom-color: #000000;
+  box-shadow: inset 1px 1px 0 #dfdfdf;
+  font-family: 'MS Sans Serif', sans-serif;
+  font-size: 11px;
+  cursor: default;
+  outline: 1px solid black;
+  outline-offset: -3px;
+}
+
+.win98-msgbox-btn:active {
+  border: 1px solid #000000;
+  border-right-color: #ffffff;
+  border-bottom-color: #ffffff;
+  box-shadow: none;
+  padding: 5px 19px 3px 21px;
+}
+
+/* 开始菜单重命名输入框 */
+.start-menu-item .start-menu-input-container,
+.submenu-item .start-menu-input-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.start-menu-input {
+  width: 100%;
+  height: 18px;
+  border: 2px inset #ffffff;
+  background: white;
+  padding: 0 2px;
+  font-family: 'MS Sans Serif', sans-serif;
+  font-size: 11px;
+  outline: none;
+}
+
+
+/* Win98 回收站窗口重构 */
+.trash-modal {
+  width: 600px;
+  height: 400px;
+  background: #c0c0c0;
+  border: 2px solid #ffffff;
+  border-right-color: #000000;
+  border-bottom-color: #000000;
+  box-shadow: 1px 1px 0 #808080;
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+}
+
+.trash-header {
+  background: linear-gradient(90deg, #000080, #1084d0);
+  height: 18px;
+  padding: 2px 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.trash-header h3 {
+  color: white;
+  font-size: 11px;
+  margin: 0;
+  font-family: 'MS Sans Serif', sans-serif;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 模拟菜单栏 */
+.trash-menubar {
+  display: flex;
+  padding: 2px 4px;
+  border-bottom: 1px solid #808080;
+  background: #c0c0c0;
+  gap: 10px;
+}
+
+.menu-item {
+  font-size: 11px;
+  color: black;
+  padding: 2px 4px;
+}
+
+.menu-item::first-letter {
+  text-decoration: underline;
+}
+
+/* 图标网格区域 */
+.trash-content {
+  flex: 1;
+  background: white;
+  border: 2px inset #ffffff;
+  margin: 2px;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 20px;
+}
+
+.trash-grid-item {
+  width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: default;
+  user-select: none;
+  padding: 4px;
+  border: 1px transparent solid;
+}
+
+.trash-grid-item:hover {
+  background-color: rgba(0, 0, 128, 0.05);
+}
+
+.trash-grid-item.selected {
+  background-color: #000080;
+}
+
+.trash-grid-item.selected .trash-icon-label {
+  background-color: #000080;
+  color: white;
+  border: 1px dotted #ffff00;
+}
+
+.trash-icon-img {
+  width: 32px !important;
+  height: 32px !important;
+  margin-bottom: 4px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* 移除之前的 SVG 背景，改用全局定义的图标类 */
+.trash-icon-img.course { }
+.trash-icon-img.board { }
+.trash-icon-img.file { }
+
+.trash-icon-label {
+  font-size: 11px;
+  color: black;
+  word-break: break-all;
+  padding: 1px 2px;
+  margin-top: 2px;
+}
+
+/* 状态栏 */
+.trash-statusbar {
+  height: 20px;
+  border-top: 1px solid #808080;
+  background: #c0c0c0;
+  display: flex;
+  font-size: 11px;
+  padding: 0 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.status-field {
+  flex: 1;
+  border: 1px inset #ffffff;
+  padding: 1px 4px;
+  display: flex;
+  align-items: center;
+  background: #c0c0c0;
+}
+
+.status-field.count { flex: 2; }
+.status-field.size { flex: 1; }
+
+/* 回收站右键菜单 */
+.trash-context-menu {
+  position: fixed;
+  background: #c0c0c0;
+  border: 2px solid #ffffff;
+  border-right-color: #000000;
+  border-bottom-color: #000000;
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+  z-index: 30000;
+  min-width: 120px;
+  padding: 2px;
+}
+
+
+/* 回收站工具栏按钮 */
+.trash-toolbar {
+  display: flex;
+  padding: 4px;
+  background: #c0c0c0;
+  border-bottom: 1px solid #808080;
+  gap: 4px;
+}
+
+.trash-toolbar-btn {
+  padding: 1px 8px;
+  background: #c0c0c0;
+  border: 1px outset #ffffff;
+  border-radius: 0px;
+  font-family: 'MS Sans Serif', sans-serif;
+  font-size: 11px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+  cursor: pointer;
+}
+
+.trash-toolbar-btn:active {
+  border: 1px inset #ffffff;
+  padding: 2px 7px 0px 9px;
+}
+
+.trash-view-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #c0c0c0;
+  border: 2px solid #ffffff;
+  border-right-color: #000000;
+  border-bottom-color: #000000;
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+  z-index: 30005;
+  min-width: 150px;
+  padding: 2px;
+}
+
+.trash-view-menu .menu-group-title {
+  padding: 2px 8px;
+  font-size: 10px;
+  color: #808080;
+  border-bottom: 1px solid #dfdfdf;
+  margin-bottom: 2px;
+}
+
+
+/* Win98 属性对话框 */
+.win98-properties-dialog {
+  width: 350px;
+  background: #c0c0c0;
+  border: 2px solid #ffffff;
+  border-right-color: #000000;
+  border-bottom-color: #000000;
+  box-shadow: 1px 1px 0 #808080;
+  padding: 2px;
+  user-select: none;
+}
+
+.properties-tabs {
+  display: flex;
+  padding: 2px 4px 0 4px;
+}
+
+.properties-tab {
+  padding: 2px 8px;
+  background: #c0c0c0;
+  border: 1px solid #ffffff;
+  border-bottom: none;
+  border-right-color: #808080;
+  font-size: 11px;
+  margin-right: 2px;
+  z-index: 1;
+}
+
+.properties-tab.active {
+  padding-bottom: 3px;
+  margin-bottom: -1px;
+  background: #c0c0c0;
+  border-right-color: #808080;
+  font-weight: bold;
+}
+
+.properties-content {
+  border: 1px solid #ffffff;
+  border-top: none;
+  border-right-color: #808080;
+  border-bottom-color: #808080;
+  padding: 15px;
+  background: #c0c0c0;
+  margin: 0 4px 4px 4px;
+}
+
+.properties-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #808080;
+  padding-bottom: 10px;
+}
+
+.properties-row {
+  display: flex;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.properties-label {
+  width: 80px;
+  color: #404040;
+}
+
+.properties-value {
+  flex: 1;
+  color: black;
+  word-break: break-all;
+}
+
+.properties-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px;
+  gap: 6px;
+}
+

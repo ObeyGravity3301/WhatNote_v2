@@ -802,42 +802,50 @@ const NarratorPluginComponent = (props) => {
                               if (done) break;
                               const chunk = decoder.decode(value, { stream: true });
                               const lines = chunk.split('\n\n');
-                              for (const line of lines) {
-                                  if (line.startsWith('data: ')) {
-                                      try {
-                                          const data = JSON.parse(line.substring(6));
-                                          if (data.type === 'page_done') {
-                                              const { page, content } = data;
-                                              
-                                              // Async save
-                                              fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/scripts/${page}`, {
-                                                  method: 'PUT',
-                                                  headers: {'Content-Type': 'application/json'},
-                                                  body: JSON.stringify({ content: content })
-                                              }).catch(console.error);
-                                              
-                                              // React state update
-                                              setScripts(prev => ({ ...prev, [page]: content }));
+                          for (const line of lines) {
+                              if (line.startsWith('data: ')) {
+                                  try {
+                                      const data = JSON.parse(line.substring(6));
+                                      if (data.type === 'status') {
+                                          setBatchProgress(prev => ({ ...prev, message: data.message }));
+                                      } else if (data.type === 'error') {
+                                          console.error('Batch error:', data.error);
+                                          setBatchProgress(prev => ({ ...prev, message: `错误: ${data.error}` }));
+                                          // 不立即停止，继续下一页，或者根据需要处理
+                                      } else if (data.type === 'page_done') {
+                                          const { page, content } = data;
+                                          
+                                          // Async save
+                                          fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/scripts/${page}`, {
+                                              method: 'PUT',
+                                              headers: {'Content-Type': 'application/json'},
+                                              body: JSON.stringify({ content: content })
+                                          }).catch(console.error);
+                                          
+                                          // React state update
+                                          setScripts(prev => ({ ...prev, [page]: content }));
 
-                                              // If it's current page
-                                              if (page === pageControl.currentPage) {
-                                                  setCurrentScript(content);
-                                                  setLastSavedScript(content);
-                                              }
-                                              
-                                              // Persist
-                                              try {
-                                                      const storageKey = `narrator_scripts_${boardId}_${windowId}`;
-                                                  const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-                                                  saved[page] = content;
-                                                  localStorage.setItem(storageKey, JSON.stringify(saved));
-                                              } catch(e) {}
-
-                                              setBatchProgress(prev => ({ ...prev, current: page }));
+                                          // If it's current page
+                                          if (page === pageControl.currentPage) {
+                                              setCurrentScript(content);
+                                              setLastSavedScript(content);
                                           }
-                                      } catch (e) {}
+                                          
+                                          // Persist
+                                          try {
+                                                  const storageKey = `narrator_scripts_${boardId}_${windowId}`;
+                                              const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+                                              saved[page] = content;
+                                              localStorage.setItem(storageKey, JSON.stringify(saved));
+                                          } catch(e) {}
+
+                                          setBatchProgress(prev => ({ ...prev, current: page }));
+                                      }
+                                  } catch (e) {
+                                      console.error('Failed to parse SSE data:', e);
                                   }
                               }
+                          }
                           }
                       }
                   } catch (err) { console.error(err); }

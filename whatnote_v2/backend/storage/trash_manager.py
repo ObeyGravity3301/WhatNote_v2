@@ -55,10 +55,24 @@ class TrashManager:
             trash_file_path = self.trash_dir / trash_filename
             
             # 移动文件到回收站
-            shutil.move(str(file_path), str(trash_file_path))
+            if file_path.is_dir():
+                shutil.copytree(str(file_path), str(trash_file_path))
+                shutil.rmtree(str(file_path))
+            else:
+                shutil.move(str(file_path), str(trash_file_path))
             
             # 记录回收站信息
             trash_info = self._load_trash_info()
+            
+            # 计算大小
+            file_size = 0
+            if trash_file_path.is_dir():
+                for f in trash_file_path.glob('**/*'):
+                    if f.is_file():
+                        file_size += f.stat().st_size
+            else:
+                file_size = trash_file_path.stat().st_size
+                
             trash_item = {
                 "id": f"trash_{timestamp}",
                 "original_name": original_name,
@@ -67,18 +81,29 @@ class TrashManager:
                 "board_id": board_id,
                 "deleted_at": datetime.now().isoformat(),
                 "original_path": str(file_path.parent),
-                "file_size": trash_file_path.stat().st_size if trash_file_path.exists() else 0
+                "file_size": file_size,
+                "item_type": "directory" if trash_file_path.is_dir() else "file"
             }
             trash_info.append(trash_item)
             self._save_trash_info(trash_info)
             
-            print(f"文件已移动到回收站: {original_name} -> {trash_filename}")
+            print(f"项目已移动到回收站: {original_name} -> {trash_filename}")
             return True
             
         except Exception as e:
-            print(f"移动文件到回收站失败: {e}")
+            print(f"移动项目到回收站失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
-    
+
+    def move_course_to_trash(self, course_id: str, course_path: Path, course_info: Dict) -> bool:
+        """将课程移动到回收站"""
+        return self.move_to_trash(course_path, {"type": "course", "data": course_info}, "system")
+
+    def move_board_to_trash(self, board_id: str, board_path: Path, board_info: Dict) -> bool:
+        """将展板移动到回收站"""
+        return self.move_to_trash(board_path, {"type": "board", "data": board_info}, board_info.get("course_id", "unknown"))
+
     def get_trash_items(self) -> List[Dict]:
         """获取回收站中的所有项目"""
         trash_info = self._load_trash_info()
@@ -130,6 +155,22 @@ class TrashManager:
             # 移动文件回原位置
             shutil.move(str(trash_file_path), str(original_file_path))
             
+            # 方案三处理：如果是展板恢复，确保父课程存在并重新注册
+            window_data = trash_item.get("window_data", {})
+            if window_data.get("type") == "board":
+                try:
+                    from storage.file_manager import FileSystemManager
+                    fm = FileSystemManager()
+                    board_info = window_data.get("data", {})
+                    course_id = board_info.get("course_id")
+                    if course_id:
+                        # 确保课程存在（如果课程在回收站，这里会创建一个“壳”）
+                        fm.ensure_course_exists(course_id)
+                        # 将展板重新注册到课程的 course_info.json 中
+                        fm.register_board_to_course(course_id, board_info.get("id"))
+                except Exception as e:
+                    print(f"恢复展板元数据失败: {e}")
+
             # 从回收站信息中移除
             trash_info.pop(item_index)
             self._save_trash_info(trash_info)

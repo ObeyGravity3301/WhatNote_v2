@@ -386,6 +386,36 @@ async def create_course(name: str, description: str = ""):
         error(f"创建课程失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/api/courses/{course_id}")
+async def delete_course(course_id: str):
+    """删除课程"""
+    try:
+        success = file_manager.delete_course(course_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="课程不存在")
+        info(f"删除课程成功: {course_id}")
+        return {"message": "课程删除成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"删除课程失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/courses/{course_id}/rename")
+async def rename_course(course_id: str, new_name: str):
+    """重命名课程"""
+    try:
+        success = file_manager.rename_course(course_id, new_name)
+        if not success:
+            raise HTTPException(status_code=404, detail="课程不存在")
+        info(f"重命名课程成功: {course_id} -> {new_name}")
+        return {"message": "课程重命名成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"重命名课程失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/courses/{course_id}/boards")
 async def get_boards(course_id: str):
     """获取课程的所有展板"""
@@ -434,6 +464,21 @@ async def delete_board(board_id: str):
         raise
     except Exception as e:
         error(f"删除展板失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/boards/{board_id}/rename")
+async def rename_board(board_id: str, new_name: str):
+    """重命名展板"""
+    try:
+        success = file_manager.rename_board(board_id, new_name)
+        if not success:
+            raise HTTPException(status_code=404, detail="展板不存在")
+        info(f"重命名展板成功: {board_id} -> {new_name}")
+        return {"message": "展板重命名成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"重命名展板失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # 日历任务API

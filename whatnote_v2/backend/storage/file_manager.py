@@ -5,12 +5,14 @@ from pathlib import Path
 from config import DATA_DIR
 from typing import Dict, List, Optional
 from datetime import datetime
+from storage.trash_manager import TrashManager
 
 class FileSystemManager:
     def __init__(self, data_dir: str | Path = None):
         # 统一使用 config.DATA_DIR，除非显式传入
         self.data_dir = Path(data_dir) if data_dir else Path(DATA_DIR)
         self.courses_dir = self.data_dir / "courses"
+        self.trash_manager = TrashManager()
         self._ensure_directories()
     
     def _ensure_directories(self):
@@ -86,7 +88,33 @@ class FileSystemManager:
                 
                 with open(course_info_path, "w", encoding="utf-8") as f:
                     json.dump(course_info, f, ensure_ascii=False, indent=2)
-    
+
+    def ensure_course_exists(self, course_id: str, course_name: str = "恢复的课程") -> bool:
+        """确保课程文件夹和元数据存在，如果不存在则重建"""
+        course_dir = self.courses_dir / course_id
+        course_info_path = course_dir / "course_info.json"
+        
+        if not course_dir.exists():
+            course_dir.mkdir(parents=True, exist_ok=True)
+            
+        if not course_info_path.exists():
+            course_info = {
+                "id": course_id,
+                "name": course_name,
+                "description": "从回收站恢复展板时自动重建的课程",
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
+                "boards": []
+            }
+            with open(course_info_path, "w", encoding="utf-8") as f:
+                json.dump(course_info, f, ensure_ascii=False, indent=2)
+            return True
+        return False
+
+    def register_board_to_course(self, course_id: str, board_id: str):
+        """将展板重新注册到课程中"""
+        self._update_course_boards(course_id, board_id)
+
     def get_courses(self) -> List[Dict]:
         """获取所有课程"""
         courses = []
@@ -126,15 +154,24 @@ class FileSystemManager:
         return None
     
     def delete_board(self, board_id: str) -> bool:
-        """删除展板文件夹"""
+        """删除展板（移动到回收站）"""
         for course_dir in self.courses_dir.iterdir():
             if course_dir.is_dir():
                 board_dir = course_dir / board_id
                 if board_dir.exists():
-                    shutil.rmtree(board_dir)
-                    # 更新课程信息
-                    self._remove_board_from_course(course_dir, board_id)
-                    return True
+                    # 读取展板信息以存入回收站元数据
+                    board_info = {}
+                    board_info_path = board_dir / "board_info.json"
+                    if board_info_path.exists():
+                        with open(board_info_path, "r", encoding="utf-8") as f:
+                            board_info = json.load(f)
+                    
+                    # 移动到回收站
+                    success = self.trash_manager.move_board_to_trash(board_id, board_dir, board_info)
+                    if success:
+                        # 从课程信息中移除
+                        self._remove_board_from_course(course_dir, board_id)
+                        return True
         return False
     
     def _remove_board_from_course(self, course_dir: Path, board_id: str):
@@ -149,4 +186,53 @@ class FileSystemManager:
                 course_info["updated_at"] = datetime.now().isoformat()
                 
                 with open(course_info_path, "w", encoding="utf-8") as f:
-                    json.dump(course_info, f, ensure_ascii=False, indent=2) 
+                    json.dump(course_info, f, ensure_ascii=False, indent=2)
+
+    def delete_course(self, course_id: str) -> bool:
+        """删除课程（移动到回收站）"""
+        course_dir = self.courses_dir / course_id
+        if course_dir.exists():
+            # 读取课程信息
+            course_info = {}
+            course_info_path = course_dir / "course_info.json"
+            if course_info_path.exists():
+                with open(course_info_path, "r", encoding="utf-8") as f:
+                    course_info = json.load(f)
+            
+            # 移动到回收站
+            return self.trash_manager.move_course_to_trash(course_id, course_dir, course_info)
+        return False
+
+    def rename_course(self, course_id: str, new_name: str) -> bool:
+        """重命名课程"""
+        course_info_path = self.courses_dir / course_id / "course_info.json"
+        if course_info_path.exists():
+            with open(course_info_path, "r", encoding="utf-8") as f:
+                course_info = json.load(f)
+            
+            course_info["name"] = new_name
+            course_info["updated_at"] = datetime.now().isoformat()
+            
+            with open(course_info_path, "w", encoding="utf-8") as f:
+                json.dump(course_info, f, ensure_ascii=False, indent=2)
+            return True
+        return False
+
+    def rename_board(self, board_id: str, new_name: str) -> bool:
+        """重命名展板"""
+        for course_dir in self.courses_dir.iterdir():
+            if course_dir.is_dir():
+                board_dir = course_dir / board_id
+                if board_dir.exists():
+                    board_info_path = board_dir / "board_info.json"
+                    if board_info_path.exists():
+                        with open(board_info_path, "r", encoding="utf-8") as f:
+                            board_info = json.load(f)
+                        
+                        board_info["name"] = new_name
+                        board_info["updated_at"] = datetime.now().isoformat()
+                        
+                        with open(board_info_path, "w", encoding="utf-8") as f:
+                            json.dump(board_info, f, ensure_ascii=False, indent=2)
+                        return True
+        return False
