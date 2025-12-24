@@ -41,12 +41,14 @@ class TrashManager:
         except Exception as e:
             print(f"保存回收站信息失败: {e}")
     
-    def move_to_trash(self, file_path: Path, window_data: Dict, board_id: str) -> bool:
-        """将文件移动到回收站"""
+    def move_to_trash(self, file_path: Path, window_data: Dict, board_id: str, parent_id: str = None) -> Optional[str]:
+        """将文件移动到回收站
+        返回创建的回收站项目ID，失败返回None
+        """
         try:
             if not file_path.exists():
                 print(f"文件不存在，无法移动到回收站: {file_path}")
-                return False
+                return None
             
             # 生成唯一的回收站文件名
             timestamp = int(time.time() * 1000)
@@ -73,8 +75,10 @@ class TrashManager:
             else:
                 file_size = trash_file_path.stat().st_size
                 
+            trash_id = f"trash_{timestamp}"
             trash_item = {
-                "id": f"trash_{timestamp}",
+                "id": trash_id,
+                "parent_id": parent_id,
                 "original_name": original_name,
                 "trash_filename": trash_filename,
                 "window_data": window_data,
@@ -87,20 +91,20 @@ class TrashManager:
             trash_info.append(trash_item)
             self._save_trash_info(trash_info)
             
-            print(f"项目已移动到回收站: {original_name} -> {trash_filename}")
-            return True
+            print(f"项目已移动到回收站: {original_name} -> {trash_filename} (parent: {parent_id})")
+            return trash_id
             
         except Exception as e:
             print(f"移动项目到回收站失败: {e}")
             import traceback
             traceback.print_exc()
-            return False
+            return None
 
-    def move_course_to_trash(self, course_id: str, course_path: Path, course_info: Dict) -> bool:
+    def move_course_to_trash(self, course_id: str, course_path: Path, course_info: Dict) -> Optional[str]:
         """将课程移动到回收站"""
         return self.move_to_trash(course_path, {"type": "course", "data": course_info}, "system")
 
-    def move_board_to_trash(self, board_id: str, board_path: Path, board_info: Dict) -> bool:
+    def move_board_to_trash(self, board_id: str, board_path: Path, board_info: Dict) -> Optional[str]:
         """将展板移动到回收站"""
         return self.move_to_trash(board_path, {"type": "board", "data": board_info}, board_info.get("course_id", "unknown"))
 
@@ -131,7 +135,32 @@ class TrashManager:
                 print(f"回收站中未找到项目: {trash_id}")
                 return False
             
-            # 检查回收站文件是否存在
+            # 1. 恢复主项目
+            success = self._restore_single_item(trash_item)
+            if not success:
+                return False
+
+            # 2. 联动恢复所有子项
+            children = [item for item in trash_info if item.get("parent_id") == trash_id]
+            for child in children:
+                print(f"发现联动子项，正在恢复: {child['original_name']}")
+                self._restore_single_item(child)
+
+            # 3. 从回收站信息中移除主项和所有子项
+            new_trash_info = [item for item in trash_info if item["id"] != trash_id and item.get("parent_id") != trash_id]
+            self._save_trash_info(new_trash_info)
+            
+            return True
+            
+        except Exception as e:
+            print(f"从回收站恢复文件失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def _restore_single_item(self, trash_item: Dict) -> bool:
+        """还原单个回收站项目（不处理联动）"""
+        try:
             trash_file_path = self.trash_dir / trash_item["trash_filename"]
             if not trash_file_path.exists():
                 print(f"回收站文件不存在: {trash_item['trash_filename']}")
@@ -157,62 +186,53 @@ class TrashManager:
             
             # 方案三处理：如果是展板恢复，确保父课程存在并重新注册
             window_data = trash_item.get("window_data", {})
-            if window_data.get("type") == "board":
+            if window_data and window_data.get("type") == "board":
                 try:
                     from storage.file_manager import FileSystemManager
                     fm = FileSystemManager()
                     board_info = window_data.get("data", {})
                     course_id = board_info.get("course_id")
                     if course_id:
-                        # 确保课程存在（如果课程在回收站，这里会创建一个“壳”）
                         fm.ensure_course_exists(course_id)
-                        # 将展板重新注册到课程的 course_info.json 中
                         fm.register_board_to_course(course_id, board_info.get("id"))
                 except Exception as e:
                     print(f"恢复展板元数据失败: {e}")
-
-            # 从回收站信息中移除
-            trash_info.pop(item_index)
-            self._save_trash_info(trash_info)
             
             print(f"文件已从回收站恢复: {trash_item['original_name']}")
             return True
-            
         except Exception as e:
-            print(f"从回收站恢复文件失败: {e}")
+            print(f"还原单个项目失败: {e}")
             return False
     
     def permanently_delete(self, trash_id: str) -> bool:
         """永久删除回收站中的文件"""
         try:
             trash_info = self._load_trash_info()
-            trash_item = None
-            item_index = -1
             
-            # 查找要删除的项目
-            for i, item in enumerate(trash_info):
-                if item["id"] == trash_id:
-                    trash_item = item
-                    item_index = i
-                    break
-            
+            # 1. 查找主项
+            trash_item = next((item for item in trash_info if item["id"] == trash_id), None)
             if not trash_item:
                 print(f"回收站中未找到项目: {trash_id}")
                 return False
             
-            # 删除回收站文件/文件夹
-            trash_file_path = self.trash_dir / trash_item["trash_filename"]
-            if trash_file_path.exists():
-                if trash_file_path.is_dir():
-                    shutil.rmtree(trash_file_path)
-                else:
-                    trash_file_path.unlink()
+            # 2. 查找所有子项
+            children = [item for item in trash_info if item.get("parent_id") == trash_id]
             
-            # 从回收站信息中移除
-            trash_info.pop(item_index)
-            self._save_trash_info(trash_info)
+            # 3. 删除物理文件（主项和所有子项）
+            items_to_delete = [trash_item] + children
+            for item in items_to_delete:
+                trash_file_path = self.trash_dir / item["trash_filename"]
+                if trash_file_path.exists():
+                    if trash_file_path.is_dir():
+                        shutil.rmtree(trash_file_path)
+                    else:
+                        trash_file_path.unlink()
+                print(f"物理文件已永久删除: {item['original_name']}")
             
-            print(f"文件已永久删除: {trash_item['original_name']}")
+            # 4. 从回收站信息中移除主项和所有子项
+            new_trash_info = [item for item in trash_info if item["id"] != trash_id and item.get("parent_id") != trash_id]
+            self._save_trash_info(new_trash_info)
+            
             return True
             
         except Exception as e:
@@ -265,7 +285,7 @@ class TrashManager:
             print(f"计算回收站大小失败: {e}")
             return 0
     
-    def move_pdf_pages_to_trash(self, board_dir: Path, pdf_filename: str) -> bool:
+    def move_pdf_pages_to_trash(self, board_dir: Path, pdf_filename: str, parent_id: str = None) -> bool:
         """将PDF对应的pages文件夹移动到回收站"""
         try:
             # 获取PDF文件名（不含扩展名）
@@ -291,6 +311,7 @@ class TrashManager:
             trash_info = self._load_trash_info()
             trash_item = {
                 "id": f"trash_{timestamp}_pages",
+                "parent_id": parent_id,
                 "original_name": f"{pdf_name}_pages",
                 "trash_filename": trash_folder_name,
                 "type": "pdf_pages_folder",
@@ -302,7 +323,7 @@ class TrashManager:
             trash_info.append(trash_item)
             self._save_trash_info(trash_info)
             
-            print(f"PDF pages文件夹已移动到回收站: {pdf_name} -> {trash_folder_name}")
+            print(f"PDF pages文件夹已移动到回收站: {pdf_name} -> {trash_folder_name} (parent: {parent_id})")
             return True
             
         except Exception as e:

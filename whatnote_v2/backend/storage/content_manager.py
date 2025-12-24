@@ -338,29 +338,36 @@ class ContentManager:
             actual_file_path = files_dir / actual_filename
             
             success = True
+            parent_trash_id = None
             
-            # 移动实际文件到回收站（如果存在）
+            # 1. 优先移动实际数据文件作为“主项” (例如 .pdf, .md)
             if actual_file_path.exists():
-                if not self.trash_manager.move_to_trash(actual_file_path, window_data, board_id):
-                    print(f"移动文件到回收站失败: {actual_file_path}")
+                parent_trash_id = self.trash_manager.move_to_trash(actual_file_path, window_data, board_id)
+                if not parent_trash_id:
                     success = False
             
-            # 移动JSON配置文件到回收站
+            # 2. 移动JSON配置文件作为“子项”
             if window_json_file.exists():
                 json_window_data = {**window_data, "is_json_config": True}
-                if not self.trash_manager.move_to_trash(window_json_file, json_window_data, board_id):
-                    print(f"移动JSON配置文件到回收站失败: {window_json_file}")
+                # 如果主项没创建成功（比如不存在），那JSON就成了主项
+                current_parent = parent_trash_id
+                res_id = self.trash_manager.move_to_trash(window_json_file, json_window_data, board_id, parent_id=current_parent)
+                
+                if not parent_trash_id:
+                    parent_trash_id = res_id  # 如果主项不存在，JSON文件升级为主项
+                
+                if not res_id:
                     success = False
             
-            # 如果是PDF窗口，同时移动对应的pages文件夹到回收站
-            if window_data.get('type') == 'pdf':
+            # 3. 如果是PDF窗口，同时移动对应的pages文件夹到回收站（作为子项）
+            if window_data.get('type') == 'pdf' and parent_trash_id:
                 # 使用JSON文件名来推断PDF文件名
-                pdf_filename = actual_filename  # actual_filename已经是去掉.json后缀的文件名
-                pages_result = self.trash_manager.move_pdf_pages_to_trash(board_dir, pdf_filename)
-                if pages_result:
-                    print(f"PDF pages文件夹清理成功: {pdf_filename}")
-                else:
+                pdf_filename = actual_filename
+                if not self.trash_manager.move_pdf_pages_to_trash(board_dir, pdf_filename, parent_id=parent_trash_id):
                     print(f"移动PDF pages文件夹到回收站失败: {pdf_filename}")
+                    success = False
+                else:
+                    print(f"PDF pages文件夹已作为子项移动到回收站: {pdf_filename}")
             
             if success:
                 print(f"窗口已移动到回收站: {window_id}")

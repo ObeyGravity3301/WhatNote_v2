@@ -1648,8 +1648,8 @@ function App() {
             </div>
             
             <div className="trash-content" onClick={() => setShowTrashViewMenu(false)}>
-              {trashItems.length > 0 ? (
-                [...trashItems].sort((a, b) => {
+              {trashItems.filter(item => !item.parent_id).length > 0 ? (
+                trashItems.filter(item => !item.parent_id).sort((a, b) => {
                   let valA, valB;
                   const config = trashSortConfig;
                   
@@ -1730,7 +1730,7 @@ function App() {
 
             <div className="trash-statusbar">
               <div className="status-field count">
-                {trashItems.length} 个对象
+                {trashItems.filter(item => !item.parent_id).length} 个对象
               </div>
               <div className="status-field size">
                 {formatSize(trashSize)}
