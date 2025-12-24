@@ -267,7 +267,20 @@ function App() {
     const actualData = targetType === 'board' ? targetData.board : targetData;
     console.log('👉 [App] actualData:', actualData);
 
-    if (action === 'rename') {
+    if (action === 'open-folder') {
+      try {
+        const response = await fetch(`http://localhost:8081/api/boards/${actualData.id}/open-folder`, {
+          method: 'POST'
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || '无法打开文件夹');
+        }
+      } catch (error) {
+        console.error('打开文件夹失败:', error);
+        showToast(`打开文件夹失败: ${error.message}`, 'error');
+      }
+    } else if (action === 'rename') {
       const actualData = targetType === 'board' ? targetData.board : targetData;
       setEditingItemId(actualData.id);
       setEditingItemName(actualData.name);
@@ -338,6 +351,9 @@ function App() {
       toastTimeoutRef.current = null;
     }, 3000);
   };
+
+  // 将 showToast 暴露给全局，方便其他组件调用
+  window.showToast = showToast;
 
   const hideToast = () => {
     if (toastTimeoutRef.current) {
@@ -1570,6 +1586,15 @@ function App() {
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
+          {startMenuContextMenu.targetType === 'board' && (
+            <>
+              <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('open-folder')}>
+                <span className="menu-icon">📂</span>
+                <span className="menu-text">在资源管理器中打开</span>
+              </div>
+              <div className="context-menu-separator"></div>
+            </>
+          )}
           <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('rename')}>
             <span className="menu-icon">✏️</span>
             <span className="menu-text">重命名</span>

@@ -11914,6 +11914,24 @@ function BoardCanvas({
       case 'new-web-window':
         handleCreateWindow('web');
         break;
+      case 'open-folder':
+        try {
+          const response = await fetch(`http://localhost:8081/api/boards/${boardId}/open-folder`, {
+            method: 'POST'
+          });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || '无法打开文件夹');
+          }
+        } catch (error) {
+          console.error('打开文件夹失败:', error);
+          if (window.showToast) {
+             window.showToast(`打开文件夹失败: ${error.message}`, 'error');
+          } else {
+             alert(`打开文件夹失败: ${error.message}`);
+          }
+        }
+        break;
       case 'open-console':
         // 打开控制台并自动定位到当前展板
         console.log('[BoardCanvas] 打开控制台:', { courseId, boardId });
@@ -12826,6 +12844,13 @@ function BoardCanvas({
         order: 1
       },
       { type: 'separator', order: 2 },
+      {
+        label: '在资源管理器中打开',
+        action: 'open-folder',
+        icon: <span className="win98-icon win98-icon-folder"></span>,
+        order: 3
+      },
+      { type: 'separator', order: 4 },
       { 
         label: '打开控制台', 
         action: 'open-console',

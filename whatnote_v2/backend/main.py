@@ -27,6 +27,8 @@ import shutil
 import zipfile
 import aiohttp
 import uuid
+import platform
+import subprocess
 from typing import List, Dict, Optional
 from pathlib import Path
 
@@ -449,6 +451,49 @@ async def get_board_info(board_id: str):
         raise
     except Exception as e:
         error(f"获取展板信息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/boards/{board_id}/open-folder")
+async def open_board_folder(board_id: str):
+    """在系统文件管理器中打开展板文件夹"""
+    try:
+        # 找到展板目录
+        board_dir = None
+        for course_dir in file_manager.courses_dir.iterdir():
+            if course_dir.is_dir():
+                potential_board_dir = course_dir / board_id
+                if potential_board_dir.exists():
+                    board_dir = potential_board_dir
+                    break
+        
+        if not board_dir:
+            raise HTTPException(status_code=404, detail="展板目录不存在")
+        
+        # 转换为绝对路径
+        abs_path = board_dir.absolute()
+        info(f"正在尝试打开文件夹: {abs_path}")
+        
+        system = platform.system()
+        if system == "Windows":
+            os.startfile(abs_path)
+        elif system == "Darwin":  # macOS
+            subprocess.Popen(["open", str(abs_path)])
+        else:  # Linux and others
+            # Linux 上使用 xdg-open
+            try:
+                subprocess.Popen(["xdg-open", str(abs_path)])
+            except FileNotFoundError:
+                # 如果没有 xdg-open，尝试一些常见的文件管理器
+                for manager in ["nautilus", "dolphin", "thunar", "pcmanfm"]:
+                    try:
+                        subprocess.Popen([manager, str(abs_path)])
+                        break
+                    except FileNotFoundError:
+                        continue
+            
+        return {"status": "success", "path": str(abs_path)}
+    except Exception as e:
+        error(f"打开文件夹失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/boards/{board_id}")
