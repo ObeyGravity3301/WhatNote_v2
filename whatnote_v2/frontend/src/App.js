@@ -109,11 +109,13 @@ function App() {
   // 子菜单激活状态
   const [activeCourseId, setActiveCourseId] = useState(null);
   const [submenuPosition, setSubmenuPosition] = useState({ top: 0 });
+  const [draggedItem, setDraggedItem] = useState(null); // 用于拖拽排序
+  const [dragOverInfo, setDragOverInfo] = useState({ id: null, position: null }); // { id, position: 'top' | 'bottom' }
   
   const toastTypeConfig = {
-    success: { icon: '✅', title: '操作成功' },
-    error: { icon: '⚠️', title: '操作失败' },
-    info: { icon: 'ℹ️', title: '提示' }
+    success: { icon: 'win98-icon-success', title: '操作成功' },
+    error: { icon: 'win98-icon-error', title: '操作失败' },
+    info: { icon: 'win98-icon-info', title: '提示' }
   };
 
   useEffect(() => {
@@ -167,10 +169,19 @@ function App() {
       height: startMenuRect.height
     });
     
-    // 获取子菜单的预估高度（基于内容）
+    // 获取子菜单的预估高度（基于内容，但受限于 CSS 的 max-height）
     const submenuElement = document.querySelector('.start-menu-submenu');
-    const estimatedHeight = submenuElement ? submenuElement.scrollHeight : 200;
-    console.log('📍 子菜单预估高度:', estimatedHeight);
+    const contentHeight = submenuElement ? submenuElement.scrollHeight : 200;
+    
+    // 获取实际显示高度（受 CSS 70vh 限制）
+    const maxAllowedHeight = window.innerHeight * 0.7;
+    const estimatedHeight = Math.min(contentHeight, maxAllowedHeight);
+    
+    console.log('📍 子菜单高度计算:', {
+      contentHeight,
+      maxAllowedHeight,
+      estimatedHeight
+    });
     
     // 计算文件夹顶部到开始菜单底部的距离（可用空间）
     const folderTop = rect.top - startMenuRect.top;
@@ -193,19 +204,113 @@ function App() {
       return result;
     } else {
       // 子菜单高度大于等于可用空间，底部对齐开始菜单底部
-      const bottomAlignedTop = startMenuHeight - estimatedHeight - 5;
-      const result = { top: bottomAlignedTop }; // 不使用Math.max，允许负数（超出顶部）
+      // 注意：这里的底部对齐是指子菜单的底部边缘与主菜单底部对齐
+      const bottomAlignedTop = startMenuHeight - estimatedHeight;
+      const result = { top: bottomAlignedTop }; 
       console.log('✅ 使用底部对齐 (子菜单高度 >= 可用空间):', {
         startMenuHeight,
         estimatedHeight,
         bottomAlignedTop,
-        finalTop: result.top,
-        note: bottomAlignedTop < 0 ? '子菜单顶部超出开始菜单顶部' : '子菜单完全在开始菜单内'
+        finalTop: result.top
       });
       return result;
     }
   };
   
+  // 拖拽排序处理
+  const handleDragStart = (e, type, item) => {
+    setDraggedItem({ type, item });
+    e.dataTransfer.effectAllowed = 'move';
+    e.currentTarget.classList.add('dragging');
+  };
+
+  const handleDragEnd = (e) => {
+    e.currentTarget.classList.remove('dragging');
+    setDraggedItem(null);
+    setDragOverInfo({ id: null, position: null });
+  };
+
+  const handleDragOver = (e, id) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    if (!draggedItem || draggedItem.item.id === id) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const position = e.clientY < midY ? 'top' : 'bottom';
+    
+    if (dragOverInfo.id !== id || dragOverInfo.position !== position) {
+      setDragOverInfo({ id, position });
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    // 只有当离开整个元素时才清除，防止子元素触发
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverInfo({ id: null, position: null });
+    }
+  };
+
+  const handleDrop = async (e, type, targetItem) => {
+    e.preventDefault();
+    const position = dragOverInfo.position;
+    setDragOverInfo({ id: null, position: null });
+
+    if (!draggedItem || draggedItem.type !== type || draggedItem.item.id === targetItem.id) {
+      return;
+    }
+
+    if (type === 'course') {
+      const newCourses = [...courses];
+      const draggedIndex = newCourses.findIndex(c => c.id === draggedItem.item.id);
+      newCourses.splice(draggedIndex, 1);
+      
+      const targetIndex = newCourses.findIndex(c => c.id === targetItem.id);
+      // 根据落点位置决定插入到目标项之前还是之后
+      const finalIndex = position === 'top' ? targetIndex : targetIndex + 1;
+      
+      newCourses.splice(finalIndex, 0, draggedItem.item);
+      setCourses(newCourses);
+      
+      // 保存到后端
+      try {
+        await fetch(`${window.location.origin}/api/courses/reorder`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newCourses.map(c => c.id))
+        });
+      } catch (err) {
+        console.error('保存课程排序失败:', err);
+      }
+    } else if (type === 'board') {
+      const courseId = activeCourseId;
+      const boards = [...courseBoards[courseId]];
+      const draggedIndex = boards.findIndex(b => b.id === draggedItem.item.id);
+      boards.splice(draggedIndex, 1);
+      
+      const targetIndex = boards.findIndex(b => b.id === targetItem.id);
+      const finalIndex = position === 'top' ? targetIndex : targetIndex + 1;
+      
+      boards.splice(finalIndex, 0, draggedItem.item);
+      setCourseBoards({
+        ...courseBoards,
+        [courseId]: boards
+      });
+      
+      // 保存到后端
+      try {
+        await fetch(`${window.location.origin}/api/courses/${courseId}/boards/reorder`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(boards.map(b => b.id))
+        });
+      } catch (err) {
+        console.error('保存展板排序失败:', err);
+      }
+    }
+  };
+
   const handleCourseClick = (courseId, event) => {
     const targetElement = event.currentTarget;
     
@@ -293,7 +398,7 @@ function App() {
       const confirmed = await openConfirmDialog({
         title: confirmTitle,
         message: confirmMsg,
-        icon: '⚠️'
+        icon: 'win98-icon-warning'
       });
         
       if (confirmed) {
@@ -372,7 +477,7 @@ function App() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
   
-  const openConfirmDialog = ({ title, message, confirmText = '确定', cancelText = '取消', icon = '⚠️' }) => {
+  const openConfirmDialog = ({ title, message, confirmText = '确定', cancelText = '取消', icon = 'win98-icon-warning' }) => {
     return new Promise((resolve) => {
       setConfirmDialog({
         title,
@@ -836,7 +941,7 @@ function App() {
     const confirmed = await openConfirmDialog({
       title: '永久删除确认',
       message: '确定要永久删除这个文件吗？此操作无法撤销！',
-      icon: '⚠️'
+      icon: 'win98-icon-warning'
     });
 
     if (!confirmed) {
@@ -864,7 +969,7 @@ function App() {
     const confirmed = await openConfirmDialog({
       title: '清空回收站',
       message: '确定要清空回收站吗？此操作将永久删除所有文件，无法撤销！',
-      icon: '⚠️'
+      icon: 'win98-icon-warning'
     });
 
     if (!confirmed) {
@@ -1402,9 +1507,15 @@ function App() {
                 courses.map(course => (
                   <div 
                     key={course.id} 
-                    className={`start-menu-item ${activeCourseId === course.id ? 'active' : ''}`}
+                    className={`start-menu-item ${activeCourseId === course.id ? 'active' : ''} ${dragOverInfo.id === course.id ? `drag-over-${dragOverInfo.position}` : ''}`}
                     onClick={(e) => handleCourseClick(course.id, e)}
                     onContextMenu={(e) => handleStartMenuContextMenuOpen(e, 'course', course)}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, 'course', course)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => handleDragOver(e, course.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, 'course', course)}
                   >
                     <span className="menu-icon win98-icon win98-icon-folder"></span>
                     {editingItemId === course.id ? (
@@ -1529,7 +1640,7 @@ function App() {
                   {courseBoards[activeCourseId]?.map(board => (
                     <div 
                       key={board.id}
-                      className="submenu-item"
+                      className={`submenu-item ${dragOverInfo.id === board.id ? `drag-over-${dragOverInfo.position}` : ''}`}
                       onClick={() => {
                         // 找到对应的课程并设置
                         const course = courses.find(c => c.id === activeCourseId);
@@ -1543,6 +1654,12 @@ function App() {
                         setNewBoardName('');
                       }}
                       onContextMenu={(e) => handleStartMenuContextMenuOpen(e, 'board', { course: courses.find(c => c.id === activeCourseId), board })}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, 'board', board)}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={(e) => handleDragOver(e, board.id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, 'board', board)}
                     >
                       <span className="submenu-icon win98-icon win98-icon-clipboard"></span>
                       {editingItemId === board.id ? (
@@ -1589,18 +1706,18 @@ function App() {
           {startMenuContextMenu.targetType === 'board' && (
             <>
               <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('open-folder')}>
-                <span className="menu-icon">📂</span>
+                <span className="menu-icon win98-icon win98-icon-folder"></span>
                 <span className="menu-text">在资源管理器中打开</span>
               </div>
               <div className="context-menu-separator"></div>
             </>
           )}
           <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('rename')}>
-            <span className="menu-icon">✏️</span>
+            <span className="menu-icon win98-icon win98-icon-edit"></span>
             <span className="menu-text">重命名</span>
           </div>
           <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('delete')}>
-            <span className="menu-icon">🗑️</span>
+            <span className="menu-icon win98-icon win98-icon-delete"></span>
             <span className="menu-text">删除</span>
           </div>
         </div>
@@ -1633,7 +1750,7 @@ function App() {
               <button className="trash-toolbar-btn" onClick={handleEmptyTrash}>
                 清空回收站
               </button>
-              <div style={{position: 'relative'}}>
+              <div style={{position: 'relative', zIndex: 32000}}>
                 <button 
                   className={`trash-toolbar-btn ${showTrashViewMenu ? 'active' : ''}`}
                   onClick={() => setShowTrashViewMenu(!showTrashViewMenu)}
@@ -1834,7 +1951,7 @@ function App() {
         <div className="win98-dialog-overlay" role="dialog" aria-modal="true">
           <div className="win98-dialog">
             <div className="win98-dialog-titlebar">
-              <span className="win98-dialog-icon">{confirmDialog.icon || '⚠️'}</span>
+              <span className={`win98-dialog-icon win98-icon ${confirmDialog.icon || 'win98-icon-warning'}`}></span>
               <span className="win98-dialog-title">{confirmDialog.title || '确认操作'}</span>
             </div>
             <div className="win98-dialog-content">
@@ -1858,13 +1975,12 @@ function App() {
 
       {/* 回收站属性对话框 */}
       {showTrashProperties && propertiesItem && (
-        <div className="win98-modal-overlay" style={{zIndex: 35000}} onClick={() => setShowTrashProperties(false)}>
+        <div className="win98-modal-overlay" style={{zIndex: 35000, display: 'flex', alignItems: 'center', justifyContent: 'center'}} onClick={() => setShowTrashProperties(false)}>
           <div className="win98-properties-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="win98-msgbox-header">
               <span className="win98-msgbox-title">属性</span>
               <button className="win98-msgbox-close" onClick={() => setShowTrashProperties(false)}>×</button>
             </div>
-            
             <div className="properties-tabs">
               <div className="properties-tab active">常规</div>
             </div>
@@ -1937,9 +2053,7 @@ function App() {
               <button className="win98-msgbox-close" onClick={hideToast}>×</button>
             </div>
             <div className="win98-msgbox-body">
-              <div className={`win98-msgbox-icon ${toast.type}`}>
-                {toast.type === 'success' ? '✅' : toast.type === 'error' ? '⚠️' : 'ℹ️'}
-              </div>
+              <div className={`win98-msgbox-icon ${toast.type}`}></div>
               <div className="win98-msgbox-content">
                 <div className="win98-msgbox-message">{toast.message}</div>
               </div>
@@ -1956,19 +2070,7 @@ function App() {
 
 // 窗口图标辅助函数
 const getWindowIcon = (type) => {
-  const typeIcons = {
-    'text': '📝',
-    'web': '🌐',
-    'image': '🖼️',
-    'video': '🎥',
-    'audio': '🎵',
-    'pdf': '📄',
-    'chat': '💬',
-    'message-center': '📬',
-    'personalization': '🎨',
-    'planner': '📅'
-  };
-  return typeIcons[type] || '';
+  return '';
 };
 
 const getWindowIconClass = (type) => {

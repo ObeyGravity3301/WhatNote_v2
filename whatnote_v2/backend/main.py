@@ -439,6 +439,30 @@ async def create_board(course_id: str, board_name: str):
         error(f"创建展板失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.put("/api/courses/reorder")
+async def reorder_courses(course_ids: List[str]):
+    """更新课程排序"""
+    try:
+        success = file_manager.reorder_courses(course_ids)
+        if success:
+            return {"message": "课程排序更新成功"}
+        raise HTTPException(status_code=500, detail="保存排序失败")
+    except Exception as e:
+        error(f"更新课程排序失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/courses/{course_id}/boards/reorder")
+async def reorder_boards(course_id: str, board_ids: List[str]):
+    """更新展板排序"""
+    try:
+        success = file_manager.reorder_boards(course_id, board_ids)
+        if success:
+            return {"message": "展板排序更新成功"}
+        raise HTTPException(status_code=500, detail="保存排序失败")
+    except Exception as e:
+        error(f"更新展板排序失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/boards/{board_id}")
 async def get_board_info(board_id: str):
     """获取展板信息"""

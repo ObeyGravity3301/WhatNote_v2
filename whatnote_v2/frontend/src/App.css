@@ -299,6 +299,30 @@ html, body {
 
 .start-menu-main {
   flex: 1;
+  max-height: 70vh; /* 限制开始菜单主区域高度为屏幕高度的70% */
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* 自定义滚动条样式使其更符合 Win98 风格 */
+  scrollbar-width: thin;
+  scrollbar-color: #c0c0c0 #ffffff;
+}
+
+/* 为 Webkit 浏览器（Chrome/Safari/Edge）添加滚动条样式 */
+.start-menu-main::-webkit-scrollbar,
+.start-menu-submenu::-webkit-scrollbar {
+  width: 12px;
+}
+
+.start-menu-main::-webkit-scrollbar-track,
+.start-menu-submenu::-webkit-scrollbar-track {
+  background: #dfdfdf;
+  border-left: 1px solid #808080;
+}
+
+.start-menu-main::-webkit-scrollbar-thumb,
+.start-menu-submenu::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border: 1px outset #ffffff;
 }
 
 .start-menu-item {
@@ -326,6 +350,35 @@ html, body {
 
 .start-menu-item.active .menu-arrow {
   color: white;
+}
+
+/* 拖拽相关样式 */
+.start-menu-item[draggable="true"],
+.submenu-item[draggable="true"] {
+  cursor: grab;
+}
+
+.start-menu-item:active,
+.submenu-item:active {
+  cursor: grabbing;
+}
+
+.start-menu-item.dragging,
+.submenu-item.dragging {
+  opacity: 0.5;
+  background: #000080;
+  color: white;
+}
+
+/* 拖拽插入指示线 */
+.start-menu-item.drag-over-top,
+.submenu-item.drag-over-top {
+  border-top: 2px solid #000080 !important;
+}
+
+.start-menu-item.drag-over-bottom,
+.submenu-item.drag-over-bottom {
+  border-bottom: 2px solid #000080 !important;
 }
 
 .menu-icon,
@@ -464,6 +517,30 @@ html, body {
 
 .win98-icon-palette {
   background-image: url('./assets/icons/windows-start.png');
+}
+
+.win98-icon-edit {
+  background-image: url('./assets/icons/notepad.png');
+}
+
+.win98-icon-delete {
+  background-image: url('./assets/icons/recycle_bin_full-3.png');
+}
+
+.win98-icon-success {
+  background-image: url('./assets/icons/connect_established.png');
+}
+
+.win98-icon-error {
+  background-image: url('./assets/icons/connect_no.png');
+}
+
+.win98-icon-info {
+  background-image: url('./assets/icons/address_book_pad.png');
+}
+
+.win98-icon-warning {
+  background-image: url('./assets/icons/search_file_2-3.png');
 }
 
 .menu-text {
@@ -872,8 +949,11 @@ html, body {
   box-shadow: 2px 2px 4px rgba(0,0,0,0.3);
   z-index: 20001; /* 比开始菜单更高 */
   height: auto; /* 高度自适应内容 */
-  max-height: calc(100vh - 70px); /* 防止超出屏幕，预留任务栏空间 */
+  max-height: 70vh; /* 限制子菜单高度为屏幕高度的70% */
   overflow-y: auto; /* 如果内容过多，允许滚动 */
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #c0c0c0 #ffffff;
 }
 
 .submenu-content {
@@ -1485,6 +1565,28 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+}
+
+.win98-msgbox-icon.success {
+  background-image: url('./assets/icons/connect_established.png');
+}
+
+.win98-msgbox-icon.error {
+  background-image: url('./assets/icons/connect_no.png');
+}
+
+.win98-msgbox-icon.info {
+  background-image: url('./assets/icons/address_book_pad.png');
+}
+
+.win98-msgbox-icon.warning {
+  background-image: url('./assets/icons/search_file_2-3.png');
 }
 
 .win98-msgbox-message {
@@ -1638,18 +1740,18 @@ html, body {
 }
 
 .trash-icon-img {
-  width: 32px !important;
-  height: 32px !important;
+  width: 32px;
+  height: 32px;
   margin-bottom: 4px;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
 }
 
-/* 移除之前的 SVG 背景，改用全局定义的图标类 */
-.trash-icon-img.course { }
-.trash-icon-img.board { }
-.trash-icon-img.file { }
+/* 根据文件类型设置图标 */
+.trash-icon-img.course { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="%23FFD700" d="M2 6h10l2 4h16v16H2z"/><path fill="%23FFF" d="M14 10l-2-4H2v2h11z"/></svg>'); }
+.trash-icon-img.board { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="%23808080" d="M6 2h20v28H6z"/><path fill="%23C0C0C0" d="M8 4h16v24H8z"/><path fill="%23000" d="M10 8h12v2H10zm0 4h12v2H10zm0 4h8v2H10z"/></svg>'); }
+.trash-icon-img.file { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="%23FFF" d="M6 2h14l6 6v22H6z"/><path fill="%23808080" d="M20 2v6h6"/></svg>'); }
 
 .trash-icon-label {
   font-size: 11px;
@@ -1696,112 +1798,117 @@ html, body {
   padding: 2px;
 }
 
-
-/* 回收站工具栏按钮 */
+/* 回收站工具栏 */
 .trash-toolbar {
   display: flex;
-  padding: 4px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
   background: #c0c0c0;
   border-bottom: 1px solid #808080;
-  gap: 4px;
+  flex-shrink: 0;
+  height: 28px;
+  box-sizing: border-box;
+  overflow: visible; /* 允许子菜单超出工具栏范围显示 */
 }
 
 .trash-toolbar-btn {
-  padding: 1px 8px;
-  background: #c0c0c0;
+  padding: 1px 10px;
+  font-size: 11px;
+  background-color: #c0c0c0;
   border: 1px outset #ffffff;
   border-radius: 0px;
-  font-family: 'MS Sans Serif', sans-serif;
-  font-size: 11px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  position: relative;
   cursor: pointer;
+  font-family: "MS Sans Serif", sans-serif;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: black;
+  white-space: nowrap;
 }
 
-.trash-toolbar-btn:active {
+.trash-toolbar-btn:hover {
+  background-color: #d4d4d4;
+}
+
+.trash-toolbar-btn:active, .trash-toolbar-btn.active {
   border: 1px inset #ffffff;
-  padding: 2px 7px 0px 9px;
+  background-color: #c0c0c0;
+  padding: 2px 9px 0px 11px;
 }
-
-.trash-view-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  background: #c0c0c0;
-  border: 2px solid #ffffff;
-  border-right-color: #000000;
-  border-bottom-color: #000000;
-  box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
-  z-index: 30005;
-  min-width: 150px;
-  padding: 2px;
-}
-
-.trash-view-menu .menu-group-title {
-  padding: 2px 8px;
-  font-size: 10px;
-  color: #808080;
-  border-bottom: 1px solid #dfdfdf;
-  margin-bottom: 2px;
-}
-
 
 /* Win98 属性对话框 */
 .win98-properties-dialog {
-  width: 350px;
+  width: 360px;
   background: #c0c0c0;
   border: 2px solid #ffffff;
   border-right-color: #000000;
   border-bottom-color: #000000;
   box-shadow: 1px 1px 0 #808080;
   padding: 2px;
-  user-select: none;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  position: relative;
+  margin: auto;
+  max-height: 90vh;
+}
+
+/* 覆盖消息框头部的边距，用于属性对话框 */
+.win98-properties-dialog .win98-msgbox-header {
+  margin-bottom: 0px; /* 彻底移除底部边距 */
+  flex-shrink: 0;
 }
 
 .properties-tabs {
   display: flex;
-  padding: 2px 4px 0 4px;
+  padding: 0px 5px 0 10px; /* 移除顶部内边距 */
+  margin-top: 4px; /* 使用微小的外边距控制间距 */
+  flex-shrink: 0;
 }
 
 .properties-tab {
-  padding: 2px 8px;
+  padding: 3px 10px;
   background: #c0c0c0;
   border: 1px solid #ffffff;
-  border-bottom: none;
   border-right-color: #808080;
+  border-bottom: none;
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
   font-size: 11px;
-  margin-right: 2px;
+  cursor: default;
+  position: relative;
   z-index: 1;
 }
 
 .properties-tab.active {
-  padding-bottom: 3px;
-  margin-bottom: -1px;
   background: #c0c0c0;
-  border-right-color: #808080;
   font-weight: bold;
+  margin-bottom: -1px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #c0c0c0; /* 遮住下面的边框 */
+  z-index: 2;
+  box-shadow: 0 1px 0 #c0c0c0;
 }
 
 .properties-content {
-  border: 1px solid #ffffff;
-  border-top: none;
-  border-right-color: #808080;
-  border-bottom-color: #808080;
+  margin: 0 5px 5px 5px;
   padding: 15px;
   background: #c0c0c0;
-  margin: 0 4px 4px 4px;
+  border: 1px solid #ffffff;
+  border-right-color: #808080;
+  border-bottom-color: #808080;
+  box-shadow: inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 #404040;
 }
 
 .properties-header {
   display: flex;
   align-items: center;
   gap: 15px;
-  margin-bottom: 15px;
-  border-bottom: 1px solid #808080;
-  padding-bottom: 10px;
+  margin-bottom: 20px;
 }
 
 .properties-row {
@@ -1812,12 +1919,60 @@ html, body {
 
 .properties-label {
   width: 80px;
-  color: #404040;
+  color: #000000;
+  flex-shrink: 0;
 }
 
 .properties-value {
   flex: 1;
-  color: black;
+  color: #000000;
+  word-break: break-all;
+}
+
+.properties-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 5px 10px 10px 10px;
+  gap: 10px;
+}
+
+/* 回收站查看菜单 */
+.trash-view-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #c0c0c0;
+  border: 2px solid #ffffff;
+  border-right-color: #000000;
+  border-bottom-color: #000000;
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+  z-index: 31000;
+  min-width: 120px;
+  padding: 2px;
+  margin-top: 2px;
+}
+
+.properties-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.properties-row {
+  display: flex;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.properties-label {
+  width: 80px;
+  color: #000000;
+}
+
+.properties-value {
+  flex: 1;
+  color: #000000;
   word-break: break-all;
 }
 
@@ -1825,6 +1980,6 @@ html, body {
   display: flex;
   justify-content: flex-end;
   padding: 10px;
-  gap: 6px;
+  gap: 10px;
 }
 
