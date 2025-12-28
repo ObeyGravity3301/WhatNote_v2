@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './PersonalizationPanel.css';
+import { useLanguage } from '../i18n/LanguageContext';
 
 const formatDate = (isoString) => {
   if (!isoString) return '';
@@ -23,6 +24,7 @@ const PersonalizationPanel = ({
   settings,
   onRefresh,
 }) => {
+  const { t, language, updateLanguage } = useLanguage();
   const defaultFileInputRef = useRef(null);
   const boardFileInputRef = useRef(null);
 
@@ -45,17 +47,17 @@ const PersonalizationPanel = ({
 
   const appliedSummary = useMemo(() => {
     if (!settings || !settings.appliedWallpaper) {
-      return '当前使用：纯色桌面 (Win98 默认蓝)';
+      return t('current_using_solid');
     }
     const { type, originalName } = settings.appliedWallpaper;
     if (type === 'board') {
-      return `当前使用：展板自定义壁纸 (${originalName || '未命名文件'})`;
+      return `${t('current_using_board')} (${originalName || t('unnamed')})`;
     }
     if (type === 'default') {
-      return `当前使用：全局默认壁纸 (${settings.appliedWallpaper.originalName || '未命名文件'})`;
+      return `${t('current_using_default')} (${settings.appliedWallpaper.originalName || t('unnamed')})`;
     }
-    return '当前使用：纯色桌面 (Win98 默认蓝)';
-  }, [settings]);
+    return t('current_using_solid');
+  }, [settings, t]);
 
   const showStatus = (message, type = 'info') => {
     setStatusMessage(message);
@@ -75,14 +77,14 @@ const PersonalizationPanel = ({
       displayMode: mode,
     });
     if (result) {
-      showStatus('壁纸显示模式已更新。', 'success');
+      showStatus(t('wallpaper_mode_updated'), 'success');
     }
   };
 
   const handleDefaultDisplayModeChange = async (event) => {
     const mode = event.target.value;
     setDefaultDisplayMode(mode);
-    showStatus('正在更新默认壁纸显示模式...', 'info');
+    showStatus(t('updating_display_mode'), 'info');
     try {
       const response = await fetch('http://localhost:8081/api/personalization/wallpapers/default/display-mode', {
         method: 'PUT',
@@ -100,10 +102,10 @@ const PersonalizationPanel = ({
         setDefaultDisplayMode(latest.defaultDisplayMode || 'fit');
         setBoardDisplayMode(latest.boardDisplayMode || latest.defaultDisplayMode || 'fit');
       }
-      showStatus('默认壁纸显示模式已更新。', 'success');
+      showStatus(t('default_display_mode_updated'), 'success');
     } catch (error) {
       console.error('更新默认壁纸显示模式失败:', error);
-      showStatus(error.message || '更新默认壁纸显示模式失败', 'error');
+      showStatus(error.message || t('default_display_mode_updated'), 'error');
     }
   };
 
@@ -112,7 +114,7 @@ const PersonalizationPanel = ({
     if (!file) return;
 
     setUploadingDefault(true);
-    showStatus('正在上传默认壁纸...', 'info');
+    showStatus(t('uploading_default_wallpaper'), 'info');
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -128,10 +130,10 @@ const PersonalizationPanel = ({
       }
 
       await onRefresh?.();
-      showStatus('默认壁纸已更新，所有展板将使用新壁纸。', 'success');
+      showStatus(t('default_wallpaper_updated'), 'success');
     } catch (error) {
       console.error('上传默认壁纸失败:', error);
-      showStatus(error.message || '上传默认壁纸失败', 'error');
+      showStatus(error.message || t('default_wallpaper_updated'), 'error');
     } finally {
       setUploadingDefault(false);
       event.target.value = '';
@@ -143,7 +145,7 @@ const PersonalizationPanel = ({
     if (!file || !boardId) return;
 
     setUploadingBoard(true);
-    showStatus('正在上传展板壁纸...', 'info');
+    showStatus(t('uploading_board_wallpaper'), 'info');
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -166,14 +168,14 @@ const PersonalizationPanel = ({
           displayMode: boardDisplayMode,
         });
         if (appliedData) {
-          showStatus('展板壁纸上传并已应用。', 'success');
+          showStatus(t('board_wallpaper_applied'), 'success');
         }
       } else {
-        showStatus('展板壁纸上传成功，请从列表中手动选择。', 'success');
+        showStatus(t('board_wallpaper_uploaded'), 'success');
       }
     } catch (error) {
       console.error('上传展板壁纸失败:', error);
-      showStatus(error.message || '上传展板壁纸失败', 'error');
+      showStatus(error.message || t('board_wallpaper_uploaded'), 'error');
     } finally {
       setUploadingBoard(false);
       event.target.value = '';
@@ -202,9 +204,9 @@ const PersonalizationPanel = ({
       const latest = await onRefresh?.();
       if (showToast) {
         if (wallpaperId) {
-          showStatus('已应用展板专属壁纸。', 'success');
+          showStatus(t('board_wallpaper_applied_msg'), 'success');
         } else {
-          showStatus('已恢复使用全局默认壁纸。', 'success');
+          showStatus(t('restored_default_wallpaper'), 'success');
         }
       }
       if (latest) {
@@ -219,81 +221,81 @@ const PersonalizationPanel = ({
   };
 
   if (!settings) {
-    return (
-      <div className="personalization-panel">
-        <div className="personalization-scroll">
-          <div className="win98-section">
-            <div className="win98-section-title">加载中...</div>
-            <div className="win98-section-body">正在加载个性化设置，请稍候。</div>
+      return (
+        <div className="personalization-panel">
+          <div className="personalization-scroll">
+            <div className="win98-section">
+              <div className="win98-section-title">{t('loading')}</div>
+              <div className="win98-section-body">{t('loading_personalization')}</div>
+            </div>
           </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  const { defaultWallpaper, boardWallpapers = [], selectedBoardWallpaperId } = settings;
+    const { defaultWallpaper, boardWallpapers = [], selectedBoardWallpaperId } = settings;
 
-  return (
-    <div className="personalization-panel">
-      <div className="personalization-summary">{appliedSummary}</div>
+    return (
+      <div className="personalization-panel">
+        <div className="personalization-summary">{appliedSummary}</div>
 
-      <div className="personalization-scroll">
-        {/* Theme Selection */}
-        <section className="win98-section">
-          <div className="win98-section-title">主题风格</div>
-          <div className="win98-section-body">
-            <label className="win98-radio">
-              <input type="radio" checked readOnly />
-              <span>Windows 98 （别的没做）</span>
-            </label>
-          </div>
-        </section>
-
-        {/* Default Wallpaper */}
-        <section className="win98-section">
-          <div className="win98-section-title">全局默认壁纸</div>
-          <div className="win98-section-body">
-            <div className="win98-field-description">
-              将会应用到所有展板，除非某个展板单独指定了壁纸。
+        <div className="personalization-scroll">
+          {/* Theme Selection */}
+          <section className="win98-section">
+            <div className="win98-section-title">{t('theme_style')}</div>
+            <div className="win98-section-body">
+              <label className="win98-radio">
+                <input type="radio" checked readOnly />
+                <span>{t('theme_win98')}</span>
+              </label>
             </div>
-            {displayModes.length > 0 && (
-              <div className="win98-field-row">
-                <span>显示模式：</span>
-                <select
-                  className="win98-select"
-                  value={defaultDisplayMode}
-                  onChange={handleDefaultDisplayModeChange}
-                >
-                  {displayModes.map((mode) => (
-                    <option key={mode.id} value={mode.id}>
-                      {mode.label}
-                    </option>
-                  ))}
-                </select>
+          </section>
+
+          {/* Default Wallpaper */}
+          <section className="win98-section">
+            <div className="win98-section-title">{t('default_wallpaper')}</div>
+            <div className="win98-section-body">
+              <div className="win98-field-description">
+                {t('default_wallpaper_desc')}
               </div>
-            )}
-            <div className="wallpaper-preview">
-              {defaultWallpaper ? (
-                <img src={`http://localhost:8081${defaultWallpaper.url}`} alt="默认壁纸预览" />
-              ) : (
-                <div className="wallpaper-empty">暂未设置默认壁纸</div>
+              {displayModes.length > 0 && (
+                <div className="win98-field-row">
+                  <span>{t('display_mode')}</span>
+                  <select
+                    className="win98-select"
+                    value={defaultDisplayMode}
+                    onChange={handleDefaultDisplayModeChange}
+                  >
+                    {displayModes.map((mode) => (
+                      <option key={mode.id} value={mode.id}>
+                        {mode.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
-            </div>
-            {defaultWallpaper && (
-              <div className="wallpaper-meta">
-                <div>文件名：{defaultWallpaper.originalName || '未命名'}</div>
-                <div>上传时间：{formatDate(defaultWallpaper.uploadedAt)}</div>
+              <div className="wallpaper-preview">
+                {defaultWallpaper ? (
+                  <img src={`http://localhost:8081${defaultWallpaper.url}`} alt={t('wallpaper_preview')} />
+                ) : (
+                  <div className="wallpaper-empty">{t('no_default_wallpaper')}</div>
+                )}
               </div>
-            )}
-            <div className="win98-button-row">
-              <button
-                className="win98-button"
-                onClick={() => defaultFileInputRef.current?.click()}
-                disabled={uploadingDefault}
-              >
-                {uploadingDefault ? '正在上传...' : '更换默认壁纸...'}
-              </button>
-            </div>
+              {defaultWallpaper && (
+                <div className="wallpaper-meta">
+                  <div>{t('filename')}{defaultWallpaper.originalName || t('unnamed')}</div>
+                  <div>{t('upload_time')}{formatDate(defaultWallpaper.uploadedAt)}</div>
+                </div>
+              )}
+              <div className="win98-button-row">
+                <button
+                  className="win98-button"
+                  onClick={() => defaultFileInputRef.current?.click()}
+                  disabled={uploadingDefault}
+                >
+                  {uploadingDefault ? t('uploading') : t('change_default_wallpaper')}
+                </button>
+              </div>
             <input
               ref={defaultFileInputRef}
               type="file"
@@ -304,83 +306,83 @@ const PersonalizationPanel = ({
           </div>
         </section>
 
-        {/* Board Wallpaper */}
-        <section className="win98-section">
-          <div className="win98-section-title">展板专属壁纸</div>
-          <div className="win98-section-body">
-            <div className="win98-field-description">
-              当前展板：<strong>{boardName}</strong>
-            </div>
-            <div className="win98-field-description">
-              上传多个壁纸后，可在下方快速切换。未选择时将使用全局默认壁纸。
-            </div>
-
-            {boardWallpapers.length === 0 ? (
-              <div className="wallpaper-empty">暂未上传展板专属壁纸。</div>
-            ) : (
-              <div className="wallpaper-grid">
-                {boardWallpapers.map((item) => {
-                  const isSelected = item.id === selectedBoardWallpaperId;
-                  return (
-                    <div
-                      key={item.id}
-                      className={`wallpaper-card ${isSelected ? 'selected' : ''}`}
-                    >
-                      <div className="wallpaper-card-preview">
-                        <img src={`http://localhost:8081${item.url}`} alt={item.originalName || '壁纸'} />
-                      </div>
-                      <div className="wallpaper-card-info">
-                        <div className="wallpaper-card-name">{item.originalName || '未命名壁纸'}</div>
-                        <div className="wallpaper-card-time">{formatDate(item.uploadedAt)}</div>
-                      </div>
-                      <div className="win98-button-row">
-                        <button
-                          className="win98-button"
-                          onClick={() => handleSelectWallpaper(item.id, { displayMode: boardDisplayMode })}
-                          disabled={isSelected}
-                        >
-                          {isSelected ? '正在使用' : '设为当前壁纸'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+          {/* Board Wallpaper */}
+          <section className="win98-section">
+            <div className="win98-section-title">{t('board_wallpaper')}</div>
+            <div className="win98-section-body">
+              <div className="win98-field-description">
+                {t('current_board')}<strong>{boardName}</strong>
               </div>
-            )}
+              <div className="win98-field-description">
+                {t('board_wallpaper_desc')}
+              </div>
 
-            {displayModes.length > 0 && (
-              <div className="win98-field-row">
-                <span>显示模式：</span>
-                <select
-                  className="win98-select"
-                  value={boardDisplayMode}
-                  onChange={handleBoardDisplayModeChange}
+              {boardWallpapers.length === 0 ? (
+                <div className="wallpaper-empty">{t('no_board_wallpaper')}</div>
+              ) : (
+                <div className="wallpaper-grid">
+                  {boardWallpapers.map((item) => {
+                    const isSelected = item.id === selectedBoardWallpaperId;
+                    return (
+                      <div
+                        key={item.id}
+                        className={`wallpaper-card ${isSelected ? 'selected' : ''}`}
+                      >
+                        <div className="wallpaper-card-preview">
+                          <img src={`http://localhost:8081${item.url}`} alt={item.originalName || t('wallpaper')} />
+                        </div>
+                        <div className="wallpaper-card-info">
+                          <div className="wallpaper-card-name">{item.originalName || t('unnamed_wallpaper')}</div>
+                          <div className="wallpaper-card-time">{formatDate(item.uploadedAt)}</div>
+                        </div>
+                        <div className="win98-button-row">
+                          <button
+                            className="win98-button"
+                            onClick={() => handleSelectWallpaper(item.id, { displayMode: boardDisplayMode })}
+                            disabled={isSelected}
+                          >
+                            {isSelected ? t('in_use') : t('set_as_current')}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {displayModes.length > 0 && (
+                <div className="win98-field-row">
+                  <span>{t('display_mode')}</span>
+                  <select
+                    className="win98-select"
+                    value={boardDisplayMode}
+                    onChange={handleBoardDisplayModeChange}
+                  >
+                    {displayModes.map((mode) => (
+                      <option key={mode.id} value={mode.id}>
+                        {mode.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="win98-button-row">
+                <button
+                  className="win98-button"
+                  onClick={() => boardFileInputRef.current?.click()}
+                  disabled={uploadingBoard}
                 >
-                  {displayModes.map((mode) => (
-                    <option key={mode.id} value={mode.id}>
-                      {mode.label}
-                    </option>
-                  ))}
-                </select>
+                  {uploadingBoard ? t('uploading') : t('upload_board_wallpaper')}
+                </button>
+                <button
+                  className="win98-button"
+                  onClick={() => handleSelectWallpaper(null, { displayMode: boardDisplayMode })}
+                  disabled={!selectedBoardWallpaperId}
+                >
+                  {t('restore_default_wallpaper')}
+                </button>
               </div>
-            )}
-
-            <div className="win98-button-row">
-              <button
-                className="win98-button"
-                onClick={() => boardFileInputRef.current?.click()}
-                disabled={uploadingBoard}
-              >
-                {uploadingBoard ? '正在上传...' : '上传展板壁纸...'}
-              </button>
-              <button
-                className="win98-button"
-                onClick={() => handleSelectWallpaper(null, { displayMode: boardDisplayMode })}
-                disabled={!selectedBoardWallpaperId}
-              >
-                恢复默认壁纸
-              </button>
-            </div>
             <input
               ref={boardFileInputRef}
               type="file"
@@ -393,11 +395,17 @@ const PersonalizationPanel = ({
 
         {/* Language */}
         <section className="win98-section">
-          <div className="win98-section-title">语言</div>
+          <div className="win98-section-title">{t('language')}</div>
           <div className="win98-section-body">
-            <div className="win98-field-description">目前仅支持简体中文。</div>
-            <select className="win98-select" value="zh-CN" disabled>
-              <option value="zh-CN">简体中文</option>
+            <div className="win98-field-description">{t('select_language')}</div>
+            <select 
+              className="win98-select" 
+              value={language} 
+              onChange={(e) => updateLanguage(e.target.value)}
+            >
+              {settings.availableLanguages?.map(lang => (
+                <option key={lang.code} value={lang.code}>{lang.label}</option>
+              ))}
             </select>
           </div>
         </section>

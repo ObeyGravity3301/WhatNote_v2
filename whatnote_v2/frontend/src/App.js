@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
+import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 
 // 导入组件
 import CourseExplorer from './components/CourseExplorer';
@@ -10,6 +11,35 @@ import Console from './components/Console';
 import Sidebar from './components/Sidebar';
 
 function App() {
+  const [globalSettings, setGlobalSettings] = useState(null);
+
+  useEffect(() => {
+    const fetchGlobalSettings = async () => {
+      try {
+        // 使用一个通用的 board_id 或者专门的全局接口，这里暂时用 'system'
+        const response = await fetch(`http://localhost:8081/api/personalization/settings/system`);
+        if (response.ok) {
+          const data = await response.json();
+          setGlobalSettings(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch global settings:', err);
+      }
+    };
+    fetchGlobalSettings();
+  }, []);
+
+  return (
+    <LanguageProvider initialSettings={globalSettings}>
+      <Router>
+        <AppContent />
+      </Router>
+    </LanguageProvider>
+  );
+}
+
+function AppContent() {
+  const { t, language, theme, updateLanguage } = useLanguage();
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedBoard, setSelectedBoard] = useState(null);
@@ -275,7 +305,7 @@ function App() {
       
       // 保存到后端
       try {
-        await fetch(`${window.location.origin}/api/courses/reorder`, {
+        await fetch(`http://localhost:8081/api/courses/reorder`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newCourses.map(c => c.id))
@@ -300,7 +330,7 @@ function App() {
       
       // 保存到后端
       try {
-        await fetch(`${window.location.origin}/api/courses/${courseId}/boards/reorder`, {
+        await fetch(`http://localhost:8081/api/courses/${courseId}/boards/reorder`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(boards.map(b => b.id))
@@ -477,7 +507,7 @@ function App() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
   
-  const openConfirmDialog = ({ title, message, confirmText = '确定', cancelText = '取消', icon = 'win98-icon-warning' }) => {
+  const openConfirmDialog = ({ title, message, confirmText = t('ok'), cancelText = t('cancel'), icon = 'win98-icon-warning' }) => {
     return new Promise((resolve) => {
       setConfirmDialog({
         title,
@@ -939,8 +969,8 @@ function App() {
 
   const handlePermanentDelete = async (trashId) => {
     const confirmed = await openConfirmDialog({
-      title: '永久删除确认',
-      message: '确定要永久删除这个文件吗？此操作无法撤销！',
+      title: t('confirm_delete_title'),
+      message: t('confirm_delete_msg'),
       icon: 'win98-icon-warning'
     });
 
@@ -967,8 +997,8 @@ function App() {
 
   const handleEmptyTrash = async () => {
     const confirmed = await openConfirmDialog({
-      title: '清空回收站',
-      message: '确定要清空回收站吗？此操作将永久删除所有文件，无法撤销！',
+      title: t('confirm_empty_trash_title'),
+      message: t('confirm_empty_trash_msg'),
       icon: 'win98-icon-warning'
     });
 
@@ -1292,7 +1322,7 @@ function App() {
             onClick={() => setShowStartMenu(!showStartMenu)}
           >
             <span className="start-icon win98-icon win98-icon-start"></span>
-            <span className="start-text">开始</span>
+            <span className="start-text">{t('start')}</span>
           </button>
           
           <div className="taskbar-separator"></div>
@@ -1358,11 +1388,11 @@ function App() {
                       window.dispatchEvent(event);
                     }
                   }}
-                  title="AI助手聊天"
+                  title={t('ai_assistant_chat')}
                   style={{ minWidth: 'auto', width: '80px' }}
                 >
                   <span className="taskbar-icon win98-icon win98-icon-chat"></span>
-                  <span className="taskbar-text">AI助手</span>
+                  <span className="taskbar-text">{t('ai_assistant')}</span>
                 </button>
                 
                 <button 
@@ -1373,11 +1403,11 @@ function App() {
                       window.dispatchEvent(event);
                     }
                   }}
-                  title="消息中心"
+                  title={t('message_center')}
                   style={{ minWidth: 'auto', width: '90px' }}
                 >
                   <span className="taskbar-icon win98-icon win98-icon-mail"></span>
-                  <span className="taskbar-text">消息</span>
+                  <span className="taskbar-text">{t('message')}</span>
                 </button>
               </>
             )}
@@ -1386,7 +1416,7 @@ function App() {
             <div className="connection-status" style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 8px' }}>
               <span className={`win98-icon ${isConnected ? 'win98-icon-connected' : 'win98-icon-disconnected'}`}></span>
               <span className="status-text" style={{ fontSize: '11px', color: 'black' }}>
-                {isConnected ? '已连接' : '未连接'}
+                {isConnected ? t('connected') : t('disconnected')}
               </span>
             </div>
             
@@ -1452,13 +1482,13 @@ function App() {
                   }}
                 >
                   <span className="menu-icon win98-icon win98-icon-document-plus"></span>
-                  <span className="menu-text">新建课程</span>
+                  <span className="menu-text">{t('create_course')}</span>
                 </div>
               ) : (
                 <div className="start-menu-item start-menu-input-container">
                   <input
                     type="text"
-                    placeholder="课程名称"
+                    placeholder={t('course_name_placeholder')}
                     value={newCourseName}
                     onChange={(e) => setNewCourseName(e.target.value)}
                     onKeyPress={(e) => {
@@ -1533,7 +1563,7 @@ function App() {
                         />
                       </div>
                     ) : (
-                      <span className="menu-text">{course.name || '未命名课程'}</span>
+                      <span className="menu-text">{course.name || t('unnamed_course')}</span>
                     )}
                     <span className="menu-arrow">▶</span>
                   </div>
@@ -1541,7 +1571,7 @@ function App() {
               )}
               {(!courses || courses.length === 0) && (
                 <div className="start-menu-item" style={{ color: '#999', fontStyle: 'italic' }}>
-                  <span className="menu-text">暂无课程（调试：courses={JSON.stringify(courses)}）</span>
+                  <span className="menu-text">{t('no_courses')}（调试：courses={JSON.stringify(courses)}）</span>
                 </div>
               )}
               
@@ -1559,7 +1589,7 @@ function App() {
                 }}
               >
                 <span className="menu-icon win98-icon win98-icon-recycle"></span>
-                <span className="menu-text">回收站</span>
+                <span className="menu-text">{t('recycle_bin')}</span>
               </div>
               
               {/* 工具控制台 */}
@@ -1571,7 +1601,7 @@ function App() {
                 }}
               >
                 <span className="menu-icon win98-icon win98-icon-console"></span>
-                <span className="menu-text">工具控制台</span>
+                <span className="menu-text">{t('console')}</span>
               </div>
             </div>
             
@@ -1595,13 +1625,13 @@ function App() {
                       }}
                     >
                       <span className="submenu-icon win98-icon win98-icon-document-plus"></span>
-                      <span className="submenu-text">新建展板</span>
+                      <span className="submenu-text">{t('create_board')}</span>
                     </div>
                   ) : (
                     <div className="submenu-item start-menu-input-container">
                       <input
                         type="text"
-                        placeholder="展板名称"
+                        placeholder={t('board_name_placeholder')}
                         value={newBoardName}
                         onChange={(e) => setNewBoardName(e.target.value)}
                         onKeyPress={(e) => {
@@ -1677,14 +1707,14 @@ function App() {
                           />
                         </div>
                       ) : (
-                        <span className="submenu-text">{board.name || '未命名展板'}</span>
+                        <span className="submenu-text">{board.name || t('unnamed_board')}</span>
                       )}
                     </div>
                   ))}
                   
                   {(!courseBoards[activeCourseId] || courseBoards[activeCourseId].length === 0) && (
                     <div className="submenu-empty">
-                      暂无展板
+                      {t('no_boards')}
                     </div>
                   )}
                 </div>
@@ -1707,18 +1737,18 @@ function App() {
             <>
               <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('open-folder')}>
                 <span className="menu-icon win98-icon win98-icon-folder"></span>
-                <span className="menu-text">在资源管理器中打开</span>
+                <span className="menu-text">{t('open_in_explorer')}</span>
               </div>
               <div className="context-menu-separator"></div>
             </>
           )}
           <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('rename')}>
             <span className="menu-icon win98-icon win98-icon-edit"></span>
-            <span className="menu-text">重命名</span>
+            <span className="menu-text">{t('rename')}</span>
           </div>
           <div className="context-menu-item" onClick={() => handleStartMenuContextMenuAction('delete')}>
             <span className="menu-icon win98-icon win98-icon-delete"></span>
-            <span className="menu-text">删除</span>
+            <span className="menu-text">{t('delete')}</span>
           </div>
         </div>
       )}
@@ -1738,7 +1768,7 @@ function App() {
             <div className="trash-header">
               <h3>
                 <span className="win98-icon win98-icon-recycle" style={{transform: 'scale(0.8)'}}></span>
-                回收站
+                {t('recycle_bin')}
               </h3>
               <button className="win98-msgbox-close" onClick={() => {
                 setShowTrash(false);
@@ -1748,41 +1778,41 @@ function App() {
 
             <div className="trash-toolbar">
               <button className="trash-toolbar-btn" onClick={handleEmptyTrash}>
-                清空回收站
+                {t('empty_trash')}
               </button>
               <div style={{position: 'relative', zIndex: 32000}}>
                 <button 
                   className={`trash-toolbar-btn ${showTrashViewMenu ? 'active' : ''}`}
                   onClick={() => setShowTrashViewMenu(!showTrashViewMenu)}
                 >
-                  查看(V) ▼
+                  {t('view')}
                 </button>
                 {showTrashViewMenu && (
                   <div className="trash-view-menu" onClick={(e) => e.stopPropagation()}>
                     <div className={`context-menu-item ${trashSortConfig.field === 'name' ? 'active' : ''}`}
                          onClick={() => { setTrashSortConfig(prev => ({...prev, field: 'name'})); setShowTrashViewMenu(false); }}>
-                      <span className="menu-text">{trashSortConfig.field === 'name' ? '• ' : ''}名称</span>
+                      <span className="menu-text">{trashSortConfig.field === 'name' ? '• ' : ''}{t('sort_name')}</span>
                     </div>
                     <div className={`context-menu-item ${trashSortConfig.field === 'created_at' ? 'active' : ''}`}
                          onClick={() => { setTrashSortConfig(prev => ({...prev, field: 'created_at'})); setShowTrashViewMenu(false); }}>
-                      <span className="menu-text">{trashSortConfig.field === 'created_at' ? '• ' : ''}创建时间</span>
+                      <span className="menu-text">{trashSortConfig.field === 'created_at' ? '• ' : ''}{t('sort_created')}</span>
                     </div>
                     <div className={`context-menu-item ${trashSortConfig.field === 'deleted_at' ? 'active' : ''}`}
                          onClick={() => { setTrashSortConfig(prev => ({...prev, field: 'deleted_at'})); setShowTrashViewMenu(false); }}>
-                      <span className="menu-text">{trashSortConfig.field === 'deleted_at' ? '• ' : ''}删除时间</span>
+                      <span className="menu-text">{trashSortConfig.field === 'deleted_at' ? '• ' : ''}{t('sort_deleted')}</span>
                     </div>
                     <div className={`context-menu-item ${trashSortConfig.field === 'type' ? 'active' : ''}`}
                          onClick={() => { setTrashSortConfig(prev => ({...prev, field: 'type'})); setShowTrashViewMenu(false); }}>
-                      <span className="menu-text">{trashSortConfig.field === 'type' ? '• ' : ''}类型</span>
+                      <span className="menu-text">{trashSortConfig.field === 'type' ? '• ' : ''}{t('sort_type')}</span>
                     </div>
                     <div className="menu-separator"></div>
                     <div className={`context-menu-item ${trashSortConfig.order === 'asc' ? 'active' : ''}`}
                          onClick={() => { setTrashSortConfig(prev => ({...prev, order: 'asc'})); setShowTrashViewMenu(false); }}>
-                      <span className="menu-text">{trashSortConfig.order === 'asc' ? '• ' : ''}正序</span>
+                      <span className="menu-text">{trashSortConfig.order === 'asc' ? '• ' : ''}{t('sort_asc')}</span>
                     </div>
                     <div className={`context-menu-item ${trashSortConfig.order === 'desc' ? 'active' : ''}`}
                          onClick={() => { setTrashSortConfig(prev => ({...prev, order: 'desc'})); setShowTrashViewMenu(false); }}>
-                      <span className="menu-text">{trashSortConfig.order === 'desc' ? '• ' : ''}倒序</span>
+                      <span className="menu-text">{trashSortConfig.order === 'desc' ? '• ' : ''}{t('sort_desc')}</span>
                     </div>
                   </div>
                 )}

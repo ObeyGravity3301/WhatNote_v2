@@ -887,6 +887,25 @@ async def update_default_wallpaper_display_mode(data: Dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.put("/api/personalization/language")
+async def set_language(request: Request):
+    """设置全局语言"""
+    try:
+        data = await request.json()
+        language = data.get("language")
+        if not language:
+            raise HTTPException(status_code=400, detail="未提供语言代码")
+        
+        new_lang = theme_manager.set_language(language)
+        info(f"全局语言已更新为: {new_lang}")
+        return {"language": new_lang}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        error(f"更新语言失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/boards/{board_id}/wallpapers/{wallpaper_id}/image")
 async def serve_board_wallpaper(board_id: str, wallpaper_id: str):
     path = theme_manager.get_board_wallpaper_path(board_id, wallpaper_id)

@@ -28,7 +28,9 @@ class ThemeManager:
     ]
 
     AVAILABLE_LANGUAGES = [
-        {"code": "zh-CN", "label": "简体中文"}
+        {"code": "zh-CN", "label": "简体中文"},
+        {"code": "en-US", "label": "English"},
+        {"code": "ja-JP", "label": "日本語"}
     ]
 
     ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
@@ -417,6 +419,17 @@ class ThemeManager:
         config["default_display_mode"] = self._validate_display_mode(display_mode) or self.DEFAULT_DISPLAY_MODE
         self._save_config(config)
         return config["default_display_mode"]
+
+    def set_language(self, language_code: str) -> str:
+        """设置全局语言"""
+        valid_codes = {lang["code"] for lang in self.AVAILABLE_LANGUAGES}
+        if language_code not in valid_codes:
+            raise ValueError(f"不支持的语言代码: {language_code}")
+        
+        config = self._load_config()
+        config["language"] = language_code
+        self._save_config(config)
+        return language_code
 
     def _validate_display_mode(self, mode: Optional[str]) -> Optional[str]:
         if not mode:
