@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
@@ -31,7 +31,7 @@ function App() {
 
   return (
     <LanguageProvider initialSettings={globalSettings}>
-      <Router>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AppContent />
       </Router>
     </LanguageProvider>
@@ -143,9 +143,9 @@ function AppContent() {
   const [dragOverInfo, setDragOverInfo] = useState({ id: null, position: null }); // { id, position: 'top' | 'bottom' }
   
   const toastTypeConfig = {
-    success: { icon: 'win98-icon-success', title: '操作成功' },
-    error: { icon: 'win98-icon-error', title: '操作失败' },
-    info: { icon: 'win98-icon-info', title: '提示' }
+    success: { icon: 'win98-icon-success', title: t('toast_success') },
+    error: { icon: 'win98-icon-error', title: t('toast_error') },
+    info: { icon: 'win98-icon-info', title: t('toast_info') }
   };
 
   useEffect(() => {
@@ -409,7 +409,7 @@ function AppContent() {
         });
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.detail || '无法打开文件夹');
+          throw new Error(errorData.detail || t('open_folder_fail'));
         }
       } catch (error) {
         console.error('打开文件夹失败:', error);
@@ -420,10 +420,10 @@ function AppContent() {
       setEditingItemId(actualData.id);
       setEditingItemName(actualData.name);
     } else if (action === 'delete') {
-      const confirmTitle = targetType === 'course' ? '删除课程' : '删除展板';
+      const confirmTitle = targetType === 'course' ? t('delete_course_title') : t('delete_board_title');
       const confirmMsg = targetType === 'course' 
-        ? `确定要删除课程 "${actualData.name}" 吗？这会删除该课程下的所有展板和文件！`
-        : `确定要删除展板 "${actualData.name}" 吗？`;
+        ? t('delete_course_confirm').replace('{name}', actualData.name)
+        : t('delete_board_confirm').replace('{name}', actualData.name);
         
       const confirmed = await openConfirmDialog({
         title: confirmTitle,
@@ -440,7 +440,7 @@ function AppContent() {
           console.log(`🚀 [App] Sending ${targetType} delete request to:`, url);
           const response = await fetch(url, { method: 'DELETE' });
           if (response.ok) {
-            showToast('删除成功', 'success');
+            showToast(t('delete_success'), 'success');
             
             // 如果回收站窗口开着，立即刷新
             loadTrashItems();
@@ -464,11 +464,11 @@ function AppContent() {
           } else {
             const errorText = await response.text();
             console.error('❌ [App] Delete failed:', errorText);
-            showToast('删除失败', 'error');
+            showToast(t('delete_fail'), 'error');
           }
         } catch (error) {
           console.error('❌ [App] Delete request error:', error);
-          showToast('操作失败，请检查网络', 'error');
+          showToast(t('network_error'), 'error');
         }
       }
     }
@@ -500,9 +500,9 @@ function AppContent() {
 
   // 格式化文件大小
   const formatSize = (bytes) => {
-    if (bytes === 0 || bytes === null || isNaN(bytes)) return '0 字节';
+    if (bytes === 0 || bytes === null || isNaN(bytes)) return `0 ${t('byte_unit')}`;
     const k = 1024;
-    const sizes = ['字节', 'KB', 'MB', 'GB', 'TB'];
+    const sizes = [t('byte_unit'), 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
@@ -844,7 +844,7 @@ function AppContent() {
   };
 
   // 窗口管理函数
-  const handleWindowMinimize = (windowId) => {
+  const handleWindowMinimize = useCallback((windowId) => {
     setMinimizedWindows(prev => {
       const newSet = new Set(prev);
       if (newSet.has(windowId)) {
@@ -858,17 +858,17 @@ function AppContent() {
       }
       return newSet;
     });
-  };
+  }, [focusedWindowId]);
 
-  const handleWindowFocus = (windowId) => {
+  const handleWindowFocus = useCallback((windowId) => {
     setFocusedWindowId(windowId);
     // 如果窗口是最小化的，先恢复它
     if (minimizedWindows.has(windowId)) {
       handleWindowMinimize(windowId);
     }
-  };
+  }, [minimizedWindows, handleWindowMinimize]);
 
-  const handleWindowClose = (windowId) => {
+  const handleWindowClose = useCallback((windowId) => {
     console.log('App: 处理窗口关闭（隐藏）:', windowId);
     // 添加到隐藏列表
     setHiddenWindows(prev => {
@@ -886,9 +886,9 @@ function AppContent() {
     if (focusedWindowId === windowId) {
       setFocusedWindowId(null);
     }
-  };
+  }, [focusedWindowId]);
 
-  const handleWindowShow = (windowId) => {
+  const handleWindowShow = useCallback((windowId) => {
     console.log('App: 处理窗口显示（恢复）:', windowId);
     // 从隐藏列表中移除
     setHiddenWindows(prev => {
@@ -896,9 +896,9 @@ function AppContent() {
       newSet.delete(windowId);
       return newSet;
     });
-  };
+  }, []);
 
-  const handleWindowHide = (windowId) => {
+  const handleWindowHide = useCallback((windowId) => {
     console.log('App: 处理窗口隐藏（设置隐藏状态）:', windowId);
     // 添加到隐藏列表
     setHiddenWindows(prev => {
@@ -906,21 +906,21 @@ function AppContent() {
       newSet.add(windowId);
       return newSet;
     });
-  };
+  }, []);
 
-  const handleBatchWindowHide = (windowIds) => {
+  const handleBatchWindowHide = useCallback((windowIds) => {
     console.log('App: 批量设置隐藏状态:', windowIds);
     setHiddenWindows(prev => {
       const newSet = new Set(prev);
       windowIds.forEach(id => newSet.add(id));
       return newSet;
     });
-  };
+  }, []);
 
-  const handleClearHiddenWindows = () => {
+  const handleClearHiddenWindows = useCallback(() => {
     console.log('App: 清空隐藏窗口状态');
     setHiddenWindows(new Set());
-  };
+  }, []);
 
   // 回收站处理函数
   const loadTrashItems = async () => {

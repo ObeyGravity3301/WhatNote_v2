@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffe
 import ShortcutManager from '../utils/ShortcutManager';
 import { createRoot } from 'react-dom/client';
 import './BoardCanvas.css';
+import { useLanguage } from '../i18n/LanguageContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -112,28 +113,8 @@ const WIN98_SUNKEN_PANEL_STYLE = {
   padding: '6px'
 };
 
-const MARP_THEME_OPTIONS = [
-  {
-    id: 'default',
-    label: 'Default 经典',
-    description: 'Marp 默认浅色主题，适合大多数场景。'
-  },
-  {
-    id: 'gaia',
-    label: 'Gaia',
-    description: '大字号、视觉冲击更强的展示主题。'
-  },
-  {
-    id: 'uncover',
-    label: 'Uncover',
-    description: '暗色背景，适合舞台演示的主题。'
-  }
-];
-
-const AVAILABLE_MARP_THEME_IDS = MARP_THEME_OPTIONS.map((theme) => theme.id);
-
 // 将插件工具栏提取为独立组件，避免在render中定义Hooks
-const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument }) => {
+const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument, narratorHeight, setNarratorHeight, isResizingNarrator, setIsResizingNarrator }) => {
   const [pluginStateKey, setPluginStateKey] = useState(0);
   
   useEffect(() => {
@@ -174,7 +155,11 @@ const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument }) => {
               windowId,
               boardId,
               pageControl,
-              pdfDocument
+              pdfDocument,
+              narratorHeight,
+              setNarratorHeight,
+              isResizingNarrator,
+              setIsResizingNarrator
             });
             
             if (React.isValidElement(ButtonComponent)) {
@@ -197,7 +182,8 @@ const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument }) => {
 };
 
 // PDF分页组件
-function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter, setConfirmDialog }) {
+const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog }) => {
+  const { t } = useLanguage();
   const PAGINATION_TOOLBAR_ITEM_STYLE = {
     padding: '1px 8px',
     fontSize: '11px',
@@ -211,7 +197,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
     alignItems: 'center',
     justifyContent: 'center',
     color: '#000000',
-    gap: '4px'
+    gap: '4px',
+    whiteSpace: 'nowrap'
   };
 
   const handlePaginationMouseEnter = (e) => {
@@ -251,6 +238,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
+  const viewerRef = useRef(null); // 新增：整个分页查看器的Ref
   const renderTimeoutRef = useRef(null);
   
   // 清理timeout
@@ -310,6 +298,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   // 批量生成状态
   const [showBatchOutlineModal, setShowBatchOutlineModal] = useState(false); // 显示批量生成大纲模态窗口
   const [showOutlinePanel, setShowOutlinePanel] = useState(false); // 显示大纲侧栏
+  const [outlineWidth, setOutlineWidth] = useState(320); // 大纲侧栏宽度
+  const [isResizingOutline, setIsResizingOutline] = useState(false); // 是否正在调整大纲宽度
+  const [annotationWidth, setAnnotationWidth] = useState(300); // 注释侧栏宽度
+  const [isResizingAnnotation, setIsResizingAnnotation] = useState(false); // 是否正在调整注释宽度
+  const [narratorHeight, setNarratorHeight] = useState(0); // 讲解栏高度 (0表示使用插件默认)
+  const [isResizingNarrator, setIsResizingNarrator] = useState(false); // 是否正在调整讲解栏高度
   const [outlineView, setOutlineView] = useState('list'); // 'list', 'detail', 或 'mindmap' - 大纲视图模式
   const [batchOutlineStatus, setBatchOutlineStatus] = useState(''); // 批量生成状态信息
   const [batchOutline, setBatchOutline] = useState(null); // 生成的大纲数据
@@ -396,20 +390,20 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   // 全文档笔记预设风格
   const summaryNoteStyles = {
     detailed: {
-      name: '详细笔记',
-      prompt: '你是一位专业的学术和文档分析助手。请仔细阅读以下PDF文档的全部内容，生成一份详尽的、结构清晰的**全文档阅读笔记**。\n\n**笔记生成要求**：\n1. **核心观点提炼**：首先用简练的语言概括文档的核心主旨（Executive Summary）。\n2. **结构化内容梳理**：按照文档的逻辑结构（章节或主题），详细记录关键信息、重要数据、论点和结论。请保留足够的细节，不要只是列大纲。\n3. **重要概念解析**：解释文档中出现的关键术语和概念。\n4. **总结与启示**：总结文档的价值，并给出你的阅读心得或批判性思考。\n5. **格式要求**：使用标准Markdown格式，利用多级标题、列表、加粗等使笔记易于阅读。'
+      name: t('pdf_note_style_detailed'),
+      prompt: t('pdf_summary_prompt_detailed')
     },
     concise: {
-      name: '简洁摘要',
-      prompt: '请阅读文档内容，生成一份**简洁的摘要笔记**。\n\n**要求**：\n1. 提炼核心论点，忽略次要细节。\n2. 使用要点列表（Bullet points）形式呈现。\n3. 控制篇幅，专注于“文档讲了什么”和“主要结论是什么”。\n4. 适合快速浏览。'
+      name: t('pdf_note_style_concise'),
+      prompt: t('pdf_summary_prompt_concise')
     },
     academic: {
-      name: '学术综述',
-      prompt: '请以**学术综述**的风格撰写这份文档的笔记。\n\n**要求**：\n1. **背景与问题**：文档研究了什么问题？背景是什么？\n2. **方法与论证**：作者使用了什么方法或论据？\n3. **主要发现**：得出了什么结论？\n4. **学术价值**：该文档在相关领域的贡献是什么？\n5. **引用与术语**：准确引用文中的专业术语。'
+      name: t('pdf_note_style_academic'),
+      prompt: t('pdf_summary_prompt_academic')
     },
     outline: {
-      name: '大纲式笔记',
-      prompt: '请为这份文档生成一份**大纲式笔记**。\n\n**要求**：\n1. 严格遵循文档的目录结构。\n2. 在每个层级下，用简短的句子概括该部分的内容。\n3. 重点展示文档的逻辑框架和层次关系。\n4. 适合梳理文档结构。'
+      name: t('pdf_note_style_outline'),
+      prompt: t('pdf_summary_prompt_outline')
     }
   };
 
@@ -441,20 +435,20 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   // 预设的注释风格
   const annotationStyles = {
     detailed: {
-      name: '详细注释',
-      prompt: '请为第{page}页生成详细的注释，包括：\n1. 页面主要内容概要\n2. 重要知识点详解\n3. 需要注意的细节\n4. 相关概念说明\n\n请用Markdown格式输出。'
+      name: t('pdf_anno_style_detailed'),
+      prompt: t('pdf_anno_prompt_detailed')
     },
     simple: {
-      name: '简洁注释',
-      prompt: '请为第{page}页生成简洁的注释，只包括：\n1. 核心内容概括（1-2句话）\n2. 关键知识点（列表形式）\n\n请用Markdown格式输出。'
+      name: t('pdf_anno_style_simple'),
+      prompt: t('pdf_anno_prompt_simple')
     },
     academic: {
-      name: '学术注释',
-      prompt: '请为第{page}页生成学术风格的注释，包括：\n1. 内容摘要\n2. 主要论点和证据\n3. 方法论说明\n4. 关键术语解释\n\n请用Markdown格式输出。'
+      name: t('pdf_anno_style_academic'),
+      prompt: t('pdf_anno_prompt_academic')
     },
     qanda: {
-      name: '问答式注释',
-      prompt: '请为第{page}页生成问答式注释：\n1. 这页讲了什么？\n2. 核心概念是什么？\n3. 需要记住什么？\n4. 如何应用？\n\n请用Markdown格式输出。'
+      name: t('pdf_anno_style_qanda'),
+      prompt: t('pdf_anno_prompt_qanda')
     }
   };
   
@@ -504,7 +498,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         setIsLoading(false);
       } catch (err) {
         console.error('PDF加载失败:', err);
-        setError('PDF加载失败: ' + err.message);
+        setError(t('pdf_load_fail') + ': ' + err.message);
         setIsLoading(false);
       }
     };
@@ -621,6 +615,48 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
       };
     }
   }, [showLLMMenu, showAnnotationSettings]);
+
+  // 侧栏和底栏调整大小处理
+  useEffect(() => {
+    const handleGlobalMouseMove = (e) => {
+      if (isResizingOutline) {
+        // 大纲在右侧，拖拽条在左边缘
+        // 计算新的宽度：窗口右边缘减去鼠标位置（如果有注释侧栏，还要减去注释侧栏宽度）
+        const newWidth = window.innerWidth - e.clientX - (showAnnotationPanel ? annotationWidth : 0);
+        setOutlineWidth(Math.max(200, Math.min(newWidth, 800)));
+      } else if (isResizingAnnotation) {
+        // 注释在最右侧，拖拽条在左边缘
+        const newWidth = window.innerWidth - e.clientX;
+        setAnnotationWidth(Math.max(200, Math.min(newWidth, 800)));
+      } else if (isResizingNarrator) {
+        // 讲解栏在底部，拖拽条在顶边缘
+        // 使用 viewerRef 计算相对于分页查看器底部的位移
+        if (viewerRef.current) {
+          const rect = viewerRef.current.getBoundingClientRect();
+          const newHeight = rect.bottom - e.clientY;
+          setNarratorHeight(Math.max(100, Math.min(newHeight, rect.height - 100)));
+        }
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      setIsResizingOutline(false);
+      setIsResizingAnnotation(false);
+      setIsResizingNarrator(false);
+      document.body.style.cursor = 'default';
+    };
+
+    if (isResizingOutline || isResizingAnnotation || isResizingNarrator) {
+      window.addEventListener('mousemove', handleGlobalMouseMove);
+      window.addEventListener('mouseup', handleGlobalMouseUp);
+      document.body.style.cursor = (isResizingOutline || isResizingAnnotation) ? 'col-resize' : 'row-resize';
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isResizingOutline, isResizingAnnotation, isResizingNarrator, showAnnotationPanel, annotationWidth]);
 
   // 渲染当前页面
   useEffect(() => {
@@ -1075,13 +1111,30 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
   }
 
   return (
-    <div style={{ 
-      width: '100%', 
-      height: '100%', 
-      display: 'flex', 
-      flexDirection: 'column',
-      backgroundColor: '#ffffff'
-    }}>
+    <div 
+      ref={viewerRef}
+      style={{ 
+        width: '100%', 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column',
+        backgroundColor: '#ffffff',
+        position: 'relative'
+      }}
+    >
+      {/* 调整大小时的遮罩层，防止鼠标穿透到 iframe */}
+      {(isResizingOutline || isResizingAnnotation || isResizingNarrator) && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          cursor: isResizingNarrator ? 'row-resize' : 'col-resize',
+          backgroundColor: 'transparent'
+        }} />
+      )}
       {/* 分页工具栏 */}
       <div style={{
         backgroundColor: '#c0c0c0',
@@ -1113,7 +1166,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         {/* 页码显示和输入 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span style={{ fontSize: '11px', fontFamily: 'MS Sans Serif, sans-serif' }}>
-            第
+            {t('pdf_page_prefix')}
           </span>
           <input
             type="number"
@@ -1132,7 +1185,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             }}
           />
           <span style={{ fontSize: '11px', fontFamily: 'MS Sans Serif, sans-serif' }}>
-            页，共 {totalPages} 页
+            {t('pdf_page_suffix').replace('{total}', totalPages)}
           </span>
         </div>
 
@@ -1194,7 +1247,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             onMouseDown={handlePaginationMouseDown}
             onMouseUp={handlePaginationMouseUp}
           >
-            重置
+            {t('pdf_zoom_reset')}
           </button>
         </div>
 
@@ -1215,9 +1268,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             onMouseLeave={handlePaginationMouseLeave}
             onMouseDown={handlePaginationMouseDown}
             onMouseUp={handlePaginationMouseUp}
-            title={showOutlinePanel ? "隐藏大纲" : "显示大纲"}
+            title={showOutlinePanel ? t('pdf_hide_outline') : t('pdf_show_outline')}
           >
-            大纲
+            {t('pdf_outline')}
           </button>
         )}
 
@@ -1237,9 +1290,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           onMouseLeave={handlePaginationMouseLeave}
           onMouseDown={handlePaginationMouseDown}
           onMouseUp={handlePaginationMouseUp}
-          title={showAnnotationPanel ? "隐藏注释" : "显示注释"}
+          title={showAnnotationPanel ? t('pdf_hide_annotations') : t('pdf_show_annotations')}
         >
-          📝 注释
+          {t('pdf_annotations')}
         </button>
 
         {/* 搜索按钮 - 仅在有大纲和细分数据时显示 */}
@@ -1258,9 +1311,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             onMouseLeave={handlePaginationMouseLeave}
             onMouseDown={handlePaginationMouseDown}
             onMouseUp={handlePaginationMouseUp}
-            title={showSearchPanel ? "隐藏搜索" : "语义搜索"}
+            title={showSearchPanel ? t('pdf_hide_search') : t('pdf_semantic_search')}
           >
-            🔍 搜索
+            {t('pdf_search')}
           </button>
         )}
 
@@ -1324,7 +1377,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   const errorText = await infoResponse.text();
                   console.error('❌ 加载页面信息失败:', infoResponse.status, errorText);
                   addMessageWithSource(
-                    '❌ 加载页面信息失败',
+                    t('pdf_extract_fail'),
                     `HTTP ${infoResponse.status}: ${errorText}`,
                     'error'
                   );
@@ -1332,7 +1385,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               } catch (error) {
                 console.error('❌ 加载失败:', error);
                 addMessageWithSource(
-                  '❌ 加载失败',
+                  t('pdf_extract_fail'),
                   error.message,
                   'error'
                 );
@@ -1350,9 +1403,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           onMouseLeave={handlePaginationMouseLeave}
           onMouseDown={handlePaginationMouseDown}
           onMouseUp={handlePaginationMouseUp}
-          title={showPageExtractPanel ? "隐藏提取面板" : "提取页面内容"}
+          title={showPageExtractPanel ? t('pdf_hide_extract') : t('pdf_show_extract')}
         >
-          📸 提取
+          {t('pdf_extract')}
         </button>
 
         {/* 关闭分页模式按钮 */}
@@ -1364,7 +1417,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           onMouseDown={handlePaginationMouseDown}
           onMouseUp={handlePaginationMouseUp}
         >
-          关闭分页
+          {t('pdf_close_pagination')}
         </button>
 
         {/* 插件工具栏插槽 */}
@@ -1384,6 +1437,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               }
             }}
             pdfDocument={pdfDocument}
+            narratorHeight={narratorHeight}
+            setNarratorHeight={setNarratorHeight}
+            isResizingNarrator={isResizingNarrator}
+            setIsResizingNarrator={setIsResizingNarrator}
           />;
         })()}
       </div>
@@ -1412,7 +1469,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   handleSearch();
                 }
               }}
-              placeholder="描述你想找的内容..."
+              placeholder={t('pdf_search_placeholder')}
               style={{
                 flex: 1,
                 padding: '4px 8px',
@@ -1438,7 +1495,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               onMouseDown={handlePaginationMouseDown}
               onMouseUp={handlePaginationMouseUp}
             >
-              {isSearching ? '搜索中...' : '搜索'}
+              {isSearching ? t('pdf_searching') : t('pdf_search_btn')}
             </button>
             <button
               onClick={() => {
@@ -1455,9 +1512,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               onMouseLeave={handlePaginationMouseLeave}
               onMouseDown={handlePaginationMouseDown}
               onMouseUp={handlePaginationMouseUp}
-              title="关闭搜索"
+              title={t('pdf_close_search')}
             >
-              关闭
+              {t('pdf_close_search')}
             </button>
           </div>
           
@@ -1482,7 +1539,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 fontWeight: 'bold',
                 color: '#000080'
               }}>
-                搜索: "{searchResults.query}"
+                {t('pdf_search_results_for').replace('{query}', searchResults.query)}
                 </div>
                 <button
                   onClick={() => {
@@ -1505,7 +1562,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   onMouseDown={handlePaginationMouseDown}
                   onMouseUp={handlePaginationMouseUp}
                 >
-                  返回历史
+                  {t('pdf_back_to_history')}
                 </button>
               </div>
               
@@ -1551,7 +1608,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         display: 'flex',
                         justifyContent: 'space-between'
                         }}>
-                        <span>第 {result.pages.join(', ')} 页</span>
+                        <span>{t('pdf_page_prefix')} {result.pages.join(', ')} {t('pdf_page_suffix').split('，')[0]}</span>
                         <span>{result.relevance}</span>
                         </div>
                     </div>
@@ -1564,7 +1621,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   color: '#808080',
                   fontSize: '11px'
                 }}>
-                  未找到相关内容
+                  {t('pdf_no_results')}
                 </div>
               )}
             </div>
@@ -1588,7 +1645,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   borderBottom: '1px solid #e0e0e0',
                   paddingBottom: '4px'
                 }}>
-                  📜 搜索历史
+                  {t('pdf_search_history')}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   {searchHistory.map((item) => (
@@ -1626,7 +1683,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         justifyContent: 'space-between'
                       }}>
                         <span>{new Date(item.timestamp).toLocaleString()}</span>
-                        <span>{item.results.length} 个结果</span>
+                        <span>{t('pdf_results_count').replace('{count}', item.results.length)}</span>
                       </div>
                     </div>
                   ))}
@@ -1679,7 +1736,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 fontWeight: 'bold'
               }}>
                 <span>■</span>
-                <span>提取页面内容 - {pagesInfo.length > 0 ? `${pagesInfo.length}页` : '加载中...'}</span>
+                <span>{t('pdf_extract_title')} - {pagesInfo.length > 0 ? t('pdf_page_suffix').replace('{total}', pagesInfo.length) : t('loading')}</span>
               </div>
               <button
                 onClick={() => setShowPageExtractPanel(false)}
@@ -1716,7 +1773,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               fontFamily: 'MS Sans Serif, sans-serif',
               color: '#000000'
             }}>
-              选择页面:
+              {t('pdf_select_pages')}
             </div>
             
             <button
@@ -1731,7 +1788,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               onMouseDown={handlePaginationMouseDown}
               onMouseUp={handlePaginationMouseUp}
             >
-              全选
+              {t('pdf_select_all')}
             </button>
             
             <button
@@ -1751,7 +1808,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               onMouseDown={handlePaginationMouseDown}
               onMouseUp={handlePaginationMouseUp}
             >
-              反选
+              {t('pdf_select_invert')}
             </button>
             
             <button
@@ -1771,7 +1828,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               onMouseDown={handlePaginationMouseDown}
               onMouseUp={handlePaginationMouseUp}
             >
-              未提取
+              {t('pdf_select_unextracted')}
             </button>
             
             <button
@@ -1782,7 +1839,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               onMouseDown={handlePaginationMouseDown}
               onMouseUp={handlePaginationMouseUp}
             >
-              清空
+              {t('pdf_select_clear')}
             </button>
             
             <div style={{ flex: 1 }}></div>
@@ -1793,13 +1850,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
               color: '#000080',
               fontWeight: 'bold'
             }}>
-              已选: {selectedPages.size} 页
+              {t('pdf_selected_count').replace('{count}', selectedPages.size)}
             </div>
             
             <button
               onClick={async () => {
                 if (selectedPages.size === 0) {
-                  alert('请先选择要提取的页面');
+                  alert(t('pdf_select_pages_alert') || '请先选择要提取的页面');
                   return;
                 }
                 
@@ -1879,120 +1936,120 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           
                           // 更新页面信息
                           setPagesInfo(prev => prev.map(p =>
+                          p.page === data.page ? { 
+                            ...p, 
+                            extracted: true, 
+                            char_count: data.content?.length || 0,
+                            // 清除错误状态
+                            error: false,
+                            errorMessage: null
+                          } : p
+                        ));
+                      } else if (data.type === 'complete') {
+                        console.log('✅ 全部提取完成');
+                        if (errorCount > 0) {
+                          addMessageWithSource(
+                            t('pdf_extract_partial'),
+                            `共处理 ${data.total} 页\n✅ 成功: ${successCount} 页\n❌ 失败: ${errorCount} 页\n请点击“未提取”按钮查看失败页面并重试。`,
+                            'warning'
+                          );
+                        } else {
+                        addMessageWithSource(
+                          t('pdf_extract_success'),
+                          `成功提取 ${data.total} 个页面的内容`,
+                          'success'
+                        );
+                        }
+                      } else if (data.type === 'error') {
+                        errorCount++;
+                        console.error(`❌ 页面 ${data.page} 提取失败:`, data.error);
+                        
+                        // 错误也算完成，更新进度
+                        setExtractionProgress(prev => ({ 
+                          current: prev.current + 1, 
+                          total: prev.total 
+                        }));
+
+                        // 检查是否为限流错误，并标记状态
+                        if (data.error && (data.error.includes("429") || data.error.includes("速率限制"))) {
+                          // 在页面上显示错误状态
+                          setPagesInfo(prev => prev.map(p =>
                             p.page === data.page ? { 
                               ...p, 
-                              extracted: true, 
-                              char_count: data.content?.length || 0,
-                              // 清除错误状态
-                              error: false,
-                              errorMessage: null
+                              extracted: false, 
+                              error: true, 
+                              errorMessage: t('pdf_rate_limit') 
                             } : p
                           ));
-                        } else if (data.type === 'complete') {
-                          console.log('✅ 全部提取完成');
-                          if (errorCount > 0) {
-                            addMessageWithSource(
-                              '⚠️ 页面提取完成(含错误)',
-                              `共处理 ${data.total} 页\n✅ 成功: ${successCount} 页\n❌ 失败: ${errorCount} 页\n请点击“未提取”按钮查看失败页面并重试。`,
-                              'warning'
-                            );
-                          } else {
-                          addMessageWithSource(
-                            '✅ 页面提取完成',
-                            `成功提取 ${data.total} 个页面的内容`,
-                            'success'
-                          );
-                          }
-                        } else if (data.type === 'error') {
-                          errorCount++;
-                          console.error(`❌ 页面 ${data.page} 提取失败:`, data.error);
                           
-                          // 错误也算完成，更新进度
-                          setExtractionProgress(prev => ({ 
-                            current: prev.current + 1, 
-                            total: prev.total 
-                          }));
-
-                          // 检查是否为限流错误，并标记状态
-                          if (data.error && (data.error.includes("429") || data.error.includes("速率限制"))) {
-                            // 在页面上显示错误状态
-                            setPagesInfo(prev => prev.map(p =>
-                              p.page === data.page ? { 
-                                ...p, 
-                                extracted: false, 
-                                error: true, 
-                                errorMessage: "❌ 限流 (429)" 
-                              } : p
-                            ));
-                            
-                            // 显示系统提示（只需显示一次）
-                            // addMessageWithSource 可能会刷屏，这里控制一下频率或不弹窗
-                          } else {
-                            // 普通错误
-                             setPagesInfo(prev => prev.map(p =>
-                              p.page === data.page ? { 
-                                ...p, 
-                                extracted: false, 
-                                error: true, 
-                                errorMessage: "❌ 提取失败" 
-                              } : p
-                            ));
-                          }
-                          
-                        } else if (data.type === 'page_error') { // 处理新的错误类型
-                          errorCount++;
-                          console.error(`❌ 页面 ${data.page} 提取错误:`, data.message);
-                          setExtractionProgress(prev => ({ 
-                            current: prev.current + 1, 
-                            total: prev.total 
-                          }));
-                          
-                          setPagesInfo(prev => prev.map(p =>
-                              p.page === data.page ? { 
-                                ...p, 
-                                extracted: false, 
-                                error: true, 
-                                errorMessage: data.error_code === 'RATE_LIMIT' ? "❌ 限流 (429)" : 
-                                             (data.error_code === 'NETWORK_ERROR' ? "❌ 网络错误" : "❌ 出错")
-                              } : p
-                            ));
+                          // 显示系统提示（只需显示一次）
+                          // addMessageWithSource 可能会刷屏，这里控制一下频率或不弹窗
+                        } else {
+                          // 普通错误
+                           setPagesInfo(prev => prev.map(p =>
+                            p.page === data.page ? { 
+                              ...p, 
+                              extracted: false, 
+                              error: true, 
+                              errorMessage: t('pdf_generic_error') 
+                            } : p
+                          ));
                         }
-                        } catch (parseError) {
-                          console.error('❌ SSE数据解析失败:', parseError);
-                          console.error('  原始行:', line);
-                        }
+                        
+                      } else if (data.type === 'page_error') { // 处理新的错误类型
+                        errorCount++;
+                        console.error(`❌ 页面 ${data.page} 提取错误:`, data.message);
+                        setExtractionProgress(prev => ({ 
+                          current: prev.current + 1, 
+                          total: prev.total 
+                        }));
+                        
+                        setPagesInfo(prev => prev.map(p =>
+                            p.page === data.page ? { 
+                              ...p, 
+                              extracted: false, 
+                              error: true, 
+                              errorMessage: data.error_code === 'RATE_LIMIT' ? t('pdf_rate_limit') : 
+                                           (data.error_code === 'NETWORK_ERROR' ? t('pdf_network_error') : t('pdf_generic_error'))
+                            } : p
+                          ));
+                      }
+                      } catch (parseError) {
+                        console.error('❌ SSE数据解析失败:', parseError);
+                        console.error('  原始行:', line);
                       }
                     }
                   }
-                } catch (error) {
-                  console.error('提取失败:', error);
-                  addMessageWithSource(
-                    '❌ 提取失败',
-                    error.message,
-                    'error'
-                  );
-                } finally {
-                  setIsExtracting(false);
-                  setSelectedPages(new Set()); // 清空选择
                 }
-              }}
-              disabled={isExtracting || selectedPages.size === 0}
-              style={{
-                ...PAGINATION_TOOLBAR_ITEM_STYLE,
-                backgroundColor: isExtracting || selectedPages.size === 0 ? 'transparent' : 'transparent',
-                opacity: isExtracting || selectedPages.size === 0 ? 0.6 : 1,
-                fontWeight: 'bold',
-                color: '#000080',
-                minWidth: '60px'
-              }}
-              onMouseEnter={handlePaginationMouseEnter}
-              onMouseLeave={handlePaginationMouseLeave}
-              onMouseDown={handlePaginationMouseDown}
-              onMouseUp={handlePaginationMouseUp}
-            >
-              {isExtracting ? '提取中...' : `开始提取 (${selectedPages.size}页)`}
-            </button>
-          </div>
+              } catch (error) {
+                console.error('提取失败:', error);
+                addMessageWithSource(
+                  t('pdf_extract_fail'),
+                  error.message,
+                  'error'
+                );
+              } finally {
+                setIsExtracting(false);
+                setSelectedPages(new Set()); // 清空选择
+              }
+            }}
+            disabled={isExtracting || selectedPages.size === 0}
+            style={{
+              ...PAGINATION_TOOLBAR_ITEM_STYLE,
+              backgroundColor: isExtracting || selectedPages.size === 0 ? 'transparent' : 'transparent',
+              opacity: isExtracting || selectedPages.size === 0 ? 0.6 : 1,
+              fontWeight: 'bold',
+              color: '#000080',
+              minWidth: '60px'
+            }}
+            onMouseEnter={handlePaginationMouseEnter}
+            onMouseLeave={handlePaginationMouseLeave}
+            onMouseDown={handlePaginationMouseDown}
+            onMouseUp={handlePaginationMouseUp}
+          >
+            {isExtracting ? t('pdf_extracting') : t('pdf_start_extract').replace('{count}', selectedPages.size)}
+          </button>
+        </div>
           
           {/* 页面网格容器 */}
           <div style={{
@@ -2072,7 +2129,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       const thumbnailUrl = `${baseUrl}pages/${pdfNameNoExt}/thumbnails/page_${String(pageInfo.page).padStart(3, '0')}.png`;
                       return thumbnailUrl;
                     })()}
-                    alt={`第${pageInfo.page}页`}
+                    alt={t('pdf_page_prefix') + pageInfo.page + t('pdf_page_suffix').split('，')[0]}
                     style={{
                       maxWidth: '100%',
                       maxHeight: '100%',
@@ -2108,7 +2165,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       fontSize: '10px',
                       marginTop: '8px'
                     }}>
-                      未渲染
+                      {t('not_rendered') || '未渲染'}
                     </div>
                   </div>
 
@@ -2126,8 +2183,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           if (!llmResponse.ok) {
                             if (addMessageWithSource) {
                                 addMessageWithSource(
-                                    '提示',
-                                    '该页面没有已保存的提取内容',
+                                    t('tip'),
+                                    t('no_saved_extracted_content'),
                                     'info'
                                 );
                             }
@@ -2161,11 +2218,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           console.error('❌ 获取提取内容失败:', error);
                           if (addMessageWithSource) {
                                 addMessageWithSource(
-                                    '错误',
-                                    '获取提取内容失败: ' + error.message,
+                                    t('error'),
+                                    t('failed_to_load_extracted_content') + ': ' + error.message,
                                     'error'
                                 );
-                          }
+                            }
                         }
                       }}
                       style={{
@@ -2288,7 +2345,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       } else {
                         console.warn(`⚠️ 页面 ${pageInfo.page} 内容未找到`);
                         if (addMessageWithSource) {
-                            addMessageWithSource('提示', '无法加载该页面的提取内容', 'warning');
+                            addMessageWithSource(t('tip'), t('failed_to_load_extracted_content'), 'warning');
                         }
                       }
                     }}
@@ -2316,7 +2373,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       e.currentTarget.style.backgroundColor = '#008000';
                     }}
                   >
-                    已提取 👁
+                    {t('pdf_extracted') || '已提取'} 👁
                   </div>
                 )}
                 
@@ -2339,7 +2396,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     fontSize: '9px',
                     fontFamily: 'MS Sans Serif, sans-serif'
                   }}>
-                    {pageInfo.char_count || 0}字
+                    {pageInfo.char_count || 0}{t('char_unit') || '字'}
                   </div>
                   
                   {/* 图片信息（仅显示超过基准的） */}
@@ -2427,7 +2484,9 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 color: '#000000',
                 textAlign: 'center'
               }}>
-                正在提取: {extractionProgress.current} / {extractionProgress.total} 页
+                {t('pdf_extract_progress')
+                  .replace('{current}', extractionProgress.current)
+                  .replace('{total}', extractionProgress.total)}
               </div>
               
               {/* Windows 98风格量子化方格进度条 */}
@@ -2856,10 +2915,27 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
         </div>
         </div>
         
+        {/* 大纲侧栏调整大小控制条 */}
+        {showOutlinePanel && outlineView !== 'mindmap' && (
+          <div 
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsResizingOutline(true);
+            }}
+            style={{
+              width: '4px',
+              cursor: 'col-resize',
+              backgroundColor: isResizingOutline ? '#000080' : 'transparent',
+              zIndex: 10,
+              flexShrink: 0
+            }}
+          />
+        )}
+
         {/* 大纲侧栏 */}
         {showOutlinePanel && (
           <div style={{
-            width: outlineView === 'mindmap' ? '60%' : '320px',
+            width: outlineView === 'mindmap' ? '60%' : `${outlineWidth}px`,
             backgroundColor: '#f0f0f0',
             borderLeft: '2px inset #c0c0c0',
             borderRight: '2px inset #c0c0c0',
@@ -2885,10 +2961,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
             }}>
               <span>
                 {isBatchGenerating && !batchOutline 
-                  ? '正在生成大纲...' 
+                  ? t('pdf_outline_generating') 
                   : (isBatchGenerating && isStage2 
-                      ? '正在细分分段...' 
-                      : '文档大纲')}
+                      ? t('pdf_outline_subdividing') 
+                      : t('pdf_outline_title'))}
               </span>
               
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -2905,7 +2981,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         cursor: 'pointer',
                         fontFamily: 'MS Sans Serif, sans-serif'
                       }}
-                      title="列表视图"
+                      title={t('pdf_outline_view_list')}
                     >
                       📋
                     </button>
@@ -2922,7 +2998,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                         cursor: 'pointer',
                         fontFamily: 'MS Sans Serif, sans-serif'
                       }}
-                      title="思维导图视图"
+                      title={t('pdf_outline_view_mindmap')}
                     >
                       🌐
                     </button>
@@ -2941,7 +3017,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       cursor: 'pointer',
                       fontFamily: 'MS Sans Serif, sans-serif'
                     }}
-                    title="全文档笔记"
+                    title={t('pdf_summary_title')}
                   >
                     📝
                   </button>
@@ -2982,7 +3058,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       border: '2px inset #c0c0c0',
                       fontSize: '11px'
                     }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>正在生成笔记...</div>
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{t('pdf_summary_generating')}</div>
                       <div>{summaryProgress.message}</div>
                     </div>
                   )}
@@ -2996,12 +3072,12 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       border: '2px inset #c0c0c0',
                       fontSize: '11px'
                     }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: '8px', textAlign: 'center' }}>
-                        📝 全文档笔记生成设置
+                      <div style={{ fontWeight: 'bold', fontSize: '12px', marginBottom: '10px', textAlign: 'center' }}>
+                        {t('pdf_summary_settings')}
                       </div>
                       
                       <div style={{ marginBottom: '8px' }}>
-                        <label style={{ display: 'block', marginBottom: '4px' }}>笔记风格:</label>
+                        <label style={{ display: 'block', marginBottom: '4px' }}>{t('pdf_summary_style_label')}</label>
                         <select
                           value={summarySettings.style}
                           onChange={(e) => saveSummarySettings({ ...summarySettings, style: e.target.value })}
@@ -3010,18 +3086,18 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           {Object.entries(summaryNoteStyles).map(([key, style]) => (
                             <option key={key} value={key}>{style.name}</option>
                           ))}
-                          <option value="custom">自定义...</option>
+                          <option value="custom">{t('pdf_summary_custom_option')}</option>
                         </select>
                       </div>
                       
                       {summarySettings.style === 'custom' && (
                         <div style={{ marginBottom: '8px' }}>
-                          <label style={{ display: 'block', marginBottom: '4px' }}>自定义提示词:</label>
+                          <label style={{ display: 'block', marginBottom: '4px' }}>{t('pdf_summary_custom_prompt_label')}</label>
                           <textarea
                             value={summarySettings.customPrompt}
                             onChange={(e) => saveSummarySettings({ ...summarySettings, customPrompt: e.target.value })}
                             style={{ width: '100%', height: '80px', padding: '4px', resize: 'vertical' }}
-                            placeholder="请输入提示词模板..."
+                            placeholder={t('pdf_summary_custom_prompt_placeholder')}
                           />
                         </div>
                       )}
@@ -3031,7 +3107,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           onClick={async () => {
                             setIsGeneratingSummary(true);
                             setSummaryNote('');
-                            setSummaryProgress({ message: '准备开始...', percentage: 0 });
+                            setSummaryProgress({ message: t('pdf_summary_preparing'), percentage: 0 });
                             
                             try {
                               const response = await fetch(
@@ -3040,8 +3116,10 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({
-                                    summary_style: summarySettings.style,
-                                    custom_prompt: summarySettings.customPrompt
+                                    summary_style: 'custom', // 强制使用 custom 以传递前端翻译后的提示词
+                                    custom_prompt: summarySettings.style === 'custom' 
+                                      ? summarySettings.customPrompt 
+                                      : (summaryNoteStyles[summarySettings.style]?.prompt || summaryNoteStyles.detailed.prompt)
                                   })
                                 }
                               );
@@ -3069,20 +3147,28 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                     const data = JSON.parse(line.slice(6));
                                     
                                     if (data.type === 'status') {
-                                      setSummaryProgress(prev => ({ ...prev, message: data.message }));
+                                      let msg = data.message;
+                                      if (msg.includes('文件较小')) msg = t('pdf_summary_small_file');
+                                      else if (msg.includes('文件较大')) msg = t('pdf_summary_large_file');
+                                      else if (msg.includes('分组分析完成')) msg = t('pdf_summary_merging');
+                                      else if (msg.includes('分为') && msg.includes('进行逐个分析')) {
+                                          const count = msg.match(/\d+/)?.[0] || '?';
+                                          msg = t('pdf_summary_split_groups').replace('{count}', count);
+                                      }
+                                      setSummaryProgress(prev => ({ ...prev, message: msg }));
                                     } else if (data.type === 'content' || data.type === 'merge_content') {
                                       setSummaryNote(prev => prev + data.content);
                                     } else if (data.type === 'group_content') {
-                                      setSummaryProgress(prev => ({ ...prev, message: `正在分析第${data.group}部分...` }));
+                                      setSummaryProgress(prev => ({ ...prev, message: t('pdf_summary_analyzing_part').replace('{part}', data.group) }));
                                     } else if (data.type === 'saved') {
                                       console.log('笔记已保存:', data.path);
-                                      addMessageWithSource('✅ 全文档笔记生成完成', '已保存并加载', 'success');
+                                      addMessageWithSource(t('pdf_summary_complete_msg'), t('pdf_summary_complete_details'), 'success');
                                     } else if (data.type === 'complete') {
                                       setIsGeneratingSummary(false);
-                                      setSummaryProgress({ message: '生成完成', percentage: 100 });
+                                      setSummaryProgress({ message: t('pdf_summary_complete'), percentage: 100 });
                                     } else if (data.type === 'error') {
                                       console.error('生成笔记错误:', data.error);
-                                      setSummaryProgress({ message: '生成失败: ' + data.error, percentage: 0 });
+                                      setSummaryProgress({ message: t('pdf_summary_failed').replace('{error}', data.error), percentage: 0 });
                                       setIsGeneratingSummary(false);
                                     }
                                   }
@@ -3090,7 +3176,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                               }
                             } catch (error) {
                               console.error('生成全文档笔记失败:', error);
-                              setSummaryProgress({ message: '错误: ' + error.message, percentage: 0 });
+                              setSummaryProgress({ message: t('pdf_summary_error').replace('{error}', error.message), percentage: 0 });
                               setIsGeneratingSummary(false);
                             }
                           }}
@@ -3102,7 +3188,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             fontWeight: 'bold'
                           }}
                         >
-                          🚀 开始生成
+                          {t('pdf_summary_start_btn')}
                         </button>
                       </div>
                     </div>
@@ -3128,7 +3214,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       paddingBottom: '5px',
                       borderBottom: '1px solid #eee'
                     }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '12px' }}>全文档笔记</div>
+                      <div style={{ fontWeight: 'bold', fontSize: '12px' }}>{t('pdf_summary_title')}</div>
                       <div style={{ display: 'flex', gap: '4px' }}>
                         <button
                           onClick={async () => {
@@ -3140,17 +3226,17 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                  const summaryData = await summaryResponse.json();
                                  if (summaryData.success && summaryData.content) {
                                    setSummaryNote(summaryData.content);
-                                   if (addMessage) addMessage('笔记刷新', '全文档笔记已重新加载', 'success');
+                                   if (addMessage) addMessage(t('pdf_summary_refresh'), t('pdf_summary_reload_success'), 'success');
                                  } else {
-                                   if (addMessage) addMessage('刷新失败', '未找到笔记内容', 'warning');
+                                   if (addMessage) addMessage(t('toast_error'), t('pdf_summary_no_content'), 'warning');
                                  }
                                }
                              } catch (error) {
                                console.error('刷新笔记失败:', error);
-                               if (addMessage) addMessage('刷新失败', '请求发生错误', 'error');
+                               if (addMessage) addMessage(t('toast_error'), t('network_error'), 'error');
                              }
                           }}
-                          title="刷新笔记内容"
+                          title={t('pdf_summary_refresh')}
                           style={{
                             padding: '2px 6px',
                             fontSize: '14px',
@@ -3238,7 +3324,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       </div>
                     ) : !isGeneratingSummary && (
                       <div style={{ textAlign: 'center', color: '#888', marginTop: '40px' }}>
-                        点击“生成全文档笔记”开始生成
+                        {t('pdf_summary_click_to_start')}
                       </div>
                     )}
                   </div>
@@ -3269,7 +3355,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                     onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                   >
-                    ← 返回大纲
+                    ← {t('pdf_outline_back')}
                   </button>
 
                   {/* 注释生成进度条 */}
@@ -3617,7 +3703,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                     
                                     addMessageWithSource(
                                       '✓ 分段注释生成完成',
-                                      `共生成 ${data.completed_pages} 页注释`,
+                                      t('pdf_sidebar_anno_batch_count').replace('{count}', data.completed_pages),
                                       'success'
                                     );
                                     
@@ -4897,9 +4983,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                       window.dispatchEvent(refreshEvent);
                                     } else if (data.type === 'complete') {
                                       const sectionPageCount = section.page_end - section.page_start + 1;
+                                      const missing = data.missing_pages || [];
+                                      if (missing.length > 0) {
+                                        console.warn(`[BatchAnnotation] 分段 ${sectionIndex} 生成不完整，缺失页面:`, missing);
+                                      }
                                       setStage3Progress(prev => ({
                                         ...prev,
-                                        completedAnnotations: prev.completedAnnotations + sectionPageCount
+                                        completedAnnotations: prev.completedAnnotations + (data.completed_pages || sectionPageCount)
                                       }));
                                     } else if (data.type === 'error') {
                                       throw new Error(data.error);
@@ -5005,7 +5095,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           e.target.style.border = '2px outset #008000';
                         }}
                       >
-                        🚀 批量生成所有分段注释
+                        {t('pdf_sidebar_anno_batch_btn')}
                       </button>
                     </div>
                   )}
@@ -5031,11 +5121,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                     marginBottom: '8px',
                     fontFamily: 'MS Sans Serif, sans-serif'
                   }}>
-                    💡 <strong>操作提示：</strong>
+                    💡 <strong>{t('pdf_outline_mindmap_hint_title')}</strong>
                     <div style={{ marginTop: '4px', paddingLeft: '16px' }}>
-                      • 点击节点跳转到对应页面<br/>
-                      • 滚轮缩放，中键拖拽移动画布<br/>
-                      • 🔵文件 🟢分段 🟣细分 ⚪页码
+                      • {t('pdf_outline_mindmap_hint_click')}<br/>
+                      • {t('pdf_outline_mindmap_hint_zoom')}<br/>
+                      • {t('pdf_outline_mindmap_legend')}
                     </div>
                   </div>
                   
@@ -5059,10 +5149,27 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
           </div>
         )}
         
+        {/* 注释侧栏调整大小控制条 */}
+        {showAnnotationPanel && (
+          <div 
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsResizingAnnotation(true);
+            }}
+            style={{
+              width: '4px',
+              cursor: 'col-resize',
+              backgroundColor: isResizingAnnotation ? '#000080' : 'transparent',
+              zIndex: 10,
+              flexShrink: 0
+            }}
+          />
+        )}
+
         {/* 注释侧栏 */}
         {showAnnotationPanel && (
           <div style={{
-            width: '300px',
+            width: `${annotationWidth}px`,
             backgroundColor: '#f0f0f0',
             borderLeft: '2px inset #c0c0c0',
             display: 'flex',
@@ -5085,7 +5192,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                 fontFamily: 'MS Sans Serif, sans-serif',
                 fontWeight: 'bold'
               }}>
-                第 {currentPage} 页注释
+                {t('pdf_sidebar_anno_title').replace('{page}', currentPage)}
               </span>
               
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}>
@@ -5108,9 +5215,14 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                   title={(() => {
                     const fileInfo = annotationFileInfo[currentPage];
                     if (!fileInfo || !fileInfo.exists) {
-                      return '暂无注释文件';
+                      return t('pdf_sidebar_anno_info_empty');
                     }
-                    return `文件名: ${fileInfo.filename}\n来源: ${fileInfo.source_pdf}\n创建时间: ${fileInfo.created_time}\n修改时间: ${fileInfo.modified_time}\n文件大小: ${fileInfo.size} 字节`;
+                    return t('pdf_sidebar_anno_info_details')
+                      .replace('{filename}', fileInfo.filename)
+                      .replace('{source}', fileInfo.source_pdf)
+                      .replace('{created}', fileInfo.created_time)
+                      .replace('{modified}', fileInfo.modified_time)
+                      .replace('{size}', fileInfo.size);
                   })()}
                 >
                   ℹ
@@ -5137,7 +5249,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                       alignItems: 'center',
                       justifyContent: 'center'
                     }}
-                    title="LLM智能功能"
+                    title={t('pdf_sidebar_anno_llm_tooltip')}
                   >
                     LLM
                   </button>
@@ -5249,12 +5361,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           borderBottom: '1px solid #a0a0a0',
                           cursor: 'pointer',
                           fontFamily: 'MS Sans Serif, sans-serif',
-                          textAlign: 'left'
+                          textAlign: 'left',
+                          whiteSpace: 'nowrap'
                         }}
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        生成注释
+                        {t('pdf_sidebar_anno_gen_btn')}
                       </button>
                       
                       <button
@@ -5347,12 +5460,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           borderBottom: '1px solid #a0a0a0',
                           cursor: 'pointer',
                           fontFamily: 'MS Sans Serif, sans-serif',
-                          textAlign: 'left'
+                          textAlign: 'left',
+                          whiteSpace: 'nowrap'
                         }}
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        👁️ 视觉生成
+                        {t('pdf_sidebar_anno_visual_btn')}
                       </button>
                       
                       <button
@@ -5372,14 +5486,18 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           
                           setIsGeneratingSummary(true);
                           setSummaryNote('');
-                          setSummaryProgress({ message: '准备开始...', percentage: 0 });
+                          setSummaryProgress({ message: t('pdf_summary_preparing'), percentage: 0 });
                           
                           try {
                             const response = await fetch(
                               `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/summary-note`,
                               {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' }
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  summary_style: 'custom',
+                                  custom_prompt: summaryNoteStyles.detailed.prompt
+                                })
                               }
                             );
                             
@@ -5406,24 +5524,32 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                   const data = JSON.parse(line.slice(6));
                                   
                                   if (data.type === 'status') {
-                                    setSummaryProgress(prev => ({ ...prev, message: data.message }));
+                                    let msg = data.message;
+                                    if (msg.includes('文件较小')) msg = t('pdf_summary_small_file');
+                                    else if (msg.includes('文件较大')) msg = t('pdf_summary_large_file');
+                                    else if (msg.includes('分组分析完成')) msg = t('pdf_summary_merging');
+                                    else if (msg.includes('分为') && msg.includes('进行逐个分析')) {
+                                        const count = msg.match(/\d+/)?.[0] || '?';
+                                        msg = t('pdf_summary_split_groups').replace('{count}', count);
+                                    }
+                                    setSummaryProgress(prev => ({ ...prev, message: msg }));
                                   } else if (data.type === 'content' || data.type === 'merge_content') {
                                     setSummaryNote(prev => prev + data.content);
                                   } else if (data.type === 'group_content') {
                                     // 可选：显示局部生成的进度
-                                    setSummaryProgress(prev => ({ ...prev, message: `正在分析第${data.group}部分...` }));
+                                    setSummaryProgress(prev => ({ ...prev, message: t('pdf_summary_analyzing_part').replace('{part}', data.group) }));
                                   } else if (data.type === 'group_done') {
                                     // 更新进度条（假设大约有多少组）
                                     // 这里没法精确知道总组数，只能估算
                                   } else if (data.type === 'saved') {
                                     console.log('笔记已保存:', data.path);
-                                    addMessageWithSource('✅ 全文档笔记生成完成', '已保存并加载', 'success');
+                                    addMessageWithSource(t('pdf_summary_complete_msg'), t('pdf_summary_complete_details'), 'success');
                                   } else if (data.type === 'complete') {
                                     setIsGeneratingSummary(false);
-                                    setSummaryProgress({ message: '生成完成', percentage: 100 });
+                                    setSummaryProgress({ message: t('pdf_summary_complete'), percentage: 100 });
                                   } else if (data.type === 'error') {
                                     console.error('生成笔记错误:', data.error);
-                                    setSummaryProgress({ message: '生成失败: ' + data.error, percentage: 0 });
+                                    setSummaryProgress({ message: t('pdf_summary_failed').replace('{error}', data.error), percentage: 0 });
                                     setIsGeneratingSummary(false);
                                   }
                                 }
@@ -5444,12 +5570,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           borderBottom: '1px solid #a0a0a0',
                           cursor: 'pointer',
                           fontFamily: 'MS Sans Serif, sans-serif',
-                          textAlign: 'left'
+                          textAlign: 'left',
+                          whiteSpace: 'nowrap'
                         }}
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        📝 生成全文档笔记
+                        {t('pdf_sidebar_anno_summary_btn')}
                       </button>
                       
                       <button
@@ -5620,12 +5747,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           borderBottom: '1px solid #a0a0a0',
                           cursor: 'pointer',
                           fontFamily: 'MS Sans Serif, sans-serif',
-                          textAlign: 'left'
+                          textAlign: 'left',
+                          whiteSpace: 'nowrap'
                         }}
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        📚 生成大纲
+                        {t('pdf_sidebar_anno_outline_btn')}
                       </button>
                       
                       <button
@@ -5661,8 +5789,11 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           // 根据文件大小决定是否需要确认
                           if (estimatedTotalPages > SMALL_FILE_THRESHOLD) {
                             const userConfirm = await showConfirmDialog({
-                              title: '逐页注释提示',
-                              message: `检测到文档共约 ${estimatedTotalPages} 页。\n\n逐页注释功能将自动执行以下操作：\n  1. 生成文档大纲\n  2. 细分各个分段\n  3. 为所有页面生成注释\n\n此操作将消耗大量 Token 和时间。\n估算耗时：${Math.ceil(estimatedTotalPages / 2)} - ${estimatedTotalPages} 分钟\n\n是否继续？`,
+                              title: t('pdf_sidebar_anno_one_click_title'),
+                              message: t('pdf_sidebar_anno_one_click_msg')
+                                .replace('{pages}', estimatedTotalPages)
+                                .replace('{min}', Math.ceil(estimatedTotalPages / 2))
+                                .replace('{max}', estimatedTotalPages),
                               icon: '⚠️'
                             });
                             
@@ -5732,6 +5863,8 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                   } else if (data.type === 'outline') {
                                     newOutline = data.outline;
                                     console.log('阶段1完成，大纲生成:', newOutline);
+                                  } else if (data.type === 'error') {
+                                    throw new Error(data.error || '生成大纲时发生未知错误');
                                   }
                                 }
                               }
@@ -5999,7 +6132,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                 // 等待一小段时间确保进度条达到100%
                                 setTimeout(() => {
                                   addMessageWithSource(
-                                    '✓ 逐页注释完成',
+                                    t('pdf_sidebar_anno_one_click_done'),
                                     `阶段1: 大纲生成 ✓\n阶段2: 细分分段 ✓\n阶段3: 注释生成 ✓\n  成功: ${successCount} 个分段\n  失败: ${failCount} 个分段\n\n阶段4: 融合重叠页 ✓\n  已融合: ${overlappingPagesCount} 个重叠页`,
                                     'success'
                                   );
@@ -6012,7 +6145,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                                 
                                 setTimeout(() => {
                                   addMessageWithSource(
-                                    '⚠ 逐页注释完成（融合失败）',
+                                    t('pdf_sidebar_anno_one_click_done_merge_fail'),
                                     `阶段1: 大纲生成 ✓\n阶段2: 细分分段 ✓\n阶段3: 注释生成 ✓\n  成功: ${successCount} 个分段\n  失败: ${failCount} 个分段\n\n阶段4: 融合重叠页 ✗\n  错误: ${mergeError.message}`,
                                     'warning'
                                   );
@@ -6026,7 +6159,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                               
                               setTimeout(() => {
                                 addMessageWithSource(
-                                  '✓ 逐页注释完成',
+                                  t('pdf_sidebar_anno_one_click_done'),
                                   `阶段1: 大纲生成 ✓\n阶段2: 细分分段 ✓\n阶段3: 注释生成 ✓\n\n成功: ${successCount} 个分段\n失败: ${failCount} 个分段\n\n无重叠页，无需融合`,
                                   'success'
                                 );
@@ -6040,7 +6173,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                             setIsBatchGenerating(false);
                             
                             addMessageWithSource(
-                              '✗ 逐页注释失败',
+                              t('pdf_sidebar_anno_one_click_fail'),
                               error.message,
                               'error'
                             );
@@ -6056,12 +6189,13 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           borderBottom: '1px solid #a0a0a0',
                           cursor: 'pointer',
                           fontFamily: 'MS Sans Serif, sans-serif',
-                          textAlign: 'left'
+                          textAlign: 'left',
+                          whiteSpace: 'nowrap'
                         }}
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                       >
-                        📝 逐页注释
+                        📝 {t('pdf_sidebar_anno_one_click_btn')}
                       </button>
                       
                       <button
@@ -6543,7 +6677,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
                           onMouseEnter={(e) => e.target.style.backgroundColor = '#d0d0d0'}
                           onMouseLeave={(e) => e.target.style.backgroundColor = '#c0c0c0'}
                         >
-                          ← 返回大纲
+                          ← {t('pdf_outline_back')}
                         </button>
                         
                         <h3 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 'bold' }}>
@@ -6880,7 +7014,7 @@ function PDFPaginationViewer({ pdfUrl, onClose, boardId, windowId, initialPage, 
       />
     </div>
   );
-}
+});
 
 // 检查窗口是否有真实的媒体内容
 const hasRealMediaContent = (window) => {
@@ -6913,8 +7047,6 @@ const ensureHttpUrl = (input) => {
 
 // toMediaUrl 函数
 const toMediaUrl = (windowOrContent, boardId) => {
-  console.log('🔗 toMediaUrl 被调用:', { windowOrContent, boardId });
-  
   // 兼容旧的调用方式（直接传content）和新的调用方式（传window对象）
   let content, filePath;
   
@@ -6946,34 +7078,31 @@ const toMediaUrl = (windowOrContent, boardId) => {
       
   if (filename && boardId) {
     const staticUrl = `http://localhost:8081/api/boards/${boardId}/files/${encodeURIComponent(filename)}`;
-    console.log('🔗 使用新API生成静态URL:', staticUrl);
-      return staticUrl;
+    return staticUrl;
   }
   
   // 备用：使用 content 字段
   if (content && typeof content === 'string') {
     if (content.startsWith('http://') || content.startsWith('https://')) {
-      console.log('🔗 使用content中的完整URL:', content);
       return content;
     }
     if (content.startsWith('/api/')) {
       const fullUrl = `http://localhost:8081${content}`;
-      console.log('🔗 使用content中的相对API路径:', fullUrl);
       return fullUrl;
     }
     // 如果content是绝对路径，编码处理
     if (content.includes('\\') || content.includes('/')) {
       const encodedUrl = `http://localhost:8081/api/boards/${boardId}/files/serve?path=${encodeURIComponent(content)}`;
-      console.log('🔗 从content生成编码URL:', encodedUrl);
       return encodedUrl;
     }
   }
   
-  console.log('🔗 无法生成有效URL，返回空字符串');
   return '';
 };
 
-function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter }) {
+// 图片窗口渲染器组件
+const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId, addMessage, openMessageCenter }) => {
+  const { t } = useLanguage();
   const hasContent = hasRealMediaContent(windowData);
   const imageUrl = hasContent ? toMediaUrl(windowData, boardId) : null;
 
@@ -6984,13 +7113,13 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
 
   const triggerImageAction = async (action, forceRefresh = false) => {
     const actionLabels = {
-      'text-extract': '文字提取',
-      'image-translate': '图片翻译'
+      'text-extract': t('image_text_extract'),
+      'image-translate': t('image_image_translate')
     };
 
     if (!hasContent) {
       if (addMessage) {
-        addMessage('请先上传图片', `${actionLabels[action]}需要有效的图片内容`, 'warning', windowData.id);
+        addMessage(t('image_upload_first'), `${actionLabels[action]}${t('image_requires_valid_content')}`, 'warning', windowData.id);
       }
       return;
     }
@@ -7012,7 +7141,7 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
             }
             
             if (forceRefresh && addMessage) {
-                 addMessage('正在重新提取文字...', '请稍候，这可能需要几秒钟', 'info', windowData.id);
+                 addMessage(t('image_re_extracting'), t('image_please_wait'), 'info', windowData.id);
             }
             
             const url = `http://localhost:8081/api/boards/${boardId}/windows/${windowData.id}/image/extract${forceRefresh ? '?force=true' : ''}`;
@@ -7032,7 +7161,7 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
                 if (data.cached) {
                     // 缓存命中，不发成功消息，直接显示
                 } else {
-                    addMessage('✅ 文字提取成功', '点击查看结果', 'success', windowData.id);
+                    addMessage(`✅ ${t('image_extract_success')}`, t('image_click_to_view'), 'success', windowData.id);
                     // 只有新提取的内容才打开消息中心
                     if (openMessageCenter) {
                         openMessageCenter();
@@ -7042,7 +7171,7 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
         } catch (error) {
             console.error('提取失败:', error);
             if (addMessage) {
-                addMessage('❌ 提取失败', error.message || '未知错误', 'error', windowData.id);
+                addMessage(`❌ ${t('image_extract_failed')}`, error.message || t('text_unknown_error'), 'error', windowData.id);
                 // 出错时打开消息中心
                 if (openMessageCenter) {
                     openMessageCenter();
@@ -7067,7 +7196,7 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
     }
 
     if (addMessage) {
-      addMessage(`已触发${actionLabels[action]}`, '请在AI助手或相关工具中查看执行状态', 'info', windowData.id);
+      addMessage(`${t('image_action_triggered')}${actionLabels[action]}`, t('image_check_ai_assistant'), 'info', windowData.id);
     }
 
     if (openMessageCenter) {
@@ -7111,7 +7240,7 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
             onMouseLeave={(e) => { if(!isExtracting) { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; } }}
             disabled={isExtracting}
           >
-            {isExtracting ? '提取中...' : '文字提取'}
+            {isExtracting ? t('image_extracting') : t('image_text_extract')}
           </button>
           <button
             style={toolbarButtonStyle}
@@ -7120,7 +7249,7 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
             onMouseUp={(e) => { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
             onMouseLeave={(e) => { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
           >
-            图片翻译
+            {t('image_image_translate')}
           </button>
         </div>
       </div>
@@ -7236,11 +7365,15 @@ function ImageWindowRenderer({ window: windowData, onUpload, boardId, addMessage
       </div>
     </div>
   );
-}
+});
 
 // 文档窗口渲染器组件（Word文档等）
-function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter, setConfirmDialog }) {
+const DocumentWindowRenderer = React.memo(({ window: windowData, onUpload, boardId, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog }) => {
   const [isPaginationMode, setIsPaginationMode] = useState(false);
+
+  const handleClosePagination = useCallback(() => {
+    setIsPaginationMode(false);
+  }, []);
 
   console.log('📄 文档窗口渲染:', {
     windowId: windowData.id,
@@ -7258,26 +7391,26 @@ function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMess
           type="file"
           accept=".doc,.docx,.ppt,.pptx,.xls,.xlsx"
           style={{ display: 'none' }}
-          onChange={(e) => onUpload(e.target.files)}
+          onChange={(e) => onUpload(windowData.id, 'documents', e.target.files)}
         />
       </label>
     );
   }
 
   const documentUrl = toMediaUrl(windowData, boardId);
-  console.log('📄 文档URL生成:', documentUrl);
 
   // 如果启用分页模式，显示分页组件（转换为PDF后）
   if (isPaginationMode) {
     return (
       <PDFPaginationViewer 
         pdfUrl={documentUrl} 
-        onClose={() => setIsPaginationMode(false)}
+        onClose={handleClosePagination}
         boardId={boardId}
         windowId={windowData.id}
         addMessage={addMessage}
         openMessageCenter={openMessageCenter}
         setConfirmDialog={setConfirmDialog}
+        showConfirmDialog={showConfirmDialog}
       />
     );
   }
@@ -7323,10 +7456,11 @@ function DocumentWindowRenderer({ window: windowData, onUpload, boardId, addMess
       </div>
     </div>
   );
-}
+});
 
 // PDF窗口渲染器组件
-function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, openMessageCenter, setConfirmDialog }) {
+const PDFWindowRenderer = React.memo(({ window: windowData, onUpload, boardId, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog }) => {
+  const { t } = useLanguage();
   const PDF_TOOLBAR_ITEM_STYLE = {
     padding: '1px 8px',
     fontSize: '11px',
@@ -7367,11 +7501,10 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, 
   const [isPaginationMode, setIsPaginationMode] = useState(false);
   const [targetPage, setTargetPage] = useState(null);
 
-  console.log('📄 PDF窗口渲染:', {
-    windowId: windowData.id,
-    windowContent: windowData.content,
-    hasContent: !!windowData.content
-  });
+  const handleClosePagination = useCallback(() => {
+    setIsPaginationMode(false);
+    setTargetPage(null);
+  }, []);
 
   // 监听打开PDF页面事件
   useEffect(() => {
@@ -7398,37 +7531,34 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, 
   if (!hasRealMediaContent(windowData)) {
     console.log('📄 PDF窗口无内容，显示占位符');
     return (
-      <label className="pdf-placeholder" title="点击上传PDF" style={{ flex: 1 }}>
-        📄 PDF内容
-        <p>点击上传PDF</p>
+      <label className="pdf-placeholder" title={t('pdf_placeholder_desc')} style={{ flex: 1 }}>
+        {t('pdf_placeholder_title')}
+        <p>{t('pdf_placeholder_desc')}</p>
         <input
           type="file"
           accept="application/pdf"
           style={{ display: 'none' }}
-          onChange={(e) => onUpload(e.target.files)}
+          onChange={(e) => onUpload(windowData.id, 'pdfs', e.target.files)}
         />
       </label>
     );
   }
 
   const pdfUrl = toMediaUrl(windowData, boardId);
-  console.log('📄 PDF URL生成:', pdfUrl);
 
   // 如果启用分页模式，显示分页组件
   if (isPaginationMode) {
     return (
       <PDFPaginationViewer 
         pdfUrl={pdfUrl} 
-        onClose={() => {
-          setIsPaginationMode(false);
-          setTargetPage(null);
-        }}
+        onClose={handleClosePagination}
         boardId={boardId}
         windowId={windowData.id}
         initialPage={targetPage}
         addMessage={addMessage}
         openMessageCenter={openMessageCenter}
         setConfirmDialog={setConfirmDialog}
+        showConfirmDialog={showConfirmDialog}
       />
     );
   }
@@ -7458,7 +7588,7 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, 
           onMouseDown={handlePdfMouseDown}
           onMouseUp={handlePdfMouseUp}
         >
-          分页模式
+          {t('pdf_pagination_mode')}
         </button>
       </div>
       
@@ -7474,9 +7604,10 @@ function PDFWindowRenderer({ window: windowData, onUpload, boardId, addMessage, 
       </div>
     </div>
   );
-}
+});
 
-function WebWindowRenderer({ window: windowData, onUrlChange }) {
+const WebWindowRenderer = React.memo(({ window: windowData, onUrlChange }) => {
+  const { t } = useLanguage();
   const WEB_TOOLBAR_ITEM_STYLE = {
     padding: '1px 4px',
     fontSize: '11px',
@@ -7557,7 +7688,7 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
       { 
         id: 'default', 
         url: fallbackUrl, 
-        title: '新标签页',
+        title: t('web_new_tab'),
         key: 0,
         isLoading: !!fallbackUrl
       }
@@ -7575,7 +7706,7 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
   const saveStateToBackend = (updatedTabs) => {
     if (onUrlChange) {
       // 将整个标签页结构保存到 content
-      onUrlChange(JSON.stringify(updatedTabs.map(t => ({
+      onUrlChange(windowData.id, JSON.stringify(updatedTabs.map(t => ({
         id: t.id,
         url: t.url,
         title: t.title
@@ -7619,7 +7750,7 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
     const newTab = { 
       id: newId, 
       url: '', 
-      title: '新标签页', 
+      title: t('web_new_tab'), 
       key: 0, 
       isLoading: false 
     };
@@ -7711,11 +7842,11 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
   };
 
   const getTabTitle = (tab) => {
-    if (tab.title && tab.title !== '新标签页') return tab.title;
-    if (!tab.url) return '新标签页';
+    if (tab.title && tab.title !== t('web_new_tab')) return tab.title;
+    if (!tab.url) return t('web_new_tab');
     try {
       const normalized = ensureHttpUrl(tab.url);
-      if (!normalized) return tab.url || '新标签页';
+      if (!normalized) return tab.url || t('web_new_tab');
       const url = new URL(normalized);
       return url.hostname || tab.url;
     } catch (e) {
@@ -7863,7 +7994,7 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
         >
           🔄
         </button>
-        <span style={{ fontFamily: 'MS Sans Serif, sans-serif', fontSize: '11px' }}>地址:</span>
+        <span style={{ fontFamily: 'MS Sans Serif, sans-serif', fontSize: '11px' }}>{t('web_address_label')}</span>
         <input
           type="text"
           value={addressBar}
@@ -7874,7 +8005,7 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
               handleNavigate();
             }
           }}
-          placeholder="输入网页链接，例如 https://example.com"
+          placeholder={t('web_url_placeholder_full')}
           style={{
             flex: 1,
             border: '2px inset #ffffff',
@@ -8004,8 +8135,8 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
                 }}
               >
                 <span role="img" aria-label="web">🌐</span>
-                <p style={{ margin: 0 }}>新标签页</p>
-                <p style={{ margin: 0 }}>在上方输入框填写 URL，点击“前往”访问网页</p>
+                <p style={{ margin: 0 }}>{t('web_new_tab')}</p>
+                <p style={{ margin: 0 }}>{t('web_placeholder_instruction')}</p>
           </div>
         )}
           </div>
@@ -8013,10 +8144,32 @@ function WebWindowRenderer({ window: windowData, onUrlChange }) {
       </div>
     </div>
   );
-}
+});
 
 // 简单的文本编辑器组件，支持实时预览和打字机模式
-function TextEditorWithPreview({ window: windowData, boardId, onContentChange, onConvertToWeb }) {
+const TextEditorWithPreview = React.memo(({ window: windowData, boardId, onContentChange, onConvertToWeb }) => {
+  const { t } = useLanguage();
+  
+  const MARP_THEME_OPTIONS = useMemo(() => [
+    {
+      id: 'default',
+      label: t('marp_theme_default_name'),
+      description: t('marp_theme_default_desc')
+    },
+    {
+      id: 'gaia',
+      label: 'Gaia',
+      description: t('marp_theme_gaia_desc')
+    },
+    {
+      id: 'uncover',
+      label: 'Uncover',
+      description: t('marp_theme_uncover_desc')
+    }
+  ], [t]);
+
+  const AVAILABLE_MARP_THEME_IDS = useMemo(() => MARP_THEME_OPTIONS.map((theme) => theme.id), [MARP_THEME_OPTIONS]);
+
   // 调试模式检测 - 必须在所有其他代码之前定义
   const isDebugMode = typeof window !== 'undefined' && 
     (window.location.search.includes('debug=true') || window.location.hash.includes('debug'));
@@ -8551,7 +8704,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
   const renderMarpCanvas = async () => {
     const result = await renderMarpContent();
     if (!result?.html) {
-      throw new Error('当前内容为空，无法导出 Marp 幻灯片');
+      throw new Error(t('text_export_marp_empty_error'));
     }
 
     const temp = document.createElement('div');
@@ -8610,7 +8763,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
   const handleExportMarkdownPDF = async () => {
     setShowExportMenu(false);
     if (!localContent || !localContent.trim()) {
-      alert('当前没有可导出的 Markdown 内容。');
+      alert(t('text_export_no_markdown'));
       return;
     }
     if (isExporting) return;
@@ -8620,7 +8773,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
       await saveCanvasAsPDF(canvas, `${exportFileBaseName || 'markdown-notes'}.pdf`);
     } catch (error) {
       console.error('导出 Markdown PDF 失败:', error);
-      alert('导出 Markdown PDF 失败：' + (error?.message || '未知错误'));
+      alert(t('text_export_markdown_pdf_error') + (error?.message || t('text_unknown_error')));
     } finally {
       setIsExporting(false);
     }
@@ -8629,7 +8782,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
   const handleExportMarpPDF = async () => {
     setShowExportMenu(false);
     if (!localContent || !localContent.trim()) {
-      alert('当前没有可导出的内容。');
+      alert(t('text_export_no_content'));
       return;
     }
     if (isExporting) return;
@@ -8639,7 +8792,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
       await saveCanvasAsPDF(canvas, `${exportFileBaseName || 'marp-slides'}.pdf`);
     } catch (error) {
       console.error('导出 Marp PDF 失败:', error);
-      alert('导出 Marp PDF 失败：' + (error?.message || '未知错误'));
+      alert(t('text_export_marp_pdf_error') + (error?.message || t('text_unknown_error')));
     } finally {
       setIsExporting(false);
     }
@@ -8648,7 +8801,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
   const handleExportMarpPPT = async () => {
     setShowExportMenu(false);
     if (!localContent || !localContent.trim()) {
-      alert('当前没有可导出的内容。');
+      alert(t('text_export_no_content'));
       return;
     }
     if (isExporting) return;
@@ -8656,7 +8809,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
     try {
       const slides = getMarpSlides();
       if (!slides.length) {
-        throw new Error('未找到可导出的 Marp 幻灯片。');
+        throw new Error(t('text_export_marp_no_slides_error'));
       }
       const pptx = new PptxGenJS();
       slides.forEach((slideContent, index) => {
@@ -8676,7 +8829,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
       await pptx.writeFile({ fileName: `${exportFileBaseName || 'marp-slides'}.pptx` });
     } catch (error) {
       console.error('导出 Marp PPT 失败:', error);
-      alert('导出 Marp PPT 失败：' + (error?.message || '未知错误'));
+      alert(t('text_export_marp_ppt_error') + (error?.message || t('text_unknown_error')));
     } finally {
       setIsExporting(false);
     }
@@ -8753,7 +8906,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
             onMouseDown={handleToolbarMouseDown}
             onMouseUp={handleToolbarMouseUp}
           >
-            上传...
+            {t('text_upload')}
           </button>
         )}
         
@@ -8765,7 +8918,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
             fontFamily: 'MS Sans Serif, sans-serif',
             padding: '2px 8px'
           }}>
-            编辑模式
+            {t('text_edit_mode')}
           </div>
         )}
 
@@ -8835,7 +8988,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
           <div style={{ position: 'relative' }} ref={marpMenuRef}>
             <button
               onClick={() => setShowMarpMenu((prev) => !prev)}
-              title="Marp 幻灯片相关功能"
+              title={t('text_marp_preview_title')}
               style={{
                 ...TOOLBAR_ITEM_STYLE,
                 backgroundColor: showMarpMenu ? '#a0a0a0' : (useMarpPreview ? '#cfe8c0' : 'transparent'),
@@ -8858,7 +9011,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                 e.target.style.border = '1px outset #ffffff';
               }}
             >
-              {useMarpPreview ? 'Marp 预览中' : 'Marp 预览'}
+              {useMarpPreview ? t('text_marp_previewing') : t('text_marp_preview')}
             </button>
 
             {showMarpMenu && (
@@ -8870,7 +9023,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                     backgroundColor: '#e9e9e9'
                   }}
                 >
-                  {useMarpPreview ? '切换回 Markdown 预览' : '切换到 Marp 预览'}
+                  {useMarpPreview ? t('text_switch_to_markdown') : t('text_switch_to_marp')}
                 </button>
 
                 <div style={{ borderTop: '1px solid #b4b4b4', paddingTop: '6px' }}>
@@ -8881,7 +9034,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                       backgroundColor: showThemePanel ? '#d7e2ff' : '#e9e9e9'
                     }}
                   >
-                    选择主题（当前：{marpThemeDisplayName})
+                    {t('text_select_theme')}{marpThemeDisplayName})
                   </button>
                   {showThemePanel && (
                     <div
@@ -8922,7 +9075,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                       ))}
                       {!knownThemeEntry && marpTheme && (
                         <div style={{ fontSize: '10px', color: '#a00' }}>
-                          当前正在使用自定义主题：<strong>{marpTheme}</strong>
+                          {t('text_marp_custom_theme')}<strong>{marpTheme}</strong>
                         </div>
                       )}
                     </div>
@@ -8938,7 +9091,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                       backgroundColor: showMarpGuide ? '#ffe9c6' : '#e9e9e9'
                     }}
                   >
-                    Marp 使用说明
+                    {t('text_marp_guide')}
                   </button>
                   {showMarpGuide && (
                     <div
@@ -8951,15 +9104,15 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                       }}
                     >
                       <p style={{ margin: '0 0 6px 0' }}>
-                        Marp 能将 Markdown 转换成幻灯片。开启预览会自动插入需要的 front-matter（`marp: true`、`theme: ...`），也可以手动编辑。
+                        {t('text_marp_guide_desc')}
                       </p>
                       <ul style={{ paddingLeft: '18px', margin: '0 0 6px 0' }}>
-                        <li>使用 `---` 分隔每一页。</li>
-                        <li>在 front-matter 中设置 `theme:` 即可指定主题。</li>
-                        <li>导出按钮可生成 PDF / PPT。导出前用预览检查样式。</li>
+                        <li>{t('text_marp_guide_item1')}</li>
+                        <li>{t('text_marp_guide_item2')}</li>
+                        <li>{t('text_marp_guide_item3')}</li>
                       </ul>
                       <p style={{ margin: 0, color: marpMeta.hasMarp ? '#2e7d32' : '#a00' }}>
-                        {marpMeta.hasMarp ? '已检测到 marp front-matter。' : '尚未检测到 marp front-matter，切换到预览后会自动添加。'}
+                        {marpMeta.hasMarp ? t('text_marp_frontmatter_detected') : t('text_marp_frontmatter_not_detected')}
                       </p>
                     </div>
                   )}
@@ -8976,7 +9129,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
             fontFamily: 'MS Sans Serif, sans-serif',
             fontSize: '11px'
           }}>
-            <span style={{ color: '#000000' }}>或输入网址:</span>
+            <span style={{ color: '#000000' }}>{t('text_or_input_url')}</span>
             <input
               type="text"
               value={webUrlInput}
@@ -8987,7 +9140,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                   handleConvertToWeb();
                 }
               }}
-              placeholder="例如 https://example.com"
+              placeholder={t('text_url_placeholder')}
               style={{
                 padding: '2px 4px',
                 width: '200px',
@@ -9023,9 +9176,9 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                 if (!webUrlInput.trim()) return;
                 e.target.style.border = '1px outset #ffffff';
               }}
-              title="将当前文本窗口转换为网页窗口"
+              title={t('text_open_webpage_title')}
             >
-              打开网页
+              {t('text_open_webpage')}
             </button>
           </div>
         )}
@@ -9062,7 +9215,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                   e.target.style.border = '1px outset #ffffff';
                 }}
               >
-                {isExporting ? '导出中...' : '导出'}
+                {isExporting ? t('text_exporting') : t('text_export')}
               </button>
 
               {showExportMenu && (
@@ -9096,7 +9249,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                     onMouseEnter={(e) => (e.target.style.backgroundColor = '#e0e0e0')}
                     onMouseLeave={(e) => (e.target.style.backgroundColor = '#f0f0f0')}
                   >
-                    导出 Markdown PDF
+                    {t('text_export_markdown_pdf')}
                   </button>
                   <button
                     onClick={handleExportMarpPDF}
@@ -9114,7 +9267,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                     onMouseEnter={(e) => (e.target.style.backgroundColor = '#e0e0e0')}
                     onMouseLeave={(e) => (e.target.style.backgroundColor = '#f0f0f0')}
                   >
-                    导出 Marp PDF
+                    {t('text_export_marp_pdf')}
                   </button>
                   <button
                     onClick={handleExportMarpPPT}
@@ -9131,7 +9284,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                     onMouseEnter={(e) => (e.target.style.backgroundColor = '#e0e0e0')}
                     onMouseLeave={(e) => (e.target.style.backgroundColor = '#f0f0f0')}
                   >
-                    导出 Marp PPT
+                    {t('text_export_marp_ppt')}
                   </button>
                 </div>
               )}
@@ -9156,7 +9309,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
         }}>
           <span><strong>🐛 调试模式</strong></span>
           <span>当前行: <strong>{cursorPosition.line}</strong></span>
-          <span>打字机模式: <strong>{isTypewriterMode ? '开启' : '关闭'}</strong></span>
+          <span>{t('typewriter_mode')}: <strong>{isTypewriterMode ? t('on') : t('off')}</strong></span>
           <span>左侧交互: <strong>{isUserInteracting.left ? '是' : '否'}</strong></span>
           <span>右侧交互: <strong>{isUserInteracting.right ? '是' : '否'}</strong></span>
           <span>左侧行数比例: <strong>{textareaRef.current ? (getLineBasedScrollRatio(textareaRef.current, true) * 100).toFixed(1) + '%' : 'N/A'}</strong></span>
@@ -9203,7 +9356,7 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
               overflowY: 'auto',
               overflowX: 'hidden'
             }}
-            placeholder="在这里输入 Markdown 内容..."
+            placeholder={t('text_markdown_placeholder')}
           />
         </div>
         
@@ -9261,13 +9414,13 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
                 />
                 {!marpRenderResult.html && (
                   <div style={{ fontSize: '12px', color: '#666' }}>
-                    内容为空或尚未渲染
+                    {t('text_empty_content')}
                   </div>
                 )}
               </div>
             ) : (
               <div style={{ fontSize: '12px', color: '#666' }}>
-                正在加载 Marp 组件...
+                {t('text_loading_marp')}
               </div>
             )
           ) : (
@@ -9285,9 +9438,9 @@ function TextEditorWithPreview({ window: windowData, boardId, onContentChange, o
       </div>
     </div>
   );
-}
+});
 
-function BoardCanvas({ 
+const BoardCanvas = React.memo(({ 
   courseId,
   boardId, 
   boardName,
@@ -9305,7 +9458,8 @@ function BoardCanvas({
   onWindowDelete,
   setShowStartMenu,
   showStartMenu // Add this prop
-}) {
+}) => {
+  const { t } = useLanguage();
   const [windows, setWindows] = useState([]);
   
   // 消息中心状态
@@ -9397,7 +9551,7 @@ function BoardCanvas({
     return {
       id: MESSAGE_CENTER_WINDOW_ID,
       type: 'message-center',
-      title: `消息中心`,
+      title: t('message_center'),
       position: { x: 200, y: 150 },
       size: { width: 500, height: 600 },
       content: '',
@@ -9411,7 +9565,7 @@ function BoardCanvas({
     return {
       id: PERSONALIZATION_WINDOW_ID,
       type: 'personalization',
-      title: `个性化设置 - ${boardName || ''}`.trim(),
+      title: `${t('personalization_settings')} - ${boardName || ''}`.trim(),
       position: { x: 220, y: 160 },
       size: { width: 540, height: 520 },
       content: '',
@@ -9425,7 +9579,7 @@ function BoardCanvas({
     return {
       id: PLANNER_WINDOW_ID,
       type: 'planner',
-      title: '日历与计划',
+      title: t('calendar_planner'),
       position: { x: 240, y: 140 },
       size: { width: 560, height: 520 },
       content: '',
@@ -9439,7 +9593,7 @@ function BoardCanvas({
     return {
       id: PLUGIN_MANAGER_WINDOW_ID,
       type: 'plugin-manager',
-      title: '插件管理器',
+      title: t('plugin_manager'),
       position: { x: 260, y: 120 },
       size: { width: 600, height: 500 },
       content: '',
@@ -9482,14 +9636,14 @@ function BoardCanvas({
     setUnreadCount(0);
   };
   
-  const openMessageCenter = () => {
+  const openMessageCenter = useCallback(() => {
     console.log('📬 openMessageCenter被调用，触发toggleMessageCenter事件');
     // 触发事件，让事件监听器处理窗口打开
     if (typeof window !== 'undefined') {
       const event = new CustomEvent('toggleMessageCenter');
       window.dispatchEvent(event);
     }
-  };
+  }, []);
 
   const reminderTrackerRef = useRef(new Map());
 
@@ -9592,10 +9746,6 @@ function BoardCanvas({
   
   // 包装setWindows来跟踪调用来源
   const setWindowsWithTrace = (newWindows) => {
-    console.log('🔄 setWindows被调用:', {
-      新窗口数量: Array.isArray(newWindows) ? newWindows.length : '函数调用',
-      调用堆栈: new Error().stack?.split('\n').slice(1, 4).join('\n')
-    });
     setWindows(newWindows);
   };
   
@@ -9603,11 +9753,6 @@ function BoardCanvas({
   useEffect(() => {
     // 更新ref以便其他地方获取最新状态
     windowsRef.current = windows;
-    
-    console.log('🔄 Windows状态变化:', {
-      数量: windows.length,
-      窗口列表: windows.map(w => ({ id: w.id, title: w.title, position: w.position }))
-    });
   }, [windows]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragData, setDragData] = useState(null);
@@ -10093,7 +10238,7 @@ function BoardCanvas({
           }
 
           if (w.id === PERSONALIZATION_WINDOW_ID) {
-            const expectedTitle = `🎨 个性化设置 - ${boardName || ''}`.trim();
+            const expectedTitle = `${t('personalization_settings')} - ${boardName || ''}`.trim();
             if (w.title !== expectedTitle) {
               return { ...w, title: expectedTitle };
             }
@@ -10163,7 +10308,7 @@ function BoardCanvas({
     try {
       const response = await fetch(`http://localhost:8081/api/personalization/settings/${boardId}`);
       if (!response.ok) {
-        throw new Error(`获取个性化设置失败: ${response.status}`);
+        throw new Error(`${t('failed_to_load_personalization')}: ${response.status}`);
       }
 
       const data = await response.json();
@@ -10189,7 +10334,7 @@ function BoardCanvas({
 
       return data;
     } catch (error) {
-      console.error('获取个性化设置失败:', error);
+      console.error(t('failed_to_load_personalization'), error);
       setPersonalizationSettings(null);
       setAppliedWallpaper(null);
       return null;
@@ -10791,14 +10936,14 @@ function BoardCanvas({
   // 窗口类型名称映射
   const getWindowTypeName = (type) => {
     const typeNames = {
-      text: '文本',
-      web: '网页',
-      image: '图片',
-      video: '视频',
-      audio: '音频',
-      pdf: 'PDF'
+      text: t('window_type_text'),
+      web: t('window_type_web'),
+      image: t('window_type_image'),
+      video: t('window_type_video'),
+      audio: t('window_type_audio'),
+      pdf: t('window_type_pdf')
     };
-    return typeNames[type] || '窗口';
+    return typeNames[type] || t('window_type_default');
   };
 
   // 生成唯一的窗口名称，处理重复名称
@@ -10903,7 +11048,7 @@ function BoardCanvas({
             x: Math.round(dropX + Math.random() * 50), // 添加一点随机偏移避免重叠
             y: Math.round(dropY + Math.random() * 50) 
           },
-          size: { width: 400, height: 300 }
+          size: windowType === 'pdf' ? { width: 600, height: 500 } : { width: 450, height: 350 }
         };
 
         console.log('📤 发送创建窗口请求:', windowData);
@@ -10999,7 +11144,7 @@ function BoardCanvas({
   // 创建新的打字机模式项目窗口
   const handleCreateProject = async () => {
     try {
-      const baseTitle = '新建项目';
+      const baseTitle = t('new_project');
       const uniqueTitle = generateUniqueWindowName(baseTitle);
       
       const windowData = {
@@ -11044,7 +11189,7 @@ function BoardCanvas({
 
   const handleCreateWindow = async (type) => {
     try {
-      const baseTitle = `新建${getWindowTypeName(type)}`;
+      const baseTitle = `${t('new_window')}${getWindowTypeName(type)}`;
       const uniqueTitle = generateUniqueWindowName(baseTitle);
       const defaultSize = type === 'web'
         ? { width: 900, height: 600 }
@@ -11095,7 +11240,7 @@ function BoardCanvas({
   };
 
   // 统一的文件上传处理
-  const handleUpload = async (windowId, fileCategory, files) => {
+  const handleUpload = useCallback(async (windowId, fileCategory, files) => {
     console.log('📤 handleUpload 开始:', { windowId, fileCategory, filesCount: files?.length });
     if (!files || files.length === 0) return;
     
@@ -11169,7 +11314,7 @@ function BoardCanvas({
     } catch (err) {
       console.error('上传失败:', err);
     }
-  };
+  }, [boardId, windows]);
   // 将 \( ... \) / \[ ... \] 转为 $...$ / $$...$$，兼容用户输入
   const normalizeLatexDelimiters = (text) => {
     if (!text) return '';
@@ -12631,7 +12776,7 @@ function BoardCanvas({
 
       setWindows(prev => {
         const personalizationWindow = prev.find(w => w.id === PERSONALIZATION_WINDOW_ID);
-        const expectedTitle = `🎨 个性化设置 - ${boardName || ''}`.trim();
+        const expectedTitle = `${t('personalization_settings')} - ${boardName || ''}`.trim();
 
         if (personalizationWindow) {
           if (hiddenWindows && hiddenWindows.has(PERSONALIZATION_WINDOW_ID) && onWindowShow) {
@@ -12671,7 +12816,7 @@ function BoardCanvas({
         window.removeEventListener('openPersonalization', handleOpenPersonalization);
       }
     };
-  }, [boardName, fetchPersonalizationSettings, hiddenWindows, minimizedWindows, onWindowMinimize, onWindowShow]);
+  }, [boardName, fetchPersonalizationSettings, hiddenWindows, minimizedWindows, onWindowMinimize, onWindowShow, t]);
 
   // 监听打开PDF页面事件
   useEffect(() => {
@@ -12832,34 +12977,34 @@ function BoardCanvas({
 
     const desktopMenuItems = [
       { 
-        label: '新建项目', 
+        label: t('new_project'), 
         action: 'new-project',
         icon: <span className="win98-icon win98-icon-text"></span>,
         order: 0
       },
       {
-        label: '新建网页窗口',
+        label: t('new_web_window'),
         action: 'new-web-window',
         icon: <span className="win98-icon win98-icon-web"></span>,
         order: 1
       },
       { type: 'separator', order: 2 },
       {
-        label: '在资源管理器中打开',
+        label: t('open_in_explorer'),
         action: 'open-folder',
         icon: <span className="win98-icon win98-icon-folder"></span>,
         order: 3
       },
       { type: 'separator', order: 4 },
       { 
-        label: '打开控制台', 
+        label: t('open_console'), 
         action: 'open-console',
         icon: <span className="win98-icon win98-icon-console"></span>,
         order: 10
       },
       { type: 'separator', order: 11 },
       { 
-        label: '插件管理器', 
+        label: t('plugin_manager'), 
         action: 'open-plugin-manager',
         icon: <span className="win98-icon win98-icon-plugin"></span>,
         order: 12
@@ -12868,14 +13013,14 @@ function BoardCanvas({
 
     const iconMenuItems = [
       { 
-        label: '重命名', 
+        label: t('rename'), 
         action: 'rename',
         icon: <span className="win98-icon win98-icon-text"></span>,
         order: 0
       },
       { type: 'separator', order: 1 },
       { 
-        label: '删除', 
+        label: t('delete'), 
         action: 'delete',
         icon: <span className="win98-icon win98-icon-recycle"></span>,
         order: 2
@@ -12883,7 +13028,13 @@ function BoardCanvas({
     ];
 
     // 获取插件菜单项
-    const pluginMenuItems = pluginRegistry.getContextMenuItems(type);
+    const pluginMenuItems = pluginRegistry.getContextMenuItems(type).map(item => {
+      // 翻译快捷键设置菜单项
+      if (item.action === 'plugin:shortcut-settings:open') {
+        return { ...item, label: t('shortcut_settings') };
+      }
+      return item;
+    });
     
     // 合并菜单项并按 order 排序
     const baseMenuItems = type === 'desktop' ? desktopMenuItems : iconMenuItems;
@@ -13424,7 +13575,7 @@ function BoardCanvas({
               {window.type === 'image' && (
                 <ImageWindowRenderer
                   window={window}
-                  onUpload={(files) => handleUpload(window.id, 'images', files)}
+                  onUpload={handleUpload}
                   boardId={boardId}
                   addMessage={addMessage}
                   openMessageCenter={openMessageCenter}
@@ -13477,27 +13628,29 @@ function BoardCanvas({
               {window.type === 'pdf' && (
                 <PDFWindowRenderer 
                   window={window} 
-                  onUpload={(files) => handleUpload(window.id, 'pdfs', files)}
+                  onUpload={handleUpload}
                   boardId={boardId}
                   addMessage={addMessage}
                   openMessageCenter={openMessageCenter}
                   setConfirmDialog={setConfirmDialog}
+                  showConfirmDialog={showConfirmDialog}
                 />
               )}
               {window.type === 'document' && (
                 <DocumentWindowRenderer 
                   window={window} 
-                  onUpload={(files) => handleUpload(window.id, 'documents', files)}
+                  onUpload={handleUpload}
                   boardId={boardId}
                   addMessage={addMessage}
                   openMessageCenter={openMessageCenter}
                   setConfirmDialog={setConfirmDialog}
+                  showConfirmDialog={showConfirmDialog}
                 />
               )}
               {window.type === 'web' && (
                 <WebWindowRenderer 
                   window={window}
-                  onUrlChange={(url) => handleWebUrlUpdate(window.id, url)}
+                  onUrlChange={handleWebUrlUpdate}
                 />
               )}
             </div>
@@ -13594,7 +13747,7 @@ function BoardCanvas({
       )}
     </div>
   );
-}
+});
 
 const getWindowIconClass = (type) => {
   const typeIconClass = {

@@ -6,6 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import 'katex/dist/katex.min.css';
+import { useLanguage } from '../i18n/LanguageContext';
 
 // LaTeX 分隔符标准化函数
 const normalizeLatexDelimiters = (text) => {
@@ -482,6 +483,7 @@ const Toolbar = React.memo(({
   showTodoList,
   setShowTodoList
 }) => {
+  const { t } = useLanguage();
   const hasTodos = hasActiveTodos(todoStatus);
 
   return (
@@ -507,9 +509,9 @@ const Toolbar = React.memo(({
           onMouseLeave={handleChatMouseLeave}
           onMouseDown={handleChatMouseDown}
           onMouseUp={handleChatMouseUp}
-          title="LLM API 设置"
+          title={t('chat_llm_api_settings')}
         >
-          ⚙️ 设置
+          ⚙️ {t('chat_settings')}
         </button>
         
         <button
@@ -529,9 +531,9 @@ const Toolbar = React.memo(({
           onMouseLeave={handleChatMouseLeave}
           onMouseDown={handleChatMouseDown}
           onMouseUp={handleChatMouseUp}
-          title="选择文件发送"
+          title={t('chat_select_file_title')}
         >
-          📎 文件
+          📎 {t('chat_select_file')}
         </button>
         
         {hasTodos && (
@@ -547,9 +549,9 @@ const Toolbar = React.memo(({
             onMouseLeave={handleChatMouseLeave}
             onMouseDown={handleChatMouseDown}
             onMouseUp={handleChatMouseUp}
-            title="显示/隐藏任务列表"
+            title={t('chat_todo_title')}
           >
-            📋 Todo
+            📋 {t('chat_todo')}
           </button>
         )}
         
@@ -566,9 +568,9 @@ const Toolbar = React.memo(({
           onMouseLeave={handleChatMouseLeave}
           onMouseDown={handleChatMouseDown}
           onMouseUp={handleChatMouseUp}
-          title={useTools ? "工具调用已启用（AI 可以创建窗口、查询任务等）" : "工具调用已禁用"}
+          title={useTools ? t('chat_tools_enabled') : t('chat_tools_disabled')}
         >
-          🔧 工具{useTools ? ' ✓' : ''}
+          🔧 {t('chat_tools')}{useTools ? ' ✓' : ''}
         </button>
       
       <button
@@ -578,9 +580,9 @@ const Toolbar = React.memo(({
         onMouseLeave={handleChatMouseLeave}
         onMouseDown={handleChatMouseDown}
         onMouseUp={handleChatMouseUp}
-        title="滚动到最底部"
+        title={t('chat_scroll_bottom_title')}
       >
-        ⬇️ 底部
+        ⬇️ {t('chat_scroll_bottom')}
       </button>
       
       <button
@@ -590,9 +592,9 @@ const Toolbar = React.memo(({
         onMouseLeave={handleChatMouseLeave}
         onMouseDown={handleChatMouseDown}
         onMouseUp={handleChatMouseUp}
-        title="清空聊天记录"
+        title={t('chat_clear_title')}
       >
-        🗑️ 清空
+        🗑️ {t('chat_clear')}
       </button>
         
         {showSettings && (
@@ -1102,6 +1104,7 @@ function ChatWindow({
   isFocused,
   onOpenWindow
 }) {
+  const { t } = useLanguage();
   // 基础状态 - 最小化状态数量
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');

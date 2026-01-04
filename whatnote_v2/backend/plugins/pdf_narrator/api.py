@@ -12,7 +12,67 @@ import re
 from pathlib import Path
 from datetime import datetime
 from logger import info, error
+from config import DATA_DIR
 from .schemas import TTSRequest
+
+def _repair_json(s: str) -> str:
+    """尝试修复常见的 LLM 生成的 JSON 错误"""
+    import re
+    # 0. 检查是否存在嵌入的错误消息 (通常由 llm_service 异常产生)
+    if "[Error]" in s:
+        # 记录错误并截断污染部分
+        s = s.split("[Error]")[0]
+        
+    # 1. 移除可能的前后非 JSON 字符
+    s = s.strip()
+    # 移除 Markdown 代码块标记
+    s = re.sub(r'^```json\s*', '', s)
+    s = re.sub(r'^```\s*', '', s)
+    s = re.sub(r'\s*```$', '', s)
+    s = s.strip()
+    
+    if not s:
+        return s
+
+    # 2. 修复字符串内的非法换行符 (JSON 字符串内不能直接换行)
+    try:
+        def replace_newlines(match):
+            content = match.group(1)
+            return f'"{content.replace("\n", "\\n").replace("\r", "")}"'
+        s = re.sub(r'"((?:[^"\\]|\\.)*)"', replace_newlines, s, flags=re.DOTALL)
+    except Exception as e:
+        error(f"JSON修复-换行符处理失败: {e}")
+    
+    # 3. 修复缺失的逗号
+    s = re.sub(r'([0-9]|"|}|\])\s*\n?\s*"(?!\s*:)', r'\1, "', s)
+    
+    # 4. 处理多余的逗号
+    s = re.sub(r',\s*}', '}', s)
+    s = re.sub(r',\s*]', ']', s)
+    
+    # 5. 处理没有引号的 Key
+    s = re.sub(r'([{,]\s*)([a-zA-Z0-9_]+)\s*:', r'\1"\2":', s)
+    
+    # 6. 处理截断的 JSON (尝试自动闭合)
+    open_braces = s.count('{') - s.count('}')
+    open_brackets = s.count('[') - s.count(']')
+    
+    if open_braces > 0 or open_brackets > 0:
+        s = s.rstrip().rstrip(',')
+        if s.count('"') % 2 != 0:
+            s += '"'
+        stack = []
+        for char in s:
+            if char == '{': stack.append('}')
+            elif char == '[': stack.append(']')
+            elif char == '}': 
+                if stack and stack[-1] == '}': stack.pop()
+            elif char == ']':
+                if stack and stack[-1] == ']': stack.pop()
+        while stack:
+            s += stack.pop()
+            
+    return s
 
 router = APIRouter()
 
@@ -20,7 +80,6 @@ router = APIRouter()
 content_manager = None
 llm_service = None
 GPT_SOVITS_URL = "http://127.0.0.1:9880"
-DATA_DIR = Path(".")
 
 # Plugin State
 _enabled = True
@@ -410,10 +469,16 @@ async def generate_narrator_script_section(
                     if prev_summary:
                         previous_context_text = f"\n**前情提要（上一分段上下文）**：\n- 上一分段标题: {prev_title}\n- 上一分段主要内容: {prev_summary}\n- 提示：请承接上述内容，保持演讲的连贯性，避免生硬的开场。"
 
-                default_req = "请为每一页撰写一份口语化的演讲稿。\n要求：\n1. 时间控制在 30-60 秒。\n2. 语言自然流畅，适合朗读。\n3. 不要念标题，而是解释核心观点。\n4. 使用第一人称。"
+                default_req = """请作为一名专业的老师，根据页面内容撰写自然、口语化的讲稿。
+要求：
+1. 内容驱动长度：讲稿的长度应直接取决于该页的信息量。简单页面（如标题页、转场页）请言简意赅；复杂页面（如包含核心概念、复杂图表、多项实验数据）请深入浅出地详细讲解。
+2. 解析深度一致：保持统一的教学风格。对于知识点，不仅要说出“是什么”，还要解释“为什么”或“意味着什么”，确保整份讲稿的解析深度在不同页面间维持一致。
+3. 自然叙事：使用口语化的第一人称。避免生硬的“第一点、第二点”这种阅读式表达，而是使用“我们再来看看...”、“这里有一个细节值得注意...”等衔接词。
+4. 严禁念稿：不要直接朗读页面上的原始文字，而是将其转化为你自己的讲解语言。
+5. 独立且连贯：每页讲稿需对应其页面内容，但语气上要与前后文保持连贯，像是在进行一场不间断的精彩讲座。"""
                 script_requirement = prompt_template if prompt_template else default_req
                 
-                prompt = f"""你是一位专业的演讲者。请根据以下PDF分段内容（包含上下文），为指定范围的页面撰写演讲稿。
+                prompt = f"""你是一位富有经验且充满激情的专业老师。请根据以下PDF分段内容（包含上下文），为指定范围的每一页页面撰写一份**讲解风格一致**的讲稿。
 
 **分段上下文信息**：
 - 分段标题: {section_data.get('title', '未命名')}
@@ -421,12 +486,12 @@ async def generate_narrator_script_section(
 - 完整上下文页码: 第{page_start}页 - 第{page_end}页
 {previous_context_text}
 
-**分段完整内容**：
+**分段内容详情**：
 {full_content}
 
 **任务目标**：
-请仅为 **第{target_start}页 到 第{target_end}页** 生成演讲稿。
-（第{page_start}页到第{target_start-1}页的内容仅供参考，不需要生成讲稿）
+请仅为 **第{target_start}页 到 第{target_end}页** 分别生成讲稿。
+注意：请根据每页实际包含的信息密度来决定讲稿的长短。不要为了凑字数而废话，也不要因为内容多而漏掉核心逻辑。
 
 **讲稿要求**：
 {script_requirement}
@@ -437,17 +502,12 @@ async def generate_narrator_script_section(
   "scripts": [
     {{
       "page": {target_start},
-      "script": "第{target_start}页的演讲稿内容..."
-    }},
-    {{
-      "page": {target_start + 1},
-      "script": "第{target_start + 1}页的演讲稿内容..."
+      "script": "这里是根据该页内容生成的自然讲解内容..."
     }}
   ]
 }}
 ```
-请确保scripts数组包含从 **{target_start}** 到 **{target_end}** 的所有页面。
-直接输出JSON，不要添加任何额外的说明文字。"""
+请确保 scripts 数组包含从 **{target_start}** 到 **{target_end}** 的每一页。直接输出 JSON。"""
                 
                 messages = [{
                     "role": "user",
@@ -468,20 +528,68 @@ async def generate_narrator_script_section(
                     content = accumulated_content.strip()
                     if content.startswith('```'):
                         lines = content.split('\n')
-                        if lines[0].startswith('```'): lines = lines[1:]
-                        if lines[-1].startswith('```'): lines = lines[:-1]
-                        content = '\n'.join(lines)
+                        # 改进：更健壮地提取JSON内容
+                        start_idx = 0
+                        for i, line in enumerate(lines):
+                            if '{' in line:
+                                start_idx = i
+                                break
+                        end_idx = len(lines)
+                        for i in range(len(lines) - 1, -1, -1):
+                            if '}' in lines[i]:
+                                end_idx = i + 1
+                                break
+                        content = '\n'.join(lines[start_idx:end_idx])
                     
-                    result_data = json.loads(content)
+                    try:
+                        result_data = json.loads(content)
+                    except json.JSONDecodeError:
+                        # 备选方案1：尝试修复并再次解析
+                        try:
+                            repaired_content = _repair_json(content)
+                            result_data = json.loads(repaired_content)
+                        except json.JSONDecodeError:
+                            # 备选方案2：尝试正则表达式提取 JSON 并修复
+                            import re
+                            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                            if json_match:
+                                try:
+                                    result_data = json.loads(_repair_json(json_match.group()))
+                                except:
+                                    error(f"修复后的正则解析仍然失败: {content[:200]}...")
+                                    raise
+                            else:
+                                error(f"无法从内容中找到JSON结构: {content[:200]}...")
+                                raise
+                            
                     scripts = result_data.get('scripts', [])
                     
+                    # 记录统计
+                    expected_range = list(range(target_start, target_end + 1))
+                    received_pages = [s.get('page') for s in scripts if s.get('page')]
+                    missing_pages = [p for p in expected_range if p not in received_pages]
+                    
+                    info(f"讲稿生成统计 - 预期范围: {target_start}-{target_end} (共{len(expected_range)}页)")
+                    info(f"讲稿生成统计 - 收到页面: {received_pages} (共{len(scripts)}页)")
+                    if missing_pages:
+                        error(f"讲稿生成统计 - 缺失页面: {missing_pages}")
+                    else:
+                        info("讲稿生成统计 - 所有页面均已收到")
+                    
+                    processed_count = 0
                     for script_item in scripts:
                         page = script_item.get('page')
                         text = script_item.get('script')
                         if page and text:
+                            processed_count += 1
                             yield f"data: {json.dumps({'type': 'page_done', 'page': page, 'content': text}, ensure_ascii=False)}\n\n"
                     
-                    yield f"data: {json.dumps({'type': 'complete', 'total': len(scripts)}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({
+                        'type': 'complete', 
+                        'total': processed_count, 
+                        'expected_total': len(expected_range),
+                        'missing_pages': missing_pages
+                    }, ensure_ascii=False)}\n\n"
                     
                 except json.JSONDecodeError as e:
                     error_msg = f"解析讲稿JSON失败: {e}\nRaw content preview: {content[:200]}..."
@@ -489,21 +597,23 @@ async def generate_narrator_script_section(
                     
                     # Log to dedicated file
                     try:
-                        with open("narrator_error.log", "a", encoding="utf-8") as f:
+                        log_path = DATA_DIR / "narrator_error.log"
+                        with open(log_path, "a", encoding="utf-8") as f:
                             f.write(f"\n{'='*30}\n[{datetime.now().isoformat()}] JSON Decode Error (Section {section_index}, Target {target_start}-{target_end})\n")
                             f.write(f"Error: {e}\n")
-                            f.write(f"Raw Content:\n{content}\n")
+                            f.write(f"Raw Content:\n{accumulated_content}\n")
                             f.write(f"{'='*30}\n")
                     except Exception as log_err:
                         error(f"Failed to write to log file: {log_err}")
 
-                    yield f"data: {json.dumps({'type': 'error', 'error': f'JSON解析失败: {str(e)}'}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'error', 'error': f'JSON解析失败: {str(e)}。详情见 {log_path.name}'}, ensure_ascii=False)}\n\n"
 
             except Exception as e:
                 error(f"批量生成讲稿失败: {e}")
                 # Log to dedicated file
                 try:
-                    with open("narrator_error.log", "a", encoding="utf-8") as f:
+                    log_path = DATA_DIR / "narrator_error.log"
+                    with open(log_path, "a", encoding="utf-8") as f:
                         f.write(f"\n{'='*30}\n[{datetime.now().isoformat()}] General Error (Section {section_index})\n")
                         f.write(f"Error: {e}\n")
                         f.write(f"{'='*30}\n")

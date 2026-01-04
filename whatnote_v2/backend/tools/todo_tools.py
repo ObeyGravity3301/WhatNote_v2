@@ -754,7 +754,7 @@ def register_todo_tools(tool_registry):
     for tool_def, handler in todo_tools:
         tool_registry.register_tool(tool_def, handler, category="todo")
     
-    info(f"[Success] 已注册 {len(todo_tools)} 个待办工具")
+    info(f"✅ 已注册 {len(todo_tools)} 个待办工具")
 
 
 # ==================== 辅助函数 ====================

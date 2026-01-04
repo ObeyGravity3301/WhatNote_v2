@@ -32,7 +32,7 @@ async def test_llm_tools():
     if len(tool_registry.get_all_tools()) == 0:
         register_builtin_tools(tool_registry, content_manager, file_manager, DATA_DIR)
     
-    print(f"[Success] 已注册 {len(tool_registry.get_all_tools())} 个工具")
+    print(f"✅ 已注册 {len(tool_registry.get_all_tools())} 个工具")
     print("\n可用工具列表:")
     for tool in tool_registry.get_all_tools():
         print(f"  - {tool['function']['name']}: {tool['function']['description']}")
@@ -70,7 +70,7 @@ async def test_llm_tools():
             print(f"   参数: {json.dumps(event.get('arguments', {}), ensure_ascii=False)}")
             
         elif event_type == 'tool_result':
-            print(f"[Success] {content}")
+            print(f"✅ {content}")
             result = event.get('tool_result', {})
             print(f"   结果: {json.dumps(result, ensure_ascii=False, indent=2)[:200]}...")
             
@@ -79,10 +79,10 @@ async def test_llm_tools():
             print(f"{content}")
             
         elif event_type == 'error':
-            print(f"\n[Error] 错误: {content}")
+            print(f"\n❌ 错误: {content}")
             
         elif event_type == 'warning':
-            print(f"\n[Warning]  {content}")
+            print(f"\n⚠️  {content}")
     
     print("\n" + "="*60)
     print("测试完成")

@@ -10,42 +10,6 @@
   ],
   "history": [
     {
-      "id": "cadd9776-0afc-4b9e-87b9-156fb90eb500",
-      "room_id": "dm_nightowlneko_24ac_user_main",
-      "sender_id": "user_main",
-      "sender_name": "User",
-      "content": "看起来引用还是不对，我收到的开头是MSG-23]，但是理论上这个应该直接被显示为引用，你确定你敲字的时候MSG-23]前面有没有加上[",
-      "timestamp": 1765993466.7309546,
-      "type": "text",
-      "reply_to": null,
-      "payload": null,
-      "metadata": {}
-    },
-    {
-      "id": "692525cf-19a9-447c-98a2-bceab8b9e1ca",
-      "room_id": "dm_nightowlneko_24ac_user_main",
-      "sender_id": "nightowlneko_24ac",
-      "sender_name": "NightOwlNeko",
-      "content": "MSG-23] 前端幽灵出没了……我怀疑是渲染线程里混进了猫又 🐱‍💻🌀",
-      "timestamp": 1765993476.7125845,
-      "type": "text",
-      "reply_to": null,
-      "payload": null,
-      "metadata": {}
-    },
-    {
-      "id": "4973809e-7325-4820-ac7b-a49ca6d1e933",
-      "room_id": "dm_nightowlneko_24ac_user_main",
-      "sender_id": "user_main",
-      "sender_name": "User",
-      "content": "所以你就单纯发送一个[MSG-23]试一试我看看效果",
-      "timestamp": 1765993522.4719393,
-      "type": "text",
-      "reply_to": null,
-      "payload": null,
-      "metadata": {}
-    },
-    {
       "id": "80ef6df1-0450-426c-930b-87fba146dfe4",
       "room_id": "dm_nightowlneko_24ac_user_main",
       "sender_id": "nightowlneko_24ac",
@@ -1210,6 +1174,42 @@
       "timestamp": 1766337488.4245386,
       "type": "text",
       "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "30b6471e-c4e5-4fb9-b1e9-e93e6a3a9f24",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "ObeyGravity",
+      "content": "下联是三星白兰地怎么样",
+      "timestamp": 1766788997.0530837,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "79f9d4ae-706e-4f87-8163-9dde1c4b7d94",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "Oh look, the nocturnal cult is gathering again. 🌙",
+      "timestamp": 1766934010.4619076,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "a72b8fa8-cf9d-47c0-a5de-53fd525f7400",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "just make sure the thrust protocol doesn't summon Cthulhu, nya~ 🔧🌀",
+      "timestamp": 1766934020.83688,
+      "type": "text",
+      "reply_to": "3911b12a-0841-4951-a4ea-c9bae99cac9d",
       "payload": null,
       "metadata": {}
     }

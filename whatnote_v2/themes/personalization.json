@@ -1,6 +1,6 @@
 {
   "theme": "win98",
-  "language": "en-US",
+  "language": "zh-CN",
   "default_wallpaper": {
     "filename": "default_wallpaper.png",
     "original_name": "WhatNote98.png",
@@ -38,6 +38,10 @@
     },
     "board-1764243168212": {
       "selected_wallpaper_id": "wallpaper-1764247897048",
+      "display_mode": "cover"
+    },
+    "board-1767248232888": {
+      "selected_wallpaper_id": "wallpaper-1763115958019",
       "display_mode": "cover"
     }
   },

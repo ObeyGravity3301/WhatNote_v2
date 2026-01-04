@@ -538,7 +538,7 @@ class LLMService:
         payload = {
             'model': config['model'],
             'messages': anthropic_messages,
-            'max_tokens': 4000,
+            'max_tokens': 8000,
             'stream': stream
         }
         
@@ -620,7 +620,7 @@ class LLMService:
             'contents': contents,
             'generationConfig': {
                 'temperature': 0.7,
-                'maxOutputTokens': 4000
+                'maxOutputTokens': 8000
             }
         }
         
@@ -699,13 +699,13 @@ class LLMService:
             'messages': messages,
             'stream': stream,
             'temperature': 0.7,
-            'max_tokens': 4000
+            'max_tokens': 8000
         }
         
         try:
             # 不设置超时，允许长文档处理
-            # 增加30s超时避免前端一直闪烁
-            timeout = aiohttp.ClientTimeout(total=30)
+            # 增加 300s 超时以支持长文档总结/合并任务
+            timeout = aiohttp.ClientTimeout(total=300)
             async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False), timeout=timeout) as session:
                 async with session.post(url, headers=headers, json=payload) as response:
                     if response.status != 200:

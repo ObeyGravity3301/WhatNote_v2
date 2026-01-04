@@ -61,7 +61,7 @@ class ToolRegistry:
         tool_name = definition.name
         
         if tool_name in self._tools:
-            error(f"[Warning] 工具已存在，将被覆盖: {tool_name}")
+            error(f"⚠️ 工具已存在，将被覆盖: {tool_name}")
         
         self._tools[tool_name] = definition
         self._handlers[tool_name] = handler
@@ -71,10 +71,10 @@ class ToolRegistry:
             if tool_name not in self._categories[category]:
                 self._categories[category].append(tool_name)
         else:
-            error(f"[Warning] 未知的工具分类: {category}，使用默认分类 'system'")
+            error(f"⚠️ 未知的工具分类: {category}，使用默认分类 'system'")
             self._categories['system'].append(tool_name)
         
-        info(f"[Success] 工具注册成功: {tool_name} (分类: {category})")
+        info(f"✅ 工具注册成功: {tool_name} (分类: {category})")
     
     def unregister_tool(self, tool_name: str) -> bool:
         """
@@ -87,7 +87,7 @@ class ToolRegistry:
             bool: 是否成功
         """
         if tool_name not in self._tools:
-            error(f"[Warning] 工具不存在: {tool_name}")
+            error(f"⚠️ 工具不存在: {tool_name}")
             return False
         
         del self._tools[tool_name]
@@ -98,7 +98,7 @@ class ToolRegistry:
             if tool_name in category_tools:
                 category_tools.remove(tool_name)
         
-        info(f"[Success] 工具注销成功: {tool_name}")
+        info(f"✅ 工具注销成功: {tool_name}")
         return True
     
     def get_tool_definition(self, tool_name: str) -> Optional[ToolDefinition]:
@@ -145,7 +145,7 @@ class ToolRegistry:
             List[Dict]: 工具定义列表
         """
         if category not in self._categories:
-            error(f"[Warning] 未知的工具分类: {category}")
+            error(f"⚠️ 未知的工具分类: {category}")
             return []
         
         tool_names = self._categories[category]

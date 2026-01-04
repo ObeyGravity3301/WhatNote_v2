@@ -1796,6 +1796,76 @@ async def generate_pdf_annotation_visual(
         error(f"视觉生成PDF注释失败: {e}")
         raise HTTPException(status_code=500, detail=f"视觉生成PDF注释失败: {str(e)}")
 
+def _repair_json(s: str) -> str:
+    """尝试修复常见的 LLM 生成的 JSON 错误"""
+    import re
+    # 0. 检查是否存在嵌入的错误消息 (通常由 llm_service 异常产生)
+    if "[Error]" in s:
+        # 记录错误并截断污染部分
+        s = s.split("[Error]")[0]
+        # 下面的闭合逻辑会自动处理截断后的补齐
+        
+    # 1. 移除可能的前后非 JSON 字符
+    s = s.strip()
+    # 移除 Markdown 代码块标记
+    s = re.sub(r'^```json\s*', '', s)
+    s = re.sub(r'^```\s*', '', s)
+    s = re.sub(r'\s*```$', '', s)
+    s = s.strip()
+    
+    if not s:
+        return s
+
+    # 2. 修复字符串内的非法换行符 (JSON 字符串内不能直接换行)
+    try:
+        def replace_newlines(match):
+            content = match.group(1)
+            return f'"{content.replace("\n", "\\n").replace("\r", "")}"'
+        s = re.sub(r'"((?:[^"\\]|\\.)*)"', replace_newlines, s, flags=re.DOTALL)
+    except Exception as e:
+        error(f"JSON修复-换行符处理失败: {e}")
+    
+    # 3. 修复缺失的逗号
+    s = re.sub(r'([0-9]|"|}|\])\s*\n?\s*"(?!\s*:)', r'\1, "', s)
+    
+    # 4. 处理多余的逗号
+    s = re.sub(r',\s*}', '}', s)
+    s = re.sub(r',\s*]', ']', s)
+    
+    # 5. 处理没有引号的 Key
+    s = re.sub(r'([{,]\s*)([a-zA-Z0-9_]+)\s*:', r'\1"\2":', s)
+    
+    # 6. 处理截断的 JSON (尝试自动闭合)
+    # 计算未闭合的括号
+    open_braces = s.count('{') - s.count('}')
+    open_brackets = s.count('[') - s.count(']')
+    
+    if open_braces > 0 or open_brackets > 0:
+        # 如果最后是一个逗号，先移除它
+        s = s.rstrip().rstrip(',')
+        
+        # 如果最后是在一个未闭合的字符串中 (简单检查引号数量)
+        # 注意：这里不处理复杂的转义，只做基本补齐
+        if s.count('"') % 2 != 0:
+            s += '"'
+            
+        # 闭合对象和数组
+        # 我们可以根据 stack 来闭合
+        stack = []
+        for char in s:
+            if char == '{': stack.append('}')
+            elif char == '[': stack.append(']')
+            elif char == '}': 
+                if stack and stack[-1] == '}': stack.pop()
+            elif char == ']':
+                if stack and stack[-1] == ']': stack.pop()
+        
+        # 逆序闭合
+        while stack:
+            s += stack.pop()
+            
+    return s
+
 @app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/outline")
 async def generate_batch_outline(
     board_id: str,
@@ -2168,6 +2238,14 @@ async def generate_batch_outline(
                         
                         async for chunk in llm_service.chat_completion(sub_messages, stream=True):
                             if chunk:
+                                if chunk.startswith('[Error]'):
+                                    error(f"分组{group_num}分析时检测到LLM错误: {chunk}")
+                                    await queue.put(f"data: {json.dumps({'type': 'error', 'error': f'分组{group_num}错误: {chunk}'}, ensure_ascii=False)}\n\n")
+                                    return {
+                                        'group_number': group_num,
+                                        'outline': [],
+                                        'error': chunk
+                                    }
                                 sub_accumulated_content += chunk
                                 # await queue.put(...)
                                 pass 
@@ -2192,9 +2270,37 @@ async def generate_batch_outline(
                             content = sub_accumulated_content.strip()
                             if content.startswith('```'):
                                 lines = content.split('\n')
-                                content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                                # 改进：更健壮地提取JSON内容
+                                start_idx = 0
+                                for i, line in enumerate(lines):
+                                    if '{' in line:
+                                        start_idx = i
+                                        break
+                                end_idx = len(lines)
+                                for i in range(len(lines) - 1, -1, -1):
+                                    if '}' in lines[i]:
+                                        end_idx = i + 1
+                                        break
+                                content = '\n'.join(lines[start_idx:end_idx])
                             
-                            sub_outline_data = json.loads(content)
+                            try:
+                                sub_outline_data = json.loads(content)
+                            except json.JSONDecodeError:
+                                # 备选方案1：尝试修复并再次解析
+                                try:
+                                    repaired_content = _repair_json(content)
+                                    sub_outline_data = json.loads(repaired_content)
+                                except json.JSONDecodeError:
+                                    # 备选方案2：尝试正则表达式提取 JSON 并修复
+                                    import re
+                                    json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                                    if json_match:
+                                        try:
+                                            sub_outline_data = json.loads(_repair_json(json_match.group()))
+                                        except:
+                                            raise
+                                    else:
+                                        raise
                             
                             # 发送完成信号
                             await queue.put(f"data: {json.dumps({'type': 'group_done', 'group': group_num, 'outline': sub_outline_data}, ensure_ascii=False)}\n\n")
@@ -2316,6 +2422,10 @@ async def generate_batch_outline(
                     
                     async for chunk in llm_service.chat_completion(merge_messages, stream=True):
                         if chunk:
+                            if chunk.startswith('[Error]'):
+                                error(f"合并大纲时检测到LLM错误: {chunk}")
+                                yield f"data: {json.dumps({'type': 'error', 'error': f'LLM服务错误: {chunk}'}, ensure_ascii=False)}\n\n"
+                                return
                             merge_accumulated_content += chunk
                             yield f"data: {json.dumps({'type': 'merge_content', 'content': chunk}, ensure_ascii=False)}\n\n"
                     
@@ -2340,9 +2450,39 @@ async def generate_batch_outline(
                         content = merge_accumulated_content.strip()
                         if content.startswith('```'):
                             lines = content.split('\n')
-                            content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                            # 改进：更健壮地提取JSON内容
+                            start_idx = 0
+                            for i, line in enumerate(lines):
+                                if '{' in line:
+                                    start_idx = i
+                                    break
+                            end_idx = len(lines)
+                            for i in range(len(lines) - 1, -1, -1):
+                                if '}' in lines[i]:
+                                    end_idx = i + 1
+                                    break
+                            content = '\n'.join(lines[start_idx:end_idx])
                         
-                        final_outline_data = json.loads(content)
+                        try:
+                            final_outline_data = json.loads(content)
+                        except json.JSONDecodeError:
+                            # 备选方案1：尝试修复并再次解析
+                            try:
+                                repaired_content = _repair_json(content)
+                                final_outline_data = json.loads(repaired_content)
+                            except json.JSONDecodeError:
+                                # 备选方案2：尝试正则表达式提取 JSON 并修复
+                                import re
+                                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                                if json_match:
+                                    try:
+                                        final_outline_data = json.loads(_repair_json(json_match.group()))
+                                    except:
+                                        error(f"修复后的正则解析仍然失败: {content[:200]}...")
+                                        raise
+                                else:
+                                    error(f"无法从内容中找到JSON结构: {content[:200]}...")
+                                    raise
                         
                         # 分析页码覆盖情况，记录重叠信息
                         analysis_result = analyze_outline_page_coverage(final_outline_data, total_pages)
@@ -2417,7 +2557,19 @@ async def generate_batch_outline(
                         yield f"data: {json.dumps({'type': 'outline', 'outline': final_outline_data}, ensure_ascii=False)}\n\n"
                     except json.JSONDecodeError as e:
                         error(f"解析最终大纲JSON失败: {e}")
-                        yield f"data: {json.dumps({'type': 'error', 'error': 'JSON解析失败，请查看原始输出'}, ensure_ascii=False)}\n\n"
+                        # 记录错误到专门的文件
+                        try:
+                            log_path = DATA_DIR / "annotation_error.log"
+                            with open(log_path, "a", encoding="utf-8") as log_f:
+                                log_f.write(f"\n{'='*30}\n[{datetime.now().isoformat()}] Final Outline JSON Error\n")
+                                log_f.write(f"Error: {e}\n")
+                                log_f.write(f"Raw Content:\n{merge_accumulated_content}\n")
+                                log_f.write(f"{'='*30}\n")
+                            info(f"解析失败详情已记录至: {log_path}")
+                        except Exception as log_err:
+                            error(f"记录错误日志失败: {log_err}")
+                        
+                        yield f"data: {json.dumps({'type': 'error', 'error': f'JSON解析失败: {str(e)}。详细输出已记录到 {log_path.name}'}, ensure_ascii=False)}\n\n"
                 
                 yield f"data: {json.dumps({'type': 'done', 'success': True}, ensure_ascii=False)}\n\n"
                 
@@ -2609,6 +2761,10 @@ async def subdivide_outline_sections(
                         # 流式接收LLM-2的响应
                         async for chunk in llm_service.chat_completion(messages, stream=True):
                             if chunk:
+                                if chunk.startswith('[Error]'):
+                                    error(f"细分分段{section_num}时检测到LLM错误: {chunk}")
+                                    await queue.put({'type': 'error', 'section': section_num, 'error': f"LLM服务错误: {chunk}"})
+                                    return None
                                 accumulated_content += chunk
                                 await queue.put({'type': 'section_content', 'section': section_num, 'content': chunk})
                         
@@ -2632,9 +2788,39 @@ async def subdivide_outline_sections(
                             content = accumulated_content.strip()
                             if content.startswith('```'):
                                 lines = content.split('\n')
-                                content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                                # 改进：更健壮地提取JSON内容
+                                start_idx = 0
+                                for i, line in enumerate(lines):
+                                    if '{' in line:
+                                        start_idx = i
+                                        break
+                                end_idx = len(lines)
+                                for i in range(len(lines) - 1, -1, -1):
+                                    if '}' in lines[i]:
+                                        end_idx = i + 1
+                                        break
+                                content = '\n'.join(lines[start_idx:end_idx])
                             
-                            subdivision_data = json.loads(content)
+                            try:
+                                subdivision_data = json.loads(content)
+                            except json.JSONDecodeError:
+                                # 备选方案1：尝试修复并再次解析
+                                try:
+                                    repaired_content = _repair_json(content)
+                                    subdivision_data = json.loads(repaired_content)
+                                except json.JSONDecodeError:
+                                    # 备选方案2：尝试正则表达式提取 JSON 并修复
+                                    import re
+                                    json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                                    if json_match:
+                                        try:
+                                            subdivision_data = json.loads(_repair_json(json_match.group()))
+                                        except:
+                                            error(f"分段{section_num}修复后的正则解析仍然失败: {content[:200]}...")
+                                            raise
+                                    else:
+                                        error(f"分段{section_num}无法从内容中找到JSON结构: {content[:200]}...")
+                                        raise
                             
                             # 验证细分数据
                             if 'section_summary' in subdivision_data and 'subdivisions' in subdivision_data:
@@ -2658,6 +2844,16 @@ async def subdivide_outline_sections(
                         
                         except json.JSONDecodeError as e:
                             error(f"解析分段{section_num}细分JSON失败: {e}")
+                            # 记录错误到专门的文件
+                            try:
+                                log_path = DATA_DIR / "annotation_error.log"
+                                with open(log_path, "a", encoding="utf-8") as log_f:
+                                    log_f.write(f"\n{'='*30}\n[{datetime.now().isoformat()}] Subdivide JSON Error (Section {section_num})\n")
+                                    log_f.write(f"Error: {e}\n")
+                                    log_f.write(f"Raw Content:\n{accumulated_content}\n")
+                                    log_f.write(f"{'='*30}\n")
+                            except: pass
+                            
                             await queue.put({'type': 'error', 'message': f'分段{section_num}解析失败'})
                     
                     except Exception as e:
@@ -2896,6 +3092,10 @@ async def generate_section_annotations(
                 info(f"开始调用LLM生成分段注释，页码范围: {page_start}-{page_end}")
                 async for chunk in llm_service.chat_completion(messages, stream=True):
                     if chunk:
+                        if chunk.startswith('[Error]'):
+                            error(f"生成分段注释时检测到LLM错误: {chunk}")
+                            yield f"data: {json.dumps({'type': 'error', 'error': f'LLM服务错误: {chunk}'}, ensure_ascii=False)}\n\n"
+                            return
                         accumulated_content += chunk
                         yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
                 
@@ -2922,13 +3122,57 @@ async def generate_section_annotations(
                     content = accumulated_content.strip()
                     if content.startswith('```'):
                         lines = content.split('\n')
-                        content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+                        # 改进：更健壮地提取JSON内容
+                        start_idx = 0
+                        for i, line in enumerate(lines):
+                            if '{' in line:
+                                start_idx = i
+                                break
+                        end_idx = len(lines)
+                        for i in range(len(lines) - 1, -1, -1):
+                            if '}' in lines[i]:
+                                end_idx = i + 1
+                                break
+                        content = '\n'.join(lines[start_idx:end_idx])
                     
-                    result_data = json.loads(content)
+                    try:
+                        result_data = json.loads(content)
+                    except json.JSONDecodeError:
+                        # 备选方案1：尝试修复并再次解析
+                        try:
+                            repaired_content = _repair_json(content)
+                            result_data = json.loads(repaired_content)
+                        except json.JSONDecodeError:
+                            # 备选方案2：尝试正则表达式提取 JSON 并修复
+                            import re
+                            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                            if json_match:
+                                try:
+                                    result_data = json.loads(_repair_json(json_match.group()))
+                                except:
+                                    error(f"修复后的正则解析仍然失败: {content[:200]}...")
+                                    raise
+                            else:
+                                error(f"无法从内容中找到JSON结构: {content[:200]}...")
+                                raise
+                    
                     annotations = result_data.get('annotations', [])
+                    
+                    # 记录生成统计
+                    expected_range = list(range(page_start, page_end + 1))
+                    received_pages = [ann.get('page') for ann in annotations if ann.get('page')]
+                    missing_pages = [p for p in expected_range if p not in received_pages]
+                    
+                    info(f"注释生成统计 - 预期范围: {page_start}-{page_end} (共{len(expected_range)}页)")
+                    info(f"注释生成统计 - 收到页面: {received_pages} (共{len(annotations)}页)")
+                    if missing_pages:
+                        error(f"注释生成统计 - 缺失页面: {missing_pages}")
+                    else:
+                        info("注释生成统计 - 所有页面均已收到")
                     
                     # 保存每一页的注释
                     completed_pages = 0
+                    processed_pages = []
                     for ann in annotations:
                         page_num = ann.get('page')
                         annotation_content = ann.get('annotation', '')
@@ -2936,8 +3180,8 @@ async def generate_section_annotations(
                         if page_num and annotation_content:
                             # 添加生成时间戳和分段标记
                             section_title = section_data.get('title', f'分段{section_index + 1}')
-                            page_range = f"{section_data.get('page_start', '?')}-{section_data.get('page_end', '?')}"
-                            timestamped_content = f"<!-- 批量生成的注释 - 分段{section_index}: {section_title} (页{page_range}) - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n{annotation_content}"
+                            page_range_str = f"{section_data.get('page_start', '?')}-{section_data.get('page_end', '?')}"
+                            timestamped_content = f"<!-- 批量生成的注释 - 分段{section_index}: {section_title} (页{page_range_str}) - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n{annotation_content}"
                             
                             # 保存注释到临时文件（用于后续融合）
                             temp_annotations_dir = conversation_manager.get_board_conversations_dir(board_id) / "temp_annotations" / window_id
@@ -2951,7 +3195,13 @@ async def generate_section_annotations(
                             
                             if save_success:
                                 completed_pages += 1
+                                processed_pages.append(page_num)
                                 yield f"data: {json.dumps({'type': 'page_done', 'page': page_num, 'completed': completed_pages, 'total': len(annotations), 'annotation': timestamped_content}, ensure_ascii=False)}\n\n"
+                    
+                    # 再次检查最终处理成功的页面
+                    final_missing = [p for p in expected_range if p not in processed_pages]
+                    if final_missing:
+                        error(f"最终保存统计 - 缺失页面: {final_missing}")
                     
                     # 在主对话（AI助手）中添加系统通知
                     try:
@@ -2976,7 +3226,7 @@ async def generate_section_annotations(
                                 # 添加系统消息
                                 system_notification = {
                                     "role": "system",
-                                    "content": f"⚡ 用户对PDF文件《{pdf_filename}》的第{section_num}分段「{section_title}」（第{page_start}-{page_end}页）生成了注释。",
+                                    "content": f"⚡ 用户对PDF文件《{pdf_filename}》的第{section_num}分段「{section_title}」（第{page_start}-{page_end}页）生成了注释。成功: {completed_pages}/{len(expected_range)}" + (f" (缺失: {final_missing})" if final_missing else ""),
                                     "timestamp": datetime.now().isoformat(),
                                     "metadata": {
                                         "type": "batch_section_annotation_generated",
@@ -2987,7 +3237,9 @@ async def generate_section_annotations(
                                         "section_title": section_title,
                                         "section_summary": section_description,
                                         "page_range": [page_start, page_end],
-                                        "annotation_count": completed_pages
+                                        "annotation_count": completed_pages,
+                                        "expected_count": len(expected_range),
+                                        "missing_pages": final_missing
                                     }
                                 }
                                 
@@ -3000,10 +3252,25 @@ async def generate_section_annotations(
                     except Exception as e:
                         error(f"添加系统通知失败: {e}")
                     
-                    yield f"data: {json.dumps({'type': 'complete', 'completed_pages': completed_pages, 'total_pages': len(annotations)}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({
+                        'type': 'complete', 
+                        'completed_pages': completed_pages, 
+                        'total_pages': len(annotations),
+                        'expected_total': len(expected_range),
+                        'missing_pages': final_missing
+                    }, ensure_ascii=False)}\n\n"
                     
                 except json.JSONDecodeError as e:
                     error(f"解析注释JSON失败: {e}")
+                    # 记录到专门的错误文件
+                    try:
+                        log_path = DATA_DIR / "annotation_error.log"
+                        with open(log_path, "a", encoding="utf-8") as f:
+                            f.write(f"\n{'='*30}\n[{datetime.now().isoformat()}] JSON Decode Error (Section {section_index}, Range {page_start}-{page_end})\n")
+                            f.write(f"Error: {e}\n")
+                            f.write(f"Raw Content:\n{accumulated_content}\n")
+                            f.write(f"{'='*30}\n")
+                    except: pass
                     yield f"data: {json.dumps({'type': 'error', 'error': f'解析结果失败: {str(e)}'}, ensure_ascii=False)}\n\n"
                     
             except Exception as e:
@@ -5599,23 +5866,27 @@ async def generate_batch_summary_note(
                     info(f"分为{len(groups)}组进行分析")
                     yield f"data: {json.dumps({'type': 'status', 'message': f'分为{len(groups)}组进行逐个分析...'}, ensure_ascii=False)}\n\n"
                     
-                    # 对每组进行分析（生成局部笔记）
-                    group_notes = []
-                    for group in groups:
-                        group_num = group['group_number']
-                        page_start = group['page_start']
-                        page_end = group['page_end']
-                        status_message = f'正在分析第{group_num}组 (第{page_start}-{page_end}页)...'
-                        yield f"data: {json.dumps({'type': 'status', 'message': status_message}, ensure_ascii=False)}\n\n"
-                        
-                        # 构建组文本
-                        group_text = "\n\n".join([
-                            f"=== 第{p['page']}页 ===\n{p['content']}"
-                            for p in group['pages']
-                        ])
-                        
-                        # 构建子模型提示词 - 局部笔记
-                        sub_prompt = f"""你是一位专业的文档分析助手。请分析以下PDF文档片段的内容，生成一份**局部阅读笔记**。
+                    # 对每组进行分析 (并发处理)
+                    import asyncio
+                    queue = asyncio.Queue()
+                    semaphore = asyncio.Semaphore(3) # 并发限制
+                    
+                    async def process_summary_group(group):
+                        async with semaphore:
+                            group_num = group['group_number']
+                            page_start = group['page_start']
+                            page_end = group['page_end']
+                            
+                            await queue.put(f"data: {json.dumps({'type': 'status', 'message': f'正在并发分析第{group_num}部分 (第{page_start}-{page_end}页)...'}, ensure_ascii=False)}\n\n")
+                            
+                            # 构建组文本
+                            group_text = "\n\n".join([
+                                f"=== 第{p['page']}页 ===\n{p['content']}"
+                                for p in group['pages']
+                            ])
+                            
+                            # 构建子模型提示词 - 局部笔记
+                            sub_prompt = f"""你是一位专业的文档分析助手。请分析以下PDF文档片段的内容，生成一份**局部阅读笔记**。
 
 **文档信息**：
 - 文件名: {pdf_filename}
@@ -5633,67 +5904,93 @@ async def generate_batch_summary_note(
 5. 保持客观、准确。
 
 请输出Markdown格式的笔记内容。"""
-                        
-                        # 创建子对话记录
-                        sub_conv_id = f"summary-note-{window_id}-part{group_num}"
-                        sub_conversation = conversation_manager.get_conversation(board_id, sub_conv_id, page=None, limit=None)
-                        if not sub_conversation:
-                            sub_conversation = conversation_manager.create_conversation(
-                                board_id,
-                                title=f"全文档笔记-分组{group_num} - {pdf_filename}"
-                            )
-                            conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
-                            old_file = conversations_dir / f"{sub_conversation['id']}.json"
-                            new_file = conversations_dir / f"{sub_conv_id}.json"
-                            if old_file.exists():
-                                old_file.rename(new_file)
-                            sub_conversation['id'] = sub_conv_id
-                        
-                        # 发送给子模型
-                        sub_user_message = {
-                            "role": "user",
-                            "content": sub_prompt,
-                            "timestamp": datetime.now().isoformat(),
-                            "metadata": {
-                                "action": "generate_batch_summary_note_sub",
-                                "pdf_filename": pdf_filename,
-                                "window_id": window_id,
-                                "group_number": group_num,
-                                "page_start": group['page_start'],
-                                "page_end": group['page_end'],
-                                "method": "split"
+                            
+                            # 创建子对话记录
+                            sub_conv_id = f"summary-note-{window_id}-part{group_num}"
+                            sub_conversation = conversation_manager.get_conversation(board_id, sub_conv_id, page=None, limit=None)
+                            if not sub_conversation:
+                                sub_conversation = conversation_manager.create_conversation(
+                                    board_id,
+                                    title=f"全文档笔记-分组{group_num} - {pdf_filename}"
+                                )
+                                conversations_dir = conversation_manager.get_board_conversations_dir(board_id)
+                                old_file = conversations_dir / f"{sub_conversation['id']}.json"
+                                new_file = conversations_dir / f"{sub_conv_id}.json"
+                                if old_file.exists():
+                                    old_file.rename(new_file)
+                                sub_conversation['id'] = sub_conv_id
+                            
+                            # 发送给子模型
+                            sub_user_message = {
+                                "role": "user",
+                                "content": sub_prompt,
+                                "timestamp": datetime.now().isoformat(),
+                                "metadata": {
+                                    "action": "generate_batch_summary_note_sub",
+                                    "pdf_filename": pdf_filename,
+                                    "window_id": window_id,
+                                    "group_number": group_num,
+                                    "page_start": group['page_start'],
+                                    "page_end": group['page_end'],
+                                    "method": "split"
+                                }
                             }
-                        }
-                        
-                        sub_messages = [sub_user_message]
-                        sub_accumulated_content = ""
-                        
-                        async for chunk in llm_service.chat_completion(sub_messages, stream=True):
-                            if chunk:
-                                sub_accumulated_content += chunk
-                                # 将子模型的输出也流式传递给前端（作为进度预览）
-                                yield f"data: {json.dumps({'type': 'group_content', 'group': group_num, 'content': chunk}, ensure_ascii=False)}\n\n"
-                        
-                        # 保存子模型消息
-                        sub_assistant_message = {
-                            "role": "assistant",
-                            "content": sub_accumulated_content,
-                            "timestamp": datetime.now().isoformat(),
-                            "metadata": {
-                                "action": "generate_batch_summary_note_sub",
-                                "group_number": group_num,
-                                "method": "split"
+                            
+                            sub_messages = [sub_user_message]
+                            sub_accumulated_content = ""
+                            
+                            async for chunk in llm_service.chat_completion(sub_messages, stream=True):
+                                if chunk:
+                                    sub_accumulated_content += chunk
+                                    # 将子模型的输出也流式传递给前端（作为进度预览）
+                                    await queue.put(f"data: {json.dumps({'type': 'group_content', 'group': group_num, 'content': chunk}, ensure_ascii=False)}\n\n")
+                            
+                            # 保存子模型消息
+                            sub_assistant_message = {
+                                "role": "assistant",
+                                "content": sub_accumulated_content,
+                                "timestamp": datetime.now().isoformat(),
+                                "metadata": {
+                                    "action": "generate_batch_summary_note_sub",
+                                    "group_number": group_num,
+                                    "method": "split"
+                                }
                             }
-                        }
+                            
+                            conversation_manager.add_message(board_id, sub_conv_id, sub_user_message)
+                            conversation_manager.add_message(board_id, sub_conv_id, sub_assistant_message)
+                            
+                            # 发送完成信号
+                            await queue.put(f"data: {json.dumps({'type': 'group_done', 'group': group_num}, ensure_ascii=False)}\n\n")
+                            
+                            return {
+                                'group_number': group_num,
+                                'content': sub_accumulated_content
+                            }
+                    
+                    # 创建任务
+                    tasks = [asyncio.create_task(process_summary_group(g)) for g in groups]
+                    
+                    # 等待任务并管理队列
+                    async def summary_waiter():
+                        results = await asyncio.gather(*tasks)
+                        await queue.put(None) # 结束信号
+                        return results
                         
-                        conversation_manager.add_message(board_id, sub_conv_id, sub_user_message)
-                        conversation_manager.add_message(board_id, sub_conv_id, sub_assistant_message)
+                    waiter_task = asyncio.create_task(summary_waiter())
+                    
+                    # 从队列中读取消息并yield
+                    while True:
+                        msg = await queue.get()
+                        if msg is None:
+                            break
+                        yield msg
                         
-                        group_notes.append({
-                            'group_number': group_num,
-                            'content': sub_accumulated_content
-                        })
-                        yield f"data: {json.dumps({'type': 'group_done', 'group': group_num}, ensure_ascii=False)}\n\n"
+                    # 获取最终结果
+                    group_notes_results = await waiter_task
+                    
+                    # 整理结果（按组号排序）
+                    group_notes = sorted(group_notes_results, key=lambda x: x['group_number'])
                     
                     # 汇总所有分组笔记
                     yield f"data: {json.dumps({'type': 'status', 'message': '所有分组分析完成，正在整合成总笔记...'}, ensure_ascii=False)}\n\n"

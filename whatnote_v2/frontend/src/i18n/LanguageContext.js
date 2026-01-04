@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import translations from './translations';
 
 const LanguageContext = createContext();
@@ -28,7 +28,7 @@ export const LanguageProvider = ({ children, initialSettings }) => {
    * 2. translations[key]['default'][language]
    * 3. translations[key]['default']['zh-CN']
    */
-  const t = (key) => {
+  const t = useCallback((key) => {
     const entry = translations[key];
     if (!entry) return key;
 
@@ -48,9 +48,9 @@ export const LanguageProvider = ({ children, initialSettings }) => {
     }
 
     return key;
-  };
+  }, [language, theme]);
 
-  const updateLanguage = async (newLang) => {
+  const updateLanguage = useCallback(async (newLang) => {
     try {
       const response = await fetch(`http://localhost:8081/api/personalization/language`, {
         method: 'PUT',
@@ -65,15 +65,15 @@ export const LanguageProvider = ({ children, initialSettings }) => {
       console.error('Failed to update language:', err);
     }
     return false;
-  };
+  }, []);
 
-  const value = {
+  const value = useMemo(() => ({
     language,
     theme,
     setTheme,
     t,
     updateLanguage
-  };
+  }), [language, theme, t, updateLanguage]);
 
   return (
     <LanguageContext.Provider value={value}>

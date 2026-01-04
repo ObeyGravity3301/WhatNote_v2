@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import './CalendarPlannerWindow.css';
+import { useLanguage } from '../i18n/LanguageContext';
 
-const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+// 星期数组将在组件内部根据语言动态生成
 
 const getMonthMatrix = (date) => {
   const year = date.getFullYear();
@@ -52,9 +53,7 @@ const getMonthMatrix = (date) => {
   return cells;
 };
 
-const formatDateLabel = (date) => {
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
-};
+// formatDateLabel 将在组件内部根据语言动态生成
 
 const formatDateKey = (date) => {
   const year = date.getFullYear();
@@ -66,6 +65,7 @@ const formatDateKey = (date) => {
 // 已移除 loadInitialPlannerData，改为从后端加载
 
 function CalendarPlannerWindow({ initialDate }) {
+  const { t, language } = useLanguage();
   const [currentDate, setCurrentDate] = useState(() => initialDate ? new Date(initialDate) : new Date());
   const [selectedDate, setSelectedDate] = useState(() => initialDate ? new Date(initialDate) : new Date());
   const [plannerData, setPlannerData] = useState({});
@@ -75,10 +75,60 @@ function CalendarPlannerWindow({ initialDate }) {
   const [editTaskTitle, setEditTaskTitle] = useState('');
   const [editTaskTime, setEditTaskTime] = useState('');
 
+  // 根据语言动态生成星期数组（用于日历表头显示，单字或缩写）
+  const WEEKDAYS = useMemo(() => [
+    t('calendar_weekday_0'),
+    t('calendar_weekday_1'),
+    t('calendar_weekday_2'),
+    t('calendar_weekday_3'),
+    t('calendar_weekday_4'),
+    t('calendar_weekday_5'),
+    t('calendar_weekday_6')
+  ], [t]);
+
+  // 根据语言动态生成完整星期名称数组（用于显示选中日期的星期）
+  const FULL_WEEKDAYS = useMemo(() => [
+    t('calendar_weekday_full_0'),
+    t('calendar_weekday_full_1'),
+    t('calendar_weekday_full_2'),
+    t('calendar_weekday_full_3'),
+    t('calendar_weekday_full_4'),
+    t('calendar_weekday_full_5'),
+    t('calendar_weekday_full_6')
+  ], [t]);
+
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }, []);
+
+  // 根据语言格式化日期标签
+  const formatDateLabel = useCallback((date) => {
+    if (language.startsWith('en')) {
+      // 英文格式: January 1, 2024
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    } else if (language.startsWith('ja')) {
+      // 日文格式: 2024年1月1日
+      return `${date.getFullYear()}${t('date_format_year')}${date.getMonth() + 1}${t('date_format_month')}${date.getDate()}${t('date_format_day')}`;
+    } else {
+      // 中文格式: 2024年1月1日
+      return `${date.getFullYear()}${t('date_format_year')}${date.getMonth() + 1}${t('date_format_month')}${date.getDate()}${t('date_format_day')}`;
+    }
+  }, [t, language]);
+
+  // 根据语言格式化月份标签
+  const formatMonthLabel = useCallback((date) => {
+    if (language.startsWith('en')) {
+      // 英文格式: January 2024
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+    } else if (language.startsWith('ja')) {
+      // 日文格式: 2024年1月
+      return `${date.getFullYear()}${t('date_format_year')}${date.getMonth() + 1}${t('date_format_month')}`;
+    } else {
+      // 中文格式: 2024年1月
+      return `${date.getFullYear()}${t('date_format_year')}${date.getMonth() + 1}${t('date_format_month')}`;
+    }
+  }, [t, language]);
 
   const monthMatrix = useMemo(() => getMonthMatrix(currentDate), [currentDate]);
   const selectedDateKey = useMemo(() => formatDateKey(selectedDate), [selectedDate]);
@@ -277,12 +327,12 @@ function CalendarPlannerWindow({ initialDate }) {
     <div className="calendar-planner-window">
       <div className="calendar-panel">
         <div className="calendar-header">
-          <button className="calendar-nav-btn" onClick={handlePrevMonth} aria-label="上一月">◀</button>
+          <button className="calendar-nav-btn" onClick={handlePrevMonth} aria-label={t('calendar_prev_month')}>◀</button>
           <div className="calendar-header-title">
-            <div className="calendar-month-label">{currentDate.getFullYear()}年{currentDate.getMonth() + 1}月</div>
-            <div className="calendar-subtitle">快速查看当月安排</div>
+            <div className="calendar-month-label">{formatMonthLabel(currentDate)}</div>
+            <div className="calendar-subtitle">{t('calendar_subtitle')}</div>
           </div>
-          <button className="calendar-nav-btn" onClick={handleNextMonth} aria-label="下一月">▶</button>
+          <button className="calendar-nav-btn" onClick={handleNextMonth} aria-label={t('calendar_next_month')}>▶</button>
         </div>
         <div className="calendar-weekdays">
           {WEEKDAYS.map(weekday => (
@@ -313,8 +363,7 @@ function CalendarPlannerWindow({ initialDate }) {
           })}
         </div>
         <div className="calendar-footer">
-          <button className="calendar-footer-btn" onClick={handleToday}>回到今天</button>
-          <div className="calendar-footer-label">选中日期将在右侧展示，计划功能稍后补充</div>
+          <button className="calendar-footer-btn" onClick={handleToday}>{t('calendar_back_to_today')}</button>
         </div>
       </div>
 
@@ -322,13 +371,13 @@ function CalendarPlannerWindow({ initialDate }) {
         <div className="planner-header">
           <div>
             <div className="planner-selected-date">{formatDateLabel(selectedDate)}</div>
-            <div className="planner-selected-weekday">星期{WEEKDAYS[selectedDate.getDay()]}</div>
+            <div className="planner-selected-weekday">{FULL_WEEKDAYS[selectedDate.getDay()]}</div>
           </div>
           <div className="planner-actions" onKeyDown={handleFormKeyDown}>
             <input
               className="planner-input planner-input-title"
               type="text"
-              placeholder="新增待办名称"
+              placeholder={t('planner_new_task_placeholder')}
               value={newTaskName}
               onChange={(e) => setNewTaskName(e.target.value)}
             />
@@ -345,7 +394,7 @@ function CalendarPlannerWindow({ initialDate }) {
               onClick={handleAddTask}
               disabled={!newTaskName.trim() || !newTaskTime}
             >
-              添加待办
+              {t('planner_add_task')}
             </button>
           </div>
         </div>
@@ -353,9 +402,9 @@ function CalendarPlannerWindow({ initialDate }) {
         <div className="planner-content">
           {tasksForSelectedDate.length === 0 ? (
             <div className="planner-placeholder">
-              <div className="planner-placeholder-title">暂未添加待办</div>
-              <p>使用上方输入框添加新的计划事项，支持精确到分钟的开始时间。</p>
-              <p>勾选事项即可标记完成，完成后的待办会自动移动到列表底部。</p>
+              <div className="planner-placeholder-title">{t('planner_no_tasks')}</div>
+              <p>{t('planner_no_tasks_desc')}</p>
+              <p>{t('planner_no_tasks_desc2')}</p>
             </div>
           ) : (
             <div className="planner-task-list">

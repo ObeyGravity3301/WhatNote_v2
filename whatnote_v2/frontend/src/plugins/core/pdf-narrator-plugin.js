@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import ShortcutManager from '../../utils/ShortcutManager';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 const NarratorPluginComponent = (props) => {
+  const { t } = useLanguage();
   const { windowId, boardId, pageControl } = props;
 
   const NARRATOR_TOOLBAR_ITEM_STYLE = {
@@ -370,7 +372,7 @@ const NarratorPluginComponent = (props) => {
           });
       } catch (e) {
           console.error('切换模型失败:', e);
-          alert('切换模型失败，请检查后端连接');
+          alert(t('narrator_switch_fail'));
       }
   };
 
@@ -606,12 +608,13 @@ const NarratorPluginComponent = (props) => {
 
     setIsBatchProcessing(true);
     stopBatchRef.current = false;
-    setBatchProgress({ current: 0, total, type, message: '准备中...' });
+    setBatchProgress({ current: 0, total, type, message: t('narrator_preparing') });
 
     try {
       if (type === 'script' || type === 'script-missing') {
-          // ... (Previous batch script logic remains same, simplified for brevity)
-          // Assume this part is unchanged
+          const prefix = type === 'script-missing' ? t('narrator_batch_prefix_fill') : t('narrator_batch_prefix_batch');
+          setBatchProgress({ current: 0, total, type: 'script', message: t('narrator_batch_start_script').replace('{prefix}', prefix) });
+          
           let outlineData = null;
           let subdivisionData = null;
           try {
@@ -620,7 +623,7 @@ const NarratorPluginComponent = (props) => {
           } catch(e) {}
 
           if (!outlineData || !outlineData.outline) {
-              setBatchProgress({ current: 0, total: 100, type: 'analyzing', message: '未找到文档结构，正在执行大纲分析 (1/2)...' });
+              setBatchProgress({ current: 0, total: 100, type: 'analyzing', message: t('narrator_analyzing_outline') });
               try {
                   await runSSETask(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/outline`, (d) => {
                       if (d.type === 'status') setBatchProgress(p => ({...p, message: d.message}));
@@ -640,7 +643,7 @@ const NarratorPluginComponent = (props) => {
           } catch(e) {}
 
           if ((!subdivisionData || !subdivisionData.subdivisions) && outlineData && outlineData.outline) {
-              setBatchProgress({ current: 0, total: 100, type: 'analyzing', message: '正在细分文档结构 (2/2)...' });
+              setBatchProgress({ current: 0, total: 100, type: 'analyzing', message: t('narrator_subdividing') });
               try {
                   await runSSETask(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivide`, (d) => {
                       if (d.type === 'status') setBatchProgress(p => ({...p, message: d.message}));
@@ -718,7 +721,7 @@ const NarratorPluginComponent = (props) => {
                       setBatchProgress(prev => ({
                            ...prev, 
                            current: Math.min(section.page_end, prev.total),
-                           message: `跳过重复分段 ${index + 1}...`
+                           message: t('narrator_skip_section').replace('{index}', index + 1)
                       }));
                       continue;
                   }
@@ -753,7 +756,7 @@ const NarratorPluginComponent = (props) => {
                       setBatchProgress(prev => ({
                           ...prev,
                           current: Math.min(section.target_page_end, prev.total),
-                          message: `跳过已完成分段 ${section.title || (index + 1)}...`
+                          message: t('narrator_skip_completed_section').replace('{title}', section.title || (index + 1))
                       }));
                       continue;
                   }
@@ -767,7 +770,9 @@ const NarratorPluginComponent = (props) => {
                           current: range.start, 
                       total: total, 
                       type: 'script',
-                          message: `正在生成: ${section.title || `第 ${index+1} 部分`} [${range.start}-${range.end}] (并⾏处理中)...` 
+                          message: t('narrator_generating')
+                            .replace('{title}', section.title || `Part ${index+1}`)
+                            .replace('{range}', `${range.start}-${range.end}`)
                   });
 
                   try {
@@ -802,50 +807,51 @@ const NarratorPluginComponent = (props) => {
                               if (done) break;
                               const chunk = decoder.decode(value, { stream: true });
                               const lines = chunk.split('\n\n');
-                          for (const line of lines) {
-                              if (line.startsWith('data: ')) {
-                                  try {
-                                      const data = JSON.parse(line.substring(6));
-                                      if (data.type === 'status') {
-                                          setBatchProgress(prev => ({ ...prev, message: data.message }));
-                                      } else if (data.type === 'error') {
-                                          console.error('Batch error:', data.error);
-                                          setBatchProgress(prev => ({ ...prev, message: `错误: ${data.error}` }));
-                                          // 不立即停止，继续下一页，或者根据需要处理
-                                      } else if (data.type === 'page_done') {
-                                          const { page, content } = data;
-                                          
-                                          // Async save
-                                          fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/scripts/${page}`, {
-                                              method: 'PUT',
-                                              headers: {'Content-Type': 'application/json'},
-                                              body: JSON.stringify({ content: content })
-                                          }).catch(console.error);
-                                          
-                                          // React state update
-                                          setScripts(prev => ({ ...prev, [page]: content }));
+                              for (const line of lines) {
+                                  if (line.startsWith('data: ')) {
+                                      try {
+                                          const data = JSON.parse(line.substring(6));
+                                          if (data.type === 'page_done') {
+                                              const { page, content } = data;
+                                              
+                                              // Async save
+                                              fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/scripts/${page}`, {
+                                                  method: 'PUT',
+                                                  headers: {'Content-Type': 'application/json'},
+                                                  body: JSON.stringify({ content: content })
+                                              }).catch(console.error);
+                                              
+                                              // React state update
+                                              setScripts(prev => ({ ...prev, [page]: content }));
 
-                                          // If it's current page
-                                          if (page === pageControl.currentPage) {
-                                              setCurrentScript(content);
-                                              setLastSavedScript(content);
+                                              // If it's current page
+                                              if (page === pageControl.currentPage) {
+                                                  setCurrentScript(content);
+                                                  setLastSavedScript(content);
+                                              }
+                                              
+                                              // Persist
+                                              try {
+                                                      const storageKey = `narrator_scripts_${boardId}_${windowId}`;
+                                                  const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+                                                  saved[page] = content;
+                                                  localStorage.setItem(storageKey, JSON.stringify(saved));
+                                              } catch(e) {}
+
+                                              setBatchProgress(prev => ({ ...prev, current: page }));
+                                          } else if (data.type === 'complete') {
+                                              const missing = data.missing_pages || [];
+                                              if (missing.length > 0) {
+                                                  console.warn(`[BatchScript] 分段 ${index} 生成不完整，缺失页面:`, missing);
+                                              }
+                                              setBatchProgress(prev => ({ 
+                                                  ...prev, 
+                                                  message: missing.length > 0 ? t('narrator_batch_missing').replace('{pages}', missing.join(', ')) : t('narrator_batch_complete') 
+                                              }));
                                           }
-                                          
-                                          // Persist
-                                          try {
-                                                  const storageKey = `narrator_scripts_${boardId}_${windowId}`;
-                                              const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-                                              saved[page] = content;
-                                              localStorage.setItem(storageKey, JSON.stringify(saved));
-                                          } catch(e) {}
-
-                                          setBatchProgress(prev => ({ ...prev, current: page }));
-                                      }
-                                  } catch (e) {
-                                      console.error('Failed to parse SSE data:', e);
+                                      } catch (e) {}
                                   }
                               }
-                          }
                           }
                       }
                   } catch (err) { console.error(err); }
@@ -857,8 +863,8 @@ const NarratorPluginComponent = (props) => {
           await Promise.all(workers);
 
       } else if (type === 'audio' || type === 'audio-missing') {
-        const msgPrefix = type === 'audio-missing' ? '补全' : '批量';
-        setBatchProgress({ current: 0, total, type: 'audio', message: `开始${msgPrefix}合成语音...` });
+        const prefix = type === 'audio-missing' ? t('narrator_batch_prefix_fill') : t('narrator_batch_prefix_batch');
+        setBatchProgress({ current: 0, total, type: 'audio', message: t('narrator_batch_start_audio').replace('{prefix}', prefix) });
         
         for (let i = 1; i <= total; i++) {
             if (stopBatchRef.current) break;
@@ -889,7 +895,7 @@ const NarratorPluginComponent = (props) => {
 
                 if (skip) {
                     // Update progress without generating
-                    setBatchProgress(prev => ({ ...prev, current: i, message: `跳过已存在的第 ${i} 页...` }));
+                    setBatchProgress(prev => ({ ...prev, current: i, message: t('narrator_skipping').replace('{page}', i) }));
                     // Use a very short timeout to keep UI responsive but fast
                     await new Promise(r => setTimeout(r, 50)); 
                     continue; 
@@ -906,7 +912,7 @@ const NarratorPluginComponent = (props) => {
 
                 // Only generate if we have text
                 if (text) {
-                   setBatchProgress(prev => ({ ...prev, current: i, message: `正在合成第 ${i} 页语音...` }));
+                   setBatchProgress(prev => ({ ...prev, current: i, message: t('narrator_synthesizing').replace('{page}', i) }));
                    
                    // Call same endpoint
                    const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/audio/${i}`, {
@@ -945,7 +951,7 @@ const NarratorPluginComponent = (props) => {
     if (!boardId || !windowId || !pageControl) return;
     const page = pageControl.currentPage;
     setIsGenerating(true);
-    setCurrentScript('正在生成讲稿...');
+    setCurrentScript(t('narrator_generating_script_status'));
 
     try {
         const text = await fetchScriptForPage(page);
@@ -966,7 +972,7 @@ const NarratorPluginComponent = (props) => {
         setLastSavedScript(text);
     } catch (error) {
         console.error(error);
-        setCurrentScript('生成出错: ' + error.message);
+        setCurrentScript(t('narrator_gen_error').replace('{error}', error.message));
     } finally {
         setIsGenerating(false);
     }
@@ -1014,7 +1020,7 @@ const NarratorPluginComponent = (props) => {
 
   const startPresentation = () => {
       if (!audioUrl) {
-          alert('当前页没有语音，无法开始演示');
+          alert(t('narrator_no_audio_alert'));
           return;
       }
       setIsAutoMode(true);
@@ -1028,10 +1034,10 @@ const NarratorPluginComponent = (props) => {
 
   const getPlaybackModeIcon = () => {
       switch(playbackMode) {
-          case 'page_once': return '➡️ 单页';
-          case 'page_loop': return '🔂 单页循环';
-          case 'doc_once': return '⏩ 全文';
-          case 'doc_loop': return '🔁 全文循环';
+          case 'page_once': return t('narrator_mode_page_once');
+          case 'page_loop': return t('narrator_mode_page_loop');
+          case 'doc_once': return t('narrator_mode_doc_once');
+          case 'doc_loop': return t('narrator_mode_doc_loop');
           default: return '⏩';
       }
   };
@@ -1094,9 +1100,9 @@ const NarratorPluginComponent = (props) => {
             saveSettingsToLocal();
             // alert('参考音频上传成功！请确保在下方文本框中输入该音频对应的文字内容。');
         }
-        else alert('上传失败: ' + (data.detail || 'Unknown error'));
+        else alert(t('narrator_upload_fail').replace('{error}', data.detail || 'Unknown error'));
     } catch (e) {
-        alert('上传出错: ' + e.message);
+        alert(t('narrator_upload_error').replace('{error}', e.message));
     }
   };
 
@@ -1104,9 +1110,9 @@ const NarratorPluginComponent = (props) => {
     try {
         const res = await fetch('http://localhost:8081/api/tts/status');
         const data = await res.json();
-        alert(`TTS 服务状态: ${data.status}\n${data.error || ''}`);
+        alert(t('narrator_status_alert').replace('{status}', data.status).replace('{error}', data.error || ''));
     } catch (e) {
-        alert('无法连接到后端服务');
+        alert(t('narrator_conn_error'));
     }
   };
 
@@ -1134,35 +1140,49 @@ const NarratorPluginComponent = (props) => {
         onMouseLeave={handleNarratorMouseLeave}
         onMouseDown={handleNarratorMouseDown}
         onMouseUp={handleNarratorMouseUp}
-        title="打开智能讲解控制台"
+        title={t('narrator_btn_title')}
       >
-        🗣️ 讲解
+        {t('narrator_btn')}
       </button>
       
       {showPanel && container && ReactDOM.createPortal(
           <div style={{
             width: '100%',
-            height: viewMode === 'settings' ? '300px' : '180px',
+            height: `${props.narratorHeight || (viewMode === 'settings' ? 300 : (viewMode === 'player' && !showSubtitles ? 100 : 180))}px`,
             position: 'static',
             backgroundColor: '#c0c0c0',
             borderTop: '2px outset #ffffff',
             fontFamily: 'MS Sans Serif, sans-serif',
             fontSize: '12px',
-                     display: 'flex',
-                     flexDirection: 'column',
-            overflow: 'hidden',
-            transition: 'height 0.3s ease'
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
           }}>
+            {/* 顶部调整高度控制条 */}
+            <div 
+              onMouseDown={(e) => {
+                e.preventDefault();
+                if (props.setIsResizingNarrator) props.setIsResizingNarrator(true);
+              }}
+              style={{
+                height: '4px',
+                cursor: 'row-resize',
+                width: '100%',
+                backgroundColor: props.isResizingNarrator ? '#000080' : 'transparent',
+                zIndex: 10,
+                flexShrink: 0
+              }}
+            />
             
             {/* --- VIEW: SETTINGS --- */}
             {viewMode === 'settings' && (
                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '8px', overflowY: 'auto' }}>
                    <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px', alignItems:'center'}}>
-                       <span style={{fontWeight:'bold', color: '#000080'}}>⚙️ 设置</span>
-                       <button onClick={() => setViewMode('player')}>🔙 返回</button>
+                       <span style={{fontWeight:'bold', color: '#000080'}}>{t('narrator_settings')}</span>
+                       <button onClick={() => setViewMode('player')}>{t('narrator_back')}</button>
                    </div>
                    
-                   <div style={{fontWeight: 'bold', color: '#444', marginBottom:'2px'}}>讲稿生成提示词 (Prompt)</div>
+                   <div style={{fontWeight: 'bold', color: '#444', marginBottom:'2px'}}>{t('narrator_prompt_label')}</div>
                        <textarea 
                            value={customPrompt}
                            onChange={(e) => setCustomPrompt(e.target.value)}
@@ -1171,16 +1191,16 @@ const NarratorPluginComponent = (props) => {
                    
                    <div style={{display:'flex', gap:'10px'}}>
                        <div style={{flex:1, border:'1px dotted #888', padding:'4px', backgroundColor:'#ece9d8'}}>
-                            <div style={{fontWeight:'bold', fontSize:'11px'}}>🗣️ 参考音色 (Reference)</div>
+                            <div style={{fontWeight:'bold', fontSize:'11px'}}>{t('narrator_reference_label')}</div>
                             <div style={{display:'flex', gap:'4px', marginTop:'4px', alignItems:'center'}}>
                                 <select value={refLang} onChange={e => setRefLang(e.target.value)} style={{width:'60px'}}>
-                                    <option value="zh">中文</option>
-                                    <option value="en">EN</option>
-                                    <option value="ja">JP</option>
+                                    <option value="zh">{t('lang_zh')}</option>
+                                    <option value="en">{t('lang_en')}</option>
+                                    <option value="ja">{t('lang_ja')}</option>
                                     </select>
                                 
                                 {!refAudioExists ? (
-                                    <button onClick={() => document.getElementById(`ref-up-${windowId}`).click()} style={{flex:1}}>📤 上传参考音频</button>
+                                    <button onClick={() => document.getElementById(`ref-up-${windowId}`).click()} style={{flex:1}}>{t('narrator_upload_ref')}</button>
                                 ) : (
                                     <>
                                         <div style={{flex:1, border:'1px inset #fff', background:'#fff', padding:'2px', height:'20px', display:'flex', alignItems:'center', overflow:'hidden'}}>
@@ -1188,7 +1208,7 @@ const NarratorPluginComponent = (props) => {
                                                 {refFilename || 'default.wav'}
                                             </span>
                                 </div>
-                                        <button onClick={() => document.getElementById(`ref-up-${windowId}`).click()} style={{width:'auto', padding:'0 6px'}} title="更换参考音频">📂</button>
+                                        <button onClick={() => document.getElementById(`ref-up-${windowId}`).click()} style={{width:'auto', padding:'0 6px'}} title={t('narrator_change_ref')}>📂</button>
                                     </>
                                 )}
                                 
@@ -1200,20 +1220,20 @@ const NarratorPluginComponent = (props) => {
                                 <audio controls src={`http://localhost:8081/api/tts/reference/audio?t=${audioTimestamp}`} style={{width:'100%', height:'25px', marginTop:'4px'}} />
                             )}
                             
-                            <textarea value={refText} onChange={e => setRefText(e.target.value)} placeholder="输入参考音频的文字内容..." 
+                            <textarea value={refText} onChange={e => setRefText(e.target.value)} placeholder={t('narrator_ref_text_placeholder')} 
                                 style={{width:'100%', height: refAudioExists ? '30px' : '55px', marginTop:'4px', fontSize:'10px', resize:'none'}} />
                             </div>
 
                        <div style={{flex:1, border:'1px dotted #888', padding:'4px', backgroundColor:'#fff'}}>
-                            <div style={{fontWeight:'bold', fontSize:'11px'}}>🧠 模型 (Model)</div>
+                            <div style={{fontWeight:'bold', fontSize:'11px'}}>{t('narrator_model_label')}</div>
                             <div style={{display:'flex', flexDirection:'column', gap:'4px', marginTop:'4px'}}>
                                 <div style={{display:'flex', alignItems:'center'}}>
-                                    <span style={{width:'40px'}}>输出:</span>
+                                    <span style={{width:'40px'}}>{t('narrator_output_lang')}</span>
                                     <select value={targetLang} onChange={e => setTargetLang(e.target.value)} style={{flex:1}}>
-                                        <option value="zh">中英混合</option>
-                                        <option value="en">纯英文</option>
-                                        <option value="ja">日英混合</option>
-                                        <option value="auto">自动</option>
+                                        <option value="zh">{t('narrator_mixed_zh')}</option>
+                                        <option value="en">{t('narrator_pure_en')}</option>
+                                        <option value="ja">{t('narrator_mixed_ja')}</option>
+                                        <option value="auto">{t('narrator_auto_lang')}</option>
                                     </select>
                                 </div>
                                 <div style={{display:'flex', alignItems:'center'}}>
@@ -1235,8 +1255,8 @@ const NarratorPluginComponent = (props) => {
                    </div>
                    
                    <div style={{marginTop:'8px', textAlign:'right'}}>
-                       <button onClick={fetchModels} style={{marginRight:'8px'}}>🔄 刷新模型</button>
-                       <button onClick={handleSaveSettings} style={{fontWeight:'bold', padding:'2px 8px'}}>💾 保存设置</button>
+                       <button onClick={fetchModels} style={{marginRight:'8px'}}>{t('narrator_refresh_models')}</button>
+                       <button onClick={handleSaveSettings} style={{fontWeight:'bold', padding:'2px 8px'}}>{t('narrator_save_settings')}</button>
                    </div>
                </div>
             )}
@@ -1245,17 +1265,17 @@ const NarratorPluginComponent = (props) => {
             {viewMode === 'editor' && (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '8px' }}>
                     <div style={{display:'flex', justifyContent:'space-between', marginBottom:'4px', alignItems:'center'}}>
-                       <span style={{fontWeight:'bold', color: '#000080'}}>📝 第 {pageControl.currentPage} 页讲稿</span>
-                       <button onClick={() => setViewMode('player')}>🔙 返回播放器</button>
+                       <span style={{fontWeight:'bold', color: '#000080'}}>{t('narrator_script_page').replace('{page}', pageControl.currentPage)}</span>
+                       <button onClick={() => setViewMode('player')}>{t('narrator_back_to_player')}</button>
                      </div>
                      <textarea
                         value={currentScript}
                         onChange={(e) => setCurrentScript(e.target.value)}
                         style={{ flex: 1, resize: 'none', padding: '4px', fontFamily:'inherit', fontSize:'12px' }}
-                        placeholder="在此处输入或修改讲稿..."
+                        placeholder={t('narrator_edit_placeholder')}
                     />
                     <div style={{textAlign:'right', fontSize:'10px', color:'#666', marginTop:'2px'}}>
-                        {currentScript !== lastSavedScript ? '💾 正在自动保存...' : '✅ 已保存'}
+                        {currentScript !== lastSavedScript ? t('narrator_saving') : t('narrator_saved')}
                     </div>
                    </div>
                )}
@@ -1281,18 +1301,17 @@ const NarratorPluginComponent = (props) => {
                             lineHeight: '1.4',
                             overflowY: 'auto'
                         }}>
-                            {currentSubtitle || (audioUrl ? (isPlaying ? "..." : "点击播放") : "暂无语音")}
+                            {currentSubtitle || (audioUrl ? (isPlaying ? "..." : t('narrator_click_to_play')) : t('narrator_no_audio'))}
                     <button
                                 onClick={() => setShowSubtitles(false)}
                       style={{
                                     position: 'absolute', right: '4px', top: '4px', 
                                     background:'transparent', border:'none', color:'#888', cursor:'pointer', fontSize:'10px'
                       }}
-                                title="隐藏字幕"
+                                title={t('narrator_hide_subtitles')}
                             >✕</button>
                   </div>
                     )}
-                    {!showSubtitles && <div style={{flex:1, background:'#333'}}></div>}
                     
                     {/* 2. Progress Bar */}
                     <div style={{
@@ -1326,7 +1345,7 @@ const NarratorPluginComponent = (props) => {
                         />
                         <span style={{minWidth:'35px'}}>{formatTime(audioDuration)}</span>
                         {!showSubtitles && (
-                            <button onClick={() => setShowSubtitles(true)} style={{border:'1px solid #999', background:'#fff', cursor:'pointer', fontSize:'10px', padding:'0 4px'}}>字幕</button>
+                            <button onClick={() => setShowSubtitles(true)} style={{border:'1px solid #999', background:'#fff', cursor:'pointer', fontSize:'10px', padding:'0 4px'}}>{t('narrator_show_subtitles')}</button>
                         )}
                   </div>
     
@@ -1342,16 +1361,16 @@ const NarratorPluginComponent = (props) => {
                         {/* Left: Generators */}
                         <div style={{display: 'flex', gap: '4px', alignItems:'center'}}>
                             <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
-                                <button onClick={generateScript} title="生成本页讲稿" disabled={isGenerating} style={{fontSize:'10px', padding:'0 4px'}}>📝 文</button>
-                                <button onClick={generateAudio} title="生成本页语音" disabled={isGeneratingAudio} style={{fontSize:'10px', padding:'0 4px'}}>🔊 音</button>
+                                <button onClick={generateScript} title={t('narrator_gen_script')} disabled={isGenerating} style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}>📝 {t('narrator_script_short')}</button>
+                                <button onClick={generateAudio} title={t('narrator_gen_audio')} disabled={isGeneratingAudio} style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}>🔊 {t('narrator_audio_short')}</button>
                     </div>
                             <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
-                                <button onClick={() => startBatch('script')} title="生成全部讲稿" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>📚 批量文</button>
-                                <button onClick={() => startBatch('audio')} title="生成全部语音" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>💿 批量音</button>
+                                <button onClick={() => startBatch('script')} title={t('narrator_batch_script')} disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}>📚 {t('narrator_batch_script_short')}</button>
+                                <button onClick={() => startBatch('audio')} title={t('narrator_batch_audio')} disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}>💿 {t('narrator_batch_audio_short')}</button>
                             </div>
                             <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
-                                <button onClick={() => startBatch('script-missing')} title="补全未生成讲稿" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>➕ 补全</button>
-                                <button onClick={() => startBatch('audio-missing')} title="补全未生成语音" disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px'}}>➕ 补全</button>
+                                <button onClick={() => startBatch('script-missing')} title={t('narrator_missing_script')} disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}>➕ {t('narrator_fill_short')}</button>
+                                <button onClick={() => startBatch('audio-missing')} title={t('narrator_missing_audio')} disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}>➕ {t('narrator_fill_short')}</button>
                             </div>
                             <span style={{fontSize:'10px', color:'#666', marginLeft:'2px'}}>
                                 {isBatchProcessing ? batchProgress.current + '/' + batchProgress.total : ''}
@@ -1362,12 +1381,13 @@ const NarratorPluginComponent = (props) => {
                         <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
                     <button
                       onClick={() => { setIsAutoMode(false); pageControl.goToPreviousPage(); }}
-                                title="上一页"
+                                title={t('narrator_prev_page')}
                                 style={{fontSize:'18px', background:'transparent', border:'none', cursor:'pointer', color:'#000'}}
                             >⏮</button>
                     <button
                       onClick={isAutoMode ? togglePlay : startPresentation}
                       disabled={!audioUrl}
+                      title={t('narrator_play_pause')}
                       style={{ 
                                     width: '36px', height: '36px', borderRadius:'50%', 
                                     fontSize: '18px', fontWeight:'bold', 
@@ -1381,13 +1401,13 @@ const NarratorPluginComponent = (props) => {
                     </button>
                     <button
                       onClick={() => { setIsAutoMode(false); pageControl.goToNextPage(); }}
-                                title="下一页"
+                                title={t('narrator_next_page')}
                                 style={{fontSize:'18px', background:'transparent', border:'none', cursor:'pointer', color:'#000'}}
                             >⏭</button>
                             <button 
                                 onClick={togglePlaybackMode} 
-                                title={`模式: ${getPlaybackModeIcon()}`} 
-                                style={{width:'24px', background:'transparent', border:'none', cursor:'pointer', fontSize:'14px'}}
+                                title={`${t('narrator_mode_label')} ${getPlaybackModeIcon()}`} 
+                                style={{width:'auto', minWidth:'24px', background:'transparent', border:'none', cursor:'pointer', fontSize:'14px', whiteSpace:'nowrap'}}
                     >
                                 {getPlaybackModeIcon().split(' ')[0]}
                     </button>
@@ -1395,10 +1415,10 @@ const NarratorPluginComponent = (props) => {
 
                         {/* Right: Tools */}
                         <div style={{display: 'flex', gap: '6px', alignItems:'center'}}>
-                            <button onClick={() => setViewMode('editor')} title="编辑讲稿" style={{padding:'4px'}}>✏️ 编辑</button>
-                            <button onClick={() => setViewMode('settings')} title="设置" style={{padding:'4px'}}>⚙️</button>
+                            <button onClick={() => setViewMode('editor')} title={t('narrator_edit')} style={{padding:'4px', whiteSpace:'nowrap'}}>✏️ {t('narrator_edit').split(' ')[1] || t('narrator_edit')}</button>
+                            <button onClick={() => setViewMode('settings')} title={t('narrator_settings')} style={{padding:'4px'}}>⚙️</button>
                             <div style={{width:'1px', height:'20px', background:'#888', margin:'0 2px'}}></div>
-                            <button onClick={() => setShowPanel(false)} title="关闭" style={{padding:'4px', fontWeight:'bold', color:'red'}}>✕</button>
+                            <button onClick={() => setShowPanel(false)} title={t('narrator_close')} style={{padding:'4px', fontWeight:'bold', color:'red'}}>✕</button>
                </div>
             </div>
             </div>
