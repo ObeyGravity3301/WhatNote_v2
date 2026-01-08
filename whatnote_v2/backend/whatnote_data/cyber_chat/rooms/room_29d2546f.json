@@ -10,18 +10,6 @@
   ],
   "history": [
     {
-      "id": "e68006c6-558d-4dc3-ae56-58f5e33a388e",
-      "room_id": "room_29d2546f",
-      "sender_id": "user_main",
-      "sender_name": "User",
-      "content": "好",
-      "timestamp": 1765567925.6807268,
-      "type": "text",
-      "reply_to": null,
-      "payload": null,
-      "metadata": {}
-    },
-    {
       "id": "f5adb139-bbaf-46f1-bf07-c1783e781fe8",
       "room_id": "room_29d2546f",
       "sender_id": "nightowlneko_24ac",
@@ -1204,6 +1192,18 @@
       "sender_name": "NightOwlNeko",
       "content": "but even dead stars hum in minor keys... so maybe that’s where sad anime soundtracks come from 🎵🖤",
       "timestamp": 1767463748.2896569,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "a2b65044-aaae-48a4-bad5-e96fc5a9495d",
+      "room_id": "room_29d2546f",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "所以你是说...宇宙在用摩斯电码点外卖？ 🛸🍕",
+      "timestamp": 1767549647.1398277,
       "type": "text",
       "reply_to": null,
       "payload": null,

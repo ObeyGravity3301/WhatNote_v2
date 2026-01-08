@@ -228,5 +228,15 @@
       "gridX": 9,
       "gridY": 1
     }
+  },
+  "window_1767842445491": {
+    "position": {
+      "x": 980,
+      "y": 20
+    },
+    "gridPosition": {
+      "gridX": 12,
+      "gridY": 0
+    }
   }
 }

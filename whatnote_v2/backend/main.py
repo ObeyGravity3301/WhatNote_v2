@@ -22,6 +22,7 @@ import mimetypes
 from fastapi.staticfiles import StaticFiles
 import asyncio
 import json
+import base64
 import os
 import shutil
 import zipfile
@@ -5626,6 +5627,223 @@ async def extract_image_content(board_id: str, window_id: str, force: bool = Fal
 
     except Exception as e:
         error(f"图片提取失败: {e}")
+        import traceback
+        error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/image/translate")
+async def translate_image_content(board_id: str, window_id: str, force: bool = False):
+    """使用 Gemini 1.5 Flash 或其他多模态模型进行图片翻译"""
+    try:
+        info(f"[Start] 开始图片翻译: window_id={window_id}, force={force}")
+        
+        # 获取窗口信息
+        windows = content_manager.get_board_windows(board_id)
+        window_data = None
+        for window in windows:
+            if window.get('id') == window_id:
+                window_data = window
+                break
+        
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        
+        # 确定图片路径
+        image_path_str = window_data.get('content', '') or window_data.get('file_path', '')
+        if not image_path_str:
+             raise HTTPException(status_code=400, detail="窗口没有图片内容")
+
+        # 处理路径 (复用提取逻辑中的路径查找)
+        image_path = Path(image_path_str)
+        if not image_path.is_absolute():
+             path1 = Path(DATA_DIR) / image_path_str
+             if path1.exists():
+                 image_path = path1
+             else:
+                 found = False
+                 for root, dirs, files in os.walk(DATA_DIR):
+                     if image_path_str in files or (Path(root) / image_path_str).exists():
+                         image_path = Path(root) / image_path_str if image_path_str in files else Path(root) / image_path_str
+                         if image_path.exists() and image_path.is_file():
+                            found = True
+                            break
+                 
+                 if not found:
+                     if "/static/files/" in image_path_str:
+                         try:
+                             import urllib.parse
+                             rel_path = urllib.parse.unquote(image_path_str.split("/static/files/")[1])
+                             path2 = Path(DATA_DIR) / rel_path
+                             if path2.exists():
+                                 image_path = path2
+                         except:
+                             pass
+
+        if not image_path.exists():
+             raise HTTPException(status_code=404, detail=f"图片文件不存在: {image_path_str}")
+
+        # 缓存路径
+        files_dir = image_path.parent
+        if files_dir.name != "files":
+            if (files_dir / "files").exists():
+                files_dir = files_dir / "files"
+            elif (files_dir.parent / "files").exists():
+                files_dir = files_dir.parent / "files"
+
+        cache_dir = files_dir / "pages" / image_path.stem
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / "translation.json"
+
+        if not force and cache_file.exists():
+            info(f"📄 找到已有翻译结果: {cache_file}")
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                return {
+                    'success': True,
+                    'data': json.load(f),
+                    'cached': True
+                }
+
+        # 读取图片并增加参考网格
+        from PIL import Image, ImageDraw, ImageFont
+        import io
+
+        with open(image_path, "rb") as image_file:
+            img_bytes = image_file.read()
+            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        
+        # 在内存中绘制网格图用于 AI 识别
+        grid_img = img.copy()
+        draw = ImageDraw.Draw(grid_img)
+        w, h = grid_img.size
+        
+        # 动态调整线宽和字体大小，确保在大图和小图上都清晰
+        line_width = max(1, int(min(w, h) / 300))
+        font_size = max(12, int(min(w, h) / 40))
+        
+        # 尝试加载默认字体，如果失败则使用基础字体
+        try:
+            # 尝试不同系统的默认路径
+            font_paths = ["/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "C:\\Windows\\Fonts\\arial.ttf"]
+            font = None
+            for p in font_paths:
+                if os.path.exists(p):
+                    font = ImageFont.truetype(p, font_size)
+                    break
+            if not font:
+                font = ImageFont.load_default()
+        except:
+            font = ImageFont.load_default()
+        
+        # 绘制 10x10 网格
+        line_color = (255, 0, 0, 160) # 半透明红色
+        for i in range(1, 10):
+            # 垂直线
+            x = int(w * i / 10)
+            draw.line([(x, 0), (x, h)], fill=line_color, width=line_width)
+            draw.text((x + 5, 5), str(i * 100), fill="red", font=font)
+            
+            # 水平线
+            y = int(h * i / 10)
+            draw.line([(0, y), (w, y)], fill=line_color, width=line_width)
+            draw.text((5, y + 5), str(i * 100), fill="red", font=font)
+
+        # 将带网格的图片转为 Base64 发给 AI
+        buffered = io.BytesIO()
+        grid_img.save(buffered, format="JPEG", quality=85)
+        img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+        # 构造更精确的 Prompt，要求细化框的颗粒度并估算字号
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": """你是一个高精度的图片原位翻译专家。
+
+**辅助网格说明：**
+图片上标有 10x10 的红色网格（0-1000坐标系），请务必参考网格线。
+
+**任务要求：**
+1. 识别图片中所有的文本行或单词。
+2. **严禁将不同位置的文字合并到一个大框里。** 每个独立的词组或行必须有自己精确的 [ymin, xmin, ymax, xmax]。
+3. 翻译成中文。
+4. **估算字体大小**：请根据文字在 0-1000 坐标系下占据的高度，给出一个合适的 `font_size`（单位 px）。例如，如果文字占据了 y 轴 50 个单位，`font_size` 约等于 50。
+5. 识别准确的前景色（color）和背景色（background）。
+
+**输出格式：**
+```json
+{
+  "translations": [
+    {
+      "original": "Microsoft",
+      "translated": "微软",
+      "box_2d": [ymin, xmin, ymax, xmax],
+      "font_size": 35,
+      "color": "#000000",
+      "background": "#008080"
+    }
+  ]
+}
+```"""
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{img_base64}"
+                        }
+                    }
+                ]
+            }
+        ]
+
+        # 尝试使用更强的模型如果当前是 Gemini，或者优化 Flash 的调用
+        current_config = llm_service.get_config()
+        current_provider = current_config.get('provider', 'gemini')
+        
+        # 如果是 Gemini provider，我们依然用 Flash 保持成本，但通过上面的 Prompt 优化精度
+        use_model = "gemini-1.5-flash" if current_provider == "gemini" else "gpt-4o-mini"
+        if current_provider == "qwen":
+            use_model = "qwen-vl-plus"
+        elif current_provider == "anthropic":
+            use_model = "claude-3-5-sonnet-20241022"
+
+        info(f"[LLM] 使用模型 {use_model} 进行高精度图片翻译")
+        
+        accumulated_content = ""
+        async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
+            accumulated_content += chunk
+            
+        info(f"[LLM] AI返回原始数据: {accumulated_content[:500]}...")
+
+        # 解析 JSON
+        try:
+            json_content = accumulated_content.strip()
+            if json_content.startswith("```json"):
+                json_content = json_content[7:]
+            if json_content.startswith("```"):
+                json_content = json_content[3:]
+            if json_content.endswith("```"):
+                json_content = json_content[:-3]
+            json_content = json_content.strip()
+            
+            parsed_data = json.loads(json_content)
+            
+            # 保存到缓存
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(parsed_data, f, ensure_ascii=False, indent=2)
+                
+            return {
+                'success': True,
+                'data': parsed_data,
+                'cached': False
+            }
+        except Exception as e:
+            error(f"翻译结果解析失败: {e}\n原始内容: {accumulated_content}")
+            raise HTTPException(status_code=500, detail=f"解析AI返回内容失败: {str(e)}")
+
+    except Exception as e:
+        error(f"图片翻译失败: {e}")
         import traceback
         error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))

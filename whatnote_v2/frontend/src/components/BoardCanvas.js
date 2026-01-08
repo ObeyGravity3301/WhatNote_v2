@@ -7110,6 +7110,10 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractResult, setExtractResult] = useState(null);
   const [showResult, setShowResult] = useState(false);
+  // 为图片翻译新增状态
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translateResult, setTranslateResult] = useState(null);
+  const [showTranslation, setShowTranslation] = useState(false);
 
   const triggerImageAction = async (action, forceRefresh = false) => {
     const actionLabels = {
@@ -7133,13 +7137,6 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
 
         setIsExtracting(true);
         try {
-            if (!forceRefresh && addMessage) {
-                // 只有非强制刷新时才显示"正在提取"，因为可能是从缓存读取
-                // 但为了用户体验，如果很快返回，这个消息可能会一闪而过，所以只在需要较长时间时显示比较好
-                // 这里简单处理：总是提示，但文案不同
-                // addMessage('正在获取提取内容...', '请稍候', 'info', windowData.id);
-            }
-            
             if (forceRefresh && addMessage) {
                  addMessage(t('image_re_extracting'), t('image_please_wait'), 'info', windowData.id);
             }
@@ -7162,7 +7159,6 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
                     // 缓存命中，不发成功消息，直接显示
                 } else {
                     addMessage(`✅ ${t('image_extract_success')}`, t('image_click_to_view'), 'success', windowData.id);
-                    // 只有新提取的内容才打开消息中心
                     if (openMessageCenter) {
                         openMessageCenter();
                     }
@@ -7172,7 +7168,6 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
             console.error('提取失败:', error);
             if (addMessage) {
                 addMessage(`❌ ${t('image_extract_failed')}`, error.message || t('text_unknown_error'), 'error', windowData.id);
-                // 出错时打开消息中心
                 if (openMessageCenter) {
                     openMessageCenter();
                 }
@@ -7181,6 +7176,50 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
             setIsExtracting(false);
       }
       return;
+    }
+
+    if (action === 'image-translate') {
+        // 如果已经显示翻译且不是强制刷新，则关闭翻译层
+        if (showTranslation && !forceRefresh) {
+            setShowTranslation(false);
+            return;
+        }
+
+        setIsTranslating(true);
+        try {
+            if (forceRefresh && addMessage) {
+                 addMessage(t('image_translating'), t('image_please_wait'), 'info', windowData.id);
+            }
+            
+            const url = `http://localhost:8081/api/boards/${boardId}/windows/${windowData.id}/image/translate${forceRefresh ? '?force=true' : ''}`;
+            const response = await fetch(url, {
+                method: 'POST'
+            });
+            
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
+            
+            const data = await response.json();
+            setTranslateResult(data.data);
+            setShowTranslation(true);
+            
+            if (addMessage) {
+                if (data.cached) {
+                    // 缓存命中
+                } else {
+                    addMessage(`✅ ${t('image_translate_success')}`, t('image_translate_applied'), 'success', windowData.id);
+                }
+            }
+        } catch (error) {
+            console.error('翻译失败:', error);
+            if (addMessage) {
+                addMessage(`❌ ${t('image_translate_failed')}`, error.message || t('text_unknown_error'), 'error', windowData.id);
+            }
+        } finally {
+            setIsTranslating(false);
+        }
+        return;
     }
 
     if (typeof window !== 'undefined') {
@@ -7227,7 +7266,7 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
         padding: '2px 4px',
         display: 'flex',
         alignItems: 'center',
-        gap: '4px',
+        justifyContent: 'space-between',
         height: '24px',
         flexShrink: 0
       }}>
@@ -7243,29 +7282,100 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
             {isExtracting ? t('image_extracting') : t('image_text_extract')}
           </button>
           <button
-            style={toolbarButtonStyle}
-            onClick={() => triggerImageAction('image-translate')}
-            onMouseDown={(e) => { e.currentTarget.style.border = '2px inset #c0c0c0'; e.currentTarget.style.backgroundColor = '#a0a0a0'; }}
-            onMouseUp={(e) => { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; }}
+            style={{...toolbarButtonStyle, cursor: isTranslating ? 'wait' : 'pointer'}}
+            onClick={() => !isTranslating && triggerImageAction('image-translate')}
+            onMouseDown={(e) => { if(!isTranslating) { e.currentTarget.style.border = '2px inset #c0c0c0'; e.currentTarget.style.backgroundColor = '#a0a0a0'; } }}
+            onMouseUp={(e) => { if(!isTranslating) { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; } }}
+            onMouseLeave={(e) => { if(!isTranslating) { e.currentTarget.style.border = '2px outset #c0c0c0'; e.currentTarget.style.backgroundColor = '#c0c0c0'; } }}
+            disabled={isTranslating}
           >
-            {t('image_image_translate')}
+            {isTranslating ? t('image_translating') : t('image_image_translate')}
           </button>
         </div>
+        {(showResult || showTranslation) && (
+          <button
+            style={{...toolbarButtonStyle, minWidth: 'auto', padding: '0 4px'}}
+            onClick={() => {
+              if (showResult) triggerImageAction('text-extract', true);
+              if (showTranslation) triggerImageAction('image-translate', true);
+            }}
+            title="重新生成"
+          >
+            🔄
+          </button>
+        )}
       </div>
-      <div style={{ flex: 1, display: 'flex', position: 'relative' }}>
-        <label className="image-placeholder" title={windowData.content || '点击上传图片'} style={{ width: '100%', height: '100%' }}>
+      <div style={{ flex: 1, display: 'flex', position: 'relative', overflow: 'hidden' }}>
+        <label className="image-placeholder" title={windowData.content || '点击上传图片'} style={{ width: '100%', height: '100%', overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           {hasContent ? (
-            <img
-              src={imageUrl}
-              alt="img"
-              style={{ maxWidth: '100%', maxHeight: '100%' }}
-            />
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <img
+                src={imageUrl}
+                alt="img"
+                style={{ maxWidth: 'none', maxHeight: 'none', display: 'block' }}
+                onLoad={(e) => {
+                  // 可以记录图片实际大小
+                }}
+              />
+              
+              {/* 图片翻译覆盖层 */}
+              {showTranslation && translateResult && translateResult.translations && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  pointerEvents: 'none'
+                }}>
+                  {translateResult.translations.map((item, idx) => {
+                    const [ymin, xmin, ymax, xmax] = item.box_2d;
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          position: 'absolute',
+                          top: `${ymin / 10}%`,
+                          left: `${xmin / 10}%`,
+                          width: `${(xmax - xmin) / 10}%`,
+                          height: `${(ymax - ymin) / 10}%`,
+                          backgroundColor: item.background || '#FFFFFF',
+                          color: item.color || '#000000',
+                          fontSize: item.font_size ? `${item.font_size * 0.8}px` : (item.is_title ? '1.2em' : '0.9em'),
+                          fontWeight: item.is_title || (item.font_size > 20) ? 'bold' : 'normal',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          textAlign: 'center',
+                          overflow: 'visible',
+                          lineHeight: '1',
+                          padding: '0',
+                          pointerEvents: 'auto',
+                          border: 'none',
+                          boxSizing: 'border-box',
+                          whiteSpace: 'nowrap',
+                          minWidth: 'fit-content'
+                        }}
+                        title={item.original}
+                      >
+                        <span style={{ 
+                          display: 'block',
+                          wordBreak: 'keep-all',
+                          lineHeight: '1'
+                        }}>
+                          {item.translated}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           ) : (
-            <>
+            <div style={{ textAlign: 'center' }}>
               🖼️ 图片内容
               <p>点击上传图片</p>
-            </>
+            </div>
           )}
           <input
             type="file"

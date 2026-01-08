@@ -1261,6 +1261,34 @@ const translations = {
       "ja-JP": "抽出に失敗しました"
     }
   },
+  "image_translating": {
+    "default": {
+      "zh-CN": "正在翻译...",
+      "en-US": "Translating...",
+      "ja-JP": "翻訳中..."
+    }
+  },
+  "image_translate_success": {
+    "default": {
+      "zh-CN": "图片翻译成功",
+      "en-US": "Image translation successful",
+      "ja-JP": "画像翻訳成功"
+    }
+  },
+  "image_translate_failed": {
+    "default": {
+      "zh-CN": "图片翻译失败",
+      "en-US": "Image translation failed",
+      "ja-JP": "画像翻訳に失敗しました"
+    }
+  },
+  "image_translate_applied": {
+    "default": {
+      "zh-CN": "翻译层已应用到图片",
+      "en-US": "Translation layer applied to image",
+      "ja-JP": "翻訳レイヤーが画像に適用されました"
+    }
+  },
   "image_action_triggered": {
     "default": {
       "zh-CN": "已触发",

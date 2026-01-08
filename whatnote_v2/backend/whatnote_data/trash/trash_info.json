@@ -20,5 +20,70 @@
     "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1756987907632",
     "file_size": 196,
     "item_type": "directory"
+  },
+  {
+    "id": "trash_1767842548830",
+    "parent_id": null,
+    "original_name": "微信图片_20260107185318_146_4.jpg",
+    "trash_filename": "1767842548830_微信图片_20260107185318_146_4.jpg",
+    "window_data": {
+      "type": "image",
+      "title": "微信图片_20260107185318_146_4.jpg",
+      "position": {
+        "x": 196,
+        "y": 102
+      },
+      "size": {
+        "width": 1545,
+        "height": 826
+      },
+      "id": "window_1767842445491",
+      "created_at": "2026-01-08T11:20:45.491621",
+      "updated_at": "2026-01-08T11:22:20.857513",
+      "file_path": "files/微信图片_20260107185318_146_4.jpg",
+      "width": 1545,
+      "height": 826,
+      "hidden": true,
+      "x": 196,
+      "y": 102
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2026-01-08T11:22:28.830837",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1756987907632/board-1756987954946/files",
+    "file_size": 128536,
+    "item_type": "file"
+  },
+  {
+    "id": "trash_1767842548834",
+    "parent_id": "trash_1767842548830",
+    "original_name": "微信图片_20260107185318_146_4.jpg.json",
+    "trash_filename": "1767842548834_微信图片_20260107185318_146_4.jpg.json",
+    "window_data": {
+      "type": "image",
+      "title": "微信图片_20260107185318_146_4.jpg",
+      "position": {
+        "x": 196,
+        "y": 102
+      },
+      "size": {
+        "width": 1545,
+        "height": 826
+      },
+      "id": "window_1767842445491",
+      "created_at": "2026-01-08T11:20:45.491621",
+      "updated_at": "2026-01-08T11:22:20.857513",
+      "file_path": "files/微信图片_20260107185318_146_4.jpg",
+      "width": 1545,
+      "height": 826,
+      "hidden": true,
+      "x": 196,
+      "y": 102,
+      "is_json_config": true
+    },
+    "board_id": "board-1756987954946",
+    "deleted_at": "2026-01-08T11:22:28.834824",
+    "original_path": "/home/obeygravity/Projects/whatnote/whatnote_v2/backend/whatnote_data/courses/course-1756987907632/board-1756987954946/files",
+    "file_size": 437,
+    "item_type": "file"
   }
 ]
