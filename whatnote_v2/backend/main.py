@@ -5798,17 +5798,19 @@ async def translate_image_content(board_id: str, window_id: str, force: bool = F
         ]
 
         # 尝试使用更强的模型如果当前是 Gemini，或者优化 Flash 的调用
+        # 优先使用适配当前服务商的模型
         current_config = llm_service.get_config()
         current_provider = current_config.get('provider', 'gemini')
         
-        # 如果是 Gemini provider，我们依然用 Flash 保持成本，但通过上面的 Prompt 优化精度
-        use_model = "gemini-1.5-flash" if current_provider == "gemini" else "gpt-4o-mini"
-        if current_provider == "qwen":
-            use_model = "qwen-vl-plus"
-        elif current_provider == "anthropic":
-            use_model = "claude-3-5-sonnet-20241022"
+        provider_model_map = {
+            'qwen': 'qwen-vl-plus',
+            'gemini': 'gemini-1.5-flash',
+            'openai': 'gpt-4o-mini',
+            'anthropic': 'claude-3-5-sonnet-20241022'
+        }
+        use_model = provider_model_map.get(current_provider, 'gpt-4o-mini')
 
-        info(f"[LLM] 使用模型 {use_model} 进行高精度图片翻译")
+        info(f"[LLM] 使用服务商 {current_provider} 的多模态模型 {use_model} 进行图片翻译")
         
         accumulated_content = ""
         async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
@@ -5844,6 +5846,219 @@ async def translate_image_content(board_id: str, window_id: str, force: bool = F
 
     except Exception as e:
         error(f"图片翻译失败: {e}")
+        import traceback
+        error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/pdf/translate-page/{page_num}")
+async def translate_pdf_page(board_id: str, window_id: str, page_num: int):
+    """提取 PDF 页面文字坐标、采样背景并翻译内容"""
+    try:
+        import fitz  # PyMuPDF
+        from collections import Counter
+        
+        info(f"[PDF] 开始翻译页面: window_id={window_id}, page={page_num}")
+        
+        # 1. 获取窗口和文件路径
+        windows = content_manager.get_board_windows(board_id)
+        window_data = next((w for w in windows if w.get('id') == window_id), None)
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+            
+        file_path_str = window_data.get('content') or window_data.get('file_path')
+        if not file_path_str:
+            raise HTTPException(status_code=400, detail="未找到 PDF 文件")
+            
+        # 确定绝对路径 (复用之前的逻辑)
+        file_path = Path(file_path_str)
+        if not file_path.is_absolute():
+            file_path = Path(DATA_DIR) / file_path_str
+            if not file_path.exists():
+                 # 遍历查找... (这里为了简洁先用直接路径，后续可完善)
+                 pass
+
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="PDF 文件不存在")
+
+        # 2. 打开 PDF 并提取信息
+        doc = fitz.open(file_path)
+        if page_num < 1 or page_num > len(doc):
+            raise HTTPException(status_code=400, detail=f"页码超出范围 (1-{len(doc)})")
+            
+        page = doc[page_num - 1]
+        text_dict = page.get_text("dict")
+        
+        # 3. 解析文本块和采样背景 (改为按 Block 合并)
+        translation_units = []
+        full_text_to_translate = []
+        
+        # 获取页面 DPI 缩放，以便采样更准
+        pix = page.get_pixmap(matrix=fitz.Matrix(1, 1)) # 1:1 采样
+        
+        for block in text_dict.get("blocks", []):
+            if block.get("type") != 0: continue # 仅处理文本块
+            if "lines" not in block: continue
+            
+            block_text = ""
+            block_bbox = block["bbox"]
+            
+            # 提取块内的所有文字，并寻找主导样式
+            font_sizes = []
+            colors = []
+            fonts = []
+            
+            for line in block["lines"]:
+                line_text = ""
+                for span in line["spans"]:
+                    text = span["text"]
+                    if not text.strip(): continue
+                    line_text += text
+                    font_sizes.append(span["size"])
+                    colors.append(span["color"])
+                    fonts.append(span["font"])
+                
+                if line_text:
+                    # 如果行末没有连字符，添加空格
+                    if block_text and not block_text.endswith('-'):
+                        block_text += " "
+                    block_text += line_text.strip()
+
+            if not block_text.strip(): continue
+
+            # 智能采样背景色 (5x5 网格采样，且向内缩进以避开边缘)
+            try:
+                samples = []
+                x0, y0, x1, y1 = block_bbox
+                bw = x1 - x0
+                bh = y1 - y0
+                
+                # 向内缩进 15%，确保采在文字背景区
+                inset_x = bw * 0.15
+                inset_y = bh * 0.15
+                
+                # 在缩进后的区域生成 5x5 的采样网格
+                for ix in range(5):
+                    for iy in range(5):
+                        px = x0 + inset_x + (bw - 2 * inset_x) * (ix / 4 if ix > 0 else 0)
+                        py = y0 + inset_y + (bh - 2 * inset_y) * (iy / 4 if iy > 0 else 0)
+                        
+                        if 0 <= px < pix.width and 0 <= py < pix.height:
+                            color_sample = pix.pixel(int(px), int(py))
+                            samples.append('#%02x%02x%02x' % color_sample)
+                
+                # 取众数作为背景色
+                if samples:
+                    bg_color = Counter(samples).most_common(1)[0][0]
+                else:
+                    bg_color = "#FFFFFF"
+            except Exception as e:
+                info(f"背景采样失败: {e}")
+                bg_color = "#FFFFFF"
+
+            # 提取主导文字颜色
+            if colors:
+                c = Counter(colors).most_common(1)[0][0]
+                r, g, b = (c >> 16) & 255, (c >> 8) & 255, c & 255
+                text_color = '#%02x%02x%02x' % (r, g, b)
+            else:
+                text_color = "#000000"
+
+            unit = {
+                "original": block_text,
+                "bbox": block_bbox,
+                "size": Counter(font_sizes).most_common(1)[0][0] if font_sizes else 12,
+                "color": text_color,
+                "background": bg_color,
+                "font": Counter(fonts).most_common(1)[0][0] if fonts else "sans-serif"
+            }
+            translation_units.append(unit)
+            full_text_to_translate.append(block_text)
+
+        doc.close()
+
+        if not full_text_to_translate:
+            return {"success": True, "translations": []}
+
+        # 4. 调用 LLM 进行批量翻译
+        # 为了保持对应关系，我们发送带序号的列表
+        numbered_text = "\n".join([f"[{i}] {text}" for i, text in enumerate(full_text_to_translate)])
+        
+        messages = [
+            {
+                "role": "user",
+                "content": f"""你是一个专业的学术翻译专家。请将以下从 PDF 中提取的文本片段翻译成中文。
+保持专业、严谨、学术的语气，确保翻译符合上下文语境。
+
+**要求：**
+1. 严格保持编号格式，返回格式为 `[序号] 翻译内容`。
+2. 每个片段占一行。
+3. 不要包含任何解释、前导词或额外文字。
+4. 如果原文是数字、公式、特殊符号或人名地名，若无合适中文译名请保持原样。
+5. 必须翻译成简体中文。
+
+**待翻译文本：**
+{numbered_text}"""
+            }
+        ]
+
+        current_config = llm_service.get_config()
+        current_provider = current_config.get('provider', 'openai')
+        
+        # 根据当前服务商选择合适的翻译模型
+        provider_model_map = {
+            'qwen': 'qwen-plus',
+            'gemini': 'gemini-1.5-flash',
+            'openai': 'gpt-4o-mini',
+            'anthropic': 'claude-3-haiku-20240307'
+        }
+        use_model = provider_model_map.get(current_provider, current_config.get('model'))
+
+        info(f"[PDF] 使用服务商 {current_provider} 的模型 {use_model} 进行页面翻译")
+        
+        accumulated_translation = ""
+        async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
+            accumulated_translation += chunk
+
+        info(f"[PDF] AI 翻译返回内容预览: {accumulated_translation[:200]}...")
+
+        # 5. 解析翻译并组合结果
+        translated_map = {}
+        import re
+        # 支持 [0] 翻译 或 0: 翻译 或 0. 翻译 等多种可能出现的格式
+        pattern = re.compile(r'^[\[\s]*(\d+)[\s\]\.\:\：]+(.*)$')
+        
+        for line in accumulated_translation.strip().split('\n'):
+            line = line.strip()
+            if not line: continue
+            
+            match = pattern.match(line)
+            if match:
+                try:
+                    idx = int(match.group(1))
+                    trans = match.group(2).strip()
+                    translated_map[idx] = trans
+                except:
+                    continue
+            else:
+                # 尝试备选方案：如果行中包含冒号
+                if ':' in line:
+                    parts = line.split(':', 1)
+                    if parts[0].strip().isdigit():
+                        translated_map[int(parts[0].strip())] = parts[1].strip()
+
+        for i, unit in enumerate(translation_units):
+            unit["translated"] = translated_map.get(i, unit["original"])
+
+        info(f"[PDF] 翻译解析完成，成功解析 {len(translated_map)}/{len(translation_units)} 个片段")
+
+        return {
+            "success": True,
+            "page": page_num,
+            "translations": translation_units
+        }
+
+    except Exception as e:
+        error(f"PDF 页面翻译失败: {e}")
         import traceback
         error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))

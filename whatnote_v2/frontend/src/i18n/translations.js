@@ -1542,6 +1542,48 @@ const translations = {
       "ja-JP": "ページ表示を閉じる"
     }
   },
+  "pdf_page_translate": {
+    "default": {
+      "zh-CN": "页面翻译",
+      "en-US": "Page Translate",
+      "ja-JP": "ページ翻訳"
+    }
+  },
+  "pdf_translating": {
+    "default": {
+      "zh-CN": "正在翻译页面...",
+      "en-US": "Translating page...",
+      "ja-JP": "ページを翻訳中..."
+    }
+  },
+  "pdf_show_original": {
+    "default": {
+      "zh-CN": "显示原文",
+      "en-US": "Show Original",
+      "ja-JP": "原文を表示"
+    }
+  },
+  "pdf_page_translate_success": {
+    "default": {
+      "zh-CN": "页面翻译完成",
+      "en-US": "Page translation complete",
+      "ja-JP": "ページ翻訳完了"
+    }
+  },
+  "pdf_translate_applied": {
+    "default": {
+      "zh-CN": "翻译层已覆盖到当前页",
+      "en-US": "Translation layer applied to current page",
+      "ja-JP": "翻訳レイヤーが現在のページに適用されました"
+    }
+  },
+  "pdf_translate_failed": {
+    "default": {
+      "zh-CN": "翻译失败",
+      "en-US": "Translation failed",
+      "ja-JP": "翻訳に失敗しました"
+    }
+  },
   "pdf_search_placeholder": {
     "default": {
       "zh-CN": "描述你想找的内容...",

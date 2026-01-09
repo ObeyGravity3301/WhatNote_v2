@@ -10,18 +10,6 @@
   ],
   "history": [
     {
-      "id": "80ef6df1-0450-426c-930b-87fba146dfe4",
-      "room_id": "dm_nightowlneko_24ac_user_main",
-      "sender_id": "nightowlneko_24ac",
-      "sender_name": "NightOwlNeko",
-      "content": "[MSG-23",
-      "timestamp": 1765993526.3487666,
-      "type": "text",
-      "reply_to": null,
-      "payload": null,
-      "metadata": {}
-    },
-    {
       "id": "3cc0662b-503a-42ae-966d-11b1218fd8b9",
       "room_id": "dm_nightowlneko_24ac_user_main",
       "sender_id": "user_main",
@@ -1210,6 +1198,18 @@
       "timestamp": 1766934020.83688,
       "type": "text",
       "reply_to": "3911b12a-0841-4951-a4ea-c9bae99cac9d",
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "32776a07-3c82-4d86-8e53-89394b36ae4c",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "user_main",
+      "sender_name": "ObeyGravity",
+      "content": "好啊",
+      "timestamp": 1767925519.7074358,
+      "type": "text",
+      "reply_to": null,
       "payload": null,
       "metadata": {}
     }

@@ -473,6 +473,48 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
     }
   };
 
+  // PDF 页面翻译状态
+  const [isTranslatingPage, setIsTranslatingPage] = useState(false);
+  const [pageTranslation, setPageTranslation] = useState(null); // { page: number, translations: [...] }
+  const [showTranslationLayer, setShowTranslationLayer] = useState(false);
+
+  const handlePageTranslate = async () => {
+    if (isTranslatingPage) return;
+    
+    // 如果已经在显示翻译，点击按钮则关闭
+    if (showTranslationLayer) {
+        setShowTranslationLayer(false);
+        return;
+    }
+
+    setIsTranslatingPage(true);
+    try {
+        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pdf/translate-page/${currentPage}`, {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+            setPageTranslation(data);
+            setShowTranslationLayer(true);
+            if (addMessage) {
+                addMessage(`✅ ${t('pdf_page_translate_success') || '页面翻译完成'}`, t('pdf_translate_applied') || '翻译层已覆盖到当前页', 'success', windowId);
+            }
+        }
+    } catch (err) {
+        console.error('PDF翻译失败:', err);
+        if (addMessage) {
+            addMessage(`❌ ${t('pdf_translate_failed') || '翻译失败'}`, err.message, 'error', windowId);
+        }
+    } finally {
+        setIsTranslatingPage(false);
+    }
+  };
+
   // 加载PDF文档
   useEffect(() => {
     const loadPDF = async () => {
@@ -508,12 +550,14 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
     }
   }, [pdfUrl, initialPage]);
 
-  // 页面切换时加载注释和文件信息
+  // 页面切换时加载注释和文件信息，并重置翻译层
   useEffect(() => {
     if (showAnnotationPanel && boardId && windowId) {
       loadAnnotation(currentPage);
       loadAnnotationFileInfo(currentPage);
     }
+    // 换页时隐藏翻译层，因为翻译是按页缓存的
+    setShowTranslationLayer(false);
   }, [currentPage, showAnnotationPanel, boardId, windowId]);
 
   // 加载大纲数据
@@ -1406,6 +1450,32 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
           title={showPageExtractPanel ? t('pdf_hide_extract') : t('pdf_show_extract')}
         >
           {t('pdf_extract')}
+        </button>
+
+        {/* 页面翻译按钮 */}
+        <button
+          onClick={handlePageTranslate}
+          style={{
+            ...PAGINATION_TOOLBAR_ITEM_STYLE,
+            backgroundColor: showTranslationLayer ? '#a0a0a0' : 'transparent',
+            marginRight: '8px',
+            color: isTranslatingPage ? '#808080' : '#000000'
+          }}
+          disabled={isTranslatingPage}
+          onMouseEnter={handlePaginationMouseEnter}
+          onMouseLeave={handlePaginationMouseLeave}
+          onMouseDown={handlePaginationMouseDown}
+          onMouseUp={handlePaginationMouseUp}
+          title={showTranslationLayer ? t('pdf_show_original') : t('pdf_page_translate')}
+        >
+          {isTranslatingPage ? (
+            <>
+              <span className="spinning-icon">⏳</span>
+              {t('pdf_translating')}
+            </>
+          ) : (
+            showTranslationLayer ? t('pdf_show_original') : t('pdf_page_translate')
+          )}
         </button>
 
         {/* 关闭分页模式按钮 */}
@@ -2908,10 +2978,66 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
               height: canvasRef.current?.height + 'px' || '100%',
               zIndex: 2,
               pointerEvents: 'auto',
-              userSelect: 'text',
-              border: '2px solid red' // 临时调试边框
+              userSelect: 'text'
             }}
           />
+          {/* PDF 页面翻译层 */}
+          {showTranslationLayer && pageTranslation && pageTranslation.translations && (
+            <div
+              data-translation-layer="true"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: canvasRef.current?.width + 'px' || '100%',
+                height: canvasRef.current?.height + 'px' || '100%',
+                zIndex: 10,
+                pointerEvents: 'none', // 容器本身不拦截事件，让点击穿透到块或底层
+                userSelect: 'text',
+                backgroundColor: 'transparent'
+              }}
+            >
+              {pageTranslation.translations.map((item, idx) => {
+                const [x0, y0, x1, y1] = item.bbox;
+                const scaleValue = renderScale; // 使用当前的渲染缩放比例
+                return (
+                  <div
+                    key={idx}
+                    className="translation-block"
+                    style={{
+                      position: 'absolute',
+                      left: x0 * scaleValue,
+                      top: y0 * scaleValue,
+                      width: (x1 - x0) * scaleValue,
+                      height: (y1 - y0) * scaleValue,
+                      backgroundColor: item.background || '#FFFFFF',
+                      color: item.color || '#000000',
+                      fontSize: (item.size || 12) * scaleValue + 'px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start',
+                      textAlign: 'left',
+                      overflow: 'visible',
+                      lineHeight: '1.4',
+                      padding: '2px 4px',
+                      boxSizing: 'border-box',
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      fontFamily: item.font || 'sans-serif',
+                      flexDirection: 'column',
+                      pointerEvents: 'auto' // 翻译块拦截并响应鼠标事件（如选择文本）
+                    }}
+                    title={item.original}
+                    onMouseDown={(e) => e.stopPropagation()} // 阻止事件冒泡到父容器的拖拽逻辑
+                  >
+                    <div style={{ width: '100%' }}>
+                      {item.translated}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         </div>
         
