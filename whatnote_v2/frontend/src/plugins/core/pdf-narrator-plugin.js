@@ -69,6 +69,14 @@ const NarratorPluginComponent = (props) => {
   const [selectedGPT, setSelectedGPT] = useState('');
   const [selectedSoVITS, setSelectedSoVITS] = useState('');
   
+  // TTS 设置
+  const [ttsProvider, setTtsProvider] = useState('edge');
+  const [ttsVoice, setTtsVoice] = useState('zh-CN-XiaoxiaoNeural');
+  const [availableVoices, setAvailableVoices] = useState([]);
+  const [sovitsUrl, setSovitsUrl] = useState('http://127.0.0.1:9880');
+  const [sovitsPath, setSovitsPath] = useState('');
+  const [sovitsStatus, setSovitsStatus] = useState('checking'); // 'checking' | 'online' | 'offline'
+  
   // 参考音频设置
   const [refText, setRefText] = useState('');
   const [refLang, setRefLang] = useState('zh');
@@ -99,6 +107,98 @@ const NarratorPluginComponent = (props) => {
 请直接输出演讲稿内容，不要包含任何 Markdown 格式或额外说明。`;
   
   const [customPrompt, setCustomPrompt] = useState(DEFAULT_PROMPT);
+
+  // 初始化获取 TTS 配置
+  useEffect(() => {
+    const fetchTtsConfig = async () => {
+      try {
+        const res = await fetch('http://localhost:8081/api/tts/config');
+        if (res.ok) {
+          const config = await res.json();
+          setTtsProvider(config.provider || 'edge');
+          setTtsVoice(config.voice || 'zh-CN-XiaoxiaoNeural');
+          setSovitsUrl(config.sovits_url || 'http://127.0.0.1:9880');
+          setSovitsPath(config.sovits_path || '');
+          
+          // 初始检查连接
+          checkTTSConnection(config.sovits_url || 'http://127.0.0.1:9880');
+        }
+      } catch (e) {
+        console.error('Failed to fetch TTS config', e);
+      }
+    };
+    fetchTtsConfig();
+  }, []);
+
+  const checkTTSConnection = async (url) => {
+    setSovitsStatus('checking');
+    try {
+        const testUrl = url || sovitsUrl;
+        const res = await fetch(`http://localhost:8081/api/tts/test_connection?url=${encodeURIComponent(testUrl)}`);
+        const data = await res.json();
+        setSovitsStatus(data.success ? 'online' : 'offline');
+    } catch (e) {
+        setSovitsStatus('offline');
+    }
+  };
+
+  const handleDetectLocal = async () => {
+    if (!sovitsPath) return;
+    try {
+        const res = await fetch('http://localhost:8081/api/tts/detect_local', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ path: sovitsPath })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert(`检测成功: ${data.message}\n核心指标: ${data.indicators.join(', ')}`);
+        } else {
+            alert(`检测失败: ${data.message}`);
+        }
+    } catch (e) {
+        alert('检测出错: ' + e.message);
+    }
+  };
+
+  const [isStartingSovits, setIsStartingSovits] = useState(false);
+  const handleStartSovits = async () => {
+    setIsStartingSovits(true);
+    try {
+        const res = await fetch('http://localhost:8081/api/tts/start_local', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            setSovitsStatus('online');
+            fetchModels(); // 启动成功后刷新模型
+        } else {
+            alert(`启动失败: ${data.message}`);
+            setSovitsStatus('offline');
+        }
+    } catch (e) {
+        alert('启动出错: ' + e.message);
+        setSovitsStatus('offline');
+    } finally {
+        setIsStartingSovits(false);
+    }
+  };
+
+  // 获取音色列表
+  useEffect(() => {
+    const fetchVoices = async () => {
+      try {
+        const res = await fetch(`http://localhost:8081/api/tts/voices?provider=${ttsProvider}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setAvailableVoices(data.voices || []);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch voices', e);
+      }
+    };
+    fetchVoices();
+  }, [ttsProvider]);
 
   const audioRef = useRef(null);
 
@@ -1054,6 +1154,22 @@ const NarratorPluginComponent = (props) => {
   const handleSaveSettings = async () => {
       saveSettingsToLocal();
       
+      // 保存 TTS 配置到后端
+      try {
+          await fetch('http://localhost:8081/api/tts/config', {
+              method: 'PUT',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                  provider: ttsProvider,
+                  voice: ttsVoice,
+                  sovits_url: sovitsUrl,
+                  sovits_path: sovitsPath
+              })
+          });
+      } catch (e) {
+          console.error("Failed to save TTS config", e);
+      }
+
       // Sync reference metadata to backend
       if (refAudioExists) {
           try {
@@ -1123,6 +1239,20 @@ const NarratorPluginComponent = (props) => {
       return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  // 计算当前应该显示的高度
+  const calculateHeight = () => {
+    if (viewMode === 'settings') {
+      return 300; // 设置模式固定高度
+    } else {
+      // 播放模式
+      if (!showSubtitles) {
+        return 100; // 关闭字幕时紧凑高度
+      } else {
+        return 180; // 开启字幕时标准高度
+      }
+    }
+  };
+
   // 获取Portal容器
   const containerId = `pdf-plugin-bottom-panel-${windowId}`;
   const container = document.getElementById(containerId);
@@ -1148,7 +1278,7 @@ const NarratorPluginComponent = (props) => {
       {showPanel && container && ReactDOM.createPortal(
           <div style={{
             width: '100%',
-            height: `${props.narratorHeight || (viewMode === 'settings' ? 300 : (viewMode === 'player' && !showSubtitles ? 100 : 180))}px`,
+            height: `${calculateHeight()}px`,
             position: 'static',
             backgroundColor: '#c0c0c0',
             borderTop: '2px outset #ffffff',
@@ -1158,21 +1288,7 @@ const NarratorPluginComponent = (props) => {
             flexDirection: 'column',
             overflow: 'hidden'
           }}>
-            {/* 顶部调整高度控制条 */}
-            <div 
-              onMouseDown={(e) => {
-                e.preventDefault();
-                if (props.setIsResizingNarrator) props.setIsResizingNarrator(true);
-              }}
-              style={{
-                height: '4px',
-                cursor: 'row-resize',
-                width: '100%',
-                backgroundColor: props.isResizingNarrator ? '#000080' : 'transparent',
-                zIndex: 10,
-                flexShrink: 0
-              }}
-            />
+            {/* 移除了之前无效的高度调整控制条 */}
             
             {/* --- VIEW: SETTINGS --- */}
             {viewMode === 'settings' && (
@@ -1186,12 +1302,107 @@ const NarratorPluginComponent = (props) => {
                        <textarea 
                            value={customPrompt}
                            onChange={(e) => setCustomPrompt(e.target.value)}
-                       style={{ height: '50px', width: '100%', resize: 'none', marginBottom:'8px', fontSize:'11px' }}
+                           style={{ 
+                               height: '80px', 
+                               minHeight: '80px',
+                               width: '100%', 
+                               resize: 'vertical', 
+                               marginBottom:'8px', 
+                               fontSize:'11px',
+                               flexShrink: 0,
+                               border: '1px inset #888',
+                               padding: '4px'
+                           }}
                        />
                    
-                   <div style={{display:'flex', gap:'10px'}}>
+                   <div style={{display:'flex', gap:'10px', marginBottom: '8px'}}>
                        <div style={{flex:1, border:'1px dotted #888', padding:'4px', backgroundColor:'#ece9d8'}}>
-                            <div style={{fontWeight:'bold', fontSize:'11px'}}>{t('narrator_reference_label')}</div>
+                            <div style={{fontWeight:'bold', fontSize:'11px', color:'#000080', marginBottom:'4px', display:'flex', justifyContent:'space-between'}}>
+                                <span>TTS 服务设置</span>
+                                {ttsProvider === 'gpt-sovits' && (
+                                    <span style={{
+                                        fontSize:'9px', 
+                                        color: sovitsStatus === 'online' ? '#008000' : (sovitsStatus === 'checking' ? '#808000' : '#ff0000')
+                                    }}>
+                                        ● {sovitsStatus === 'online' ? '已连接' : (sovitsStatus === 'checking' ? '正在连接...' : '未连接')}
+                                    </span>
+                                )}
+                            </div>
+                            <div style={{display:'flex', flexDirection:'column', gap:'4px'}}>
+                                <div style={{display:'flex', alignItems:'center', gap:'4px'}}>
+                                    <span style={{fontSize:'10px', width:'50px'}}>服务商:</span>
+                                    <select 
+                                        value={ttsProvider} 
+                                        onChange={e => setTtsProvider(e.target.value)}
+                                        style={{flex:1, fontSize:'11px'}}
+                                    >
+                                        <option value="edge">Edge TTS (在线/免费)</option>
+                                        <option value="openai">OpenAI TTS (在线/收费)</option>
+                                        <option value="gpt-sovits">GPT-SoVITS (本地/克隆)</option>
+                                    </select>
+                                </div>
+                                
+                                {ttsProvider === 'gpt-sovits' ? (
+                                    <>
+                                        <div style={{display:'flex', alignItems:'center', gap:'4px'}}>
+                                            <span style={{fontSize:'10px', width:'50px'}}>API 地址:</span>
+                                            <input 
+                                                type="text" 
+                                                value={sovitsUrl} 
+                                                onChange={e => setSovitsUrl(e.target.value)}
+                                                placeholder="http://127.0.0.1:9880"
+                                                style={{flex:1, fontSize:'10px', padding:'1px 3px'}}
+                                            />
+                                            <button 
+                                                onClick={() => checkTTSConnection(sovitsUrl)}
+                                                style={{fontSize:'9px', padding:'1px 4px'}}
+                                            >测试</button>
+                                            {sovitsStatus === 'offline' && sovitsPath && (
+                                                <button 
+                                                    onClick={handleStartSovits}
+                                                    disabled={isStartingSovits}
+                                                    style={{fontSize:'9px', padding:'1px 4px', backgroundColor: '#e1e1e1', border: '1px solid #999'}}
+                                                >
+                                                    {isStartingSovits ? '启动中...' : '启动'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div style={{display:'flex', alignItems:'center', gap:'4px'}}>
+                                            <span style={{fontSize:'10px', width:'50px'}}>本地路径:</span>
+                                            <input 
+                                                type="text" 
+                                                value={sovitsPath} 
+                                                onChange={e => setSovitsPath(e.target.value)}
+                                                placeholder="GPT-SoVITS 根目录"
+                                                style={{flex:1, fontSize:'10px', padding:'1px 3px'}}
+                                            />
+                                            <button 
+                                                onClick={handleDetectLocal}
+                                                style={{fontSize:'9px', padding:'1px 4px'}}
+                                            >探测</button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={{display:'flex', alignItems:'center', gap:'4px'}}>
+                                        <span style={{fontSize:'10px', width:'50px'}}>音色:</span>
+                                        <select 
+                                            value={ttsVoice} 
+                                            onChange={e => setTtsVoice(e.target.value)}
+                                            style={{flex:1, fontSize:'11px'}}
+                                        >
+                                            {availableVoices.map(v => (
+                                                <option key={v.id} value={v.id}>{v.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                       </div>
+                   </div>
+
+                   <div style={{display:'flex', gap:'10px'}}>
+                       <div style={{flex:1, border:'1px dotted #888', padding:'4px', backgroundColor:'#ece9d8', opacity: ttsProvider === 'gpt-sovits' ? 1 : 0.5}}>
+                            <div style={{fontWeight:'bold', fontSize:'11px'}}>{t('narrator_reference_label')} {ttsProvider !== 'gpt-sovits' && '(仅SoVITS可用)'}</div>
                             <div style={{display:'flex', gap:'4px', marginTop:'4px', alignItems:'center'}}>
                                 <select value={refLang} onChange={e => setRefLang(e.target.value)} style={{width:'60px'}}>
                                     <option value="zh">{t('lang_zh')}</option>
@@ -1285,12 +1496,12 @@ const NarratorPluginComponent = (props) => {
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     
                     {/* 1. Subtitle Bar */}
-                    {showSubtitles && (
-               <div style={{ 
+                    {showSubtitles ? (
+                        <div style={{ 
                             flex: 1, // Takes remaining space
                             backgroundColor: 'rgba(0,0,0,0.85)',
                             color: '#fff',
-                 display: 'flex', 
+                            display: 'flex', 
                             alignItems: 'center',
                             justifyContent: 'center',
                             padding: '0 30px',
@@ -1302,15 +1513,18 @@ const NarratorPluginComponent = (props) => {
                             overflowY: 'auto'
                         }}>
                             {currentSubtitle || (audioUrl ? (isPlaying ? "..." : t('narrator_click_to_play')) : t('narrator_no_audio'))}
-                    <button
+                            <button
                                 onClick={() => setShowSubtitles(false)}
-                      style={{
+                                style={{
                                     position: 'absolute', right: '4px', top: '4px', 
                                     background:'transparent', border:'none', color:'#888', cursor:'pointer', fontSize:'10px'
-                      }}
+                                }}
                                 title={t('narrator_hide_subtitles')}
                             >✕</button>
-                  </div>
+                        </div>
+                    ) : (
+                        /* 当字幕关闭时，添加一个弹性占位符，将进度条和控制栏推到底部 */
+                        <div style={{ flex: 1 }} />
                     )}
                     
                     {/* 2. Progress Bar */}

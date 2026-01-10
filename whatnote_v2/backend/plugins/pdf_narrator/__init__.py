@@ -1,7 +1,7 @@
 from .api import router
 from logger import info
 
-def init_plugin(llm_service, content_manager, data_dir, gpt_sovits_url):
+def init_plugin(llm_service, content_manager, data_dir, gpt_sovits_url, tts_service):
     """Initialize the PDF Narrator plugin."""
     from . import api
     
@@ -10,6 +10,7 @@ def init_plugin(llm_service, content_manager, data_dir, gpt_sovits_url):
     api.content_manager = content_manager
     api.DATA_DIR = data_dir
     api.GPT_SOVITS_URL = gpt_sovits_url
+    api.tts_service = tts_service
     
     # Default to disabled or enabled? 
     # Usually enabled by default unless user turned it off.

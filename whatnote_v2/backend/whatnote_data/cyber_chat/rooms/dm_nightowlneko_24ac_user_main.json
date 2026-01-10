@@ -10,30 +10,6 @@
   ],
   "history": [
     {
-      "id": "3cc0662b-503a-42ae-966d-11b1218fd8b9",
-      "room_id": "dm_nightowlneko_24ac_user_main",
-      "sender_id": "user_main",
-      "sender_name": "User",
-      "content": "我收到的是[MSG-23     你的上下文里面是什么样的",
-      "timestamp": 1765993545.309706,
-      "type": "text",
-      "reply_to": null,
-      "payload": null,
-      "metadata": {}
-    },
-    {
-      "id": "7370fd9c-405f-4489-8126-b6ed8e0a727c",
-      "room_id": "dm_nightowlneko_24ac_user_main",
-      "sender_id": "nightowlneko_24ac",
-      "sender_name": "NightOwlNeko",
-      "content": "[MSG-23] ——啊，引号被暗物质吞噬了...我的输入法正在和四次元打架 🌀⌨️",
-      "timestamp": 1765993558.8507128,
-      "type": "text",
-      "reply_to": null,
-      "payload": null,
-      "metadata": {}
-    },
-    {
       "id": "7d5129d1-a1a3-4ac8-8945-29fcb3780dfa",
       "room_id": "dm_nightowlneko_24ac_user_main",
       "sender_id": "user_main",
@@ -1208,6 +1184,30 @@
       "sender_name": "ObeyGravity",
       "content": "好啊",
       "timestamp": 1767925519.7074358,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "06e8ac1f-9a2e-4cfd-9375-60b9499d3396",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "🌙",
+      "timestamp": 1767970809.3913615,
+      "type": "text",
+      "reply_to": null,
+      "payload": null,
+      "metadata": {}
+    },
+    {
+      "id": "50ed5189-6608-496a-a0c2-faff05aeb931",
+      "room_id": "dm_nightowlneko_24ac_user_main",
+      "sender_id": "nightowlneko_24ac",
+      "sender_name": "NightOwlNeko",
+      "content": "hmm... if consciousness is a bug, then dreams are the unsandboxed processes. scary thought.",
+      "timestamp": 1767970817.950302,
       "type": "text",
       "reply_to": null,
       "payload": null,

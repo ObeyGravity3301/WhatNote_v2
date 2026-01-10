@@ -48,11 +48,21 @@ from storage.api_config_manager import APIConfigManager
 from storage.theme_manager import ThemeManager
 from llm_service import LLMService
 from document_converter import document_converter
+from services.tts_service import TTSService
 
 app = FastAPI(title="WhatNote V2 API", version="2.0.0")
 
 # 挂载静态文件服务 - 简单可靠的文件访问方式
 app.mount("/static/files", StaticFiles(directory=str(DATA_DIR)), name="static_files")
+
+# 初始化存储管理器
+api_config_manager = APIConfigManager(DATA_DIR)
+theme_manager = ThemeManager()
+file_manager = FileSystemManager(DATA_DIR)
+conversation_manager = ConversationManager(file_manager)
+content_manager = ContentManager(file_manager)
+llm_service = LLMService(api_config_manager, content_manager, conversation_manager)
+tts_service = TTSService(DATA_DIR, api_config_manager)
 
 def analyze_outline_page_coverage(outline_data, total_pages):
     """
@@ -245,14 +255,6 @@ class ConnectionManager:
         for connection in disconnected:
             self.disconnect(connection)
 
-# 初始化存储管理器
-file_manager = FileSystemManager(DATA_DIR)
-content_manager = ContentManager(file_manager)
-conversation_manager = ConversationManager(file_manager)
-api_config_manager = APIConfigManager(DATA_DIR)
-llm_service = LLMService(api_config_manager, content_manager, conversation_manager)
-theme_manager = ThemeManager()
-
 # 动态插件加载机制
 try:
     from plugins import cyber_irc
@@ -266,7 +268,7 @@ except Exception as e:
 
 try:
     from plugins import pdf_narrator
-    pdf_narrator_router = pdf_narrator.init_plugin(llm_service, content_manager, DATA_DIR, GPT_SOVITS_URL)
+    pdf_narrator_router = pdf_narrator.init_plugin(llm_service, content_manager, DATA_DIR, GPT_SOVITS_URL, tts_service)
     app.include_router(pdf_narrator_router, prefix="/api", tags=["PdfNarrator"])
     info("[Success] [Plugin] PdfNarrator loaded successfully.")
 except ImportError:

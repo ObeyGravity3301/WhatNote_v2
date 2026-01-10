@@ -3139,17 +3139,17 @@ class ContentManager:
             audio_dir = pdf_pages_dir / "audio"
             if not audio_dir.exists(): return None
             
-            audio_filename = f"audio_{page:03d}.wav"
-            audio_path = audio_dir / audio_filename
+            # 查找任何扩展名的音频文件
+            for audio_path in audio_dir.glob(f"audio_{page:03d}.*"):
+                if audio_path.suffix != ".json":
+                    return str(audio_path)
             
-            if audio_path.exists():
-                return str(audio_path)
             return None
         except Exception as e:
             print(f"获取语音路径失败: {e}")
             return None
 
-    def save_narrator_audio(self, board_id: str, window_id: str, page: int, audio_content: bytes) -> Optional[str]:
+    def save_narrator_audio(self, board_id: str, window_id: str, page: int, audio_content: bytes, extension: str = "wav") -> Optional[str]:
         """保存PDF指定页面的语音内容"""
         try:
             windows = self.get_board_windows(board_id)
@@ -3166,7 +3166,7 @@ class ContentManager:
             audio_dir = pdf_pages_dir / "audio"
             audio_dir.mkdir(parents=True, exist_ok=True)
             
-            audio_filename = f"audio_{page:03d}.wav"
+            audio_filename = f"audio_{page:03d}.{extension}"
             audio_path = audio_dir / audio_filename
             
             with open(audio_path, 'wb') as f:

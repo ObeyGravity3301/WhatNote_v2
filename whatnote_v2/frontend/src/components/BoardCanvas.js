@@ -182,7 +182,7 @@ const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument, narratorHe
 };
 
 // PDF分页组件
-const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, initialPage, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog }) => {
+const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, initialPage, onUpdateWindow, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog }) => {
   const { t } = useLanguage();
   const PAGINATION_TOOLBAR_ITEM_STYLE = {
     padding: '1px 8px',
@@ -225,6 +225,25 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
   const [pdfDocument, setPdfDocument] = useState(null);
   const [currentPage, setCurrentPage] = useState(initialPage || 1);
   const [totalPages, setTotalPages] = useState(0);
+  
+  // 监听页码变化并同步到窗口数据
+  useEffect(() => {
+    if (onUpdateWindow && currentPage !== initialPage) {
+      const timer = setTimeout(() => {
+        onUpdateWindow(windowId, { initialPage: currentPage });
+      }, 500); // 500ms 防抖，避免频繁同步
+      return () => clearTimeout(timer);
+    }
+  }, [currentPage, windowId, onUpdateWindow, initialPage]);
+
+  // 处理外部跳转请求
+  useEffect(() => {
+    if (pdfDocument && initialPage && initialPage >= 1 && initialPage <= totalPages && initialPage !== currentPage) {
+      setCurrentPage(initialPage);
+      console.log('📖 执行外部跳转请求到第', initialPage, '页');
+    }
+  }, [initialPage, pdfDocument, totalPages]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const canvasRef = useRef(null);
@@ -528,13 +547,13 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
         setPdfDocument(pdf);
         setTotalPages(pdf.numPages);
         
-        // 如果有初始页码，跳转到该页，否则默认第1页
+        // 只有在第一次加载或 initialPage 确实存在时才跳转
         if (initialPage && initialPage >= 1 && initialPage <= pdf.numPages) {
           setCurrentPage(initialPage);
-          console.log('PDF加载成功，跳转到第', initialPage, '页');
-        } else {
+          console.log('PDF加载成功，跳转到初始页:', initialPage);
+        } else if (!pdfDocument) {
           setCurrentPage(1);
-        console.log('PDF加载成功，总页数:', pdf.numPages);
+          console.log('PDF首次加载，默认第1页');
         }
         
         setIsLoading(false);
@@ -548,7 +567,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
     if (pdfUrl) {
       loadPDF();
     }
-  }, [pdfUrl, initialPage]);
+  }, [pdfUrl]); // 移除 initialPage 依赖，避免页码保存导致的重载
 
   // 页面切换时加载注释和文件信息，并重置翻译层
   useEffect(() => {
@@ -7232,7 +7251,7 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
   const hasContent = hasRealMediaContent(windowData);
   const imageUrl = hasContent ? toMediaUrl(windowData, boardId) : null;
 
-  // 新增状态
+  // 基础状态
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractResult, setExtractResult] = useState(null);
   const [showResult, setShowResult] = useState(false);
@@ -7240,6 +7259,69 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
   const [isTranslating, setIsTranslating] = useState(false);
   const [translateResult, setTranslateResult] = useState(null);
   const [showTranslation, setShowTranslation] = useState(false);
+
+  // 缩放和拖拽状态
+  const [scale, setScale] = useState(1.0);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
+  const containerRef = useRef(null);
+
+  // 滚轮缩放处理
+  const handleWheel = (e) => {
+    if (!hasContent) return;
+    e.preventDefault();
+    
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const newScale = Math.max(0.1, Math.min(10.0, scale + delta));
+    
+    if (newScale === scale) return;
+    
+    const scaleRatio = newScale / scale;
+    const contentMouseX = mouseX - rect.width / 2;
+    const contentMouseY = mouseY - rect.height / 2;
+    
+    const newPanX = contentMouseX - (contentMouseX - panX) * scaleRatio;
+    const newPanY = contentMouseY - (contentMouseY - panY) * scaleRatio;
+    
+    setScale(newScale);
+    setPanX(newPanX);
+    setPanY(newPanY);
+  };
+
+  // 鼠标中键拖拽处理
+  const handleMouseDown = (e) => {
+    if (e.button === 1) { // 中键
+      e.preventDefault();
+      setIsDraggingImage(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+      setLastPan({ x: panX, y: panY });
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (isDraggingImage) {
+      const deltaX = e.clientX - dragStart.x;
+      const deltaY = e.clientY - dragStart.y;
+      setPanX(lastPan.x + deltaX);
+      setPanY(lastPan.y + deltaY);
+    }
+  };
+
+  const handleMouseUp = (e) => {
+    if (e.button === 1) {
+      setIsDraggingImage(false);
+    }
+  };
 
   const triggerImageAction = async (action, forceRefresh = false) => {
     const actionLabels = {
@@ -7431,17 +7513,64 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
           </button>
         )}
       </div>
-      <div style={{ flex: 1, display: 'flex', position: 'relative', overflow: 'hidden' }}>
-        <label className="image-placeholder" title={windowData.content || '点击上传图片'} style={{ width: '100%', height: '100%', overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          {hasContent ? (
-            <div style={{ position: 'relative', display: 'inline-block' }}>
+      <div 
+        ref={containerRef}
+        style={{ 
+          flex: 1, 
+          display: 'flex', 
+          justifyContent: 'center',
+          alignItems: 'center',
+          position: 'relative', 
+          overflow: 'hidden',
+          cursor: isDraggingImage ? 'grabbing' : 'default',
+          backgroundColor: '#404040' // 深色背景衬托图片
+        }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        {!hasContent ? (
+          <label className="image-placeholder" title={windowData.content || '点击上传图片'} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }}>
+            <div style={{ textAlign: 'center', color: '#ccc' }}>
+              🖼️ 图片内容
+              <p>点击上传图片</p>
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const files = e.target.files;
+                if (onUpload) {
+                  onUpload(files);
+                }
+                e.target.value = '';
+              }}
+            />
+          </label>
+        ) : (
+          <div style={{ 
+            position: 'relative', 
+            display: 'inline-block',
+            transform: `translate(${panX}px, ${panY}px) scale(${scale})`,
+            transformOrigin: 'center center',
+            transition: isDraggingImage ? 'none' : 'transform 0.1s ease-out',
+            pointerEvents: 'none' // 容器本身不拦截事件，让父级处理
+          }}>
+            <div style={{ pointerEvents: 'auto', position: 'relative' }}>
               <img
                 src={imageUrl}
                 alt="img"
-                style={{ maxWidth: 'none', maxHeight: 'none', display: 'block' }}
-                onLoad={(e) => {
-                  // 可以记录图片实际大小
+                style={{ 
+                  maxWidth: 'none', 
+                  maxHeight: 'none', 
+                  display: 'block',
+                  userSelect: 'none',
+                  WebkitUserDrag: 'none'
                 }}
+                draggable={false}
               />
               
               {/* 图片翻译覆盖层 */}
@@ -7497,25 +7626,8 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
                 </div>
               )}
             </div>
-          ) : (
-            <div style={{ textAlign: 'center' }}>
-              🖼️ 图片内容
-              <p>点击上传图片</p>
-            </div>
-          )}
-          <input
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const files = e.target.files;
-              if (onUpload) {
-                onUpload(files);
-              }
-              e.target.value = '';
-            }}
-          />
-        </label>
+          </div>
+        )}
 
         {/* 提取结果覆盖层 */}
         {showResult && extractResult && (
@@ -7604,98 +7716,7 @@ const ImageWindowRenderer = React.memo(({ window: windowData, onUpload, boardId,
 });
 
 // 文档窗口渲染器组件（Word文档等）
-const DocumentWindowRenderer = React.memo(({ window: windowData, onUpload, boardId, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog }) => {
-  const [isPaginationMode, setIsPaginationMode] = useState(false);
-
-  const handleClosePagination = useCallback(() => {
-    setIsPaginationMode(false);
-  }, []);
-
-  console.log('📄 文档窗口渲染:', {
-    windowId: windowData.id,
-    windowContent: windowData.content,
-    hasContent: !!windowData.content
-  });
-
-  if (!hasRealMediaContent(windowData)) {
-    console.log('📄 文档窗口无内容，显示占位符');
-    return (
-      <label className="pdf-placeholder" title="点击上传文档" style={{ flex: 1 }}>
-        📄 文档内容
-        <p>点击上传Word文档</p>
-        <input
-          type="file"
-          accept=".doc,.docx,.ppt,.pptx,.xls,.xlsx"
-          style={{ display: 'none' }}
-          onChange={(e) => onUpload(windowData.id, 'documents', e.target.files)}
-        />
-      </label>
-    );
-  }
-
-  const documentUrl = toMediaUrl(windowData, boardId);
-
-  // 如果启用分页模式，显示分页组件（转换为PDF后）
-  if (isPaginationMode) {
-    return (
-      <PDFPaginationViewer 
-        pdfUrl={documentUrl} 
-        onClose={handleClosePagination}
-        boardId={boardId}
-        windowId={windowData.id}
-        addMessage={addMessage}
-        openMessageCenter={openMessageCenter}
-        setConfirmDialog={setConfirmDialog}
-        showConfirmDialog={showConfirmDialog}
-      />
-    );
-  }
-
-  // 默认iframe模式
-  return (
-    <div className="pdf-container" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 文档工具栏 */}
-      <div style={{
-        backgroundColor: '#c0c0c0',
-        borderBottom: '2px outset #c0c0c0',
-        padding: '2px 4px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        height: '24px',
-        flexShrink: 0
-      }}>
-        <button
-          onClick={() => {
-            console.log('分页模式按钮被点击');
-            setIsPaginationMode(true);
-          }}
-          style={PDF_TOOLBAR_ITEM_STYLE}
-          onMouseEnter={handlePdfMouseEnter}
-          onMouseLeave={handlePdfMouseLeave}
-          onMouseDown={handlePdfMouseDown}
-          onMouseUp={handlePdfMouseUp}
-        >
-          分页模式
-        </button>
-      </div>
-      
-      {/* 文档内容区域 */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        <iframe
-          title="document"
-          style={{ width: '100%', height: '100%', border: 'none' }}
-          src={documentUrl}
-          onLoad={() => console.log('📄 文档iframe加载完成')}
-          onError={(e) => console.error('📄 文档iframe加载错误:', e)}
-        ></iframe>
-      </div>
-    </div>
-  );
-});
-
-// PDF窗口渲染器组件
-const PDFWindowRenderer = React.memo(({ window: windowData, onUpload, boardId, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog }) => {
+const DocumentWindowRenderer = React.memo(({ window: windowData, onUpload, onUpdateWindow, boardId, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog }) => {
   const { t } = useLanguage();
   const PDF_TOOLBAR_ITEM_STYLE = {
     padding: '1px 8px',
@@ -7734,13 +7755,156 @@ const PDFWindowRenderer = React.memo(({ window: windowData, onUpload, boardId, a
     e.currentTarget.style.border = '1px outset #ffffff';
   };
 
-  const [isPaginationMode, setIsPaginationMode] = useState(false);
+  const isPaginationMode = windowData.isPaginationMode || false;
+
+  const setIsPaginationMode = useCallback((val) => {
+    if (onUpdateWindow) {
+      onUpdateWindow(windowData.id, { isPaginationMode: val });
+    }
+  }, [onUpdateWindow, windowData.id]);
+
+  const handleClosePagination = useCallback(() => {
+    setIsPaginationMode(false);
+  }, [setIsPaginationMode]);
+
+  console.log('📄 文档窗口渲染:', {
+    windowId: windowData.id,
+    windowContent: windowData.content,
+    hasContent: !!windowData.content
+  });
+
+  if (!hasRealMediaContent(windowData)) {
+    console.log('📄 文档窗口无内容，显示占位符');
+    return (
+      <label className="pdf-placeholder" title="点击上传文档" style={{ flex: 1 }}>
+        📄 文档内容
+        <p>点击上传Word文档</p>
+        <input
+          type="file"
+          accept=".doc,.docx,.ppt,.pptx,.xls,.xlsx"
+          style={{ display: 'none' }}
+          onChange={(e) => onUpload(windowData.id, 'documents', e.target.files)}
+        />
+      </label>
+    );
+  }
+
+  const documentUrl = toMediaUrl(windowData, boardId);
+
+  // 如果启用分页模式，显示分页组件（转换为PDF后）
+  if (isPaginationMode) {
+    return (
+      <PDFPaginationViewer 
+        pdfUrl={documentUrl} 
+        onClose={handleClosePagination}
+        boardId={boardId}
+        windowId={windowData.id}
+        initialPage={windowData.initialPage}
+        onUpdateWindow={onUpdateWindow}
+        addMessage={addMessage}
+        openMessageCenter={openMessageCenter}
+        setConfirmDialog={setConfirmDialog}
+        showConfirmDialog={showConfirmDialog}
+      />
+    );
+  }
+
+  // 默认iframe模式
+  return (
+    <div className="pdf-container" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* 文档工具栏 */}
+      <div style={{
+        backgroundColor: '#c0c0c0',
+        borderBottom: '2px outset #c0c0c0',
+        padding: '2px 4px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        height: '24px',
+        flexShrink: 0
+      }}>
+        <button
+          onClick={() => {
+            console.log('分页模式按钮被点击');
+            setIsPaginationMode(true);
+          }}
+          style={PDF_TOOLBAR_ITEM_STYLE}
+          onMouseEnter={handlePdfMouseEnter}
+          onMouseLeave={handlePdfMouseLeave}
+          onMouseDown={handlePdfMouseDown}
+          onMouseUp={handlePdfMouseUp}
+        >
+          {t('pdf_pagination_mode')}
+        </button>
+      </div>
+      
+      {/* 文档内容区域 */}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <iframe
+          title="document"
+          style={{ width: '100%', height: '100%', border: 'none' }}
+          src={documentUrl}
+          onLoad={() => console.log('📄 文档iframe加载完成')}
+          onError={(e) => console.error('📄 文档iframe加载错误:', e)}
+        ></iframe>
+      </div>
+    </div>
+  );
+});
+
+// PDF窗口渲染器组件
+const PDFWindowRenderer = React.memo(({ window: windowData, onUpload, onUpdateWindow, boardId, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog }) => {
+  const { t } = useLanguage();
+  const PDF_TOOLBAR_ITEM_STYLE = {
+    padding: '1px 8px',
+    fontSize: '11px',
+    backgroundColor: 'transparent',
+    border: '1px solid transparent',
+    borderRadius: '0px',
+    cursor: 'pointer',
+    fontFamily: 'MS Sans Serif, sans-serif',
+    height: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#000000',
+    gap: '4px'
+  };
+
+  const handlePdfMouseEnter = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px outset #ffffff';
+    e.currentTarget.style.backgroundColor = '#c0c0c0';
+  };
+
+  const handlePdfMouseLeave = (e) => {
+    e.currentTarget.style.border = '1px solid transparent';
+    e.currentTarget.style.backgroundColor = 'transparent';
+  };
+
+  const handlePdfMouseDown = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px inset #ffffff';
+  };
+
+  const handlePdfMouseUp = (e) => {
+    if (e.currentTarget.disabled) return;
+    e.currentTarget.style.border = '1px outset #ffffff';
+  };
+
+  const isPaginationMode = windowData.isPaginationMode || false;
   const [targetPage, setTargetPage] = useState(null);
+
+  const setIsPaginationMode = useCallback((val) => {
+    if (onUpdateWindow) {
+      onUpdateWindow(windowData.id, { isPaginationMode: val });
+    }
+  }, [onUpdateWindow, windowData.id]);
 
   const handleClosePagination = useCallback(() => {
     setIsPaginationMode(false);
     setTargetPage(null);
-  }, []);
+  }, [setIsPaginationMode]);
 
   // 监听打开PDF页面事件
   useEffect(() => {
@@ -7790,7 +7954,8 @@ const PDFWindowRenderer = React.memo(({ window: windowData, onUpload, boardId, a
         onClose={handleClosePagination}
         boardId={boardId}
         windowId={windowData.id}
-        initialPage={targetPage}
+        initialPage={targetPage || windowData.initialPage}
+        onUpdateWindow={onUpdateWindow}
         addMessage={addMessage}
         openMessageCenter={openMessageCenter}
         setConfirmDialog={setConfirmDialog}
@@ -11665,6 +11830,18 @@ const BoardCanvas = React.memo(({
     }
   };
 
+  const handleUpdateWindow = useCallback(async (windowId, updates) => {
+    // 更新本地状态
+    setWindows(prevWindows => 
+      prevWindows.map(w => 
+        w.id === windowId ? { ...w, ...updates } : w
+      )
+    );
+    
+    // 保存到后端
+    await saveWindowState(windowId, updates);
+  }, [windows, boardId]);
+
   // 优化的窗口内容保存函数
   const handleWindowContentChange = async (windowId, newContent, mode = 'content') => {
     try {
@@ -13460,18 +13637,14 @@ const BoardCanvas = React.memo(({
         {/* 窗口渲染 */}
         {windows
           .filter(window => {
-            const isMinimized = minimizedWindows.has(window.id);
             const isHidden = hiddenWindows.has(window.id);
-            
             if (isHidden) {
               return false;
             }
-            if (isMinimized) {
-              return false;
-            }
-            return true; // 显示非最小化且非隐藏的窗口
+            return true; // 显示非隐藏的窗口（包括最小化的窗口）
           })
           .map(window => {
+            const isMinimized = minimizedWindows.has(window.id);
             const iconClass = getWindowIconClass(window.type);
             return (
             <div
@@ -13484,6 +13657,7 @@ const BoardCanvas = React.memo(({
                 height: window.isMaximized ? 'calc(100% - 28px)' : (window.size?.height || 300),
                 zIndex: getWindowZIndex(window.id),
                 borderRadius: window.isMaximized ? 0 : undefined,
+                display: isMinimized ? 'none' : 'flex', // 使用 display: none 隐藏最小化窗口，但不卸载组件
               }}
               onMouseDown={(e) => {
                 console.log(`窗口 ${window.id} 当前位置:`, window.position);
@@ -13865,6 +14039,7 @@ const BoardCanvas = React.memo(({
                 <PDFWindowRenderer 
                   window={window} 
                   onUpload={handleUpload}
+                  onUpdateWindow={handleUpdateWindow}
                   boardId={boardId}
                   addMessage={addMessage}
                   openMessageCenter={openMessageCenter}
@@ -13876,6 +14051,7 @@ const BoardCanvas = React.memo(({
                 <DocumentWindowRenderer 
                   window={window} 
                   onUpload={handleUpload}
+                  onUpdateWindow={handleUpdateWindow}
                   boardId={boardId}
                   addMessage={addMessage}
                   openMessageCenter={openMessageCenter}

@@ -3,6 +3,7 @@ from typing import Optional
 
 class TTSRequest(BaseModel):
     text: str
+    voice: Optional[str] = None
     text_lang: str = "zh"
     ref_audio_path: Optional[str] = None
     prompt_text: Optional[str] = None

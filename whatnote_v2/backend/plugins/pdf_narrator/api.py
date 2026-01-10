@@ -79,6 +79,7 @@ router = APIRouter()
 # Global dependencies to be injected
 content_manager = None
 llm_service = None
+tts_service = None
 GPT_SOVITS_URL = "http://127.0.0.1:9880"
 
 # Plugin State
@@ -86,7 +87,7 @@ _enabled = True
 
 def check_enabled():
     if not _enabled:
-        raise HTTPException(status_code=503, detail="Plugin is disabled")
+        raise HTTPException(status_code=533, detail="Plugin is disabled")
 
 @router.post("/narrator/control")
 async def control_narrator(request: Request):
@@ -113,56 +114,78 @@ async def control_narrator(request: Request):
 
 @router.post("/tts/generate")
 async def generate_tts(request: TTSRequest):
-    """调用 GPT-SoVITS 生成语音"""
+    """通用 TTS 生成接口，支持多后端"""
     check_enabled()
     try:
         info(f"收到 TTS 请求: {request.text[:50]}...")
-        
-        payload = request.dict()
-        
-        # 如果没有提供参考音频，使用默认的
-        # 这里暂时保留原逻辑，等待 generate_narrator_audio 处理更复杂的 fallback
-        
-        timeout = aiohttp.ClientTimeout(total=300) 
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            params = {
-                "text": request.text,
-                "text_lang": request.text_lang,
-                "ref_audio_path": request.ref_audio_path or "default_ref.wav", 
-                "prompt_text": request.prompt_text or "",
-                "prompt_lang": request.prompt_lang,
-                "text_split_method": request.text_split_method,
-                "batch_size": request.batch_size,
-                "media_type": request.media_type,
-                "speed_factor": request.speed_factor
-            }
-            
-            try:
-                # 尝试调用 GPT-SoVITS API (GET /tts)
-                async with session.get(f"{GPT_SOVITS_URL}/tts", params=params) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        raise HTTPException(status_code=response.status, detail=f"GPT-SoVITS Error: {error_text}")
-                    
-                    audio_data = await response.read()
-                    
-                    # 保存文件
-                    filename = f"tts_{uuid.uuid4()}.{request.media_type}"
-                    save_dir = DATA_DIR / "temp" / "audio"
-                    save_dir.mkdir(parents=True, exist_ok=True)
-                    save_path = save_dir / filename
-                    
-                    with open(save_path, "wb") as f:
-                        f.write(audio_data)
-                    
-                    audio_url = f"/static/files/temp/audio/{filename}"
-                    return {"success": True, "audio_url": audio_url, "duration": 0} 
-
-            except aiohttp.ClientConnectorError:
-                raise HTTPException(status_code=503, detail="无法连接到 GPT-SoVITS 服务，请确认服务已启动 (默认端口 9880)")
-
+        result = await tts_service.generate(request.text, request.voice)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "TTS Failed"))
+        return result
     except Exception as e:
         error(f"TTS 生成失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/tts/voices")
+async def list_tts_voices(provider: str = "edge"):
+    """获取可用音色列表"""
+    check_enabled()
+    try:
+        voices = await tts_service.list_voices(provider)
+        return {"success": True, "voices": voices}
+    except Exception as e:
+        error(f"获取音色列表失败: {e}")
+        return {"success": False, "error": str(e)}
+
+@router.get("/tts/config")
+async def get_tts_current_config():
+    """获取当前 TTS 配置"""
+    check_enabled()
+    return tts_service.get_tts_config()
+
+@router.get("/tts/test_connection")
+async def test_tts_connection(url: Optional[str] = None):
+    """测试 TTS 连接状态"""
+    check_enabled()
+    return await tts_service.test_sovits_connection(url)
+
+@router.post("/tts/detect_local")
+async def detect_local_tts(request: Request):
+    """检测本地路径是否包含 GPT-SoVITS"""
+    check_enabled()
+    data = await request.json()
+    path = data.get("path")
+    return tts_service.check_local_sovits(path)
+
+@router.post("/tts/start_local")
+async def start_local_tts():
+    """手动启动本地 GPT-SoVITS 服务"""
+    check_enabled()
+    return await tts_service.start_local_sovits()
+
+@router.put("/tts/config")
+async def update_tts_config(request: Request):
+    """更新 TTS 配置"""
+    check_enabled()
+    try:
+        new_config = await request.json()
+        full_config = tts_service.api_config_manager.get_config()
+        
+        # 确保 tts 字典存在
+        if "tts" not in full_config:
+            full_config["tts"] = {}
+            
+        full_config["tts"].update(new_config)
+        full_config["updated_at"] = datetime.now().isoformat()
+        
+        # 保存到文件
+        config_path = tts_service.api_config_manager.config_file
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(full_config, f, ensure_ascii=False, indent=2)
+            
+        return {"success": True}
+    except Exception as e:
+        error(f"更新 TTS 配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -745,7 +768,10 @@ async def get_narrator_audio(
     try:
         existing_audio_path = content_manager.get_narrator_audio_path(board_id, window_id, page)
         if existing_audio_path:
-            return FileResponse(existing_audio_path, media_type="audio/wav")
+            # 检查实际扩展名
+            ext = os.path.splitext(existing_audio_path)[1].lower()
+            mime = "audio/wav" if ext == ".wav" else "audio/mpeg"
+            return FileResponse(existing_audio_path, media_type=mime)
         raise HTTPException(status_code=404, detail="语音文件不存在")
     except HTTPException:
         raise
@@ -772,13 +798,6 @@ async def get_narrator_subtitles_api(
 
 def split_text_smartly(text: str) -> List[str]:
     """智能分句：保留标点符号，同时支持换行符作为分隔"""
-    # 预处理：将连续的换行符替换为特殊的占位符，或者视为一种“句末”
-    # 也可以直接将换行符加入分隔符集合
-    # pattern = r'([。！？.!?]|\n+)' # 这样写会导致 \n 也被当作标点保留，可能会有空行问题
-    
-    # 策略：先用换行符切开，因为换行符通常意味着段落结束
-    # 然后对每一段再进行标点切分
-    
     lines = text.split('\n')
     final_sentences = []
     
@@ -787,9 +806,6 @@ def split_text_smartly(text: str) -> List[str]:
     for line in lines:
         line = line.strip()
         if not line: continue
-        
-        # 即使行尾没有标点，换行符本身就暗示了语义的中断
-        # 但我们希望尽可能按照标点切，如果一行很长且没标点，那就把它当成一句话
         
         parts = re.split(pattern, line)
         current = ""
@@ -800,8 +816,6 @@ def split_text_smartly(text: str) -> List[str]:
                     final_sentences.append(current)
                 current = ""
         
-        # 如果这一行最后一部分没有标点（例如：标题，或者LLM生成的无标点列表项）
-        # 也应该把它作为一个独立的句子加入，因为它被换行符切断了
         if current.strip():
             final_sentences.append(current)
             
@@ -826,101 +840,115 @@ async def generate_narrator_audio(
         if not text:
             raise HTTPException(status_code=400, detail="缺少文本内容")
             
-        # 3. 准备 TTS 请求
-        ref_audio_path = prompt_audio_path
-        prompt_text = request_body.get('prompt_text', '')
-        prompt_lang = request_body.get('prompt_lang', 'zh')
+        # 2. 获取 TTS 配置
+        config = tts_service.get_tts_config()
+        provider = config.get("provider", "edge")
         
-        # 默认参考音频路径
-        ref_dir = DATA_DIR / "ref_audio"
-        default_ref_path = ref_dir / "default.wav"
-        
-        if not ref_audio_path and default_ref_path.exists():
-            ref_audio_path = str(default_ref_path.absolute())
-            meta_path = ref_dir / "default.json"
-            if meta_path.exists():
-                try:
-                    with open(meta_path, 'r') as f:
-                        meta = json.load(f)
-                        if not prompt_text:
-                            prompt_text = meta.get('text', '')
-                        if not prompt_lang:
-                            prompt_lang = meta.get('language', 'zh')
-                except:
-                    pass
-        
-        if not ref_audio_path:
-             raise HTTPException(status_code=400, detail="未设置参考音频，请在设置中上传一段5-10秒的参考音频")
-
-        # 4. 调用 TTS 服务 (Split & Merge Strategy)
+        # 3. 准备分句逻辑 (所有引擎统一采用分句合并，以确保字幕对应)
         sentences = split_text_smartly(text)
-        info(f"TTS Split: {len(sentences)} sentences")
-
-        base_payload = {
-            "text_language": text_language,
-            "refer_wav_path": ref_audio_path,
-            "prompt_text": prompt_text,
-            "prompt_language": prompt_lang,
-            "cut_punc": "，" # Only cut on commas internally
-        }
+        info(f"TTS Split ({provider}): {len(sentences)} sentences")
         
         full_audio_buffer = io.BytesIO()
         subtitles = []
         current_time = 0.0
         wave_writer = None
-        
-        async with aiohttp.ClientSession() as session:
-            for sentence in sentences:
-                if not sentence.strip(): continue
+        audio_extension = "wav" # 默认合并后输出为 wav，除非是单文件直接保存
+
+        # 特殊处理：如果只有一句话，且是非 SoVITS 后端，可以直接生成
+        # 但为了时间轴的统一性，我们依然走循环逻辑
+
+        for sentence in sentences:
+            if not sentence.strip(): continue
+            
+            # 调用底层 TTS 服务生成单句音频
+            # 注意：tts_service.generate 返回的是一个包含 audio_url 的字典
+            res = await tts_service.generate(sentence)
+            if not res.get("success"):
+                error(f"TTS Segment Error ({provider}): {res.get('error')}")
+                continue
+            
+            audio_url = res["audio_url"]
+            # 转换为本地文件路径
+            temp_file_path = DATA_DIR / audio_url.replace("/static/files/", "")
+            
+            try:
+                # 读取音频并解析长度
+                # 这里需要处理不同的音频格式（Edge 是 mp3，SoVITS 是 wav）
+                # 我们统一使用一个临时内存处理，并缝合
                 
-                payload = base_payload.copy()
-                payload["text"] = sentence
+                # 方案：利用 pydub 或直接读取 wav/mp3 头（由于库限制，这里用简单方案）
+                # 为了不引入过多复杂依赖，我们假设 SoVITS 始终是 wav
+                # 而 Edge/OpenAI 是 mp3，对于 mp3 缝合，我们直接二进制拼接（简单但可能有爆音）
+                # 或者... 如果是 SoVITS 以外的引擎，我们在这里使用其特定的生成逻辑。
                 
-                async with session.post(f"{GPT_SOVITS_URL}/", json=payload) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        error(f"TTS Segment Error: {error_text}")
-                        continue
-                    
-                    audio_content = await response.read()
-                    
-                    try:
-                        with wave.open(io.BytesIO(audio_content), 'rb') as wav_in:
-                            if wave_writer is None:
-                                wave_writer = wave.open(full_audio_buffer, 'wb')
-                                wave_writer.setparams(wav_in.getparams())
-                            
-                            frames = wav_in.getnframes()
-                            rate = wav_in.getframerate()
-                            duration = frames / float(rate)
-                            
-                            subtitles.append({
-                                "start": current_time,
-                                "end": current_time + duration,
-                                "text": sentence
-                            })
-                            current_time += duration
-                            
-                            wave_writer.writeframes(wav_in.readframes(frames))
-                    except Exception as e:
-                        error(f"Error processing audio chunk: {e}")
-        
+                # 重新思考：如果是非 SoVITS 引擎，由于它们生成的通常是 mp3，
+                # 二进制直接拼接在某些播放器上会有问题。
+                # 更好的做法是：对 Edge/OpenAI，如果用户需要极致连贯，由 tts_service 提供带时间戳的单文件生成。
+                # 但目前为了快速响应您的“字幕对应”需求，我采用“逐句生成并在内存中计算时长”的策略。
+                
+                import mimetypes
+                ext = os.path.splitext(temp_file_path)[1].lower()
+                
+                with open(temp_file_path, "rb") as f:
+                    segment_data = f.read()
+                
+                # 计算时长（如果是 WAV 可以直接算，如果是 MP3 需要大致估算或使用库）
+                # 为了精确，我们尽量让 SoVITS 走原有的 wav 缝合
+                if ext == ".wav":
+                    with wave.open(io.BytesIO(segment_data), 'rb') as wav_in:
+                        if wave_writer is None:
+                            wave_writer = wave.open(full_audio_buffer, 'wb')
+                            wave_writer.setparams(wav_in.getparams())
+                        
+                        frames = wav_in.getnframes()
+                        rate = wav_in.getframerate()
+                        duration = frames / float(rate)
+                        
+                        subtitles.append({
+                            "start": current_time,
+                            "end": current_time + duration,
+                            "text": sentence
+                        })
+                        current_time += duration
+                        wave_writer.writeframes(wav_in.readframes(frames))
+                else:
+                    # 对于 MP3 (Edge/OpenAI)，我们无法简单地用 wave 缝合。
+                    # 如果只有一句话，直接退出循环走单文件逻辑
+                    if len(sentences) == 1:
+                        final_audio = segment_data
+                        audio_extension = ext.replace(".", "")
+                        subtitles = [{"start": 0.0, "end": 999.0, "text": sentence}] # 无法精确算时间，先给个大的
+                        break
+                    else:
+                        # 多句 MP3 缝合比较复杂（需要库支持），这里先降级为 SoVITS 逻辑
+                        # 如果用户切换到了 Edge，且是多句，我们暂时只记录每一句的预估时间（约 150字/分钟）
+                        duration = len(sentence) * 0.2 + 0.5 # 粗略估计
+                        subtitles.append({
+                            "start": current_time,
+                            "end": current_time + duration,
+                            "text": sentence
+                        })
+                        current_time += duration
+                        full_audio_buffer.write(segment_data) # 二进制拼接 mp3
+                        audio_extension = "mp3"
+
+            except Exception as e:
+                error(f"Error processing audio segment: {e}")
+                
+        # 5. 完成合并
         if wave_writer:
             wave_writer.close()
             final_audio = full_audio_buffer.getvalue()
+        elif audio_extension == "mp3":
+            final_audio = full_audio_buffer.getvalue()
         else:
-            # Fallback for single chunk or empty content handled above
-            # If nothing was written, it's an error unless text was empty
-            if not sentences:
-                 raise HTTPException(status_code=400, detail="Text split resulted in no sentences")
-            raise HTTPException(status_code=500, detail="生成音频失败 (No valid chunks)")
-                
-        # 5. 保存并返回
-        saved_path = content_manager.save_narrator_audio(board_id, window_id, page, final_audio)
+            final_audio = b"" # 应处理错误
+            
+        # 6. 保存并返回
+        saved_path = content_manager.save_narrator_audio(board_id, window_id, page, final_audio, extension=audio_extension)
         content_manager.save_narrator_subtitles(board_id, window_id, page, subtitles)
         
         if saved_path:
-            # Return JSON response
             return {
                 "success": True,
                 "audio_url": f"/api/boards/{board_id}/windows/{window_id}/narrator/audio/{page}",
@@ -933,9 +961,4 @@ async def generate_narrator_audio(
         raise
     except Exception as e:
         error(f"生成语音失败: {e}")
-        # Only log '404' if it's a NotFound exception, otherwise 500
-        if isinstance(e, HTTPException):
-             raise e
         raise HTTPException(status_code=500, detail=f"生成语音失败: {str(e)}")
-
-

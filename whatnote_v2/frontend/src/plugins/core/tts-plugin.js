@@ -51,28 +51,38 @@ const TTSPlugin = {
         }
         
         setIsGenerating(true);
-        setAudioUrl(null);
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          setAudioUrl(null);
+        }
         
         try {
           if (TTSPlugin.modelConfig.useBackend) {
-            // 方案3: 使用后端 API（推荐）
+            // 使用统一的 TTS 生成接口
             const response = await fetch(TTSPlugin.modelConfig.apiEndpoint, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 text: content,
-                model: 'gpt-sovit',
-                voice: 'default'
+                media_type: 'mp3'
               })
             });
             
             if (!response.ok) {
-              throw new Error(`后端服务错误: ${response.statusText}`);
+              const err = await response.json();
+              throw new Error(err.detail || `后端服务错误: ${response.statusText}`);
             }
             
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            setAudioUrl(url);
+            const data = await response.json();
+            if (data.success && data.audio_url) {
+                // 如果后端返回的是 URL，直接获取并转换为 Blob 以便播放（或者直接设置 src）
+                const audioRes = await fetch(`http://localhost:8081${data.audio_url}`);
+                const blob = await audioRes.blob();
+                const url = URL.createObjectURL(blob);
+                setAudioUrl(url);
+            } else {
+                throw new Error(data.error || '生成失败');
+            }
           } else {
             // 方案1/2: 前端加载模型（需要 onnxruntime-web）
             // 注意：这需要安装 onnxruntime-web 包
