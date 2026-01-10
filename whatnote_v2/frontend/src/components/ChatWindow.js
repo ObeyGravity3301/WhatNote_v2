@@ -775,6 +775,7 @@ const TodoListSelector = React.memo(({
   setShowTodoList, 
   todoStatus 
 }) => {
+  const { t } = useLanguage();
   const hasTodos = hasActiveTodos(todoStatus);
   if (!showTodoList || !hasTodos) return null;
 
@@ -804,7 +805,7 @@ const TodoListSelector = React.memo(({
         top: '0',
         zIndex: 10
       }}>
-        <span>📋 任务进度 ({completedCount}/{totalCount})</span>
+        <span>{t('chat_task_progress').replace('{completed}', completedCount).replace('{total}', totalCount)}</span>
         <button
           onClick={() => setShowTodoList(false)}
           style={{
@@ -884,12 +885,12 @@ const TodoListSelector = React.memo(({
                     }}>
                       {item.skip_reason && (
                         <span style={{ color: '#999' }}>
-                          跳过: {item.skip_reason}
+                          {t('chat_task_skipped')}: {item.skip_reason}
                         </span>
                       )}
                       {item.note && (
                         <span style={{ color: '#4caf50', fontStyle: 'italic', marginLeft: item.skip_reason ? '8px' : '0' }}>
-                          {item.skip_reason ? ' | ' : ''}备注: {item.note}
+                          {item.skip_reason ? ' | ' : ''}{t('chat_task_note')}: {item.note}
                         </span>
                       )}
                     </div>
@@ -900,7 +901,7 @@ const TodoListSelector = React.memo(({
           </div>
         ) : (
           <div style={{ color: '#808080', textAlign: 'center', padding: '16px' }}>
-            暂无任务项
+            {t('chat_no_tasks')}
           </div>
         )}
         
@@ -911,18 +912,19 @@ const TodoListSelector = React.memo(({
           fontSize: '10px',
           color: '#666',
           display: 'flex',
+          paddingBottom: '4px',
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
           <span>
             {todoStatus.all_completed 
-              ? '🎉 所有任务已完成' 
-              : `进度：已完成 ${completedCount}/${totalCount}，剩余 ${remainingCount}`
+              ? t('chat_all_tasks_completed')
+              : t('chat_task_progress_summary').replace('{completed}', completedCount).replace('{total}', totalCount).replace('{remaining}', remainingCount)
             }
           </span>
           {todoStatus.all_completed && (
             <span style={{ color: '#4caf50', fontWeight: 'bold' }}>
-              ✓ 完成
+              {t('chat_task_completed')}
             </span>
           )}
         </div>
@@ -994,7 +996,7 @@ const FileSelector = React.memo(({
       }}>
             {boardFiles.length === 0 ? (
               <div style={{ color: '#808080', textAlign: 'center', padding: '16px' }}>
-                展板中暂无文件
+                {t('chat_no_files_in_board')}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -2727,7 +2729,7 @@ ${argsStr}
               value={inputText}
               onChange={handleInputChange}
               onKeyPress={handleKeyPress}
-              placeholder="输入消息... (Enter发送，Shift+Enter换行)"
+              placeholder={t('chat_input_placeholder')}
               rows="1"
             disabled={isLoading || isStreaming}
               style={{
@@ -2742,7 +2744,7 @@ ${argsStr}
             <button
               className="send-button stop-button"
               onClick={handleStopGeneration}
-              title="停止生成"
+              title={t('chat_stop_generation')}
               style={{
                 backgroundColor: '#ff4444',
                 borderColor: '#ff4444'
@@ -2755,7 +2757,7 @@ ${argsStr}
               className="send-button"
               onClick={sendMessage}
               disabled={isLoading || (!inputText.trim() && selectedFiles.length === 0)}
-              title="发送消息"
+              title={t('chat_send_message')}
             >
               {isLoading ? '⏳' : '📤'}
             </button>

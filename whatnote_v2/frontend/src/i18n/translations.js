@@ -736,6 +736,97 @@ const translations = {
       "ja-JP": "チャット履歴をクリア"
     }
   },
+  "chat_input_placeholder": {
+    "default": {
+      "zh-CN": "输入消息... (Enter发送，Shift+Enter换行)",
+      "en-US": "Type a message... (Enter to send, Shift+Enter for new line)",
+      "ja-JP": "メッセージを入力... (Enterで送信、Shift+Enterで改行)"
+    }
+  },
+  "chat_task_progress": {
+    "default": {
+      "zh-CN": "任务进度 ({completed}/{total})",
+      "en-US": "Task Progress ({completed}/{total})",
+      "ja-JP": "タスク進捗 ({completed}/{total})"
+    }
+  },
+  "chat_all_tasks_completed": {
+    "default": {
+      "zh-CN": "所有任务已完成",
+      "en-US": "All tasks completed",
+      "ja-JP": "すべてのタスクが完了しました"
+    }
+  },
+  "chat_task_progress_summary": {
+    "default": {
+      "zh-CN": "进度：已完成 {completed}/{total}，剩余 {remaining}",
+      "en-US": "Progress: {completed}/{total} completed, {remaining} remaining",
+      "ja-JP": "進捗：{completed}/{total} 完了、残り {remaining}"
+    }
+  },
+  "chat_task_completed": {
+    "default": {
+      "zh-CN": "✓ 完成",
+      "en-US": "✓ Completed",
+      "ja-JP": "✓ 完了"
+    }
+  },
+  "chat_no_tasks": {
+    "default": {
+      "zh-CN": "暂无任务项",
+      "en-US": "No task items",
+      "ja-JP": "タスク項目はありません"
+    }
+  },
+  "chat_task_note": {
+    "default": {
+      "zh-CN": "备注",
+      "en-US": "Note",
+      "ja-JP": "備考"
+    }
+  },
+  "chat_task_skipped": {
+    "default": {
+      "zh-CN": "跳过",
+      "en-US": "Skipped",
+      "ja-JP": "スキップ"
+    }
+  },
+  "chat_stop_generation": {
+    "default": {
+      "zh-CN": "停止生成",
+      "en-US": "Stop Generation",
+      "ja-JP": "生成を停止"
+    }
+  },
+  "chat_send_message": {
+    "default": {
+      "zh-CN": "发送消息",
+      "en-US": "Send Message",
+      "ja-JP": "メッセージを送信"
+    }
+  },
+  "chat_no_messages": {
+    "default": {
+      "zh-CN": "暂无消息",
+      "en-US": "No messages",
+      "ja-JP": "メッセージはありません"
+    }
+  },
+  "chat_clear_all": {
+    "default": {
+      "zh-CN": "清空所有消息",
+      "en-US": "Clear all messages",
+      "ja-JP": "すべてのメッセージをクリア"
+    }
+  },
+  "chat_no_files_in_board": {
+    "default": {
+      "zh-CN": "展板中暂无文件",
+      "en-US": "No files in board",
+      "ja-JP": "ボード内にファイルはありません"
+    }
+  },
   "calendar_weekday_0": {
     "default": {
       "zh-CN": "日",
@@ -1495,9 +1586,9 @@ const translations = {
   },
   "pdf_search": {
     "default": {
-      "zh-CN": "🔍 搜索",
-      "en-US": "🔍 Search",
-      "ja-JP": "🔍 検索"
+      "zh-CN": "搜索",
+      "en-US": "Search",
+      "ja-JP": "検索"
     }
   },
   "pdf_hide_search": {
@@ -1516,9 +1607,9 @@ const translations = {
   },
   "pdf_extract": {
     "default": {
-      "zh-CN": "📸 提取",
-      "en-US": "📸 Extract",
-      "ja-JP": "📸 抽出"
+      "zh-CN": "提取",
+      "en-US": "Extract",
+      "ja-JP": "抽出"
     }
   },
   "pdf_hide_extract": {
@@ -1635,9 +1726,9 @@ const translations = {
   },
   "pdf_search_history": {
     "default": {
-      "zh-CN": "📜 搜索历史",
-      "en-US": "📜 Search History",
-      "ja-JP": "📜 検索履歴"
+      "zh-CN": "搜索历史",
+      "en-US": "Search History",
+      "ja-JP": "検索履歴"
     }
   },
   "pdf_results_count": {
@@ -1929,23 +2020,23 @@ const translations = {
   },
   "pdf_sidebar_anno_visual_btn": {
     "default": {
-      "zh-CN": "👁️ 视觉生成",
-      "en-US": "👁️ Visual Generation",
-      "ja-JP": "👁️ 視覚生成"
+      "zh-CN": "视觉生成",
+      "en-US": "Visual Generation",
+      "ja-JP": "視覚生成"
     }
   },
   "pdf_sidebar_anno_summary_btn": {
     "default": {
-      "zh-CN": "📝 生成全文档笔记",
-      "en-US": "📝 Generate Full Doc Notes",
-      "ja-JP": "📝 全文ノート生成"
+      "zh-CN": "生成全文档笔记",
+      "en-US": "Generate Full Doc Notes",
+      "ja-JP": "全文ノート生成"
     }
   },
   "pdf_sidebar_anno_outline_btn": {
     "default": {
-      "zh-CN": "📚 生成大纲",
-      "en-US": "📚 Generate Outline",
-      "ja-JP": "📚 大綱生成"
+      "zh-CN": "生成大纲",
+      "en-US": "Generate Outline",
+      "ja-JP": "大綱生成"
     }
   },
   "pdf_sidebar_anno_one_click_btn": {
@@ -1999,9 +2090,9 @@ const translations = {
   },
   "pdf_sidebar_anno_batch_btn": {
     "default": {
-      "zh-CN": "🚀 批量生成所有分段注释",
-      "en-US": "🚀 Batch Generate All Section Annotations",
-      "ja-JP": "🚀 全セクション注釈を一括生成"
+      "zh-CN": "批量生成所有分段注释",
+      "en-US": "Batch Generate All Section Annotations",
+      "ja-JP": "全セクション注釈を一括生成"
     }
   },
   "pdf_outline_generating": {
@@ -2077,9 +2168,9 @@ const translations = {
   // PDF Narrator Plugin
   "narrator_btn": {
     "default": {
-      "zh-CN": "🗣️ 讲解",
-      "en-US": "🗣️ Narrator",
-      "ja-JP": "🗣️ 解説"
+      "zh-CN": "讲解",
+      "en-US": "Narrator",
+      "ja-JP": "解説"
     }
   },
   "narrator_btn_title": {
@@ -2091,16 +2182,16 @@ const translations = {
   },
   "narrator_settings": {
     "default": {
-      "zh-CN": "⚙️ 设置",
-      "en-US": "⚙️ Settings",
-      "ja-JP": "⚙️ 設定"
+      "zh-CN": "设置",
+      "en-US": "Settings",
+      "ja-JP": "設定"
     }
   },
   "narrator_back": {
     "default": {
-      "zh-CN": "🔙 返回",
-      "en-US": "🔙 Back",
-      "ja-JP": "🔙 戻る"
+      "zh-CN": "返回",
+      "en-US": "Back",
+      "ja-JP": "戻る"
     }
   },
   "narrator_prompt_label": {
@@ -2112,9 +2203,9 @@ const translations = {
   },
   "narrator_reference_label": {
     "default": {
-      "zh-CN": "🗣️ 参考音色 (Reference)",
-      "en-US": "🗣️ Reference Voice",
-      "ja-JP": "🗣️ 参考音声"
+      "zh-CN": "参考音色 (Reference)",
+      "en-US": "Reference Voice",
+      "ja-JP": "参考音声"
     }
   },
   "lang_zh": {
@@ -2140,9 +2231,9 @@ const translations = {
   },
   "narrator_upload_ref": {
     "default": {
-      "zh-CN": "📤 上传参考音频",
-      "en-US": "📤 Upload Reference Audio",
-      "ja-JP": "📤 参考音声をアップロード"
+      "zh-CN": "上传参考音频",
+      "en-US": "Upload Reference Audio",
+      "ja-JP": "参考音声をアップロード"
     }
   },
   "narrator_change_ref": {
@@ -2161,9 +2252,9 @@ const translations = {
   },
   "narrator_model_label": {
     "default": {
-      "zh-CN": "🧠 模型 (Model)",
-      "en-US": "🧠 Model",
-      "ja-JP": "🧠 モデル"
+      "zh-CN": "模型 (Model)",
+      "en-US": "Model",
+      "ja-JP": "モデル"
     }
   },
   "narrator_output_lang": {
@@ -2203,30 +2294,30 @@ const translations = {
   },
   "narrator_refresh_models": {
     "default": {
-      "zh-CN": "🔄 刷新模型",
-      "en-US": "🔄 Refresh Models",
-      "ja-JP": "🔄 モデルを更新"
+      "zh-CN": "刷新模型",
+      "en-US": "Refresh Models",
+      "ja-JP": "モデルを更新"
     }
   },
   "narrator_save_settings": {
     "default": {
-      "zh-CN": "💾 保存设置",
-      "en-US": "💾 Save Settings",
-      "ja-JP": "💾 設定を保存"
+      "zh-CN": "保存设置",
+      "en-US": "Save Settings",
+      "ja-JP": "設定を保存"
     }
   },
   "narrator_script_page": {
     "default": {
-      "zh-CN": "📝 第 {page} 页讲稿",
-      "en-US": "📝 Page {page} Script",
-      "ja-JP": "📝 {page} 頁の原稿"
+      "zh-CN": "第 {page} 页讲稿",
+      "en-US": "Page {page} Script",
+      "ja-JP": "{page} 頁の原稿"
     }
   },
   "narrator_back_to_player": {
     "default": {
-      "zh-CN": "🔙 返回播放器",
-      "en-US": "🔙 Back to Player",
-      "ja-JP": "🔙 戻る"
+      "zh-CN": "返回播放器",
+      "en-US": "Back to Player",
+      "ja-JP": "戻る"
     }
   },
   "narrator_edit_placeholder": {
@@ -2238,16 +2329,16 @@ const translations = {
   },
   "narrator_saving": {
     "default": {
-      "zh-CN": "💾 正在自动保存...",
-      "en-US": "💾 Auto-saving...",
-      "ja-JP": "💾 保存中..."
+      "zh-CN": "正在自动保存...",
+      "en-US": "Auto-saving...",
+      "ja-JP": "保存中..."
     }
   },
   "narrator_saved": {
     "default": {
-      "zh-CN": "✅ 已保存",
-      "en-US": "✅ Saved",
-      "ja-JP": "✅ 保存済"
+      "zh-CN": "已保存",
+      "en-US": "Saved",
+      "ja-JP": "保存済"
     }
   },
   "narrator_click_to_play": {
@@ -2371,9 +2462,9 @@ const translations = {
   },
   "narrator_edit": {
     "default": {
-      "zh-CN": "✏️ 编辑",
-      "en-US": "✏️ Edit",
-      "ja-JP": "✏️ 編集"
+      "zh-CN": "编辑",
+      "en-US": "Edit",
+      "ja-JP": "編集"
     }
   },
   "narrator_close": {
@@ -2798,9 +2889,9 @@ const translations = {
   },
   "pdf_summary_start_btn": {
     "default": {
-      "zh-CN": "🚀 开始生成",
-      "en-US": "🚀 Start Generating",
-      "ja-JP": "🚀 生成開始"
+      "zh-CN": "开始生成",
+      "en-US": "Start Generating",
+      "ja-JP": "生成開始"
     }
   },
   "pdf_summary_click_to_start": {
@@ -2819,9 +2910,9 @@ const translations = {
   },
   "pdf_summary_settings": {
     "default": {
-      "zh-CN": "📝 全文档笔记生成设置",
-      "en-US": "📝 Full-document Note Settings",
-      "ja-JP": "📝 全文ノート生成設定"
+      "zh-CN": "全文档笔记生成设置",
+      "en-US": "Full-document Note Settings",
+      "ja-JP": "全文ノート生成設定"
     }
   },
   "pdf_summary_refresh": {

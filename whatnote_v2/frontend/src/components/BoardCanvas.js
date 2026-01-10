@@ -9938,7 +9938,7 @@ const BoardCanvas = React.memo(({
     return {
       id: CHAT_WINDOW_ID,
       type: 'chat',
-      title: `AI助手 - ${boardName}`,
+      title: `${t('ai_assistant')} - ${boardName}`,
       position: { x: 150, y: 100 },
       size: { width: 400, height: 500 },
       content: '',
