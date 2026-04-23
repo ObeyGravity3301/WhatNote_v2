@@ -98,9 +98,24 @@ def kill_process_on_port(port):
 def get_gpt_sovits_python():
     """获取GPT-SoVITS虚拟环境中的Python路径"""
     if IS_WINDOWS:
-        return GPT_SOVITS_DIR / "venv" / "Scripts" / "python.exe"
+        candidates = [
+            GPT_SOVITS_DIR / "venv310" / "Scripts" / "python.exe",
+            GPT_SOVITS_DIR / "venv" / "Scripts" / "python.exe",
+            GPT_SOVITS_DIR / "runtime" / "python.exe",
+        ]
     else:
-        return GPT_SOVITS_DIR / "venv" / "bin" / "python"
+        candidates = [
+            GPT_SOVITS_DIR / "venv310" / "bin" / "python",
+            GPT_SOVITS_DIR / "venv" / "bin" / "python",
+            GPT_SOVITS_DIR / "runtime" / "bin" / "python",
+        ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    # 回退到旧路径，保持原有返回类型
+    return candidates[1]
 
 def start_gpt_sovits():
     """启动GPT-SoVITS服务"""

@@ -128,8 +128,8 @@ class VisionToolHandlers:
                     error=f"读取图片失败: {str(e)}"
                 )
             
-            # 3. 获取 API 配置 (强制使用 qwen-vl-max)
-            # 我们暂时硬编码使用 Qwen VL，因为它是最强的
+            # 3. 获取 API 配置 (强制使用 qwen3-vl-plus)
+            # 视觉工具统一切到新版 Qwen3-VL，避免继续命中旧的 VL 系列
             # 也可以从配置中读取，但要确保是 VL 模型
             qwen_config = self.api_config_manager.get_provider_config("qwen")
             if not qwen_config or not qwen_config.get("apiKey"):
@@ -142,7 +142,7 @@ class VisionToolHandlers:
             
             api_key = qwen_config["apiKey"]
             base_url = qwen_config["baseUrl"]
-            model = "qwen-vl-max"  # 强制使用 VL 模型
+            model = "qwen3-vl-plus"  # 强制使用新版 VL 模型
             
             # 4. 调用 VL 模型
             info(f"[Vision Tool] 调用 {model} 分析图片: {path.name}")

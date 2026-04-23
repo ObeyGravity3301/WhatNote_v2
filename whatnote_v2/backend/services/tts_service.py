@@ -44,18 +44,15 @@ class TTSService:
         try:
             timeout = aiohttp.ClientTimeout(total=5)
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                # 尝试获取模型列表作为连接测试
-                async with session.get(f"{url}/models") as response:
+                # 新版 GPT-SoVITS api.py 没有 /models，这里改用更稳定的 /control 探活。
+                async with session.get(f"{url}/control") as response:
                     if response.status == 200:
-                        data = await response.json()
                         self._last_status["gpt_sovits"] = True
                         return {
-                            "success": True, 
-                            "message": "连接成功",
-                            "models": data
+                            "success": True,
+                            "message": "连接成功"
                         }
-                    else:
-                        return {"success": False, "message": f"服务器返回错误: {response.status}"}
+                    return {"success": False, "message": f"服务器返回错误: {response.status}"}
         except Exception as e:
             self._last_status["gpt_sovits"] = False
             return {"success": False, "message": f"无法连接: {str(e)}"}
@@ -100,13 +97,23 @@ class TTSService:
 
         # 准备启动命令
         is_windows = platform.system() == "Windows"
-        venv_python = p / "venv" / "Scripts" / "python.exe" if is_windows else p / "venv" / "bin" / "python"
-        
-        if not venv_python.exists():
-            # 尝试另一种常见的虚拟环境路径
-            venv_python = p / "runtime" / "python.exe" if is_windows else p / "runtime" / "bin" / "python"
-            
-        if not venv_python.exists():
+        candidate_paths = []
+        if is_windows:
+            candidate_paths = [
+                p / "venv310" / "Scripts" / "python.exe",
+                p / "venv" / "Scripts" / "python.exe",
+                p / "runtime" / "python.exe",
+            ]
+        else:
+            candidate_paths = [
+                p / "venv310" / "bin" / "python",
+                p / "venv" / "bin" / "python",
+                p / "runtime" / "bin" / "python",
+            ]
+
+        venv_python = next((candidate for candidate in candidate_paths if candidate.exists()), None)
+
+        if not venv_python:
             return {"success": False, "message": "未找到虚拟环境 Python 指释器，请确保路径正确"}
 
         try:
@@ -121,8 +128,8 @@ class TTSService:
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if is_windows else 0
             )
             
-            # 等待启动 (轮询 15 秒)
-            for _ in range(15):
+            # 模型加载较慢，给足启动缓冲时间，避免前端误判为离线。
+            for _ in range(90):
                 await asyncio.sleep(1)
                 status = await self.test_sovits_connection()
                 if status["success"]:
@@ -169,23 +176,40 @@ class TTSService:
         url = config.get("sovits_url", "http://127.0.0.1:9880")
         if not url.startswith("http"):
             url = f"http://{url}"
+
+        ref_audio_path = config.get("ref_audio_path")
+        prompt_text = config.get("prompt_text") or ""
+        prompt_language = config.get("prompt_lang", "zh")
+
+        # 如果配置里没有显式写入参考音频，就复用插件上传的默认参考音频。
+        if not ref_audio_path:
+            default_ref_path = self.data_dir / "ref_audio" / "default.wav"
+            default_meta_path = self.data_dir / "ref_audio" / "default.json"
+            if default_ref_path.exists():
+                ref_audio_path = str(default_ref_path)
+                if default_meta_path.exists():
+                    try:
+                        with open(default_meta_path, "r", encoding="utf-8") as f:
+                            meta = json.load(f)
+                        prompt_text = prompt_text or meta.get("text", "")
+                        prompt_language = meta.get("language", prompt_language)
+                    except Exception as e:
+                        error(f"读取默认参考音频元数据失败: {e}")
             
         timeout = aiohttp.ClientTimeout(total=300) 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             params = {
                 "text": text,
-                "text_lang": config.get("text_lang", "zh"),
-                "ref_audio_path": config.get("ref_audio_path") or "default_ref.wav", 
-                "prompt_text": config.get("prompt_text") or "",
-                "prompt_lang": config.get("prompt_lang", "zh"),
-                "text_split_method": config.get("text_split_method", "cut5"),
-                "batch_size": config.get("batch_size", 1),
-                "media_type": config.get("media_type", "wav"),
-                "speed_factor": config.get("speed_factor", 1.0)
+                "text_language": config.get("text_lang", "zh"),
+                "refer_wav_path": ref_audio_path,
+                "prompt_text": prompt_text,
+                "prompt_language": prompt_language,
+                "speed": config.get("speed_factor", 1.0)
             }
             
             try:
-                async with session.get(f"{url}/tts", params=params) as response:
+                # 兼容新版 GPT-SoVITS api.py，TTS 入口为根路径 /
+                async with session.get(f"{url}/", params=params) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         return {"success": False, "error": f"GPT-SoVITS Error: {error_text}"}
@@ -210,8 +234,11 @@ class TTSService:
         from openai import AsyncOpenAI
         import aiofiles
         
-        # 获取 OpenAI 配置
-        openai_config = self.api_config_manager.get_config().get("providers", {}).get("openai", {})
+        # 统一使用 get_provider_config 以便支持环境变量
+        openai_config = self.api_config_manager.get_provider_config("openai")
+        if not openai_config:
+            return {"success": False, "error": "OpenAI 配置不存在"}
+            
         api_key = openai_config.get("apiKey")
         if not api_key:
             return {"success": False, "error": "未配置 OpenAI API Key"}

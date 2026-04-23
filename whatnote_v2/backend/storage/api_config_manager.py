@@ -110,10 +110,27 @@ class APIConfigManager:
         return config.get("current_provider", "openai")
     
     def get_provider_config(self, provider: str) -> Optional[Dict]:
-        """获取指定服务商的配置"""
+        """获取指定服务商的配置，优先使用环境变量"""
         config = self.get_config()
         providers = config.get("providers", {})
-        return providers.get(provider)
+        provider_config = providers.get(provider, {}).copy()
+        
+        # 环境变量映射
+        env_map = {
+            "qwen": "QWEN_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "gemini": "GEMINI_API_KEY"
+        }
+        
+        # 如果环境变量存在，则覆盖配置中的 apiKey
+        env_key = env_map.get(provider)
+        if env_key:
+            env_value = os.getenv(env_key)
+            if env_value:
+                provider_config["apiKey"] = env_value
+        
+        return provider_config if provider_config else None
     
     def get_current_config(self) -> Optional[Dict]:
         """获取当前服务商的配置"""

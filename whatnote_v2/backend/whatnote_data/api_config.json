@@ -17,11 +17,17 @@
       "baseUrl": "https://generativelanguage.googleapis.com/v1"
     },
     "qwen": {
-      "apiKey": "sk-41b812cd78824614bdc3184525cc729f",
+      "apiKey": "",
       "model": "qwen-plus",
       "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
     }
   },
   "created_at": "2025-09-19T11:49:29.740818",
-  "updated_at": "2025-12-06T15:10:59.810157"
+  "updated_at": "2026-04-14T18:39:00.994062",
+  "tts": {
+    "provider": "gpt-sovits",
+    "voice": "zh-CN-XiaoxiaoNeural",
+    "sovits_url": "http://127.0.0.1:9880",
+    "sovits_path": "/home/obeygravity/Projects/GPT-SoVITS"
+  }
 }

@@ -2043,17 +2043,18 @@ class ContentManager:
             
             print(f"开始提取PDF文本: {pdf_file_path}")
             
-            # 使用pypdf提取文本
-            with open(pdf_file_path, 'rb') as file:
-                pdf_reader = pypdf.PdfReader(file)
-                total_pages = len(pdf_reader.pages)
+            # 使用 PyMuPDF (fitz) 提取文本，比 pypdf 更鲁棒
+            import fitz
+            try:
+                pdf_document = fitz.open(pdf_file_path)
+                total_pages = len(pdf_document)
                 
                 print(f"PDF总页数: {total_pages}")
                 
                 for page_num in range(total_pages):
                     try:
-                        page = pdf_reader.pages[page_num]
-                        text = page.extract_text()
+                        page = pdf_document[page_num]
+                        text = page.get_text()
                         
                         # 保存到MD文件
                         page_filename = f"{pdf_name}_page_{page_num + 1:03d}.md"
@@ -2066,7 +2067,7 @@ class ContentManager:
                         md_content += f"页码: {page_num + 1}/{total_pages}\n\n"
                         md_content += "---\n\n"
                         
-                        if text.strip():
+                        if text and text.strip():
                             md_content += text.strip()
                         else:
                             md_content += "*此页面没有可提取的文本内容*"
@@ -2078,10 +2079,42 @@ class ContentManager:
                         print(f"已保存第 {page_num + 1} 页文本: {page_filename}")
                         
                     except Exception as e:
-                        print(f"提取第 {page_num + 1} 页文本失败: {e}")
+                        print(f"提取第 {page_num + 1} 页文本异常: {e}")
+                        # 即使单页失败，也创建一个占位文件，避免后续流程中断
+                        page_filename = f"{pdf_name}_page_{page_num + 1:03d}.md"
+                        page_file_path = pdf_pages_dir / page_filename
+                        if not page_file_path.exists():
+                            with open(page_file_path, 'w', encoding='utf-8') as f:
+                                f.write(f"# 提取失败\n\n错误信息: {str(e)}")
                         continue
                 
+                pdf_document.close()
                 print(f"PDF文本提取完成: {total_pages} 页 -> {pdf_pages_dir}")
+                return True
+                
+            except Exception as e:
+                print(f"使用fitz打开PDF失败: {e}")
+                # 回退到 pypdf (作为最后的尝试)
+                import pypdf
+                with open(pdf_file_path, 'rb') as file:
+                    pdf_reader = pypdf.PdfReader(file)
+                    total_pages = len(pdf_reader.pages)
+                    
+                    for page_num in range(total_pages):
+                        try:
+                            page = pdf_reader.pages[page_num]
+                            text = page.extract_text()
+                            page_filename = f"{pdf_name}_page_{page_num + 1:03d}.md"
+                            page_file_path = pdf_pages_dir / page_filename
+                            
+                            md_content = f"# {pdf_name} - 第 {page_num + 1} 页\n\n"
+                            md_content += f"来源: {window_data.get('title', 'unknown.pdf')}\n"
+                            md_content += "---\n\n"
+                            md_content += text.strip() if text and text.strip() else "*此页面没有可提取的文本内容*"
+                            
+                            with open(page_file_path, 'w', encoding='utf-8') as f:
+                                f.write(md_content)
+                        except: continue
                 return True
                 
         except Exception as e:
@@ -2195,6 +2228,86 @@ class ContentManager:
             print(f"保存PDF注释失败: {e}")
             import traceback
             print(f"详细错误信息: {traceback.format_exc()}")
+            return False
+
+    def get_pdf_page_translation(self, board_id: str, window_id: str, page: int) -> Optional[Dict]:
+        """获取PDF指定页面的翻译内容 (JSON格式)"""
+        try:
+            # 获取窗口信息
+            windows = self.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if not target_window:
+                return None
+            
+            # 构建翻译文件路径 - 去掉.pdf后缀
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]  # 去掉.pdf后缀
+            pdf_name = self._sanitize_filename(title)
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            
+            if not pdf_pages_dir or not pdf_pages_dir.exists():
+                return None
+            
+            # 构建翻译文件名
+            trans_filename = f"{pdf_name}_trans_{page:03d}.json"
+            trans_file_path = pdf_pages_dir / trans_filename
+            
+            # 读取翻译文件
+            if trans_file_path.exists():
+                with open(trans_file_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            else:
+                return None
+                
+        except Exception as e:
+            print(f"获取PDF翻译失败: {e}")
+            return None
+
+    def save_pdf_page_translation(self, board_id: str, window_id: str, page: int, translation_data: Dict) -> bool:
+        """保存PDF指定页面的翻译内容 (JSON格式)"""
+        try:
+            # 获取窗口信息
+            windows = self.get_board_windows(board_id)
+            target_window = None
+            for window in windows:
+                if window.get('id') == window_id:
+                    target_window = window
+                    break
+            
+            if not target_window:
+                return False
+            
+            # 构建翻译文件路径 - 去掉.pdf后缀
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]  # 去掉.pdf后缀
+            pdf_name = self._sanitize_filename(title)
+            
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            if not pdf_pages_dir:
+                return False
+            
+            # 确保目录存在
+            pdf_pages_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 构建翻译文件名
+            trans_filename = f"{pdf_name}_trans_{page:03d}.json"
+            trans_file_path = pdf_pages_dir / trans_filename
+            
+            # 写入翻译文件
+            with open(trans_file_path, 'w', encoding='utf-8') as f:
+                json.dump(translation_data, f, ensure_ascii=False, indent=2)
+            
+            return True
+            
+        except Exception as e:
+            print(f"保存PDF翻译失败: {e}")
             return False
 
     def _get_pdf_pages_dir(self, board_id: str, pdf_name: str) -> Optional[Path]:
@@ -3231,4 +3344,40 @@ class ContentManager:
             return True
         except Exception as e:
             print(f"保存字幕失败: {e}")
+            return False
+
+    def delete_narrator_audio(self, board_id: str, window_id: str, page: int) -> bool:
+        """删除PDF指定页面的语音与字幕文件"""
+        try:
+            windows = self.get_board_windows(board_id)
+            target_window = next((w for w in windows if w.get('id') == window_id), None)
+            if not target_window:
+                return False
+
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            if not pdf_pages_dir:
+                return False
+
+            audio_dir = pdf_pages_dir / "audio"
+            if not audio_dir.exists():
+                return True
+
+            deleted_any = False
+            for audio_path in audio_dir.glob(f"audio_{page:03d}.*"):
+                audio_path.unlink(missing_ok=True)
+                deleted_any = True
+
+            sub_path = audio_dir / f"audio_{page:03d}.json"
+            if sub_path.exists():
+                sub_path.unlink(missing_ok=True)
+                deleted_any = True
+
+            return deleted_any or True
+        except Exception as e:
+            print(f"删除语音失败: {e}")
             return False

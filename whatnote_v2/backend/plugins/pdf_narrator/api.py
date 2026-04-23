@@ -9,6 +9,7 @@ import os
 import wave
 import io
 import re
+import subprocess
 from pathlib import Path
 from datetime import datetime
 from logger import info, error
@@ -82,12 +83,79 @@ llm_service = None
 tts_service = None
 GPT_SOVITS_URL = "http://127.0.0.1:9880"
 
+GPT_MODEL_DIR_NAMES = [
+    "GPT_weights",
+    "GPT_weights_v2",
+    "GPT_weights_v2Pro",
+    "GPT_weights_v2ProPlus",
+    "GPT_weights_v3",
+    "GPT_weights_v4",
+]
+
+SOVITS_MODEL_DIR_NAMES = [
+    "SoVITS_weights",
+    "SoVITS_weights_v2",
+    "SoVITS_weights_v2Pro",
+    "SoVITS_weights_v2ProPlus",
+    "SoVITS_weights_v3",
+    "SoVITS_weights_v4",
+]
+
 # Plugin State
 _enabled = True
 
 def check_enabled():
     if not _enabled:
         raise HTTPException(status_code=533, detail="Plugin is disabled")
+
+
+def _has_any_model_dir(base_dir: Path) -> bool:
+    return any((base_dir / dirname).exists() for dirname in [*GPT_MODEL_DIR_NAMES, *SOVITS_MODEL_DIR_NAMES])
+
+
+def _locate_gpt_sovits_dir() -> Optional[Path]:
+    cwd = Path.cwd().resolve()
+    candidate_dir = cwd
+
+    for _ in range(4):
+        check_path = candidate_dir / "GPT-SoVITS"
+        if check_path.exists() and _has_any_model_dir(check_path):
+            return check_path
+
+        sibling_path = candidate_dir.parent / "GPT-SoVITS"
+        if sibling_path.exists() and _has_any_model_dir(sibling_path):
+            return sibling_path
+
+        candidate_dir = candidate_dir.parent
+
+    hardcoded = Path("/home/obeygravity/Projects/GPT-SoVITS")
+    if hardcoded.exists() and _has_any_model_dir(hardcoded):
+        return hardcoded
+
+    return None
+
+
+def _collect_model_files(base_dir: Path, dir_names: List[str], pattern: str) -> List[str]:
+    collected = []
+    seen = set()
+    for dirname in dir_names:
+        model_dir = base_dir / dirname
+        if not model_dir.exists():
+            continue
+        for file_path in sorted(model_dir.glob(pattern)):
+            if file_path.name in seen:
+                continue
+            collected.append(file_path.name)
+            seen.add(file_path.name)
+    return collected
+
+
+def _resolve_model_path(base_dir: Path, filename: str, dir_names: List[str]) -> Optional[Path]:
+    for dirname in dir_names:
+        model_path = base_dir / dirname / filename
+        if model_path.exists():
+            return model_path
+    return None
 
 @router.post("/narrator/control")
 async def control_narrator(request: Request):
@@ -326,45 +394,16 @@ async def get_tts_models():
     try:
         cwd = Path.cwd().resolve()
         info(f"当前工作目录: {cwd}")
-        
-        # 尝试定位 GPT-SoVITS 目录
-        candidate_dir = cwd
-        base_dir = None
-        
-        for _ in range(4):
-            check_path = candidate_dir / "GPT-SoVITS"
-            if check_path.exists() and (check_path / "GPT_weights").exists():
-                base_dir = check_path
-                break
-            
-            sibling_path = candidate_dir.parent / "GPT-SoVITS"
-            if sibling_path.exists() and (sibling_path / "GPT_weights").exists():
-                base_dir = sibling_path
-                break
-                
-            candidate_dir = candidate_dir.parent
-            
-        if not base_dir:
-            # 最后的硬编码尝试
-            hardcoded = Path("/home/obeygravity/Projects/GPT-SoVITS")
-            if hardcoded.exists():
-                base_dir = hardcoded
-        
+
+        base_dir = _locate_gpt_sovits_dir()
         if not base_dir:
             return {"gpt_weights": [], "sovits_weights": [], "error": f"未找到 GPT-SoVITS 目录 (cwd: {cwd})"}
 
         info(f"定位到 GPT-SoVITS 目录: {base_dir}")
 
-        gpt_weights = []
-        gpt_dir = base_dir / "GPT_weights"
-        if gpt_dir.exists():
-            gpt_weights = [f.name for f in gpt_dir.glob("*.ckpt")]
-            
-        sovits_weights = []
-        sovits_dir = base_dir / "SoVITS_weights"
-        if sovits_dir.exists():
-            sovits_weights = [f.name for f in sovits_dir.glob("*.pth")]
-            
+        gpt_weights = _collect_model_files(base_dir, GPT_MODEL_DIR_NAMES, "*.ckpt")
+        sovits_weights = _collect_model_files(base_dir, SOVITS_MODEL_DIR_NAMES, "*.pth")
+
         return {
             "gpt_weights": sorted(gpt_weights),
             "sovits_weights": sorted(sovits_weights)
@@ -382,32 +421,22 @@ async def set_tts_model(request: Request):
         data = await request.json()
         gpt_name = data.get("gpt_model")
         sovits_name = data.get("sovits_model")
-        
-        possible_paths = [
-            Path("../../GPT-SoVITS"), 
-            Path("../GPT-SoVITS"),
-            Path("GPT-SoVITS"),
-        ]
-        base_dir = None
-        for p in possible_paths:
-            if p.exists() and (p / "GPT_weights").exists():
-                base_dir = p.resolve()
-                break
-        
-        # Fallback to hardcoded if not found relative
-        if not base_dir:
-             hardcoded = Path("/home/obeygravity/Projects/GPT-SoVITS")
-             if hardcoded.exists():
-                 base_dir = hardcoded
 
+        base_dir = _locate_gpt_sovits_dir()
         if not base_dir:
             raise HTTPException(status_code=500, detail="未找到 GPT-SoVITS 目录")
 
         payload = {}
         if gpt_name:
-            payload["gpt_model_path"] = str(base_dir / "GPT_weights" / gpt_name)
+            gpt_model_path = _resolve_model_path(base_dir, gpt_name, GPT_MODEL_DIR_NAMES)
+            if not gpt_model_path:
+                raise HTTPException(status_code=404, detail=f"未找到 GPT 模型: {gpt_name}")
+            payload["gpt_model_path"] = str(gpt_model_path)
         if sovits_name:
-            payload["sovits_model_path"] = str(base_dir / "SoVITS_weights" / sovits_name)
+            sovits_model_path = _resolve_model_path(base_dir, sovits_name, SOVITS_MODEL_DIR_NAMES)
+            if not sovits_model_path:
+                raise HTTPException(status_code=404, detail=f"未找到 SoVITS 模型: {sovits_name}")
+            payload["sovits_model_path"] = str(sovits_model_path)
             
         info(f"切换模型: {payload}")
         
@@ -779,6 +808,25 @@ async def get_narrator_audio(
         error(f"获取语音失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取语音失败: {str(e)}")
 
+@router.delete("/boards/{board_id}/windows/{window_id}/narrator/audio/{page}")
+async def delete_narrator_audio(
+    board_id: str,
+    window_id: str,
+    page: int
+):
+    """删除PDF指定页面的语音与字幕文件"""
+    check_enabled()
+    try:
+        success = content_manager.delete_narrator_audio(board_id, window_id, page)
+        if success:
+            return {"success": True}
+        raise HTTPException(status_code=500, detail="删除语音失败")
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"删除语音失败: {e}")
+        raise HTTPException(status_code=500, detail=f"删除语音失败: {str(e)}")
+
 @router.get("/boards/{board_id}/windows/{window_id}/narrator/subtitles/{page}")
 async def get_narrator_subtitles_api(
     board_id: str,
@@ -821,6 +869,72 @@ def split_text_smartly(text: str) -> List[str]:
             
     return final_sentences
 
+
+def get_audio_duration_seconds(audio_path: Path) -> float:
+    """获取音频时长。WAV 走标准库，其余格式走 ffprobe。"""
+    ext = audio_path.suffix.lower()
+    if ext == ".wav":
+        with wave.open(str(audio_path), "rb") as wav_in:
+            frames = wav_in.getnframes()
+            rate = wav_in.getframerate()
+            return frames / float(rate) if rate else 0.0
+
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(audio_path)
+        ],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    return float((result.stdout or "0").strip() or 0.0)
+
+
+def concat_audio_with_ffmpeg(segment_paths: List[Path], output_ext: str) -> bytes:
+    """使用 ffmpeg 正确拼接音频，避免直接二进制拼接导致文件损坏。"""
+    if not segment_paths:
+        return b""
+
+    concat_file = DATA_DIR / "temp" / "audio" / f"concat_{uuid.uuid4().hex}.txt"
+    output_file = DATA_DIR / "temp" / "audio" / f"concat_{uuid.uuid4().hex}.{output_ext}"
+    concat_file.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        concat_lines = []
+        for path in segment_paths:
+            escaped_path = str(path).replace("'", "'\\''")
+            concat_lines.append(f"file '{escaped_path}'\n")
+        concat_file.write_text(
+            "".join(concat_lines),
+            encoding="utf-8"
+        )
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", str(concat_file),
+                "-c", "copy",
+                str(output_file)
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        return output_file.read_bytes()
+    finally:
+        if concat_file.exists():
+            concat_file.unlink()
+        if output_file.exists():
+            output_file.unlink()
+
 @router.post("/boards/{board_id}/windows/{window_id}/narrator/audio/{page}")
 async def generate_narrator_audio(
     board_id: str,
@@ -844,105 +958,73 @@ async def generate_narrator_audio(
         config = tts_service.get_tts_config()
         provider = config.get("provider", "edge")
         
-        # 3. 准备分句逻辑 (所有引擎统一采用分句合并，以确保字幕对应)
+        # 3. 准备分句逻辑
         sentences = split_text_smartly(text)
         info(f"TTS Split ({provider}): {len(sentences)} sentences")
         
-        full_audio_buffer = io.BytesIO()
         subtitles = []
         current_time = 0.0
-        wave_writer = None
-        audio_extension = "wav" # 默认合并后输出为 wav，除非是单文件直接保存
-
-        # 特殊处理：如果只有一句话，且是非 SoVITS 后端，可以直接生成
-        # 但为了时间轴的统一性，我们依然走循环逻辑
+        final_audio = b""
+        audio_extension = "wav" # 默认合并后输出为 wav，除非实际生成的是其他格式
+        segment_paths: List[Path] = []
 
         for sentence in sentences:
-            if not sentence.strip(): continue
-            
-            # 调用底层 TTS 服务生成单句音频
-            # 注意：tts_service.generate 返回的是一个包含 audio_url 的字典
-            res = await tts_service.generate(sentence)
+            cleaned = sentence.strip()
+            if not cleaned:
+                continue
+
+            res = await tts_service.generate(cleaned)
             if not res.get("success"):
                 error(f"TTS Segment Error ({provider}): {res.get('error')}")
                 continue
-            
-            audio_url = res["audio_url"]
-            # 转换为本地文件路径
-            temp_file_path = DATA_DIR / audio_url.replace("/static/files/", "")
-            
-            try:
-                # 读取音频并解析长度
-                # 这里需要处理不同的音频格式（Edge 是 mp3，SoVITS 是 wav）
-                # 我们统一使用一个临时内存处理，并缝合
-                
-                # 方案：利用 pydub 或直接读取 wav/mp3 头（由于库限制，这里用简单方案）
-                # 为了不引入过多复杂依赖，我们假设 SoVITS 始终是 wav
-                # 而 Edge/OpenAI 是 mp3，对于 mp3 缝合，我们直接二进制拼接（简单但可能有爆音）
-                # 或者... 如果是 SoVITS 以外的引擎，我们在这里使用其特定的生成逻辑。
-                
-                # 重新思考：如果是非 SoVITS 引擎，由于它们生成的通常是 mp3，
-                # 二进制直接拼接在某些播放器上会有问题。
-                # 更好的做法是：对 Edge/OpenAI，如果用户需要极致连贯，由 tts_service 提供带时间戳的单文件生成。
-                # 但目前为了快速响应您的“字幕对应”需求，我采用“逐句生成并在内存中计算时长”的策略。
-                
-                import mimetypes
-                ext = os.path.splitext(temp_file_path)[1].lower()
-                
-                with open(temp_file_path, "rb") as f:
-                    segment_data = f.read()
-                
-                # 计算时长（如果是 WAV 可以直接算，如果是 MP3 需要大致估算或使用库）
-                # 为了精确，我们尽量让 SoVITS 走原有的 wav 缝合
-                if ext == ".wav":
-                    with wave.open(io.BytesIO(segment_data), 'rb') as wav_in:
-                        if wave_writer is None:
-                            wave_writer = wave.open(full_audio_buffer, 'wb')
-                            wave_writer.setparams(wav_in.getparams())
-                        
-                        frames = wav_in.getnframes()
-                        rate = wav_in.getframerate()
-                        duration = frames / float(rate)
-                        
-                        subtitles.append({
-                            "start": current_time,
-                            "end": current_time + duration,
-                            "text": sentence
-                        })
-                        current_time += duration
-                        wave_writer.writeframes(wav_in.readframes(frames))
-                else:
-                    # 对于 MP3 (Edge/OpenAI)，我们无法简单地用 wave 缝合。
-                    # 如果只有一句话，直接退出循环走单文件逻辑
-                    if len(sentences) == 1:
-                        final_audio = segment_data
-                        audio_extension = ext.replace(".", "")
-                        subtitles = [{"start": 0.0, "end": 999.0, "text": sentence}] # 无法精确算时间，先给个大的
-                        break
-                    else:
-                        # 多句 MP3 缝合比较复杂（需要库支持），这里先降级为 SoVITS 逻辑
-                        # 如果用户切换到了 Edge，且是多句，我们暂时只记录每一句的预估时间（约 150字/分钟）
-                        duration = len(sentence) * 0.2 + 0.5 # 粗略估计
-                        subtitles.append({
-                            "start": current_time,
-                            "end": current_time + duration,
-                            "text": sentence
-                        })
-                        current_time += duration
-                        full_audio_buffer.write(segment_data) # 二进制拼接 mp3
-                        audio_extension = "mp3"
 
+            audio_url = res["audio_url"]
+            temp_file_path = DATA_DIR / audio_url.replace("/static/files/", "")
+
+            try:
+                duration = get_audio_duration_seconds(temp_file_path)
+                ext = temp_file_path.suffix.lower().replace(".", "") or "wav"
+                if segment_paths and ext != audio_extension:
+                    raise HTTPException(status_code=500, detail=f"音频分段格式不一致: {audio_extension} -> {ext}")
+
+                audio_extension = ext
+                segment_paths.append(temp_file_path)
+                subtitles.append({
+                    "start": current_time,
+                    "end": current_time + duration,
+                    "text": cleaned
+                })
+                current_time += duration
+            except HTTPException:
+                raise
             except Exception as e:
                 error(f"Error processing audio segment: {e}")
-                
+
         # 5. 完成合并
-        if wave_writer:
-            wave_writer.close()
-            final_audio = full_audio_buffer.getvalue()
-        elif audio_extension == "mp3":
+        if not segment_paths:
+            raise HTTPException(status_code=500, detail="未生成任何可用音频片段")
+
+        if len(segment_paths) == 1:
+            final_audio = segment_paths[0].read_bytes()
+        elif audio_extension == "wav":
+            full_audio_buffer = io.BytesIO()
+            wave_writer = None
+            try:
+                for segment_path in segment_paths:
+                    with wave.open(str(segment_path), "rb") as wav_in:
+                        if wave_writer is None:
+                            wave_writer = wave.open(full_audio_buffer, "wb")
+                            wave_writer.setparams(wav_in.getparams())
+                        wave_writer.writeframes(wav_in.readframes(wav_in.getnframes()))
+            finally:
+                if wave_writer:
+                    wave_writer.close()
             final_audio = full_audio_buffer.getvalue()
         else:
-            final_audio = b"" # 应处理错误
+            final_audio = concat_audio_with_ffmpeg(segment_paths, audio_extension)
+
+        if not final_audio:
+            raise HTTPException(status_code=500, detail="音频拼接失败")
             
         # 6. 保存并返回
         saved_path = content_manager.save_narrator_audio(board_id, window_id, page, final_audio, extension=audio_extension)

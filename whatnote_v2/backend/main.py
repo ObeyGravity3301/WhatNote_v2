@@ -24,6 +24,8 @@ import asyncio
 import json
 import base64
 import os
+import re
+import time
 import shutil
 import zipfile
 import aiohttp
@@ -1689,14 +1691,14 @@ async def generate_pdf_annotation_visual(
                 
                 # 视觉模型映射
                 vision_model_map = {
-                    'qwen': 'qwen-vl-plus',
+                    'qwen': 'qwen3-vl-plus',
                     'openai': 'gpt-4o',
                     'anthropic': 'claude-3-5-sonnet-20241022',
                     'gemini': 'gemini-1.5-pro'
                 }
                 
                 # 检查当前模型是否支持视觉
-                visual_capable_models = ['qwen-vl-plus', 'qwen-vl-max', 'qwen-long', 
+                visual_capable_models = ['qwen3-vl-plus', 'qwen3-vl-flash', 'qwen-vl-plus', 'qwen-vl-max', 'qwen-long', 
                                         'gpt-4o', 'gpt-4-turbo', 'gpt-4-vision-preview',
                                         'claude-3-5-sonnet', 'claude-3-opus', 'claude-3-sonnet',
                                         'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro-vision']
@@ -1708,7 +1710,7 @@ async def generate_pdf_annotation_visual(
                     info(f"[视觉提取] 使用当前模型: {current_model}")
                 else:
                     # 当前模型不支持视觉，临时切换
-                    use_model = vision_model_map.get(current_provider, 'qwen-vl-plus')
+                    use_model = vision_model_map.get(current_provider, 'qwen3-vl-plus')
                     info(f"[视觉提取] 当前模型 {current_model} 不支持视觉，临时使用: {use_model}")
                 
                 async for chunk in llm_service.chat_completion(messages, stream=True, override_model=use_model):
@@ -1908,7 +1910,20 @@ async def generate_batch_outline(
         while True:
             page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
             if not page_content.get('current'):
-                break
+                # 自动修复：如果第一页就没内容，尝试重新提取一次（防止上传时因为 pypdf 崩溃等原因导致提取失败）
+                if page_num == 1:
+                    info(f"[Auto-Fix] 检测到未提取内容，尝试重新提取: {window_id}")
+                    # 获取窗口数据用于提取
+                    temp_windows = content_manager.get_board_windows(board_id)
+                    temp_target = next((w for w in temp_windows if w['id'] == window_id), None)
+                    if temp_target and content_manager.extract_pdf_text_to_pages(board_id, window_id, temp_target):
+                        page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
+                        if not page_content.get('current'):
+                            break
+                    else:
+                        break
+                else:
+                    break
             
             page_text = page_content['current']
             all_pages_content.append({
@@ -1923,7 +1938,7 @@ async def generate_batch_outline(
         info(f"PDF总页数: {total_pages}, 总字符数: {total_chars}")
         
         if total_pages == 0:
-            raise HTTPException(status_code=400, detail="PDF文件无内容")
+            raise HTTPException(status_code=400, detail="PDF文件无内容，请确保PDF不是纯图片或已正确提取文本")
         
         # 创建或获取大纲对话记录
         outline_conv_id = f"outline-pdf-{window_id}-3"
@@ -2677,54 +2692,38 @@ async def subdivide_outline_sections(
                             for p in section_pages_content
                         ])
                         
-                        # 构建给LLM-2的提示词
-                        subdivision_prompt = f"""你是一位专业的文档分析助手。我需要你对以下PDF文档的一个分段进行深入分析和细分。
+                        # 构建给LLM-2的提示词 (改进版：去文档化、高结构化)
+                        subdivision_prompt = f"""你是一位顶尖的学术导师和学科专家。请对以下PDF文档的分段内容进行深度解构与知识重组。
 
-**文档信息**：
+**文档上下文**：
 - 文件名: {pdf_filename}
-- 当前分段: {section_title}
-- 页码范围: 第{page_start}页 - 第{page_end}页
+- 章节标题: {section_title}
 
-**分段内容**：
+**待处理内容原文**：
 {section_full_text}
 
-**任务要求**：
-1. 仔细阅读并理解这个分段的内容
-2. 生成这个分段的概括性介绍（100-200字）
-3. 将这个分段进一步细分为更小的逻辑单元
-4. 为每个细分单元提供：
-   - 细分编号（从1开始）
-   - 简洁的标题
-   - 起始页码和结束页码（基于第{page_start}页到第{page_end}页的范围）
-5. 如果内容无法进一步细分，则返回一个细分单元，页码范围为第{page_start}页到第{page_end}页
+**任务目标**：
+1. **深度知识讲述（核心）**：撰写一份详尽的的结构化深度讲述。
+   - **内容要求**：将本段内的所有零散知识点提取出来，按照学科逻辑重新串联。不仅要讲“是什么”，更要解释“为什么”和“内在关联”，目的做到读完这段讲述能够获得绝大部分信息。
+   - **禁止行为**：禁止提及页码（如“在第5页”）、禁止提及文档动作（如“翻到”、“如图所示”）、禁止提及授课场景（如“同学们好”）。
+   - **格式要求**：必须使用标准的 Markdown 语法（二级标题 `##`、粗体 `**`、无序列表 `-`、引用 `>`等）来增强可读性。
+2. **概括简介**：用 150 字左右的专业语言总结本段的核心学术贡献或主题。
+3. **逻辑细分**：将本分段内容切分为若干个逻辑单元（Subdivisions），用于后续的微观标注。
 
-**输出格式**（必须严格遵守JSON格式）：
-```json
+**输出格式**（必须严格遵守JSON格式，不要包含任何Markdown代码块标签）：
 {{
-  "section_summary": "这个分段的概括性介绍...",
+  "section_summary": "专业总结...",
+  "detailed_narration": "## 核心主题\n### 知识点1\n内容解析...\n\n### 知识点2\n- 细节A\n- 细节B\n...",
   "subdivisions": [
     {{
       "subdivision_number": 1,
-      "title": "细分标题",
+      "title": "细分逻辑主题",
       "page_start": {page_start},
       "page_end": {page_start}
-    }},
-    {{
-      "subdivision_number": 2,
-      "title": "细分标题",
-      "page_start": {page_start + 1},
-      "page_end": {page_end}
     }}
   ]
 }}
-```
-
-**提示**：
-- 细分应该基于内容的逻辑结构（如：不同的知识点、概念、步骤等）
-- 细分的页码范围应该在第{page_start}页到第{page_end}页之内
-- 如果内容较少或逻辑统一，可以不细分（只返回一个单元）
-
-请直接输出JSON，不要添加任何额外的说明文字或代码块标记。"""
+"""
                         
                         # 创建LLM-2对话记录
                         llm2_conv_id = f"subdivision-{window_id}-section{section_num}-2"
@@ -2833,6 +2832,7 @@ async def subdivide_outline_sections(
                                     'page_start': page_start,
                                     'page_end': page_end,
                                     'section_summary': subdivision_data['section_summary'],
+                                    'detailed_narration': subdivision_data.get('detailed_narration', ''),
                                     'subdivisions': subdivision_data['subdivisions']
                                 }
                                 
@@ -2943,6 +2943,132 @@ async def subdivide_outline_sections(
     except Exception as e:
         error(f"细分大纲分段失败: {e}")
         raise HTTPException(status_code=500, detail=f"细分大纲分段失败: {str(e)}")
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/subdivide/section/{section_idx}")
+async def subdivide_single_section(
+    board_id: str,
+    window_id: str,
+    section_idx: int
+):
+    """第二阶段增强：对单个特定分段执行细分与深度讲述分析（支持失败重试或手动更新）"""
+    try:
+        info(f"局部更新分段细分: board_id={board_id}, window_id={window_id}, section_idx={section_idx}")
+        
+        # 1. 读取大纲数据
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        if not outline_file.exists():
+            raise HTTPException(status_code=404, detail="未找到大纲数据")
+        
+        with open(outline_file, 'r', encoding='utf-8') as f:
+            outline_data = json.load(f)
+        
+        outline = outline_data.get('outline', [])
+        if section_idx < 0 or section_idx >= len(outline):
+            raise HTTPException(status_code=400, detail="分段索引越界")
+        
+        section = outline[section_idx]
+        section_num = section.get('section_number', section_idx + 1)
+        section_title = section.get('title', f'分段{section_num}')
+        page_start = section.get('page_start')
+        page_end = section.get('page_end')
+
+        # 2. 获取窗口与PDF信息
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get('id') == window_id), None)
+        pdf_filename = target_window.get('title', 'unknown') if target_window else "unknown"
+
+        # 3. 读取内容并构建提示词 (复用 subdivide_outline_sections 逻辑)
+        section_pages_content = []
+        for page_num in range(page_start, page_end + 1):
+            page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
+            if page_content.get('current'):
+                section_pages_content.append(f"=== 第{page_num}页 ===\n{page_content['current']}")
+        
+        section_full_text = "\n\n".join(section_pages_content)
+        
+        subdivision_prompt = f"""你是一位顶尖的学术导师和学科专家。请对以下PDF文档的分段内容进行深度解构与知识重组。
+
+**文档上下文**：
+- 文件名: {pdf_filename}
+- 章节标题: {section_title}
+
+**待处理内容原文**：
+{section_full_text}
+
+**任务目标**：
+1. **深度知识讲述（核心）**：撰写一份详尽的的结构化深度讲述。
+   - **内容要求**：将本段内的所有零散知识点提取出来，按照学科逻辑重新串联。不仅要讲“是什么”，更要解释“为什么”和“内在关联”，目的做到读完这段讲述之后能掌握绝大部分信息。
+   - **禁止行为**：禁止提及页码、禁止提及文档动作（如“翻到”）、禁止提及授课场景。
+   - **格式要求**：必须使用标准的 Markdown 语法。
+2. **概括简介**：用 150 字左右的专业语言总结本段。
+3. **逻辑细分**：将本分段内容切分为若干个逻辑单元（Subdivisions）。
+
+**输出格式**（必须严格遵守JSON格式，不要包含任何Markdown代码块标签）：
+{{
+  "section_summary": "...",
+  "detailed_narration": "...",
+  "subdivisions": [
+    {{
+      "subdivision_number": 1,
+      "title": "...",
+      "page_start": {page_start},
+      "page_end": {page_end}
+    }}
+  ]
+}}
+"""
+
+        # 4. 调用 LLM
+        messages = [{"role": "user", "content": subdivision_prompt}]
+        accumulated_content = ""
+        async for chunk in llm_service.chat_completion(messages, stream=False):
+            if chunk: accumulated_content += chunk
+        
+        # 5. 解析并更新
+        try:
+            # 简单清理 Markdown 代码块包裹
+            content = accumulated_content.strip()
+            if content.startswith('```'):
+                content = re.sub(r'^```(json)?\n|```$', '', content, flags=re.MULTILINE)
+            
+            sub_data = json.loads(content)
+            
+            result = {
+                'section_number': section_num,
+                'section_title': section_title,
+                'page_start': page_start,
+                'page_end': page_end,
+                'section_summary': sub_data.get('section_summary', ''),
+                'detailed_narration': sub_data.get('detailed_narration', ''),
+                'subdivisions': sub_data.get('subdivisions', [])
+            }
+
+            # 6. 持久化局部更新
+            subdivision_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
+            if subdivision_file.exists():
+                with open(subdivision_file, 'r', encoding='utf-8') as f:
+                    full_data = json.load(f)
+                
+                # 确保 subdivisions 数组长度正确
+                if 'subdivisions' not in full_data: full_data['subdivisions'] = []
+                while len(full_data['subdivisions']) <= section_idx:
+                    full_data['subdivisions'].append(None)
+                
+                full_data['subdivisions'][section_idx] = result
+                
+                with open(subdivision_file, 'w', encoding='utf-8') as f:
+                    json.dump(full_data, f, ensure_ascii=False, indent=2)
+            
+            return {"success": True, "data": result}
+            
+        except Exception as e:
+            error(f"解析/更新局部细分失败: {e}")
+            raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+
+    except Exception as e:
+        error(f"局部细分处理失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/generate-section")
 async def generate_section_annotations(
@@ -3447,36 +3573,33 @@ async def get_outline_data(board_id: str, window_id: str):
         outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
         
         if not outline_file.exists():
-            raise HTTPException(status_code=404, detail="大纲数据不存在")
+            # 不存在则返回 null，不报 404
+            return None
         
         with open(outline_file, 'r', encoding='utf-8') as f:
             outline_data = json.load(f)
         
         return outline_data
-    except HTTPException:
-        raise
     except Exception as e:
         error(f"加载大纲数据失败: {e}")
-        raise HTTPException(status_code=500, detail=f"加载大纲数据失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/subdivision-data")
 async def get_subdivision_data(board_id: str, window_id: str):
     """获取已保存的细分数据"""
     try:
-        subdivision_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
+        subdiv_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
         
-        if not subdivision_file.exists():
-            raise HTTPException(status_code=404, detail="细分数据不存在")
+        if not subdiv_file.exists():
+            return None
         
-        with open(subdivision_file, 'r', encoding='utf-8') as f:
-            subdivision_data = json.load(f)
+        with open(subdiv_file, 'r', encoding='utf-8') as f:
+            subdiv_data = json.load(f)
         
-        return subdivision_data
-    except HTTPException:
-        raise
+        return subdiv_data
     except Exception as e:
         error(f"加载细分数据失败: {e}")
-        raise HTTPException(status_code=500, detail=f"加载细分数据失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/summary-note")
 async def get_batch_summary_note(board_id: str, window_id: str):
@@ -3695,22 +3818,22 @@ async def semantic_search_annotations(
                 if pdf_content:
                     pdf_path = Path(pdf_content)
                     
-                    # 使用config.DATA_DIR作为基础目录，确保storage_base_dir已定义
-                    storage_base_dir = DATA_DIR
+                    # 使用config.DATA_DIR作为基础目录，确保DATA_DIR已定义
+                    DATA_DIR = DATA_DIR
                     
                     if not pdf_path.is_absolute():
                         # 兼容处理：尝试构建绝对路径
                         board_dir = None
                         # 遍历查找board所在的目录
-                        for course_dir in (Path(storage_base_dir) / "courses").iterdir():
+                        for course_dir in (Path(DATA_DIR) / "courses").iterdir():
                             if course_dir.is_dir():
                                 potential_board_dir = course_dir / board_id
                                 if potential_board_dir.exists():
                                     board_dir = potential_board_dir
                                     break
                         
-                        if not board_dir and (Path(storage_base_dir) / board_id).exists():
-                            board_dir = Path(storage_base_dir) / board_id
+                        if not board_dir and (Path(DATA_DIR) / board_id).exists():
+                            board_dir = Path(DATA_DIR) / board_id
                             
                         if board_dir:
                             pdf_path = board_dir / pdf_content
@@ -3797,13 +3920,13 @@ async def get_search_history(board_id: str, window_id: str):
             
         pdf_path = Path(pdf_content)
         # 使用config.DATA_DIR作为基础目录
-        storage_base_dir = DATA_DIR
+        DATA_DIR = DATA_DIR
         
         if not pdf_path.is_absolute():
-            board_dir = Path(storage_base_dir) / "courses" / "course-xxx" / board_id # 这里的course-xxx是占位符，实际上应该从board_id反推或者遍历
+            board_dir = Path(DATA_DIR) / "courses" / "course-xxx" / board_id # 这里的course-xxx是占位符，实际上应该从board_id反推或者遍历
             # 更稳妥的方式是遍历查找board所在的目录
             found_board = False
-            for course_dir in (Path(storage_base_dir) / "courses").iterdir():
+            for course_dir in (Path(DATA_DIR) / "courses").iterdir():
                 if course_dir.is_dir():
                     potential_board_dir = course_dir / board_id
                     if potential_board_dir.exists():
@@ -3814,23 +3937,23 @@ async def get_search_history(board_id: str, window_id: str):
             
             if not found_board:
                 # 兼容旧路径结构（直接在DATA_DIR下）
-                if (Path(storage_base_dir) / board_id).exists():
-                    board_dir = Path(storage_base_dir) / board_id
+                if (Path(DATA_DIR) / board_id).exists():
+                    board_dir = Path(DATA_DIR) / board_id
                     pdf_path = board_dir / pdf_content
         
         if not pdf_path.exists():
             # 尝试相对于board目录查找
             # 复用上面的查找逻辑找到board_dir
             board_dir = None
-            for course_dir in (Path(storage_base_dir) / "courses").iterdir():
+            for course_dir in (Path(DATA_DIR) / "courses").iterdir():
                 if course_dir.is_dir():
                     potential_board_dir = course_dir / board_id
                     if potential_board_dir.exists():
                         board_dir = potential_board_dir
                         break
             
-            if not board_dir and (Path(storage_base_dir) / board_id).exists():
-                board_dir = Path(storage_base_dir) / board_id
+            if not board_dir and (Path(DATA_DIR) / board_id).exists():
+                board_dir = Path(DATA_DIR) / board_id
                 
             if board_dir:
                 potential_path = board_dir / pdf_content
@@ -3882,7 +4005,7 @@ async def render_pages_thumbnails(board_id: str, window_id: str):
         
         pdf_path = Path(window_data['content'])
         if not pdf_path.is_absolute():
-            board_dir = Path(storage_base_dir) / board_id
+            board_dir = Path(DATA_DIR) / board_id
             pdf_path = board_dir / window_data['content']
             
         if not pdf_path.exists():
@@ -3983,7 +4106,7 @@ async def get_pages_extraction_info(board_id: str, window_id: str):
         # 转换为绝对路径
         pdf_path = Path(window_content)
         if not pdf_path.is_absolute():
-            board_dir = Path(storage_base_dir) / board_id
+            board_dir = Path(DATA_DIR) / board_id
             pdf_path = board_dir / window_content
         
         if not pdf_path.exists():
@@ -4225,12 +4348,12 @@ async def get_page_llm_content(board_id: str, window_id: str, page_num: int):
         # 转换为绝对路径
         pdf_path = Path(window_content)
         if not pdf_path.is_absolute():
-            board_dir = Path(storage_base_dir) / board_id
+            board_dir = Path(DATA_DIR) / board_id
             pdf_path = board_dir / window_content
             
         if not pdf_path.exists():
              # 尝试相对于board目录查找
-            board_dir = Path(storage_base_dir) / board_id
+            board_dir = Path(DATA_DIR) / board_id
             pdf_path = board_dir / window_content
             
             if not pdf_path.exists():
@@ -4309,12 +4432,12 @@ async def extract_pages_content(
         # 转换为绝对路径
         pdf_path = Path(window_content)
         if not pdf_path.is_absolute():
-            board_dir = Path(storage_base_dir) / board_id
+            board_dir = Path(DATA_DIR) / board_id
             pdf_path = board_dir / window_content
         
         if not pdf_path.exists():
              # 尝试相对于board目录查找
-            board_dir = Path(storage_base_dir) / board_id
+            board_dir = Path(DATA_DIR) / board_id
             pdf_path = board_dir / window_content
         
         if not pdf_path.exists():
@@ -4331,13 +4454,13 @@ async def extract_pages_content(
         current_model = current_config.get('model', '')
         
         vision_model_map = {
-            'qwen': 'qwen-vl-plus',
+            'qwen': 'qwen3-vl-plus',
             'openai': 'gpt-4o',
             'anthropic': 'claude-3-5-sonnet-20241022',
             'gemini': 'gemini-1.5-pro'
         }
         
-        visual_capable_models = ['qwen-vl-plus', 'qwen-vl-max', 'qwen-long', 
+        visual_capable_models = ['qwen3-vl-plus', 'qwen3-vl-flash', 'qwen-vl-plus', 'qwen-vl-max', 'qwen-long', 
                                 'gpt-4o', 'gpt-4-turbo', 'gpt-4-vision-preview',
                                 'claude-3-5-sonnet', 'claude-3-opus', 'claude-3-sonnet',
                                 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro-vision']
@@ -4346,7 +4469,7 @@ async def extract_pages_content(
             use_model = None
             info(f"[批量提取] 使用当前模型: {current_model}")
         else:
-            use_model = vision_model_map.get(current_provider, 'qwen-vl-plus')
+            use_model = vision_model_map.get(current_provider, 'qwen3-vl-plus')
             info(f"[批量提取] 当前模型 {current_model} 不支持视觉，临时使用: {use_model}")
         
         # 定义单个页面的提取任务（返回结果而不是yield）
@@ -4659,7 +4782,7 @@ async def get_page_text(board_id: str, window_id: str, page: int):
         window_content = window_data.get('content', '')
         pdf_path = Path(window_content)
         if not pdf_path.is_absolute():
-            board_dir = Path(storage_base_dir) / board_id
+            board_dir = Path(DATA_DIR) / board_id
             pdf_path = board_dir / window_content
         
         if not pdf_path.exists():
@@ -4707,7 +4830,7 @@ async def get_page_content(board_id: str, window_id: str, page: int):
         window_content = window_data.get('content', '')
         pdf_path = Path(window_content)
         if not pdf_path.is_absolute():
-            board_dir = Path(storage_base_dir) / board_id
+            board_dir = Path(DATA_DIR) / board_id
             pdf_path = board_dir / window_content
         
         # 获取PDF文件名（不含扩展名）
@@ -4846,7 +4969,7 @@ async def update_page_content(board_id: str, window_id: str, page: int, request_
         window_content = window_data.get('content', '')
         pdf_path = Path(window_content)
         if not pdf_path.is_absolute():
-            board_dir = Path(storage_base_dir) / board_id
+            board_dir = Path(DATA_DIR) / board_id
             pdf_path = board_dir / window_content
         
         # 获取PDF文件名（不含扩展名）
@@ -5398,8 +5521,8 @@ async def get_conversation_context(board_id: str, conversation_id: str, limit: i
 
 if __name__ == "__main__":
     import uvicorn
-    info("启动WhatNote V2后端服务...")
-    uvicorn.run("main:app", host="127.0.0.1", port=8081, reload=False) 
+    info(f"启动WhatNote V2后端服务 @ {API_HOST}:{API_PORT}")
+    uvicorn.run("main:app", host=API_HOST, port=API_PORT, reload=False) 
 
 
 @app.post("/api/boards/{board_id}/windows/{window_id}/image/extract")
@@ -5574,12 +5697,12 @@ async def extract_image_content(board_id: str, window_id: str, force: bool = Fal
         current_provider = current_config.get('provider', 'qwen')
         
         vision_model_map = {
-            'qwen': 'qwen-vl-plus',
+            'qwen': 'qwen3-vl-plus',
             'openai': 'gpt-4o',
             'anthropic': 'claude-3-5-sonnet-20241022',
             'gemini': 'gemini-1.5-pro'
         }
-        use_model = vision_model_map.get(current_provider, 'qwen-vl-plus')
+        use_model = vision_model_map.get(current_provider, 'qwen3-vl-plus')
 
         accumulated_content = ""
         async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
@@ -5805,7 +5928,7 @@ async def translate_image_content(board_id: str, window_id: str, force: bool = F
         current_provider = current_config.get('provider', 'gemini')
         
         provider_model_map = {
-            'qwen': 'qwen-vl-plus',
+            'qwen': 'qwen3-vl-plus',
             'gemini': 'gemini-1.5-flash',
             'openai': 'gpt-4o-mini',
             'anthropic': 'claude-3-5-sonnet-20241022'
@@ -5853,14 +5976,21 @@ async def translate_image_content(board_id: str, window_id: str, force: bool = F
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/boards/{board_id}/windows/{window_id}/pdf/translate-page/{page_num}")
-async def translate_pdf_page(board_id: str, window_id: str, page_num: int):
+async def translate_pdf_page(board_id: str, window_id: str, page_num: int, force_refresh: bool = False):
     """提取 PDF 页面文字坐标、采样背景并翻译内容"""
     try:
         import fitz  # PyMuPDF
         from collections import Counter
         
-        info(f"[PDF] 开始翻译页面: window_id={window_id}, page={page_num}")
+        info(f"[PDF] 开始翻译页面: window_id={window_id}, page={page_num}, force_refresh={force_refresh}")
         
+        # 0. 检查缓存 (除非强制刷新)
+        if not force_refresh:
+            cached_trans = content_manager.get_pdf_page_translation(board_id, window_id, page_num)
+            if cached_trans:
+                info(f"[PDF] 发现翻译缓存: page={page_num}")
+                return {**cached_trans, "cached": True}
+
         # 1. 获取窗口和文件路径
         windows = content_manager.get_board_windows(board_id)
         window_data = next((w for w in windows if w.get('id') == window_id), None)
@@ -5875,9 +6005,6 @@ async def translate_pdf_page(board_id: str, window_id: str, page_num: int):
         file_path = Path(file_path_str)
         if not file_path.is_absolute():
             file_path = Path(DATA_DIR) / file_path_str
-            if not file_path.exists():
-                 # 遍历查找... (这里为了简洁先用直接路径，后续可完善)
-                 pass
 
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="PDF 文件不存在")
@@ -5979,10 +6106,11 @@ async def translate_pdf_page(board_id: str, window_id: str, page_num: int):
         doc.close()
 
         if not full_text_to_translate:
-            return {"success": True, "translations": []}
+            result = {"success": True, "page": page_num, "translations": []}
+            content_manager.save_pdf_page_translation(board_id, window_id, page_num, result)
+            return result
 
         # 4. 调用 LLM 进行批量翻译
-        # 为了保持对应关系，我们发送带序号的列表
         numbered_text = "\n".join([f"[{i}] {text}" for i, text in enumerate(full_text_to_translate)])
         
         messages = [
@@ -6006,7 +6134,6 @@ async def translate_pdf_page(board_id: str, window_id: str, page_num: int):
         current_config = llm_service.get_config()
         current_provider = current_config.get('provider', 'openai')
         
-        # 根据当前服务商选择合适的翻译模型
         provider_model_map = {
             'qwen': 'qwen-plus',
             'gemini': 'gemini-1.5-flash',
@@ -6021,12 +6148,9 @@ async def translate_pdf_page(board_id: str, window_id: str, page_num: int):
         async for chunk in llm_service.chat_completion(messages, stream=False, override_model=use_model):
             accumulated_translation += chunk
 
-        info(f"[PDF] AI 翻译返回内容预览: {accumulated_translation[:200]}...")
-
         # 5. 解析翻译并组合结果
         translated_map = {}
         import re
-        # 支持 [0] 翻译 或 0: 翻译 或 0. 翻译 等多种可能出现的格式
         pattern = re.compile(r'^[\[\s]*(\d+)[\s\]\.\:\：]+(.*)$')
         
         for line in accumulated_translation.strip().split('\n'):
@@ -6042,7 +6166,6 @@ async def translate_pdf_page(board_id: str, window_id: str, page_num: int):
                 except:
                     continue
             else:
-                # 尝试备选方案：如果行中包含冒号
                 if ':' in line:
                     parts = line.split(':', 1)
                     if parts[0].strip().isdigit():
@@ -6051,13 +6174,138 @@ async def translate_pdf_page(board_id: str, window_id: str, page_num: int):
         for i, unit in enumerate(translation_units):
             unit["translated"] = translated_map.get(i, unit["original"])
 
-        info(f"[PDF] 翻译解析完成，成功解析 {len(translated_map)}/{len(translation_units)} 个片段")
-
-        return {
+        result = {
             "success": True,
             "page": page_num,
             "translations": translation_units
         }
+        
+        # 6. 保存结果到缓存
+        content_manager.save_pdf_page_translation(board_id, window_id, page_num, result)
+        
+        return result
+
+    except Exception as e:
+        error(f"PDF 页面翻译失败: {e}")
+        import traceback
+        error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/pdf/translation-status")
+async def get_pdf_translation_status(board_id: str, window_id: str):
+    """获取 PDF 所有页面的翻译状态 (是否已翻译)"""
+    try:
+        # 获取窗口信息以确定总页数
+        windows = content_manager.get_board_windows(board_id)
+        window_data = next((w for w in windows if w.get('id') == window_id), None)
+        if not window_data:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+            
+        file_path_str = window_data.get('content') or window_data.get('file_path')
+        if not file_path_str:
+            return {"success": True, "translated_pages": []}
+
+        file_path = Path(file_path_str)
+        if not file_path.is_absolute():
+            file_path = Path(DATA_DIR) / file_path_str
+
+        if not file_path.exists():
+            return {"success": True, "translated_pages": []}
+
+        import fitz
+        doc = fitz.open(file_path)
+        total_pages = len(doc)
+        doc.close()
+
+        translated_pages = []
+        for p in range(1, total_pages + 1):
+            if content_manager.get_pdf_page_translation(board_id, window_id, p):
+                translated_pages.append(p)
+
+        return {
+            "success": True,
+            "total_pages": total_pages,
+            "translated_pages": translated_pages
+        }
+    except Exception as e:
+        error(f"获取翻译状态失败: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/pdf/batch-translate")
+async def translate_pdf_batch(board_id: str, window_id: str, request: Request):
+    """批量翻译 PDF 页面 (支持并发和流式反馈)"""
+    try:
+        body = await request.json()
+        pages = body.get('pages', [])
+        if not pages:
+            return {"success": True, "results": []}
+
+        import asyncio
+
+        async def event_generator():
+            total = len(pages)
+            # 1. 发送初始进度
+            yield f"data: {json.dumps({'type': 'progress', 'total': total}, ensure_ascii=False)}\n\n"
+
+            # 2. 定义单页翻译包装器，捕获异常
+            async def wrapped_translate(page_num):
+                try:
+                    # 检查缓存逻辑已在 translate_pdf_page 内部实现
+                    res = await translate_pdf_page(board_id, window_id, page_num)
+                    return {"type": "page_complete", "page": page_num, "success": True, "data": res}
+                except Exception as e:
+                    import traceback
+                    error_msg = str(e)
+                    error_code = "GENERIC_ERROR"
+                    if "429" in error_msg or "速率" in error_msg:
+                        error_code = "RATE_LIMIT"
+                    elif "timeout" in error_msg.lower():
+                        error_code = "TIMEOUT"
+                    
+                    return {
+                        "type": "page_error", 
+                        "page": page_num, 
+                        "success": False, 
+                        "error": error_msg,
+                        "error_code": error_code
+                    }
+
+            # 3. 并发启动所有任务 (限制并发数)
+            CONCURRENCY_LIMIT = 5 # 批量翻译比较耗时且容易限流，设低一点
+            semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+            
+            async def sem_task(p):
+                async with semaphore:
+                    return await wrapped_translate(p)
+
+            tasks = [sem_task(p) for p in pages]
+            
+            # 4. 随着任务完成，流式返回结果
+            completed_count = 0
+            for task in asyncio.as_completed(tasks):
+                result = await task
+                completed_count += 1
+                info(f"[PDF] 批量翻译进度: {completed_count}/{total} (页面 {result.get('page')})")
+                yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
+
+            # 5. 发送完成信号
+            yield f"data: {json.dumps({'type': 'complete', 'total': total}, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            event_generator(),
+            media_type='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+                'Connection': 'keep-alive'
+            }
+        )
+
+    except Exception as e:
+        error(f"批量翻译初始化失败: {e}")
+        import traceback
+        error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
     except Exception as e:
         error(f"PDF 页面翻译失败: {e}")
@@ -6148,7 +6396,20 @@ async def generate_batch_summary_note(
         while True:
             page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
             if not page_content.get('current'):
-                break
+                # 自动修复：如果第一页就没内容，尝试重新提取一次（防止上传时因为 pypdf 崩溃等原因导致提取失败）
+                if page_num == 1:
+                    info(f"[Auto-Fix] 检测到未提取内容，尝试重新提取: {window_id}")
+                    # 获取窗口数据用于提取
+                    temp_windows = content_manager.get_board_windows(board_id)
+                    temp_target = next((w for w in temp_windows if w['id'] == window_id), None)
+                    if temp_target and content_manager.extract_pdf_text_to_pages(board_id, window_id, temp_target):
+                        page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
+                        if not page_content.get('current'):
+                            break
+                    else:
+                        break
+                else:
+                    break
             
             page_text = page_content['current']
             all_pages_content.append({
@@ -6163,7 +6424,7 @@ async def generate_batch_summary_note(
         info(f"PDF总页数: {total_pages}, 总字符数: {total_chars}")
         
         if total_pages == 0:
-            raise HTTPException(status_code=400, detail="PDF文件无内容")
+            raise HTTPException(status_code=400, detail="PDF文件无内容，请确保PDF不是纯图片或已正确提取文本")
         
         # 创建或获取总笔记对话记录
         summary_conv_id = f"summary-note-{window_id}"

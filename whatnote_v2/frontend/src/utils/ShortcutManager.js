@@ -28,8 +28,8 @@ class ShortcutManager {
     
     // 5. Narrator Player
     this.register('narrator.play_pause', { label: '播放/暂停', defaultKey: 'Space', category: 'PDF讲解', description: '播放或暂停讲解语音' });
-    this.register('narrator.rewind', { label: '快退', defaultKey: 'Ctrl+ArrowLeft', category: 'PDF讲解', description: '快退 5 秒' });
-    this.register('narrator.forward', { label: '快进', defaultKey: 'Ctrl+ArrowRight', category: 'PDF讲解', description: '快进 5 秒' });
+    this.register('narrator.rewind', { label: '上一句', defaultKey: ',', category: 'PDF讲解', description: '跳转到上一句字幕' });
+    this.register('narrator.forward', { label: '下一句', defaultKey: '.', category: 'PDF讲解', description: '跳转到下一句字幕' });
   }
 
   load() {
@@ -100,6 +100,16 @@ class ShortcutManager {
     if (event.metaKey) keys.push('Meta');
     
     let key = event.key;
+    
+    // Normalize Chinese punctuation to English and handle shift variants
+    if (key === '，' || key === '<') key = ',';
+    if (key === '。' || key === '>') key = '.';
+    if (key === '！') key = '!';
+    if (key === '？') key = '?';
+    if (key === '：') key = ':';
+    if (key === '；') key = ';';
+    if (key === '（') key = '(';
+    if (key === '）') key = ')';
     
     // Normalize key names
     if (key === ' ') key = 'Space';

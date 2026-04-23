@@ -820,6 +820,20 @@ const translations = {
       "ja-JP": "すべてのメッセージをクリア"
     }
   },
+  "chat_select_files_title": {
+    "default": {
+      "zh-CN": "选择要发送的文件 ({count}个文件)",
+      "en-US": "Select files to send ({count} files)",
+      "ja-JP": "送信するファイルを選択 ({count} 個のファイル)"
+    }
+  },
+  "chat_selected_files_count": {
+    "default": {
+      "zh-CN": "已选择 {count} 个文件:",
+      "en-US": "{count} files selected:",
+      "ja-JP": "{count} 個のファイルが選択されました:"
+    }
+  },
   "chat_no_files_in_board": {
     "default": {
       "zh-CN": "展板中暂无文件",
@@ -1645,6 +1659,13 @@ const translations = {
       "zh-CN": "正在翻译页面...",
       "en-US": "Translating page...",
       "ja-JP": "ページを翻訳中..."
+    }
+  },
+  "pdf_auto_translate": {
+    "default": {
+      "zh-CN": "自动显示翻译",
+      "en-US": "Auto Translation",
+      "ja-JP": "自動翻訳"
     }
   },
   "pdf_show_original": {
@@ -3095,6 +3116,76 @@ const translations = {
       "zh-CN": "PDF加载失败",
       "en-US": "PDF Load Failed",
       "ja-JP": "PDF読み込み失敗"
+    }
+  },
+  "pdf_batch_translate": {
+    "default": {
+      "zh-CN": "批量翻译",
+      "en-US": "Batch Translate",
+      "ja-JP": "一括翻译"
+    }
+  },
+  "pdf_translate_batch_title": {
+    "default": {
+      "zh-CN": "页面翻译面板",
+      "en-US": "Page Translation Panel",
+      "ja-JP": "ページ翻訳パネル"
+    }
+  },
+  "pdf_select_untranslated": {
+    "default": {
+      "zh-CN": "未翻译",
+      "en-US": "Untranslated",
+      "ja-JP": "未翻訳"
+    }
+  },
+  "pdf_translating": {
+    "default": {
+      "zh-CN": "正在翻译...",
+      "en-US": "Translating...",
+      "ja-JP": "翻訳中..."
+    }
+  },
+  "pdf_start_translate": {
+    "default": {
+      "zh-CN": "开始翻译 (已选 {count} 页)",
+      "en-US": "Start Translation ({count} pages selected)",
+      "ja-JP": "翻訳開始 ({count} ページ選択中)"
+    }
+  },
+  "pdf_translated": {
+    "default": {
+      "zh-CN": "已翻译",
+      "en-US": "Translated",
+      "ja-JP": "翻訳済み"
+    }
+  },
+  "pdf_untranslated": {
+    "default": {
+      "zh-CN": "未翻译",
+      "en-US": "Not Translated",
+      "ja-JP": "未翻訳"
+    }
+  },
+  "pdf_translate_batch_success": {
+    "default": {
+      "zh-CN": "批量翻译完成",
+      "en-US": "Batch translation complete",
+      "ja-JP": "一括翻訳が完了しました"
+    }
+  },
+  "pdf_translate_batch_partial": {
+    "default": {
+      "zh-CN": "部分翻译完成",
+      "en-US": "Partial batch translation complete",
+      "ja-JP": "一部の一括翻訳が完了しました"
+    }
+  },
+  "pdf_translate_batch_details": {
+    "default": {
+      "zh-CN": "成功翻译 {total} 个页面",
+      "en-US": "Successfully translated {total} pages",
+      "ja-JP": "{total} ページを正常に翻訳しました"
     }
   }
 };

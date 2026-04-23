@@ -84,6 +84,7 @@ const NarratorPluginComponent = (props) => {
   const [refFilename, setRefFilename] = useState('');
   const [audioTimestamp, setAudioTimestamp] = useState(Date.now());
   const [targetLang, setTargetLang] = useState('zh');
+  const SUBTITLE_LEAD_SECONDS = 0.2;
   
   // 批量处理状态
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
@@ -108,27 +109,59 @@ const NarratorPluginComponent = (props) => {
   
   const [customPrompt, setCustomPrompt] = useState(DEFAULT_PROMPT);
 
+  const getFallbackVoices = useCallback((provider) => {
+    if (provider === 'edge') {
+      return [
+        { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓 (女声)' },
+        { id: 'zh-CN-YunxiNeural', name: '云希 (男声)' },
+        { id: 'zh-CN-YunjianNeural', name: '云健 (男声)' },
+        { id: 'zh-CN-XiaoyiNeural', name: '晓依 (女声)' },
+        { id: 'zh-TW-HsiaoChenNeural', name: '晓臻 (女声-台湾)' },
+        { id: 'zh-HK-HiuGaaiNeural', name: '晓佳 (女声-香港)' }
+      ];
+    }
+
+    if (provider === 'openai') {
+      return [
+        { id: 'alloy', name: 'Alloy (通用)' },
+        { id: 'echo', name: 'Echo (浑厚)' },
+        { id: 'fable', name: 'Fable (叙述)' },
+        { id: 'onyx', name: 'Onyx (沉稳)' },
+        { id: 'nova', name: 'Nova (清亮)' },
+        { id: 'shimmer', name: 'Shimmer (柔和)' }
+      ];
+    }
+
+    return [];
+  }, []);
+
+  const fetchTtsConfig = useCallback(async () => {
+    try {
+      const res = await fetch('http://localhost:8081/api/tts/config');
+      if (res.ok) {
+        const config = await res.json();
+        setTtsProvider(config.provider || 'edge');
+        setTtsVoice(config.voice || 'zh-CN-XiaoxiaoNeural');
+        setSovitsUrl(config.sovits_url || 'http://127.0.0.1:9880');
+        setSovitsPath(config.sovits_path || '');
+
+        checkTTSConnection(config.sovits_url || 'http://127.0.0.1:9880');
+      }
+    } catch (e) {
+      console.error('Failed to fetch TTS config', e);
+    }
+  }, []);
+
   // 初始化获取 TTS 配置
   useEffect(() => {
-    const fetchTtsConfig = async () => {
-      try {
-        const res = await fetch('http://localhost:8081/api/tts/config');
-        if (res.ok) {
-          const config = await res.json();
-          setTtsProvider(config.provider || 'edge');
-          setTtsVoice(config.voice || 'zh-CN-XiaoxiaoNeural');
-          setSovitsUrl(config.sovits_url || 'http://127.0.0.1:9880');
-          setSovitsPath(config.sovits_path || '');
-          
-          // 初始检查连接
-          checkTTSConnection(config.sovits_url || 'http://127.0.0.1:9880');
-        }
-      } catch (e) {
-        console.error('Failed to fetch TTS config', e);
-      }
-    };
     fetchTtsConfig();
-  }, []);
+  }, [fetchTtsConfig]);
+
+  useEffect(() => {
+    if (ttsProvider === 'gpt-sovits' && viewMode === 'settings') {
+      checkTTSConnection(sovitsUrl);
+    }
+  }, [ttsProvider, viewMode, sovitsUrl]);
 
   const checkTTSConnection = async (url) => {
     setSovitsStatus('checking');
@@ -190,15 +223,29 @@ const NarratorPluginComponent = (props) => {
         if (res.ok) {
           const data = await res.json();
           if (data.success) {
-            setAvailableVoices(data.voices || []);
+            const voices = data.voices || [];
+            setAvailableVoices(voices.length ? voices : getFallbackVoices(ttsProvider));
+            return;
           }
         }
+        setAvailableVoices(getFallbackVoices(ttsProvider));
       } catch (e) {
         console.error('Failed to fetch voices', e);
+        setAvailableVoices(getFallbackVoices(ttsProvider));
       }
     };
     fetchVoices();
-  }, [ttsProvider]);
+  }, [ttsProvider, getFallbackVoices]);
+
+  useEffect(() => {
+    if (ttsProvider === 'gpt-sovits') return;
+    if (!availableVoices.length) return;
+
+    const hasCurrentVoice = availableVoices.some(v => v.id === ttsVoice);
+    if (!hasCurrentVoice) {
+      setTtsVoice(availableVoices[0].id);
+    }
+  }, [ttsProvider, availableVoices, ttsVoice]);
 
   const audioRef = useRef(null);
 
@@ -577,6 +624,29 @@ const NarratorPluginComponent = (props) => {
           }
   }, [audioUrl, isAutoMode]);
 
+  useEffect(() => {
+      const audio = audioRef.current;
+      if (!audio || !audioUrl) return;
+
+      const syncSubtitle = () => {
+          const currentTime = Math.max(0, (audio.currentTime || 0) + SUBTITLE_LEAD_SECONDS);
+          const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+          setAudioProgress(audio.currentTime || 0);
+          if (duration) setAudioDuration(duration);
+
+          if (subtitles && subtitles.length > 0) {
+              const sub = subtitles.find(s => currentTime >= s.start && currentTime <= s.end);
+              setCurrentSubtitle(sub ? sub.text : '');
+          } else {
+              setCurrentSubtitle('');
+          }
+      };
+
+      syncSubtitle();
+      const intervalId = window.setInterval(syncSubtitle, 50);
+      return () => window.clearInterval(intervalId);
+  }, [audioUrl, subtitles, SUBTITLE_LEAD_SECONDS]);
+
   // 自动保存讲稿
   useEffect(() => {
       if (!showPanel || !pageControl) return;
@@ -890,10 +960,10 @@ const NarratorPluginComponent = (props) => {
                                   },
                                   subdivision_data: subdivisionData?.subdivisions?.[index],
                                   // 发送所有之前的分段摘要，构建完整的上下文链
-                                  context_history: subdivisionData?.subdivisions?.slice(0, index).map(s => ({
-                                      title: s.title,
-                                      summary: s.section_summary
-                                  })),
+                                  context_history: subdivisionData?.subdivisions?.slice(0, index)?.map(s => ({
+                                      title: s?.title || "",
+                                      summary: s?.section_summary || ""
+                                  })) || [],
                                   promptTemplate: customPrompt
                               })
                           }
@@ -1186,6 +1256,33 @@ const NarratorPluginComponent = (props) => {
           }
       }
 
+      // 切换 TTS 服务后，当前页旧音频会失效；清掉缓存并删除当前页成品，避免继续播放旧的 Edge 音频。
+      try {
+          if (audioRef.current) {
+              audioRef.current.pause();
+              audioRef.current.removeAttribute('src');
+              audioRef.current.load();
+          }
+          setIsAutoMode(false);
+          setIsPlaying(false);
+          setCurrentSubtitle('');
+          setAudioProgress(0);
+          setAudioDuration(0);
+          setAudioUrl(null);
+          setAudioUrls({});
+          setSubtitles([]);
+
+          if (boardId && windowId && pageControl?.currentPage) {
+              await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/audio/${pageControl.currentPage}`, {
+                  method: 'DELETE'
+              });
+          }
+
+          await fetchTtsConfig();
+      } catch (e) {
+          console.error("Failed to refresh TTS state after saving settings", e);
+      }
+
       setViewMode('player');
   };
 
@@ -1390,6 +1487,9 @@ const NarratorPluginComponent = (props) => {
                                             onChange={e => setTtsVoice(e.target.value)}
                                             style={{flex:1, fontSize:'11px'}}
                                         >
+                                            {!availableVoices.length && (
+                                                <option value="">暂无可用音色</option>
+                                            )}
                                             {availableVoices.map(v => (
                                                 <option key={v.id} value={v.id}>{v.name}</option>
                                             ))}
@@ -1645,11 +1745,6 @@ const NarratorPluginComponent = (props) => {
                     const d = e.target.duration;
                     setAudioProgress(t);
                     setAudioDuration(d);
-                    
-                    if (subtitles && subtitles.length > 0) {
-                        const sub = subtitles.find(s => t >= s.start && t <= s.end);
-                        if (sub) setCurrentSubtitle(sub.text);
-                    }
                 }}
                 onEnded={() => {
                     // setIsPlaying(false); // Don't stop immediately, logic below decides

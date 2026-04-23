@@ -182,7 +182,7 @@ const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument, narratorHe
 };
 
 // PDF分页组件
-const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, initialPage, onUpdateWindow, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog }) => {
+const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, initialPage, onUpdateWindow, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog, isAutoTranslateMode }) => {
   const { t } = useLanguage();
   const PAGINATION_TOOLBAR_ITEM_STYLE = {
     padding: '1px 8px',
@@ -386,12 +386,17 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
   
   // 页面提取功能状态
   const [showPageExtractPanel, setShowPageExtractPanel] = useState(false); // 显示页面提取面板
+  const [showBatchTranslatePanel, setShowBatchTranslatePanel] = useState(false); // 显示批量翻译面板
+  const [showTranslateMenu, setShowTranslateMenu] = useState(false); // 显示翻译下拉菜单
   const [pagesInfo, setPagesInfo] = useState([]); // 所有页面信息
   const [selectedPages, setSelectedPages] = useState(new Set()); // 选中的页面
   const [isExtracting, setIsExtracting] = useState(false); // 是否正在提取
+  const [isBatchTranslating, setIsBatchTranslating] = useState(false); // 是否正在批量翻译
   const [extractionProgress, setExtractionProgress] = useState({ current: 0, total: 0 }); // 提取进度
+  const [translateProgress, setTranslateProgress] = useState({ current: 0, total: 0 }); // 翻译进度
   const [showResultCompare, setShowResultCompare] = useState(null); // { page: number, textContent: string, imageContent: string }
   const [extractedContents, setExtractedContents] = useState({}); // 提取的内容 {pageNum: {text, description}}
+  const [translatedPages, setTranslatedPages] = useState(new Set()); // 已翻译的页面集合
   const [pageVersions, setPageVersions] = useState({}); // 每页使用的版本 {pageNum: 'text'|'image'|'full'}
   
   // 全文档笔记状态
@@ -497,11 +502,11 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
   const [pageTranslation, setPageTranslation] = useState(null); // { page: number, translations: [...] }
   const [showTranslationLayer, setShowTranslationLayer] = useState(false);
 
-  const handlePageTranslate = async () => {
+  const handlePageTranslate = async (forceShow = false) => {
     if (isTranslatingPage) return;
     
-    // 如果已经在显示翻译，点击按钮则关闭
-    if (showTranslationLayer) {
+    // 如果已经在显示翻译，且不是强制显示模式，点击按钮则关闭
+    if (showTranslationLayer && forceShow !== true) {
         setShowTranslationLayer(false);
         return;
     }
@@ -520,17 +525,126 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
         if (data.success) {
             setPageTranslation(data);
             setShowTranslationLayer(true);
-            if (addMessage) {
+            setTranslatedPages(prev => new Set([...prev, currentPage])); // 标记当前页已翻译
+            
+            // 只有手动点击（forceShow不为true）时才显示成功消息
+            if (forceShow !== true && addMessage) {
                 addMessage(`✅ ${t('pdf_page_translate_success') || '页面翻译完成'}`, t('pdf_translate_applied') || '翻译层已覆盖到当前页', 'success', windowId);
             }
         }
     } catch (err) {
         console.error('PDF翻译失败:', err);
-        if (addMessage) {
+        if (forceShow !== true && addMessage) {
             addMessage(`❌ ${t('pdf_translate_failed') || '翻译失败'}`, err.message, 'error', windowId);
         }
     } finally {
         setIsTranslatingPage(false);
+    }
+  };
+
+  // 加载翻译状态
+  const loadTranslationStatus = useCallback(async () => {
+    if (!boardId || !windowId) return;
+    try {
+        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pdf/translation-status`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.translated_pages) {
+                setTranslatedPages(new Set(data.translated_pages));
+                console.log('加载已翻译页面状态:', data.translated_pages.length);
+            }
+        }
+    } catch (err) {
+        console.error('获取翻译状态失败:', err);
+    }
+  }, [boardId, windowId]);
+
+  // 批量翻译逻辑
+  const handleBatchTranslate = async (pages) => {
+    if (isBatchTranslating || !pages || pages.length === 0) return;
+    
+    setIsBatchTranslating(true);
+    setTranslateProgress({ current: 0, total: pages.length });
+    
+    try {
+        const response = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pdf/batch-translate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pages })
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let successCount = 0;
+        let errorCount = 0;
+        let buffer = ''; // 用于处理 SSE 分包/粘包
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            
+            // 保留最后一行（可能不完整）在 buffer 中
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (line.trim().startsWith('data: ')) {
+                    try {
+                        const dataStr = line.trim().substring(6);
+                        if (!dataStr) continue;
+                        
+                        const data = JSON.parse(dataStr);
+                        
+                        if (data.type === 'progress') {
+                            setTranslateProgress(prev => ({ ...prev, total: data.total }));
+                        } else if (data.type === 'page_complete') {
+                            successCount++;
+                            setTranslateProgress(prev => ({ ...prev, current: prev.current + 1 }));
+                            setTranslatedPages(prev => new Set([...prev, data.page]));
+                            
+                            // 更新页面信息（清除之前的错误）
+                            setPagesInfo(prev => prev.map(p => 
+                                p.page === data.page ? { ...p, translateError: false, translateErrorMessage: null } : p
+                            ));
+                        } else if (data.type === 'page_error') {
+                            errorCount++;
+                            setTranslateProgress(prev => ({ ...prev, current: prev.current + 1 }));
+                            
+                            // 在卡片上标记翻译错误
+                            setPagesInfo(prev => prev.map(p => 
+                                p.page === data.page ? { 
+                                    ...p, 
+                                    translateError: true, 
+                                    translateErrorMessage: data.error_code === 'RATE_LIMIT' ? t('pdf_rate_limit') : data.error 
+                                } : p
+                            ));
+                        } else if (data.type === 'complete') {
+                            if (addMessage) {
+                                if (errorCount > 0) {
+                                    addMessage(`⚠️ ${t('pdf_translate_batch_partial') || '部分翻译完成'}`, 
+                                               `成功: ${successCount}, 失败: ${errorCount}. 失败页面已标红。`, 'warning', windowId);
+                                } else {
+                                    addMessage(`✅ ${t('pdf_translate_batch_success') || '批量翻译完成'}`, 
+                                               (t('pdf_translate_batch_details') || '成功翻译 {total} 个页面').replace('{total}', successCount), 
+                                               'success', windowId);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error('解析翻译进度出错:', e, '行内容:', line);
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error('批量翻译失败:', err);
+        if (addMessage) {
+            addMessage(`❌ ${t('pdf_translate_failed') || '翻译失败'}`, err.message, 'error', windowId);
+        }
+    } finally {
+        setIsBatchTranslating(false);
     }
   };
 
@@ -569,15 +683,73 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
     }
   }, [pdfUrl]); // 移除 initialPage 依赖，避免页码保存导致的重载
 
-  // 页面切换时加载注释和文件信息，并重置翻译层
+  // 页面切换时加载注释和文件信息，并处理翻译层
   useEffect(() => {
     if (showAnnotationPanel && boardId && windowId) {
       loadAnnotation(currentPage);
       loadAnnotationFileInfo(currentPage);
     }
-    // 换页时隐藏翻译层，因为翻译是按页缓存的
-    setShowTranslationLayer(false);
-  }, [currentPage, showAnnotationPanel, boardId, windowId]);
+    
+    // 如果是自动翻译模式且页面已翻译，则自动显示翻译层
+    if (isAutoTranslateMode && translatedPages.has(currentPage)) {
+      // 这里的 handlePageTranslate 内部会调用 API，后端会有缓存返回
+      handlePageTranslate(true);
+    } else {
+      // 否则换页时隐藏翻译层
+      setShowTranslationLayer(false);
+    }
+  }, [currentPage, showAnnotationPanel, boardId, windowId, isAutoTranslateMode]); // 故意不放 translatedPages 依赖，避免翻译完立即触发
+
+  // 统一加载页面信息逻辑
+  const loadPagesInfo = useCallback(async () => {
+    if (!boardId || !windowId) return;
+    try {
+      // 1. 先渲染所有页面的缩略图
+      const thumbnailsUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/thumbnails`;
+      await fetch(thumbnailsUrl);
+      
+      // 2. 然后加载页面信息
+      const infoUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/info`;
+      const infoResponse = await fetch(infoUrl);
+      
+      if (infoResponse.ok) {
+        const infoData = await infoResponse.json();
+        setPagesInfo(infoData.pages || []);
+        
+        // 加载已提取页面的内容
+        const extractedPages = (infoData.pages || []).filter(p => p.extracted);
+        for (const pageInfo of extractedPages) {
+          try {
+            const contentUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${pageInfo.page}/content`;
+            const contentResponse = await fetch(contentUrl);
+            
+            if (contentResponse.ok) {
+              const contentData = await contentResponse.json();
+              setExtractedContents(prev => ({
+                ...prev,
+                [pageInfo.page]: {
+                  text: contentData.text_content || contentData.content || '',
+                  image: contentData.image_content || '',
+                  full: contentData.content || ''
+                }
+              }));
+              
+              if (contentData.version) {
+                setPageVersions(prev => ({
+                  ...prev,
+                  [pageInfo.page]: contentData.version
+                }));
+              }
+            }
+          } catch (error) {
+            console.error(`❌ 页面 ${pageInfo.page} 加载失败:`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ 加载页面信息失败:', error);
+    }
+  }, [boardId, windowId]);
 
   // 加载大纲数据
   const loadOutlineData = useCallback(async () => {
@@ -601,9 +773,11 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
         );
         if (subdivResponse.ok) {
           const subdivData = await subdivResponse.json();
-          setBatchSubdivisions(subdivData);
-          setStage2Completed(true);
-          console.log('加载已有细分数据:', subdivData);
+          if (subdivData) {
+            setBatchSubdivisions(subdivData);
+            setStage2Completed(true);
+            console.log('加载已有细分数据:', subdivData);
+          }
         }
         } catch(e) { /* ignore 404 */ }
       
@@ -627,7 +801,8 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
     
   useEffect(() => {
     loadOutlineData();
-  }, [loadOutlineData]);
+    loadTranslationStatus();
+  }, [loadOutlineData, loadTranslationStatus]);
 
   // 监听刷新事件
   useEffect(() => {
@@ -1384,78 +1559,9 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
         <button
           onClick={async () => {
             if (!showPageExtractPanel) {
-              // 打开面板时，先渲染缩略图，再加载页面信息
-              try {
-                // 1. 先渲染所有页面的缩略图
-                const thumbnailsUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/thumbnails`;
-                const thumbnailsResponse = await fetch(thumbnailsUrl);
-                
-                if (!thumbnailsResponse.ok) {
-                  console.warn('⚠️ 缩略图渲染失败');
-                }
-                
-                // 2. 然后加载页面信息
-                const infoUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/info`;
-                const infoResponse = await fetch(infoUrl);
-                
-                if (infoResponse.ok) {
-                  const infoData = await infoResponse.json();
-                  setPagesInfo(infoData.pages || []);
-                  
-                  // 加载已提取页面的内容
-                  const extractedPages = (infoData.pages || []).filter(p => p.extracted);
-                  console.log(`📚 加载已提取页面: ${extractedPages.length}个`);
-                  
-                  for (const pageInfo of extractedPages) {
-                    try {
-                      const contentUrl = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/pages/${pageInfo.page}/content`;
-                      const contentResponse = await fetch(contentUrl);
-                      
-                      if (contentResponse.ok) {
-                        const contentData = await contentResponse.json();
-                        
-                        // 保存到extractedContents
-                        setExtractedContents(prev => ({
-                          ...prev,
-                          [pageInfo.page]: {
-                            text: contentData.text_content || contentData.content || '',
-                            image: contentData.image_content || '',
-                            full: contentData.content || ''
-                          }
-                        }));
-                        
-                        // 如果有版本信息，也保存
-                        if (contentData.version) {
-                          setPageVersions(prev => ({
-                            ...prev,
-                            [pageInfo.page]: contentData.version
-                          }));
-                        }
-                      }
-                    } catch (error) {
-                      console.error(`❌ 页面 ${pageInfo.page} 加载失败:`, error);
-                    }
-                  }
-                } else {
-                  const errorText = await infoResponse.text();
-                  console.error('❌ 加载页面信息失败:', infoResponse.status, errorText);
-                  addMessageWithSource(
-                    t('pdf_extract_fail'),
-                    `HTTP ${infoResponse.status}: ${errorText}`,
-                    'error'
-                  );
-                }
-              } catch (error) {
-                console.error('❌ 加载失败:', error);
-                addMessageWithSource(
-                  t('pdf_extract_fail'),
-                  error.message,
-                  'error'
-                );
-              }
+              await loadPagesInfo();
             }
             setShowPageExtractPanel(!showPageExtractPanel);
-            console.log('页面提取面板切换:', !showPageExtractPanel);
           }}
           style={{
             ...PAGINATION_TOOLBAR_ITEM_STYLE,
@@ -1471,31 +1577,110 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
           {t('pdf_extract')}
         </button>
 
-        {/* 页面翻译按钮 */}
-        <button
-          onClick={handlePageTranslate}
-          style={{
-            ...PAGINATION_TOOLBAR_ITEM_STYLE,
-            backgroundColor: showTranslationLayer ? '#a0a0a0' : 'transparent',
-            marginRight: '8px',
-            color: isTranslatingPage ? '#808080' : '#000000'
-          }}
-          disabled={isTranslatingPage}
-          onMouseEnter={handlePaginationMouseEnter}
-          onMouseLeave={handlePaginationMouseLeave}
-          onMouseDown={handlePaginationMouseDown}
-          onMouseUp={handlePaginationMouseUp}
-          title={showTranslationLayer ? t('pdf_show_original') : t('pdf_page_translate')}
-        >
-          {isTranslatingPage ? (
-            <>
-              <span className="spinning-icon">⏳</span>
-              {t('pdf_translating')}
-            </>
-          ) : (
-            showTranslationLayer ? t('pdf_show_original') : t('pdf_page_translate')
+        {/* 页面翻译按钮组 */}
+        <div style={{ display: 'flex', alignItems: 'center', marginRight: '8px', position: 'relative' }}>
+          <button
+            onClick={handlePageTranslate}
+            style={{
+              ...PAGINATION_TOOLBAR_ITEM_STYLE,
+              backgroundColor: showTranslationLayer ? '#a0a0a0' : 'transparent',
+              borderRight: 'none',
+              color: isTranslatingPage ? '#808080' : '#000000',
+              borderTopRightRadius: 0,
+              borderBottomRightRadius: 0
+            }}
+            disabled={isTranslatingPage}
+            onMouseEnter={handlePaginationMouseEnter}
+            onMouseLeave={handlePaginationMouseLeave}
+            onMouseDown={handlePaginationMouseDown}
+            onMouseUp={handlePaginationMouseUp}
+            title={showTranslationLayer ? t('pdf_show_original') : t('pdf_page_translate')}
+          >
+            {isTranslatingPage ? (
+              <>
+                <span className="spinning-icon">⏳</span>
+                {t('pdf_translating')}
+              </>
+            ) : (
+              showTranslationLayer ? t('pdf_show_original') : t('pdf_page_translate')
+            )}
+          </button>
+          <button
+            onClick={() => setShowTranslateMenu(!showTranslateMenu)}
+            style={{
+              ...PAGINATION_TOOLBAR_ITEM_STYLE,
+              width: '16px',
+              padding: '0',
+              borderLeft: '1px solid #808080',
+              backgroundColor: showTranslateMenu ? '#a0a0a0' : 'transparent',
+              borderTopLeftRadius: 0,
+              borderBottomLeftRadius: 0
+            }}
+            onMouseEnter={handlePaginationMouseEnter}
+            onMouseLeave={handlePaginationMouseLeave}
+            onMouseDown={handlePaginationMouseDown}
+            onMouseUp={handlePaginationMouseUp}
+          >
+            ▼
+          </button>
+
+          {/* 翻译下拉菜单 */}
+          {showTranslateMenu && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              backgroundColor: '#c0c0c0',
+              border: '2px outset #ffffff',
+              boxShadow: '2px 2px 5px rgba(0,0,0,0.2)',
+              zIndex: 1000,
+              minWidth: '100px'
+            }}>
+              <div 
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  cursor: 'pointer',
+                  backgroundColor: 'transparent'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#000080'; e.currentTarget.style.color = '#ffffff'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#000000'; }}
+                onClick={async () => {
+                  await loadPagesInfo();
+                  setShowBatchTranslatePanel(true);
+                  setShowTranslateMenu(false);
+                }}
+              >
+                {t('pdf_batch_translate') || '批量翻译...'}
+              </div>
+              <div 
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  cursor: 'pointer',
+                  backgroundColor: 'transparent',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  borderTop: '1px solid #808080'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#000080'; e.currentTarget.style.color = '#ffffff'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#000000'; }}
+                onClick={() => {
+                  if (onUpdateWindow) {
+                    onUpdateWindow(windowId, { isAutoTranslateMode: !isAutoTranslateMode });
+                  }
+                  setShowTranslateMenu(false);
+                }}
+              >
+                <span style={{ width: '12px', display: 'inline-block' }}>{isAutoTranslateMode ? '✓' : ''}</span>
+                {t('pdf_auto_translate') || '自动显示翻译'}
+              </div>
+            </div>
           )}
-        </button>
+        </div>
 
         {/* 关闭分页模式按钮 */}
         <button
@@ -1971,18 +2156,22 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                   
                   const reader = response.body.getReader();
                   const decoder = new TextDecoder();
+                  let buffer = '';
                   
                   while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
                     
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
                     
                     for (const line of lines) {
-                      if (line.startsWith('data: ')) {
+                      if (line.trim().startsWith('data: ')) {
                         try {
-                          const data = JSON.parse(line.substring(6));
+                          const dataStr = line.trim().substring(6);
+                          if (!dataStr) continue;
+                          const data = JSON.parse(dataStr);
                           console.log('📦 收到SSE事件:', data.type, '页面:', data.page);
                           
                           if (data.type === 'progress') {
@@ -2639,6 +2828,398 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
           )}
           </div>
         </div>
+          )}
+
+      {/* 批量翻译模态窗口 */}
+      {showBatchTranslatePanel && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            backgroundColor: '#c0c0c0',
+            border: '2px outset #ffffff',
+            boxShadow: '4px 4px 0px rgba(0, 0, 0, 0.5)',
+            width: '80%',
+            maxWidth: '1000px',
+            height: '80%',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            {/* Windows 98 标题栏 */}
+            <div style={{
+              background: 'linear-gradient(to right, #000080, #1084d0)',
+              padding: '3px 4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                color: '#ffffff',
+                fontSize: '11px',
+                fontFamily: 'MS Sans Serif, sans-serif',
+                fontWeight: 'bold'
+              }}>
+                <span>■</span>
+                <span>{t('pdf_translate_batch_title') || '页面翻译面板'} - {pagesInfo.length > 0 ? t('pdf_page_suffix').replace('{total}', pagesInfo.length) : t('loading')}</span>
+              </div>
+              <button
+                onClick={() => setShowBatchTranslatePanel(false)}
+                style={{
+                  width: '16px',
+                  height: '14px',
+                  padding: '0',
+                  fontSize: '10px',
+                  fontFamily: 'MS Sans Serif, sans-serif',
+                  fontWeight: 'bold',
+                  backgroundColor: '#c0c0c0',
+                  border: '1px outset #ffffff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 工具栏 */}
+            <div style={{
+              padding: '8px',
+              backgroundColor: '#c0c0c0',
+              borderBottom: '2px groove #808080',
+              display: 'flex',
+              gap: '8px',
+              alignItems: 'center'
+            }}>
+            <div style={{
+              fontSize: '11px',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              color: '#000000'
+            }}>
+              {t('pdf_select_pages')}
+            </div>
+            
+            <button
+              onClick={() => {
+                const allPages = new Set(pagesInfo.map(p => p.page));
+                setSelectedPages(allPages);
+              }}
+              style={PAGINATION_TOOLBAR_ITEM_STYLE}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
+            >
+              {t('pdf_select_all')}
+            </button>
+            
+            <button
+              onClick={() => {
+                const newSelected = new Set();
+                pagesInfo.forEach(p => {
+                  if (!selectedPages.has(p.page)) {
+                    newSelected.add(p.page);
+                  }
+                });
+                setSelectedPages(newSelected);
+              }}
+              style={PAGINATION_TOOLBAR_ITEM_STYLE}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
+            >
+              {t('pdf_select_invert')}
+            </button>
+            
+            <button
+              onClick={() => {
+                const untranslated = new Set();
+                pagesInfo.forEach(p => {
+                  if (!translatedPages.has(p.page)) {
+                    untranslated.add(p.page);
+                  }
+                });
+                setSelectedPages(untranslated);
+              }}
+              style={PAGINATION_TOOLBAR_ITEM_STYLE}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
+            >
+              {t('pdf_select_untranslated') || '未翻译'}
+            </button>
+            
+            <button
+              onClick={() => setSelectedPages(new Set())}
+              style={PAGINATION_TOOLBAR_ITEM_STYLE}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
+            >
+              {t('pdf_select_clear')}
+            </button>
+            
+            <div style={{ flex: 1 }}></div>
+            
+            <div style={{
+              fontSize: '11px',
+              fontFamily: 'MS Sans Serif, sans-serif',
+              color: '#000080',
+              fontWeight: 'bold'
+            }}>
+              {t('pdf_selected_count').replace('{count}', selectedPages.size)}
+            </div>
+            
+            <button
+              onClick={() => handleBatchTranslate(Array.from(selectedPages))}
+              disabled={isBatchTranslating || selectedPages.size === 0}
+              style={{
+                ...PAGINATION_TOOLBAR_ITEM_STYLE,
+                backgroundColor: isBatchTranslating || selectedPages.size === 0 ? 'transparent' : 'transparent',
+                opacity: isBatchTranslating || selectedPages.size === 0 ? 0.6 : 1,
+                fontWeight: 'bold',
+                color: '#000080',
+                minWidth: '60px'
+              }}
+              onMouseEnter={handlePaginationMouseEnter}
+              onMouseLeave={handlePaginationMouseLeave}
+              onMouseDown={handlePaginationMouseDown}
+              onMouseUp={handlePaginationMouseUp}
+            >
+              {isBatchTranslating ? (t('pdf_translating') || '正在翻译...') : (t('pdf_start_translate') || '开始翻译 (已选 {count} 页)').replace('{count}', selectedPages.size)}
+            </button>
+          </div>
+          
+          {/* 页面网格容器 */}
+          <div style={{
+            flex: 1,
+            overflow: 'hidden',
+            padding: '8px',
+            backgroundColor: '#c0c0c0'
+          }}>
+            <div style={{
+              height: '100%',
+              overflowY: 'auto',
+              backgroundColor: '#ffffff',
+              border: '2px inset #808080',
+              padding: '12px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+              gap: '12px',
+              alignContent: 'start'
+            }}>
+            {pagesInfo.map((pageInfo) => (
+              <div
+                key={pageInfo.page}
+                onClick={() => {
+                  const newSelected = new Set(selectedPages);
+                  if (newSelected.has(pageInfo.page)) {
+                    newSelected.delete(pageInfo.page);
+                  } else {
+                    newSelected.add(pageInfo.page);
+                  }
+                  setSelectedPages(newSelected);
+                }}
+                style={{
+                  width: '100%',
+                  aspectRatio: '0.7',
+                  backgroundColor: pageInfo.translateError ? '#ffe0e0' : (selectedPages.has(pageInfo.page) ? '#e0e0ff' : '#ffffff'),
+                  border: selectedPages.has(pageInfo.page) ? '3px solid #0000ff' : (pageInfo.translateError ? '2px solid #ff0000' : '2px solid #808080'),
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'all 0.2s',
+                  overflow: 'hidden',
+                  boxSizing: 'border-box'
+                }}
+                onMouseEnter={(e) => {
+                  if (!selectedPages.has(pageInfo.page) && !pageInfo.translateError) {
+                    e.currentTarget.style.borderColor = '#0000ff';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,255,0.3)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!selectedPages.has(pageInfo.page) && !pageInfo.translateError) {
+                    e.currentTarget.style.borderColor = '#808080';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }
+                }}
+              >
+                {/* 缩略图背景 */}
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#f5f5f5',
+                  position: 'relative'
+                }}>
+                  <img
+                    src={(() => {
+                      const pdfFileName = pdfUrl.split('/').pop();
+                      const pdfNameNoExt = pdfFileName.replace('.pdf', '');
+                      const baseUrl = pdfUrl.substring(0, pdfUrl.lastIndexOf('/files/') + 7);
+                      return `${baseUrl}pages/${pdfNameNoExt}/thumbnails/page_${String(pageInfo.page).padStart(3, '0')}.png`;
+                    })()}
+                    alt={t('pdf_page_prefix') + pageInfo.page}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      objectFit: 'contain',
+                      opacity: selectedPages.has(pageInfo.page) ? 0.8 : 1
+                    }}
+                  />
+                  
+                  {/* 页码标记 */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '4px',
+                    left: '4px',
+                    backgroundColor: 'rgba(0,0,0,0.6)',
+                    color: '#ffffff',
+                    padding: '1px 4px',
+                    borderRadius: '2px',
+                    fontSize: '10px',
+                    fontFamily: 'MS Sans Serif, sans-serif'
+                  }}>
+                    {pageInfo.page}
+                  </div>
+
+                  {/* 错误标记 */}
+                  {pageInfo.translateError && (
+                    <div 
+                      style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        backgroundColor: '#ff0000',
+                        color: '#ffffff',
+                        width: '16px',
+                        height: '16px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        zIndex: 10,
+                        boxShadow: '1px 1px 2px rgba(0,0,0,0.3)'
+                      }}
+                      title={pageInfo.translateErrorMessage || "翻译失败"}
+                    >
+                      !
+                    </div>
+                  )}
+
+                  {/* 翻译标记 */}
+                  {translatedPages.has(pageInfo.page) && !pageInfo.translateError && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '4px',
+                      right: '4px',
+                      backgroundColor: '#4caf50',
+                      color: '#ffffff',
+                      padding: '1px 4px',
+                      borderRadius: '2px',
+                      fontSize: '10px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold',
+                      boxShadow: '1px 1px 2px rgba(0,0,0,0.3)'
+                    }}>
+                      {t('pdf_translated') || '已翻译'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            </div>
+          </div>
+
+          {/* 底部进度栏 */}
+          {isBatchTranslating && (
+            <div style={{
+              marginBottom: '12px',
+              padding: '8px',
+              backgroundColor: '#c0c0c0',
+              border: '2px inset #c0c0c0',
+              borderRadius: '0px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px'
+            }}>
+              <div style={{
+                fontSize: '11px',
+                fontWeight: 'bold',
+                marginBottom: '6px',
+                color: '#000000',
+                textAlign: 'center'
+              }}>
+                {(t('pdf_translating') || '正在翻译...') + ` ${translateProgress.current} / ${translateProgress.total}`}
+              </div>
+              
+              {/* Windows 98风格量子化方格进度条 */}
+              <div style={{
+                width: '100%',
+                height: '30px',
+                backgroundColor: '#c0c0c0',
+                border: '2px inset #c0c0c0',
+                borderRadius: '0px',
+                overflow: 'hidden',
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '1px'
+              }}>
+                {/* 进度条背景 */}
+                <div style={{
+                  width: '100%',
+                  height: '27px',
+                  backgroundColor: '#f0f0f0',
+                  border: '1px inset #c0c0c0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '2px',
+                  gap: '2px'
+                }}>
+                  {Array.from({ length: 25 }).map((_, i) => {
+                    const progress = translateProgress.current / (translateProgress.total || 1);
+                    const isActive = (i / 25) < progress;
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          flex: 1,
+                          height: '100%',
+                          backgroundColor: isActive ? '#000080' : 'transparent',
+                          transition: 'background-color 0.2s'
+                        }}
+                      >
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       )}
 
       {/* 提取结果对比窗口 */}
@@ -3617,7 +4198,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                           color: '#000000',
                           fontFamily: 'MS Sans Serif, sans-serif'
                         }}>
-                          分段概括
+                          分段简介
                         </div>
                         <div style={{
                           fontSize: '10px',
@@ -3626,6 +4207,47 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                           fontFamily: 'MS Sans Serif, sans-serif'
                         }}>
                           {batchSubdivisions.subdivisions[selectedSection].section_summary}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 新增：深度讲述 (Detailed Narration) - 渲染版 */}
+                    {batchSubdivisions.subdivisions[selectedSection].detailed_narration && (
+                      <div style={{
+                        marginBottom: '16px',
+                        padding: '4px',
+                        fontFamily: 'MS Sans Serif, sans-serif'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontWeight: 'bold', 
+                          marginBottom: '12px',
+                          fontSize: '12px',
+                          color: '#000080'
+                        }}>
+                          <span style={{ fontSize: '14px' }}>🎙️</span> 深度讲述 (Section Lecture)
+                        </div>
+                        <div style={{
+                          fontSize: '11px',
+                          lineHeight: '1.6',
+                          color: '#333333'
+                        }} className="markdown-body">
+                          <ReactMarkdown
+                            components={{
+                              h1: ({node, ...props}) => <h1 style={{fontSize: '14px', borderBottom: '1px solid #c0c0c0', paddingBottom: '4px', marginTop: '12px'}} {...props} />,
+                              h2: ({node, ...props}) => <h2 style={{fontSize: '13px', borderBottom: '1px dotted #c0c0c0', paddingBottom: '2px', marginTop: '10px'}} {...props} />,
+                              h3: ({node, ...props}) => <h3 style={{fontSize: '12px', marginTop: '8px'}} {...props} />,
+                              p: ({node, ...props}) => <p style={{marginBottom: '8px'}} {...props} />,
+                              ul: ({node, ...props}) => <ul style={{paddingLeft: '16px', marginBottom: '8px'}} {...props} />,
+                              ol: ({node, ...props}) => <ol style={{paddingLeft: '16px', marginBottom: '8px'}} {...props} />,
+                              li: ({node, ...props}) => <li style={{marginBottom: '4px'}} {...props} />,
+                              blockquote: ({node, ...props}) => <blockquote style={{borderLeft: '3px solid #c0c0c0', paddingLeft: '8px', color: '#666', fontStyle: 'italic', margin: '8px 0'}} {...props} />
+                            }}
+                          >
+                            {batchSubdivisions.subdivisions[selectedSection].detailed_narration}
+                          </ReactMarkdown>
                         </div>
                       </div>
                     )}
@@ -4525,13 +5147,50 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                       );
                     
                     // 只有在第二阶段完成后且该分段有细分数据才能点击
-                    const hasSubdivisionData = batchSubdivisions && 
-                                                batchSubdivisions.subdivisions && 
-                                                batchSubdivisions.subdivisions[index] !== null && 
-                                                batchSubdivisions.subdivisions[index] !== undefined;
+                    const currentSubData = batchSubdivisions && 
+                                          batchSubdivisions.subdivisions && 
+                                          batchSubdivisions.subdivisions[index];
+                    
+                    const hasSubdivisionData = currentSubData !== null && currentSubData !== undefined;
+                    const hasNarration = hasSubdivisionData && currentSubData.detailed_narration;
+                    
                     const isClickable = hasSubdivisionData && !isBatchGenerating;
                     const isSelected = selectedSection === index;
                     
+                    // 局部更新单个分段的函数
+                    const handleRetrySingleSection = async (e, idx) => {
+                        e.stopPropagation(); // 防止触发父级的 onClick
+                        
+                        // 设置一个临时状态表示正在重试
+                        setBatchOutlineStatus(`正在重新生成第 ${idx + 1} 段的深度讲述...`);
+                        
+                        try {
+                            const res = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivide/section/${idx}`, {
+                                method: 'POST'
+                            });
+                            
+                            if (res.ok) {
+                                const result = await res.json();
+                                if (result.success) {
+                                    // 局部更新前端状态
+                                    setBatchSubdivisions(prev => {
+                                        const newSubs = [...(prev.subdivisions || [])];
+                                        newSubs[idx] = result.data;
+                                        return { ...prev, subdivisions: newSubs };
+                                    });
+                                    setBatchOutlineStatus(`第 ${idx + 1} 段更新成功`);
+                                    setTimeout(() => setBatchOutlineStatus(''), 3000);
+                                }
+                            } else {
+                                const err = await res.json();
+                                alert(`更新失败: ${err.detail || '未知错误'}`);
+                            }
+                        } catch (error) {
+                            console.error('Retry section failed:', error);
+                            alert(`请求失败: ${error.message}`);
+                        }
+                    };
+
                     return (
                       <div
                         key={index}
@@ -4546,7 +5205,8 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                           cursor: isClickable ? 'pointer' : 'not-allowed',
                           transition: 'background-color 0.2s, box-shadow 0.2s',
                           boxShadow: 'none',
-                          opacity: isClickable ? 1 : 0.5
+                          opacity: 1, // 移除不透明度限制，方便点击重试
+                          position: 'relative'
                         }}
                         onMouseEnter={(e) => {
                           if (isClickable) {
@@ -4555,14 +5215,13 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                           }
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = isSelected ? '#e0e0e0' : '#ffffff';
+                          e.currentTarget.style.backgroundColor = isSelected ? '#e0e0e0' : (hasSubdivisionData ? '#ffffff' : '#f5f5f5');
                           e.currentTarget.style.boxShadow = 'none';
                         }}
                         onClick={() => {
                           if (isClickable) {
                             setSelectedSection(index);
                             setOutlineView('detail'); // 切换到详情视图
-                            console.log('打开细分详情页:', index);
                           }
                         }}
                       >
@@ -4587,18 +5246,52 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                                 color: '#ff0000',
                                 fontWeight: 'normal'
                               }}>
-                                [细分失败]
+                                [数据缺失]
+                              </span>
+                            )}
+                            {hasSubdivisionData && !hasNarration && (
+                              <span style={{
+                                marginLeft: '6px',
+                                fontSize: '9px',
+                                color: '#808000',
+                                fontWeight: 'normal'
+                              }}>
+                                [无讲述]
                               </span>
                             )}
                           </div>
                           <div style={{
-                            fontSize: '10px',
-                            color: '#666',
-                            marginLeft: '8px',
-                            whiteSpace: 'nowrap',
-                            fontFamily: 'MS Sans Serif, sans-serif'
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
                           }}>
-                            p.{section.page_start}-{section.page_end}
+                            {/* 单分段重试按钮 */}
+                            <button
+                                onClick={(e) => handleRetrySingleSection(e, index)}
+                                title="重新生成此段的深度讲述与细分"
+                                style={{
+                                    padding: '1px 4px',
+                                    fontSize: '9px',
+                                    backgroundColor: '#c0c0c0',
+                                    border: '1px outset #ffffff',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#d0d0d0'}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#c0c0c0'}
+                            >
+                                🔄
+                            </button>
+                            <div style={{
+                                fontSize: '10px',
+                                color: '#666',
+                                whiteSpace: 'nowrap',
+                                fontFamily: 'MS Sans Serif, sans-serif'
+                            }}>
+                                p.{section.page_start}-{section.page_end}
+                            </div>
                           </div>
                         </div>
                         
@@ -4653,7 +5346,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                           setIsBatchGenerating(true);
                           setIsStage2(true);
                           setStage2Completed(false);
-                          setBatchOutlineStatus('正在并行细分各个分段...');
+                          setBatchOutlineStatus('正在并行进行分段细分与深度讲述...');
                           setBatchProgress({ completed: 0, total: batchOutline.outline.length });
                           
                           try {
@@ -4700,7 +5393,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                                   } else if (data.type === 'section_done') {
                                     // 更新进度
                                     setBatchProgress({ completed: data.completed, total: data.total });
-                                    setBatchOutlineStatus(`正在并行细分各个分段...\n进度: ${data.completed}/${data.total}`);
+                                    setBatchOutlineStatus(`正在并行进行分段细分与深度讲述...\n进度: ${data.completed}/${data.total}`);
                                   } else if (data.type === 'complete') {
                                     console.log('所有分段细分完成:', data.data);
                                     // 确保进度条显示为100%完成状态
@@ -4761,7 +5454,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                       setIsStage2(true);
                       setStage2Completed(false);
                       setSelectedSection(null); // 清空选中
-                      setBatchOutlineStatus('正在并行细分各个分段...');
+                      setBatchOutlineStatus('正在并行进行分段细分与深度讲述...');
                       setBatchProgress({ completed: 0, total: batchOutline.outline.length });
                       
                       try {
@@ -4808,7 +5501,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                               } else if (data.type === 'section_done') {
                                 // 更新进度
                                 setBatchProgress({ completed: data.completed, total: data.total });
-                                setBatchOutlineStatus(`正在并行细分各个分段...\n进度: ${data.completed}/${data.total}`);
+                                setBatchOutlineStatus(`正在并行进行分段细分与深度讲述...\n进度: ${data.completed}/${data.total}`);
                               } else if (data.type === 'complete') {
                                 console.log('所有分段细分完成:', data.data);
                                 // 确保进度条显示为100%完成状态
@@ -7030,7 +7723,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                             setIsBatchGenerating(true);
                             setIsStage2(true);
                             setStage2Completed(false);
-                            setBatchOutlineStatus('正在并行细分各个分段...');
+                            setBatchOutlineStatus('正在并行进行分段细分与深度讲述...');
                             setBatchProgress({ completed: 0, total: batchOutline.outline.length });
                             
                             try {
@@ -7077,7 +7770,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                                     } else if (data.type === 'section_done') {
                                       // 更新进度
                                       setBatchProgress({ completed: data.completed, total: data.total });
-                                      setBatchOutlineStatus(`正在并行细分各个分段...\n进度: ${data.completed}/${data.total}`);
+                                      setBatchOutlineStatus(`正在并行进行分段细分与深度讲述...\n进度: ${data.completed}/${data.total}`);
                                     } else if (data.type === 'complete') {
                                       console.log('所有分段细分完成:', data.data);
                                       // 确保进度条显示为100%完成状态
@@ -7756,6 +8449,7 @@ const DocumentWindowRenderer = React.memo(({ window: windowData, onUpload, onUpd
   };
 
   const isPaginationMode = windowData.isPaginationMode || false;
+  const isAutoTranslateMode = windowData.isAutoTranslateMode || false;
 
   const setIsPaginationMode = useCallback((val) => {
     if (onUpdateWindow) {
@@ -7805,6 +8499,7 @@ const DocumentWindowRenderer = React.memo(({ window: windowData, onUpload, onUpd
         openMessageCenter={openMessageCenter}
         setConfirmDialog={setConfirmDialog}
         showConfirmDialog={showConfirmDialog}
+        isAutoTranslateMode={isAutoTranslateMode}
       />
     );
   }
@@ -7893,6 +8588,7 @@ const PDFWindowRenderer = React.memo(({ window: windowData, onUpload, onUpdateWi
   };
 
   const isPaginationMode = windowData.isPaginationMode || false;
+  const isAutoTranslateMode = windowData.isAutoTranslateMode || false;
   const [targetPage, setTargetPage] = useState(null);
 
   const setIsPaginationMode = useCallback((val) => {
@@ -7960,6 +8656,7 @@ const PDFWindowRenderer = React.memo(({ window: windowData, onUpload, onUpdateWi
         openMessageCenter={openMessageCenter}
         setConfirmDialog={setConfirmDialog}
         showConfirmDialog={showConfirmDialog}
+        isAutoTranslateMode={isAutoTranslateMode}
       />
     );
   }

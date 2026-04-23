@@ -11,7 +11,8 @@ async def test_simple_call():
     """测试基本的工具调用"""
     
     url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-    api_key = "sk-e6d7a8de91f24365a15a88c7f5f05471"
+    import os
+    api_key = os.getenv("QWEN_API_KEY", "")
     
     # 简单的工具定义
     tools = [

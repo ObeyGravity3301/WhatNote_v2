@@ -942,6 +942,7 @@ const FileSelector = React.memo(({
   setSelectedFiles, 
   getFileIcon 
 }) => {
+  const { t } = useLanguage();
   if (!showFileSelector) return null;
 
   return (
@@ -965,12 +966,9 @@ const FileSelector = React.memo(({
         position: 'sticky',
         top: '0',
         zIndex: 10
-            }}>
-              <span>选择要发送的文件 ({boardFiles.length}个文件)</span>
-              <div style={{ fontSize: '8px', color: '#666', marginTop: '2px' }}>
-                调试: boardFiles.length = {boardFiles.length}
-              </div>
-              <button
+      }}>
+        <span>{t('chat_select_files_title').replace('{count}', boardFiles.length)}</span>
+        <button
                 onClick={() => setShowFileSelector(false)}
                 style={{
                   backgroundColor: '#c0c0c0',
@@ -1073,7 +1071,7 @@ const FileSelector = React.memo(({
                 border: '1px solid #0078d4',
                 borderRadius: '2px'
               }}>
-                <strong>已选择 {selectedFiles.length} 个文件:</strong>
+                <strong>{t('chat_selected_files_count').replace('{count}', selectedFiles.length)}</strong>
                 <div style={{ marginTop: '4px' }}>
                   {selectedFiles.map(file => (
                     <span key={file.path} style={{ 
@@ -1410,8 +1408,8 @@ function ChatWindow({
         { value: 'gemini-pro-vision', label: 'Gemini Pro Vision (多模态)' }
       ],
       'qwen': [
-        { value: 'qwen-vl-plus', label: '通义千问-VL-Plus (支持图片识别)' },
-        { value: 'qwen-vl-max', label: '通义千问-VL-Max (支持图片识别-最强)' },
+        { value: 'qwen3-vl-plus', label: '通义千问3-VL-Plus (多模态推荐)' },
+        { value: 'qwen3-vl-flash', label: '通义千问3-VL-Flash (多模态快速)' },
         { value: 'qwen-plus', label: '通义千问-Plus (纯文本)' },
         { value: 'qwen-turbo', label: '通义千问-Turbo (纯文本-快速)' },
         { value: 'qwen-long', label: '通义千问-Long (长文本)' }
