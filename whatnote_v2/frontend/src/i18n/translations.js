@@ -2137,6 +2137,27 @@ const translations = {
       "ja-JP": "ドキュメント大綱"
     }
   },
+  "pdf_outline_export_toc": {
+    "default": {
+      "zh-CN": "导出 PDF 目录",
+      "en-US": "Export PDF TOC",
+      "ja-JP": "PDF目次をエクスポート"
+    }
+  },
+  "pdf_outline_export_toc_exporting": {
+    "default": {
+      "zh-CN": "正在导出...",
+      "en-US": "Exporting...",
+      "ja-JP": "エクスポート中..."
+    }
+  },
+  "pdf_outline_export_toc_error": {
+    "default": {
+      "zh-CN": "导出 PDF 目录失败：",
+      "en-US": "Failed to export PDF TOC: ",
+      "ja-JP": "PDF目次のエクスポートに失敗："
+    }
+  },
   "pdf_outline_view_list": {
     "default": {
       "zh-CN": "列表视图",

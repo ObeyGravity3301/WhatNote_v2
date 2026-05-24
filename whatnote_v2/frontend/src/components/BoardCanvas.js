@@ -333,6 +333,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
   const [isStage2, setIsStage2] = useState(false); // 是否是第二阶段
   const [annotationProgress, setAnnotationProgress] = useState({ completed: 0, total: 0, currentPage: null, isGenerating: false }); // 单个分段注释生成进度
   const [stage2Completed, setStage2Completed] = useState(false); // 第二阶段是否已完成
+  const [isExportingToc, setIsExportingToc] = useState(false); // 是否正在导出 PDF 目录
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
@@ -798,6 +799,54 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
       console.log('未找到批量数据（首次使用）');
       }
   }, [boardId, windowId]);
+
+  const handleExportTocPdf = useCallback(async () => {
+    if (!boardId || !windowId || isExportingToc) return;
+
+    setIsExportingToc(true);
+    try {
+      const response = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/export-toc-pdf`
+      );
+
+      if (!response.ok) {
+        let detail = '导出失败';
+        try {
+          const err = await response.json();
+          detail = err.detail || detail;
+        } catch (_) {
+          detail = await response.text() || detail;
+        }
+        throw new Error(detail);
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') || '';
+      let filename = '目录.pdf';
+      const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      if (utf8Match?.[1]) {
+        try {
+          filename = decodeURIComponent(utf8Match[1]);
+        } catch (_) {
+          filename = utf8Match[1];
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('导出 PDF 目录失败:', error);
+      alert(t('pdf_outline_export_toc_error') + (error.message || t('text_unknown_error')));
+    } finally {
+      setIsExportingToc(false);
+    }
+  }, [boardId, windowId, isExportingToc, t]);
     
   useEffect(() => {
     loadOutlineData();
@@ -3695,6 +3744,24 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
               
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {/* 视图切换按钮 */}
+                {batchOutline && batchSubdivisions && stage2Completed && (
+                  <button
+                    onClick={handleExportTocPdf}
+                    disabled={isExportingToc}
+                    style={{
+                      padding: '2px 6px',
+                      fontSize: '10px',
+                      backgroundColor: isExportingToc ? '#a0a0a0' : '#c0c0c0',
+                      border: '2px outset #c0c0c0',
+                      cursor: isExportingToc ? 'wait' : 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif'
+                    }}
+                    title={t('pdf_outline_export_toc')}
+                  >
+                    {isExportingToc ? t('pdf_outline_export_toc_exporting') : '📑'}
+                  </button>
+                )}
+
                 {batchOutline && batchSubdivisions && (
                   <>
                     <button
@@ -5445,8 +5512,32 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                   marginTop: '12px',
                   padding: '8px',
                   display: 'flex',
-                  justifyContent: 'flex-end'
+                  justifyContent: 'flex-end',
+                  gap: '8px'
                 }}>
+                  <button
+                    onClick={handleExportTocPdf}
+                    disabled={isExportingToc}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: '11px',
+                      backgroundColor: isExportingToc ? '#a0a0a0' : '#008000',
+                      color: '#ffffff',
+                      border: '2px outset #008000',
+                      borderRadius: '0px',
+                      cursor: isExportingToc ? 'wait' : 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isExportingToc) e.target.style.backgroundColor = '#006400';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isExportingToc) e.target.style.backgroundColor = '#008000';
+                    }}
+                  >
+                    {isExportingToc ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_export_toc')}
+                  </button>
                   <button
                     onClick={async () => {
                       console.log('重新开始第二阶段：细分分段');

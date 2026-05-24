@@ -3601,6 +3601,58 @@ async def get_subdivision_data(board_id: str, window_id: str):
         error(f"加载细分数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-toc-pdf")
+async def export_batch_toc_pdf(board_id: str, window_id: str):
+    """导出大纲+细分的 PDF 目录"""
+    try:
+        from urllib.parse import quote
+        from services.toc_pdf_exporter import build_toc_pdf
+
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        subdiv_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
+
+        if not outline_file.exists():
+            raise HTTPException(status_code=404, detail="大纲数据不存在，请先生成第一阶段大纲")
+        if not subdiv_file.exists():
+            raise HTTPException(status_code=404, detail="细分数据不存在，请先生成第二阶段细分")
+
+        with open(outline_file, "r", encoding="utf-8") as f:
+            outline_data = json.load(f)
+        with open(subdiv_file, "r", encoding="utf-8") as f:
+            subdivision_data = json.load(f)
+
+        subdivisions = subdivision_data.get("subdivisions") or []
+        valid_count = sum(1 for item in subdivisions if item)
+        if valid_count == 0:
+            raise HTTPException(status_code=400, detail="细分数据为空，请完成第二阶段后再导出")
+
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+
+        pdf_title = target_window.get("title", "document.pdf")
+        pdf_bytes = build_toc_pdf(outline_data, subdivision_data, pdf_title)
+
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}_目录.pdf"
+        return StreamingResponse(
+            iter([pdf_bytes]),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"
+            },
+        )
+    except HTTPException:
+        raise
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        error(f"导出 PDF 目录失败: {e}")
+        raise HTTPException(status_code=500, detail=f"导出 PDF 目录失败: {str(e)}")
+
+
 @app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/summary-note")
 async def get_batch_summary_note(board_id: str, window_id: str):
     """获取已生成的全文档笔记"""
@@ -3752,10 +3804,9 @@ async def semantic_search_annotations(
 4. pages必须是数组格式，包含起止页码
 """
 
-        # 调用LLM API
-        api_config = api_config_manager.get_config()
-        current_provider = api_config.get('current_provider', 'openai')
-        provider_config = api_config.get('providers', {}).get(current_provider, {})
+        # 调用LLM API（使用统一配置读取，支持 .env 覆盖）
+        current_provider = api_config_manager.get_current_provider()
+        provider_config = api_config_manager.get_provider_config(current_provider) or {}
         
         if not provider_config.get('apiKey'):
             raise HTTPException(status_code=400, detail="LLM API未配置")
@@ -3817,9 +3868,6 @@ async def semantic_search_annotations(
                 pdf_content = target_window.get('content', '')
                 if pdf_content:
                     pdf_path = Path(pdf_content)
-                    
-                    # 使用config.DATA_DIR作为基础目录，确保DATA_DIR已定义
-                    DATA_DIR = DATA_DIR
                     
                     if not pdf_path.is_absolute():
                         # 兼容处理：尝试构建绝对路径
@@ -3919,9 +3967,6 @@ async def get_search_history(board_id: str, window_id: str):
             return {"history": []}
             
         pdf_path = Path(pdf_content)
-        # 使用config.DATA_DIR作为基础目录
-        DATA_DIR = DATA_DIR
-        
         if not pdf_path.is_absolute():
             board_dir = Path(DATA_DIR) / "courses" / "course-xxx" / board_id # 这里的course-xxx是占位符，实际上应该从board_id反推或者遍历
             # 更稳妥的方式是遍历查找board所在的目录
