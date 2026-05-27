@@ -3097,9 +3097,9 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
     """Agent 索引：按大纲节生成结构化 JSON（复用第二阶段并行流程，独立提示词与存储）"""
     try:
         from services.agent_index_service import (
-            build_agent_section_result,
-            build_agent_subdivision_prompt,
-            parse_and_validate_agent_response,
+            AGENT_COMPLETION_RETRY_ROUNDS,
+            AGENT_SECTION_MAX_ATTEMPTS,
+            generate_agent_section_index,
         )
 
         info(f"开始 Agent 索引生成 board_id={board_id}, window_id={window_id}")
@@ -3147,74 +3147,41 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                         }
                     )
 
-                    section_pages_content = []
-                    for page_num in range(page_start, page_end + 1):
-                        page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
-                        if page_content.get("current"):
-                            section_pages_content.append(
-                                {"page": page_num, "content": page_content["current"]}
-                            )
-
-                    if not section_pages_content:
-                        await queue.put({"type": "warning", "message": f"分段{section_num}无内容，跳过"})
-                        return None
-
-                    section_full_text = "\n\n".join(
-                        [f"=== Page {p['page']} ===\n{p['content']}" for p in section_pages_content]
-                    )
-                    human_anchor = _load_human_subdivisions_anchor(board_id, window_id, section_idx)
-
-                    validation_error = ""
-                    normalized = None
-                    accumulated_content = ""
-
-                    for attempt in range(3):
-                        prompt = build_agent_subdivision_prompt(
-                            pdf_filename,
-                            section_title,
-                            page_start,
-                            page_end,
-                            section_full_text,
-                            human_anchor,
-                            validation_error,
-                        )
-                        messages = [{"role": "user", "content": prompt}]
-                        accumulated_content = ""
-                        async for chunk in llm_service.chat_completion(messages, stream=True):
-                            if chunk:
-                                if chunk.startswith("[Error]"):
-                                    await queue.put(
-                                        {
-                                            "type": "error",
-                                            "section": section_num,
-                                            "error": f"LLM服务错误: {chunk}",
-                                        }
-                                    )
-                                    return None
-                                accumulated_content += chunk
-                                await queue.put(
-                                    {
-                                        "type": "section_content",
-                                        "section": section_num,
-                                        "content": chunk,
-                                    }
-                                )
-
-                        ok, err, normalized = parse_and_validate_agent_response(
-                            accumulated_content, page_start, page_end
-                        )
-                        if ok:
-                            break
-                        validation_error = err
-                        info(f"Agent 索引分段{section_num}校验失败(尝试{attempt + 1}): {err}")
-
-                    if not normalized:
+                    async def on_chunk(sec_num, chunk):
                         await queue.put(
-                            {"type": "warning", "message": f"分段{section_num} Agent 索引校验失败: {validation_error}"}
+                            {
+                                "type": "section_content",
+                                "section": sec_num,
+                                "content": chunk,
+                            }
                         )
+
+                    result, err = await generate_agent_section_index(
+                        section_idx,
+                        section,
+                        pdf_filename,
+                        board_id,
+                        window_id,
+                        content_manager.get_pdf_page_contents,
+                        llm_service.chat_completion,
+                        _load_human_subdivisions_anchor,
+                        max_attempts=AGENT_SECTION_MAX_ATTEMPTS,
+                        on_chunk=on_chunk,
+                    )
+
+                    if not result:
+                        if err == "分段无页面内容":
+                            await queue.put({"type": "warning", "message": f"分段{section_num}无内容，跳过"})
+                        else:
+                            await queue.put(
+                                {
+                                    "type": "warning",
+                                    "message": f"分段{section_num} Agent 索引失败: {err}",
+                                }
+                            )
+                            info(f"Agent 索引分段{section_num}失败: {err}")
                         return None
 
-                    result = build_agent_section_result(section, section_idx, normalized)
                     all_sections[section_idx] = result
                     completed_count[0] += 1
                     await queue.put(
@@ -3246,6 +3213,34 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
 
                 await completion_task
 
+                for retry_round in range(AGENT_COMPLETION_RETRY_ROUNDS):
+                    pending_indices = [i for i, s in enumerate(all_sections) if s is None]
+                    if not pending_indices:
+                        break
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'补跑失败章节 {len(pending_indices)} 节（第 {retry_round + 1}/{AGENT_COMPLETION_RETRY_ROUNDS} 轮）...'}, ensure_ascii=False)}\n\n"
+                    for section_idx in pending_indices:
+                        section = outline[section_idx]
+                        section_num = section.get("section_number", section_idx + 1)
+                        result, err = await generate_agent_section_index(
+                            section_idx,
+                            section,
+                            pdf_filename,
+                            board_id,
+                            window_id,
+                            content_manager.get_pdf_page_contents,
+                            llm_service.chat_completion,
+                            _load_human_subdivisions_anchor,
+                            max_attempts=AGENT_SECTION_MAX_ATTEMPTS,
+                        )
+                        if result:
+                            all_sections[section_idx] = result
+                            completed_count[0] = sum(1 for s in all_sections if s is not None)
+                            yield f"data: {json.dumps({'type': 'section_done', 'section': section_num, 'completed': completed_count[0], 'total': total_sections}, ensure_ascii=False)}\n\n"
+                            info(f"Agent 索引补跑成功: 分段{section_num}")
+                        else:
+                            yield f"data: {json.dumps({'type': 'warning', 'message': f'补跑分段{section_num}仍失败: {err}'}, ensure_ascii=False)}\n\n"
+                            info(f"Agent 索引补跑失败: 分段{section_num}: {err}")
+
                 failed_sections = []
                 for idx, item in enumerate(all_sections):
                     if item is None:
@@ -3258,6 +3253,7 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                         )
 
                 valid_count = sum(1 for s in all_sections if s is not None)
+                index_complete = valid_count == total_sections
                 agent_file = _agent_index_file(board_id, window_id)
                 sections_ok = [s for s in all_sections if s]
                 agent_complete_data = {
@@ -3266,13 +3262,16 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                     "_readme": (
                         "sections: full index per outline section (null = failed). "
                         "sections_ok: only successful entries for agents. "
-                        "failed_sections: failure metadata (section_index/title only)."
+                        "failed_sections: failure metadata (section_index/title only). "
+                        "index_complete=false means this file is NOT safe for downstream agents."
                     ),
                     "pdf_filename": pdf_filename,
                     "window_id": window_id,
                     "board_id": board_id,
                     "total_sections": total_sections,
                     "completed_sections": valid_count,
+                    "index_complete": index_complete,
+                    "status": "complete" if index_complete else "incomplete",
                     "failed_sections": failed_sections,
                     "sections": all_sections,
                     "sections_ok": sections_ok,
@@ -3335,6 +3334,16 @@ async def export_agent_index_json(board_id: str, window_id: str):
         ]
         if not sections_ok:
             raise HTTPException(status_code=400, detail="Agent 索引为空，请重新生成")
+        if agent_data.get("index_complete") is False or (
+            agent_data.get("completed_sections", 0) < agent_data.get("total_sections", 0)
+        ):
+            failed = agent_data.get("failed_sections") or []
+            titles = ", ".join(f["section_title"] for f in failed[:6])
+            extra = f" 等{len(failed)}节" if len(failed) > 6 else ""
+            raise HTTPException(
+                status_code=400,
+                detail=f"Agent 索引不完整（{agent_data.get('completed_sections')}/{agent_data.get('total_sections')}），请重新生成。缺失章节：{titles}{extra}",
+            )
 
         windows = content_manager.get_board_windows(board_id)
         target_window = next((w for w in windows if w.get("id") == window_id), None)

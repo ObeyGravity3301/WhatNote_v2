@@ -2298,6 +2298,20 @@ const translations = {
       "ja-JP": "Agent索引の生成が完了"
     }
   },
+  "pdf_outline_agent_incomplete_status": {
+    "default": {
+      "zh-CN": "Agent 索引不完整（{completed}/{total}），缺失：{titles}。请重新生成后再用于下游任务。",
+      "en-US": "Agent index incomplete ({completed}/{total}). Missing: {titles}. Regenerate before downstream use.",
+      "ja-JP": "Agent索引が不完全（{completed}/{total}）。不足：{titles}"
+    }
+  },
+  "pdf_outline_agent_incomplete_block": {
+    "default": {
+      "zh-CN": "此索引不完整，不可用于导出或交给 Agent。请重新点击「生成 Agent 索引」直至全部章节成功。",
+      "en-US": "This index is incomplete and not safe to export. Regenerate until all sections succeed.",
+      "ja-JP": "索引が不完全なためエクスポートできません。再生成してください。"
+    }
+  },
   "pdf_outline_agent_failed": {
     "default": {
       "zh-CN": "Agent 索引生成失败：{error}",

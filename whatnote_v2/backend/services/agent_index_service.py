@@ -112,6 +112,13 @@ _SCHEMA_CLAUSE_SPLIT = re.compile(
     r"\s*;\s*|\s+which\s+|\s+that\s+|\s+because\s+|\s+including\s+",
     re.IGNORECASE,
 )
+_ELLIPSIS_RE = re.compile(
+    r"\.\.\.|…|\.{3,}|,\s*\.{2,}|(?:^|[\s,])(?:etc\.?|and so on|and others)(?:[\s,.]|$)",
+    re.IGNORECASE,
+)
+
+AGENT_SECTION_MAX_ATTEMPTS = 4
+AGENT_COMPLETION_RETRY_ROUNDS = 2
 
 
 def _extract_json_object(raw: str) -> str:
@@ -186,6 +193,7 @@ def build_agent_subdivision_prompt(
    - Max {MAX_CORE_SCHEMA_WORDS} words AND max {MAX_CORE_SCHEMA_CHARS} characters per value
    - Use noun phrases, symbols, or arrow relations only (e.g. "NO₃⁻ → NR → NH₄⁺", "NRT1.1, GS1, rhizobia")
    - NO explanatory clauses ("which...", "that...", "because...", lists of 8+ items)
+   - NEVER use "...", "…", "etc.", "and so on", "and others" — if too many items, keep 2–4 names only or use UNKNOWN
    - Use "UNKNOWN" if missing
    Keys: "Entities/Objects", "Process/Method", "Key Relation", "Evidence/Example", "Output/Result", "Assumptions/Conditions"
 
@@ -224,37 +232,73 @@ def build_agent_subdivision_prompt(
 """
 
 
-def _truncate_text(text: str, max_chars: int) -> str:
-    text = (text or "").strip()
-    if len(text) <= max_chars:
-        return text
-    cut = text[: max_chars - 3].rstrip()
-    if " " in cut:
-        cut = cut.rsplit(" ", 1)[0]
-    return cut + "..."
+def _has_forbidden_ellipsis(text: str) -> bool:
+    if not text or text.strip().upper() == "UNKNOWN":
+        return False
+    return bool(_ELLIPSIS_RE.search(text))
 
 
-def _compress_schema_value(val: str) -> str:
+def _find_ellipsis_in_payload(payload: Dict[str, Any]) -> Optional[str]:
+    one_liner = str(payload.get("one_liner", ""))
+    if _has_forbidden_ellipsis(one_liner):
+        return "one_liner 不得包含 ... / etc. / and so on"
+
+    core = payload.get("core_schema") or {}
+    if isinstance(core, dict):
+        for key in CORE_SCHEMA_KEYS:
+            val = str(core.get(key, ""))
+            if _has_forbidden_ellipsis(val):
+                return f"core_schema[{key}] 不得包含 ... / etc. / and so on"
+
+    for i, kw in enumerate(payload.get("keywords") or []):
+        if _has_forbidden_ellipsis(str(kw)):
+            return f"keywords[{i}] 不得包含省略号或 etc."
+
+    for i, hook in enumerate(payload.get("exam_hooks") or []):
+        if _has_forbidden_ellipsis(str(hook)):
+            return f"exam_hooks[{i}] 不得包含省略号或 etc."
+
+    for i, sub in enumerate(payload.get("subdivisions") or []):
+        if not isinstance(sub, dict):
+            continue
+        for field in ("title", "one_liner"):
+            if _has_forbidden_ellipsis(str(sub.get(field, ""))):
+                return f"subdivisions[{i}].{field} 不得包含省略号或 etc."
+    return None
+
+
+def _compress_schema_value(val: str) -> Tuple[str, Optional[str]]:
     val = re.sub(r"\s+", " ", (val or "").strip())
     if not val:
-        return "UNKNOWN"
+        return "UNKNOWN", None
+    if _has_forbidden_ellipsis(val):
+        return (
+            val,
+            "不得使用 .../etc./and so on；只写 2–4 个专名或用 UNKNOWN",
+        )
     parts = _SCHEMA_CLAUSE_SPLIT.split(val, maxsplit=1)
     val = parts[0].strip() if parts else val
     words = val.split()
     if len(words) > MAX_CORE_SCHEMA_WORDS:
         val = " ".join(words[:MAX_CORE_SCHEMA_WORDS])
     if len(val) > MAX_CORE_SCHEMA_CHARS:
-        val = _truncate_text(val, MAX_CORE_SCHEMA_CHARS)
-    return val or "UNKNOWN"
+        return (
+            val,
+            f"超过 {MAX_CORE_SCHEMA_CHARS} 字符；缩短为更少专名/箭头短语，禁止 ...",
+        )
+    return val or "UNKNOWN", None
 
 
-def _normalize_core_schema(raw: Any) -> Dict[str, str]:
+def _normalize_core_schema(raw: Any) -> Tuple[Dict[str, str], Optional[str]]:
     result: Dict[str, str] = {}
     if isinstance(raw, dict):
         for key in CORE_SCHEMA_KEYS:
             val = str(raw.get(key, raw.get(key.replace("/", " "), "UNKNOWN"))).strip()
-            result[key] = _compress_schema_value(val)
-        return result
+            compressed, err = _compress_schema_value(val)
+            if err:
+                return result, f"core_schema[{key}]: {err}"
+            result[key] = compressed
+        return result, None
 
     if isinstance(raw, list):
         for i, key in enumerate(CORE_SCHEMA_KEYS):
@@ -263,14 +307,17 @@ def _normalize_core_schema(raw: Any) -> Dict[str, str]:
                     val = raw[i].get("value") or raw[i].get(key) or "UNKNOWN"
                 else:
                     val = str(raw[i])
-                result[key] = _compress_schema_value(str(val))
+                compressed, err = _compress_schema_value(str(val))
             else:
-                result[key] = "UNKNOWN"
-        return result
+                compressed, err = "UNKNOWN", None
+            if err:
+                return result, f"core_schema[{key}]: {err}"
+            result[key] = compressed
+        return result, None
 
     for key in CORE_SCHEMA_KEYS:
         result[key] = "UNKNOWN"
-    return result
+    return result, None
 
 
 def _is_specific_keyword(item: str) -> bool:
@@ -308,8 +355,10 @@ def _normalize_keywords(raw: Any) -> List[str]:
         low = item.lower()
         if low in BANNED_KEYWORDS:
             continue
+        if _has_forbidden_ellipsis(item):
+            continue
         if len(item) > 80:
-            item = item[:80]
+            item = item[:80].rsplit(" ", 1)[0] if " " in item[:80] else item[:80]
         if _is_specific_keyword(item):
             if item not in specific:
                 specific.append(item)
@@ -405,7 +454,13 @@ def validate_and_normalize_agent_payload(
             None,
         )
 
-    core_schema = _normalize_core_schema(data.get("core_schema"))
+    ellipsis_err = _find_ellipsis_in_payload(data)
+    if ellipsis_err:
+        return False, ellipsis_err, None
+
+    core_schema, schema_err = _normalize_core_schema(data.get("core_schema"))
+    if schema_err:
+        return False, schema_err, None
     for key in CORE_SCHEMA_KEYS:
         if key not in core_schema:
             core_schema[key] = "UNKNOWN"
@@ -433,6 +488,9 @@ def validate_and_normalize_agent_payload(
         "exam_hooks": exam_hooks,
         "subdivisions": subdivisions,
     }
+    ellipsis_err = _find_ellipsis_in_payload(normalized)
+    if ellipsis_err:
+        return False, ellipsis_err, None
     if warnings:
         normalized["_normalization_warnings"] = warnings
     return True, "", normalized
@@ -476,6 +534,78 @@ def parse_and_validate_agent_response(
         return False, f"JSON 解析失败: {exc}", None
     except Exception as exc:
         return False, str(exc), None
+
+
+async def generate_agent_section_index(
+    section_idx: int,
+    section: Dict[str, Any],
+    pdf_filename: str,
+    board_id: str,
+    window_id: str,
+    get_page_contents,
+    llm_chat_stream,
+    get_human_anchor,
+    max_attempts: int = AGENT_SECTION_MAX_ATTEMPTS,
+    on_chunk=None,
+) -> Tuple[Optional[Dict[str, Any]], str]:
+    """生成单节 Agent 索引。返回 (result, error_message)。"""
+    section_num = section.get("section_number", section_idx + 1)
+    section_title = section.get("title", f"分段{section_num}")
+    page_start = section.get("page_start")
+    page_end = section.get("page_end")
+
+    section_pages_content = []
+    for page_num in range(page_start, page_end + 1):
+        page_content = get_page_contents(board_id, window_id, page_num)
+        if page_content.get("current"):
+            section_pages_content.append({"page": page_num, "content": page_content["current"]})
+
+    if not section_pages_content:
+        return None, "分段无页面内容"
+
+    section_full_text = "\n\n".join(
+        [f"=== Page {p['page']} ===\n{p['content']}" for p in section_pages_content]
+    )
+    human_anchor = get_human_anchor(board_id, window_id, section_idx) or ""
+
+    validation_error = ""
+    normalized = None
+    accumulated_content = ""
+
+    for attempt in range(max_attempts):
+        prompt = build_agent_subdivision_prompt(
+            pdf_filename,
+            section_title,
+            page_start,
+            page_end,
+            section_full_text,
+            human_anchor,
+            validation_error,
+        )
+        messages = [{"role": "user", "content": prompt}]
+        accumulated_content = ""
+        async for chunk in llm_chat_stream(messages):
+            if not chunk:
+                continue
+            if chunk.startswith("[Error]"):
+                return None, f"LLM服务错误: {chunk}"
+            accumulated_content += chunk
+            if on_chunk:
+                maybe = on_chunk(section_num, chunk)
+                if hasattr(maybe, "__await__"):
+                    await maybe
+
+        ok, err, normalized = parse_and_validate_agent_response(
+            accumulated_content, page_start, page_end
+        )
+        if ok:
+            break
+        validation_error = err
+
+    if not normalized:
+        return None, validation_error or "校验失败"
+
+    return build_agent_section_result(section, section_idx, normalized), ""
 
 
 def build_agent_section_result(

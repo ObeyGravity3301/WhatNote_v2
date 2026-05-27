@@ -1000,13 +1000,29 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
               t('pdf_outline_agent_progress').replace('{completed}', data.completed).replace('{total}', data.total)
             );
           } else if (data.type === 'complete') {
-            setAgentIndexData(data.data);
+            const payload = data.data;
+            setAgentIndexData(payload);
             setAgentIndexProgress({
-              completed: data.data?.completed_sections || 0,
-              total: data.data?.total_sections || 0,
+              completed: payload?.completed_sections || 0,
+              total: payload?.total_sections || 0,
             });
+            const isComplete = payload?.index_complete !== false
+              && (payload?.completed_sections || 0) >= (payload?.total_sections || 0);
+            if (isComplete) {
+              setBatchOutlineStatus(t('pdf_outline_agent_complete'));
+            } else {
+              const failedTitles = (payload?.failed_sections || [])
+                .map((f) => f.section_title)
+                .slice(0, 4)
+                .join('、');
+              setBatchOutlineStatus(
+                t('pdf_outline_agent_incomplete_status')
+                  .replace('{completed}', payload?.completed_sections || 0)
+                  .replace('{total}', payload?.total_sections || 0)
+                  .replace('{titles}', failedTitles || '—')
+              );
+            }
             setShowAgentIndexModal(true);
-            setBatchOutlineStatus(t('pdf_outline_agent_complete'));
           } else if (data.type === 'warning') {
             setBatchOutlineStatus((prev) => `${prev}\n警告: ${data.message}`);
           } else if (data.type === 'error') {
@@ -1023,26 +1039,44 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
     }
   }, [boardId, windowId, batchOutline, isGeneratingAgentIndex, t]);
 
+  const isAgentIndexComplete = useCallback((data) => {
+    if (!data) return false;
+    return data.index_complete !== false
+      && (data.completed_sections || 0) >= (data.total_sections || 0);
+  }, []);
+
   const handleDownloadAgentIndexJson = useCallback(async () => {
+    if (!isAgentIndexComplete(agentIndexData)) {
+      alert(t('pdf_outline_agent_incomplete_block'));
+      return;
+    }
     const defaultStem = (documentTitle || 'document').replace(/\.[^.]+$/, '') || 'document';
     try {
       await downloadBlobResponse('export-agent-index', `${defaultStem}-agent-index.json`);
     } catch (error) {
       alert(t('pdf_outline_agent_download_error') + error.message);
     }
-  }, [documentTitle, downloadBlobResponse, t]);
+  }, [agentIndexData, documentTitle, downloadBlobResponse, isAgentIndexComplete, t]);
 
   const handleDownloadAgentIndexMarkdown = useCallback(async () => {
+    if (!isAgentIndexComplete(agentIndexData)) {
+      alert(t('pdf_outline_agent_incomplete_block'));
+      return;
+    }
     const defaultStem = (documentTitle || 'document').replace(/\.[^.]+$/, '') || 'document';
     try {
       await downloadBlobResponse('export-agent-index-markdown', `${defaultStem}-agent-index.md`);
     } catch (error) {
       alert(t('pdf_outline_agent_md_error') + error.message);
     }
-  }, [documentTitle, downloadBlobResponse, t]);
+  }, [agentIndexData, documentTitle, downloadBlobResponse, isAgentIndexComplete, t]);
 
   const handleCopyAgentIndexJson = useCallback(async () => {
     if (!agentIndexData) return;
+    if (!isAgentIndexComplete(agentIndexData)) {
+      alert(t('pdf_outline_agent_incomplete_block'));
+      return;
+    }
     const sectionsOk = agentIndexData.sections_ok || (agentIndexData.sections || []).filter(Boolean);
     const exportPayload = {
       schema_version: agentIndexData.schema_version || 1,
@@ -1060,7 +1094,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
     } catch (error) {
       alert(t('pdf_outline_agent_copy_error') + error.message);
     }
-  }, [agentIndexData, t]);
+  }, [agentIndexData, isAgentIndexComplete, t]);
 
   useEffect(() => {
     loadOutlineData();
@@ -6467,22 +6501,58 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                         .replace('{completed}', agentIndexData.completed_sections || 0)
                         .replace('{total}', agentIndexData.total_sections || 0)}
                     </div>
+                    {!isAgentIndexComplete(agentIndexData) && (
+                      <div style={{
+                        marginBottom: '12px',
+                        padding: '8px',
+                        backgroundColor: '#ffe4e4',
+                        border: '2px inset #c0c0c0',
+                        color: '#800000',
+                        lineHeight: 1.5
+                      }}>
+                        {t('pdf_outline_agent_incomplete_block')}
+                        {(agentIndexData.failed_sections || []).length > 0 && (
+                          <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+                            {(agentIndexData.failed_sections || []).map((f) => (
+                              <li key={f.section_index}>
+                                {f.section_number}. {f.section_title}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <button
                         onClick={handleDownloadAgentIndexJson}
-                        style={{ padding: '6px', cursor: 'pointer' }}
+                        disabled={!isAgentIndexComplete(agentIndexData)}
+                        style={{
+                          padding: '6px',
+                          cursor: isAgentIndexComplete(agentIndexData) ? 'pointer' : 'not-allowed',
+                          opacity: isAgentIndexComplete(agentIndexData) ? 1 : 0.5
+                        }}
                       >
                         {t('pdf_outline_agent_download_json')}
                       </button>
                       <button
                         onClick={handleCopyAgentIndexJson}
-                        style={{ padding: '6px', cursor: 'pointer' }}
+                        disabled={!isAgentIndexComplete(agentIndexData)}
+                        style={{
+                          padding: '6px',
+                          cursor: isAgentIndexComplete(agentIndexData) ? 'pointer' : 'not-allowed',
+                          opacity: isAgentIndexComplete(agentIndexData) ? 1 : 0.5
+                        }}
                       >
                         {t('pdf_outline_agent_copy_json')}
                       </button>
                       <button
                         onClick={handleDownloadAgentIndexMarkdown}
-                        style={{ padding: '6px', cursor: 'pointer' }}
+                        disabled={!isAgentIndexComplete(agentIndexData)}
+                        style={{
+                          padding: '6px',
+                          cursor: isAgentIndexComplete(agentIndexData) ? 'pointer' : 'not-allowed',
+                          opacity: isAgentIndexComplete(agentIndexData) ? 1 : 0.5
+                        }}
                       >
                         {t('pdf_outline_agent_download_md')}
                       </button>
