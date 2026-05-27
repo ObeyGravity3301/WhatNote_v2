@@ -34,6 +34,27 @@ BANNED_KEYWORDS = {
     "content",
     "chapter",
     "section",
+    "framework",
+    "integration",
+    "paradigm",
+    "structure",
+    "function",
+    "mechanism",
+    "process",
+    "system",
+    "approach",
+    "strategy",
+    "network",
+    "regulation",
+    "signaling",
+    "development",
+    "interaction",
+    "analysis",
+    "understanding",
+    "fundamental",
+    "essential",
+    "role",
+    "important",
     "重要",
     "经典",
     "关键",
@@ -43,14 +64,54 @@ BANNED_KEYWORDS = {
     "简介",
     "内容",
     "章节",
+    "框架",
+    "整合",
+    "机制",
 }
 
-MAX_ONE_LINER_CHARS = 400
-MAX_ONE_LINER_PROMPT_CHARS = 280
-MAX_SUB_ONE_LINER_CHARS = 220
+# 过宽、多节可复用的词；每节最多保留 2 个
+GENERIC_KEYWORDS = {
+    "hormones",
+    "hormone",
+    "transport",
+    "transportation",
+    "pathway",
+    "pathways",
+    "metabolism",
+    "nutrition",
+    "cycle",
+    "cycles",
+    "plant",
+    "plants",
+    "root",
+    "roots",
+    "soil",
+    "growth",
+    "efficiency",
+    "uptake",
+    "assimilation",
+    "microbes",
+    "microbial",
+    "bacteria",
+    "nitrogen cycle",
+    "mineral nutrition",
+}
+
+MAX_ONE_LINER_PROMPT_CHARS = 240
+MAX_ONE_LINER_CHARS = 260
+MAX_ONE_LINER_SENTENCES = 2
+MAX_CORE_SCHEMA_CHARS = 80
+MAX_CORE_SCHEMA_WORDS = 18
+MAX_SUB_ONE_LINER_CHARS = 180
 MAX_KEYWORDS = 10
+MAX_GENERIC_KEYWORDS = 2
 MIN_EXAM_HOOKS = 2
 MAX_EXAM_HOOKS = 4
+
+_SCHEMA_CLAUSE_SPLIT = re.compile(
+    r"\s*;\s*|\s+which\s+|\s+that\s+|\s+because\s+|\s+including\s+",
+    re.IGNORECASE,
+)
 
 
 def _extract_json_object(raw: str) -> str:
@@ -114,17 +175,24 @@ def build_agent_subdivision_prompt(
 {retry_block}
 **Task** — output ONE JSON object only (no markdown fences, no prose outside JSON):
 
-1. **one_liner**: HARD LIMIT {MAX_ONE_LINER_PROMPT_CHARS} characters, at most 2 English sentences. What this section covers + what problem it solves or conclusion. Keep original terms/abbreviations (e.g. "ACC synthase (ACS)").
+1. **one_liner** (STRICT — will be rejected if violated):
+   - At most {MAX_ONE_LINER_SENTENCES} English sentences
+   - At most {MAX_ONE_LINER_PROMPT_CHARS} characters (hard cap {MAX_ONE_LINER_CHARS})
+   - State what this section covers + the problem/conclusion in compact form
+   - Keep original terms/abbreviations (e.g. "ACC synthase (ACS)")
+   - Do NOT write a mini-abstract; stop early rather than exceeding the limit
 
-2. **core_schema**: object with EXACTLY these 6 keys; each value is ONE short phrase (not a paragraph). Use "UNKNOWN" if missing:
-   - "Entities/Objects"
-   - "Process/Method"
-   - "Key Relation"
-   - "Evidence/Example"
-   - "Output/Result"
-   - "Assumptions/Conditions"
+2. **core_schema**: object with EXACTLY these 6 keys. Each value is a SLOT FILL (not prose):
+   - Max {MAX_CORE_SCHEMA_WORDS} words AND max {MAX_CORE_SCHEMA_CHARS} characters per value
+   - Use noun phrases, symbols, or arrow relations only (e.g. "NO₃⁻ → NR → NH₄⁺", "NRT1.1, GS1, rhizobia")
+   - NO explanatory clauses ("which...", "that...", "because...", lists of 8+ items)
+   - Use "UNKNOWN" if missing
+   Keys: "Entities/Objects", "Process/Method", "Key Relation", "Evidence/Example", "Output/Result", "Assumptions/Conditions"
 
-3. **keywords**: array of <=10 strings. Real terms/symbols/formulas/names/algorithms only. NO adjectives like important/classic/significant.
+3. **keywords**: array of <=10 strings. Prioritize:
+   - Symbols, ions, formulas, gene/protein names, theorem/algorithm names, proper nouns
+   - BAN: important, classic, framework, integration, and other vague words any chapter could share
+   - Broad terms (hormones, transport, pathway, assimilation) only if unavoidable — max 2 such per section
 
 4. **exam_hooks**: array of 2-4 strings. Each ONE sentence: "<verb>: <task> (→ <CORE_SCHEMA key>)"
    - Course/textbook: verbs define, compare, derive, apply, critique
@@ -156,12 +224,36 @@ def build_agent_subdivision_prompt(
 """
 
 
+def _truncate_text(text: str, max_chars: int) -> str:
+    text = (text or "").strip()
+    if len(text) <= max_chars:
+        return text
+    cut = text[: max_chars - 3].rstrip()
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut + "..."
+
+
+def _compress_schema_value(val: str) -> str:
+    val = re.sub(r"\s+", " ", (val or "").strip())
+    if not val:
+        return "UNKNOWN"
+    parts = _SCHEMA_CLAUSE_SPLIT.split(val, maxsplit=1)
+    val = parts[0].strip() if parts else val
+    words = val.split()
+    if len(words) > MAX_CORE_SCHEMA_WORDS:
+        val = " ".join(words[:MAX_CORE_SCHEMA_WORDS])
+    if len(val) > MAX_CORE_SCHEMA_CHARS:
+        val = _truncate_text(val, MAX_CORE_SCHEMA_CHARS)
+    return val or "UNKNOWN"
+
+
 def _normalize_core_schema(raw: Any) -> Dict[str, str]:
     result: Dict[str, str] = {}
     if isinstance(raw, dict):
         for key in CORE_SCHEMA_KEYS:
             val = str(raw.get(key, raw.get(key.replace("/", " "), "UNKNOWN"))).strip()
-            result[key] = val or "UNKNOWN"
+            result[key] = _compress_schema_value(val)
         return result
 
     if isinstance(raw, list):
@@ -171,7 +263,7 @@ def _normalize_core_schema(raw: Any) -> Dict[str, str]:
                     val = raw[i].get("value") or raw[i].get(key) or "UNKNOWN"
                 else:
                     val = str(raw[i])
-                result[key] = str(val).strip() or "UNKNOWN"
+                result[key] = _compress_schema_value(str(val))
             else:
                 result[key] = "UNKNOWN"
         return result
@@ -179,6 +271,27 @@ def _normalize_core_schema(raw: Any) -> Dict[str, str]:
     for key in CORE_SCHEMA_KEYS:
         result[key] = "UNKNOWN"
     return result
+
+
+def _is_specific_keyword(item: str) -> bool:
+    low = item.lower().strip()
+    if low in BANNED_KEYWORDS or low in GENERIC_KEYWORDS:
+        return False
+    if re.search(r"[0-9+\-/²³⁻⁺Δ]", item):
+        return True
+    if re.search(r"\b[A-Z]{2,}[0-9]", item):
+        return True
+    if "(" in item or ")" in item:
+        return True
+    if re.search(r"\b[A-Z][a-z]+[0-9]", item):
+        return True
+    if len(item) >= 10 and re.search(r"[A-Z]{2,}", item):
+        return True
+    if re.search(r"[\u4e00-\u9fff]", item) and len(item) >= 2:
+        return True
+    if len(low) >= 12:
+        return True
+    return False
 
 
 def _normalize_keywords(raw: Any) -> List[str]:
@@ -189,28 +302,33 @@ def _normalize_keywords(raw: Any) -> List[str]:
     else:
         items = []
 
-    cleaned: List[str] = []
+    specific: List[str] = []
+    generic: List[str] = []
     for item in items:
         low = item.lower()
         if low in BANNED_KEYWORDS:
             continue
         if len(item) > 80:
             item = item[:80]
-        if item not in cleaned:
-            cleaned.append(item)
-        if len(cleaned) >= MAX_KEYWORDS:
-            break
+        if _is_specific_keyword(item):
+            if item not in specific:
+                specific.append(item)
+        else:
+            if low not in {g.lower() for g in generic}:
+                generic.append(item)
+
+    cleaned = specific[:MAX_KEYWORDS]
+    remaining = MAX_KEYWORDS - len(cleaned)
+    if remaining > 0:
+        for g in generic[: min(MAX_GENERIC_KEYWORDS, remaining)]:
+            if g not in cleaned:
+                cleaned.append(g)
     return cleaned
 
 
-def _truncate_text(text: str, max_chars: int) -> str:
-    text = (text or "").strip()
-    if len(text) <= max_chars:
-        return text
-    cut = text[: max_chars - 3].rstrip()
-    if " " in cut:
-        cut = cut.rsplit(" ", 1)[0]
-    return cut + "..."
+def _count_sentences(text: str) -> int:
+    parts = re.split(r"[.!?]+", text)
+    return len([p for p in parts if p.strip()])
 
 
 def _normalize_exam_hooks(raw: Any) -> List[str]:
@@ -274,17 +392,24 @@ def validate_and_normalize_agent_payload(
     one_liner = str(data.get("one_liner", "")).strip()
     if not one_liner:
         return False, "one_liner 不能为空", None
+    if _count_sentences(one_liner) > MAX_ONE_LINER_SENTENCES:
+        return (
+            False,
+            f"one_liner 超过 {MAX_ONE_LINER_SENTENCES} 句，请压缩为最多 2 句、≤{MAX_ONE_LINER_PROMPT_CHARS} 字符",
+            None,
+        )
     if len(one_liner) > MAX_ONE_LINER_CHARS:
-        warnings.append(f"one_liner truncated from {len(one_liner)} chars")
-        one_liner = _truncate_text(one_liner, MAX_ONE_LINER_CHARS)
+        return (
+            False,
+            f"one_liner 长度 {len(one_liner)} 超过上限 {MAX_ONE_LINER_CHARS}，请重写为 ≤{MAX_ONE_LINER_PROMPT_CHARS} 字符、最多 2 句",
+            None,
+        )
 
     core_schema = _normalize_core_schema(data.get("core_schema"))
     for key in CORE_SCHEMA_KEYS:
         if key not in core_schema:
             core_schema[key] = "UNKNOWN"
             warnings.append(f"core_schema missing {key}, filled UNKNOWN")
-        if len(core_schema[key]) > 200:
-            core_schema[key] = _truncate_text(core_schema[key], 200)
 
     keywords = _normalize_keywords(data.get("keywords"))
     if len(keywords) < 1:
