@@ -2263,11 +2263,123 @@ const translations = {
       "ja-JP": "Markdown目次をエクスポート"
     }
   },
-  "pdf_outline_export_toc_agent": {
+  "pdf_outline_agent_generate": {
     "default": {
-      "zh-CN": "导出 Agent 目录",
-      "en-US": "Export Agent TOC",
-      "ja-JP": "Agent用目次をエクスポート"
+      "zh-CN": "生成 Agent 索引",
+      "en-US": "Generate Agent Index",
+      "ja-JP": "Agent索引を生成"
+    }
+  },
+  "pdf_outline_agent_open": {
+    "default": {
+      "zh-CN": "导出 Agent 索引",
+      "en-US": "Export Agent Index",
+      "ja-JP": "Agent索引をエクスポート"
+    }
+  },
+  "pdf_outline_agent_generating": {
+    "default": {
+      "zh-CN": "正在生成 Agent 索引...",
+      "en-US": "Generating Agent index...",
+      "ja-JP": "Agent索引を生成中..."
+    }
+  },
+  "pdf_outline_agent_progress": {
+    "default": {
+      "zh-CN": "Agent 索引进度：{completed}/{total}",
+      "en-US": "Agent index: {completed}/{total}",
+      "ja-JP": "Agent索引：{completed}/{total}"
+    }
+  },
+  "pdf_outline_agent_complete": {
+    "default": {
+      "zh-CN": "Agent 索引生成完成",
+      "en-US": "Agent index ready",
+      "ja-JP": "Agent索引の生成が完了"
+    }
+  },
+  "pdf_outline_agent_failed": {
+    "default": {
+      "zh-CN": "Agent 索引生成失败：{error}",
+      "en-US": "Agent index failed: {error}",
+      "ja-JP": "Agent索引の生成に失敗：{error}"
+    }
+  },
+  "pdf_outline_agent_error": {
+    "default": {
+      "zh-CN": "Agent 索引生成失败：",
+      "en-US": "Failed to generate Agent index: ",
+      "ja-JP": "Agent索引の生成に失敗："
+    }
+  },
+  "pdf_outline_agent_modal_title": {
+    "default": {
+      "zh-CN": "Agent 索引已就绪",
+      "en-US": "Agent index ready",
+      "ja-JP": "Agent索引の準備完了"
+    }
+  },
+  "pdf_outline_agent_modal_summary": {
+    "default": {
+      "zh-CN": "已完成 {completed}/{total} 个大纲节的结构化索引。",
+      "en-US": "Structured index for {completed}/{total} outline sections.",
+      "ja-JP": "{completed}/{total} セクションの索引が完成しました。"
+    }
+  },
+  "pdf_outline_agent_download_json": {
+    "default": {
+      "zh-CN": "下载 JSON",
+      "en-US": "Download JSON",
+      "ja-JP": "JSONをダウンロード"
+    }
+  },
+  "pdf_outline_agent_copy_json": {
+    "default": {
+      "zh-CN": "复制 JSON 到剪贴板",
+      "en-US": "Copy JSON to clipboard",
+      "ja-JP": "JSONをコピー"
+    }
+  },
+  "pdf_outline_agent_download_md": {
+    "default": {
+      "zh-CN": "下载 Markdown（阅读版）",
+      "en-US": "Download Markdown (readable)",
+      "ja-JP": "Markdownをダウンロード"
+    }
+  },
+  "pdf_outline_agent_close": {
+    "default": {
+      "zh-CN": "关闭",
+      "en-US": "Close",
+      "ja-JP": "閉じる"
+    }
+  },
+  "pdf_outline_agent_copied": {
+    "default": {
+      "zh-CN": "已复制 Agent 索引 JSON",
+      "en-US": "Agent index JSON copied",
+      "ja-JP": "JSONをコピーしました"
+    }
+  },
+  "pdf_outline_agent_download_error": {
+    "default": {
+      "zh-CN": "下载失败：",
+      "en-US": "Download failed: ",
+      "ja-JP": "ダウンロード失敗："
+    }
+  },
+  "pdf_outline_agent_md_error": {
+    "default": {
+      "zh-CN": "Markdown 下载失败：",
+      "en-US": "Markdown download failed: ",
+      "ja-JP": "Markdownダウンロード失敗："
+    }
+  },
+  "pdf_outline_agent_copy_error": {
+    "default": {
+      "zh-CN": "复制失败：",
+      "en-US": "Copy failed: ",
+      "ja-JP": "コピー失敗："
     }
   },
   "pdf_outline_export_script": {
@@ -2303,13 +2415,6 @@ const translations = {
       "zh-CN": "导出 Markdown 目录失败：",
       "en-US": "Failed to export Markdown TOC: ",
       "ja-JP": "Markdown目次のエクスポートに失敗："
-    }
-  },
-  "pdf_outline_export_toc_agent_error": {
-    "default": {
-      "zh-CN": "导出 Agent 目录失败：",
-      "en-US": "Failed to export Agent TOC: ",
-      "ja-JP": "Agent目次のエクスポートに失敗："
     }
   },
   "pdf_outline_export_script_error": {

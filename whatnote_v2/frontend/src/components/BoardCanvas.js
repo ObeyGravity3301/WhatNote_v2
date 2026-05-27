@@ -344,6 +344,10 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
   const [annotationProgress, setAnnotationProgress] = useState({ completed: 0, total: 0, currentPage: null, isGenerating: false }); // 单个分段注释生成进度
   const [stage2Completed, setStage2Completed] = useState(false); // 第二阶段是否已完成
   const [exportingTocFormat, setExportingTocFormat] = useState(null); // 当前正在导出的目录格式
+  const [agentIndexData, setAgentIndexData] = useState(null); // Agent 结构化索引
+  const [isGeneratingAgentIndex, setIsGeneratingAgentIndex] = useState(false);
+  const [agentIndexProgress, setAgentIndexProgress] = useState({ completed: 0, total: 0 });
+  const [showAgentIndexModal, setShowAgentIndexModal] = useState(false);
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
@@ -823,6 +827,19 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
           }
         }
         } catch(e) { /* ignore 404 */ }
+
+        try {
+          const agentRes = await fetch(
+            `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/agent-index-data`
+          );
+          if (agentRes.ok) {
+            const agentData = await agentRes.json();
+            if (agentData) {
+              setAgentIndexData(agentData);
+              console.log('加载已有 Agent 索引:', agentData);
+            }
+          }
+        } catch (e) { /* ignore */ }
       
       // 尝试加载全文档笔记
       try {
@@ -845,25 +862,17 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
   const handleExportToc = useCallback(async (format) => {
     if (!boardId || !windowId || exportingTocFormat) return;
 
-    const endpoint = format === 'markdown'
-      ? 'export-toc-markdown'
-      : format === 'agent'
-        ? 'export-toc-agent'
-        : 'export-toc-pdf';
+    const endpoint = format === 'markdown' ? 'export-toc-markdown' : 'export-toc-pdf';
     const suffix = format === 'pdf' ? '.pdf' : '.md';
     const defaultStem = (() => {
       const rawTitle = documentTitle || '';
       if (!rawTitle) return 'document';
       return rawTitle.replace(/\.[^.]+$/, '') || 'document';
     })();
-    const fallbackFilename = format === 'agent'
-      ? `${defaultStem}-目录-agent${suffix}`
-      : `${defaultStem}-目录${suffix}`;
+    const fallbackFilename = `${defaultStem}-目录${suffix}`;
     const errorPrefix = format === 'markdown'
       ? t('pdf_outline_export_toc_md_error')
-      : format === 'agent'
-        ? t('pdf_outline_export_toc_agent_error')
-        : t('pdf_outline_export_toc_error');
+      : t('pdf_outline_export_toc_error');
 
     setExportingTocFormat(format);
     try {
@@ -913,6 +922,134 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
       setExportingTocFormat(null);
     }
   }, [boardId, windowId, documentTitle, exportingTocFormat, t]);
+
+  const downloadBlobResponse = useCallback(async (endpoint, fallbackFilename) => {
+    const response = await fetch(
+      `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/${endpoint}`
+    );
+    if (!response.ok) {
+      let detail = '下载失败';
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+      } catch (_) {
+        detail = await response.text() || detail;
+      }
+      throw new Error(detail);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    let filename = fallbackFilename;
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    const quotedMatch = disposition.match(/filename="([^"]+)"/i);
+    if (utf8Match?.[1]) {
+      try {
+        filename = decodeURIComponent(utf8Match[1]);
+      } catch (_) {
+        filename = utf8Match[1];
+      }
+    } else if (quotedMatch?.[1]) {
+      filename = quotedMatch[1];
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, [boardId, windowId]);
+
+  const handleGenerateAgentIndex = useCallback(async () => {
+    if (!boardId || !windowId || !batchOutline || isGeneratingAgentIndex) return;
+
+    setIsGeneratingAgentIndex(true);
+    setAgentIndexProgress({ completed: 0, total: batchOutline.outline?.length || 0 });
+    setBatchOutlineStatus(t('pdf_outline_agent_generating'));
+
+    try {
+      const response = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivide-agent`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+      );
+      if (!response.ok) {
+        throw new Error('Agent 索引生成请求失败');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = JSON.parse(line.slice(6));
+
+          if (data.type === 'status') {
+            setBatchOutlineStatus(data.message);
+          } else if (data.type === 'section_done') {
+            setAgentIndexProgress({ completed: data.completed, total: data.total });
+            setBatchOutlineStatus(
+              t('pdf_outline_agent_progress').replace('{completed}', data.completed).replace('{total}', data.total)
+            );
+          } else if (data.type === 'complete') {
+            setAgentIndexData(data.data);
+            setAgentIndexProgress({
+              completed: data.data?.completed_sections || 0,
+              total: data.data?.total_sections || 0,
+            });
+            setShowAgentIndexModal(true);
+            setBatchOutlineStatus(t('pdf_outline_agent_complete'));
+          } else if (data.type === 'warning') {
+            setBatchOutlineStatus((prev) => `${prev}\n警告: ${data.message}`);
+          } else if (data.type === 'error') {
+            throw new Error(data.error || data.message || '未知错误');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Agent 索引生成失败:', error);
+      alert(t('pdf_outline_agent_error') + (error.message || t('text_unknown_error')));
+      setBatchOutlineStatus(t('pdf_outline_agent_failed').replace('{error}', error.message));
+    } finally {
+      setIsGeneratingAgentIndex(false);
+    }
+  }, [boardId, windowId, batchOutline, isGeneratingAgentIndex, t]);
+
+  const handleDownloadAgentIndexJson = useCallback(async () => {
+    const defaultStem = (documentTitle || 'document').replace(/\.[^.]+$/, '') || 'document';
+    try {
+      await downloadBlobResponse('export-agent-index', `${defaultStem}-agent-index.json`);
+    } catch (error) {
+      alert(t('pdf_outline_agent_download_error') + error.message);
+    }
+  }, [documentTitle, downloadBlobResponse, t]);
+
+  const handleDownloadAgentIndexMarkdown = useCallback(async () => {
+    const defaultStem = (documentTitle || 'document').replace(/\.[^.]+$/, '') || 'document';
+    try {
+      await downloadBlobResponse('export-agent-index-markdown', `${defaultStem}-agent-index.md`);
+    } catch (error) {
+      alert(t('pdf_outline_agent_md_error') + error.message);
+    }
+  }, [documentTitle, downloadBlobResponse, t]);
+
+  const handleCopyAgentIndexJson = useCallback(async () => {
+    if (!agentIndexData) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(agentIndexData, null, 2));
+      alert(t('pdf_outline_agent_copied'));
+    } catch (error) {
+      alert(t('pdf_outline_agent_copy_error') + error.message);
+    }
+  }, [agentIndexData, t]);
 
   useEffect(() => {
     loadOutlineData();
@@ -3798,7 +3935,8 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
             flexDirection: 'column',
             flexShrink: 0,
             overflow: 'hidden',
-            transition: 'width 0.3s ease'
+            transition: 'width 0.3s ease',
+            position: 'relative'
           }}>
             {/* 大纲侧栏工具栏 */}
             <div style={{
@@ -3815,63 +3953,85 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
               gap: '4px'
             }}>
               <span>
-                {isBatchGenerating && !batchOutline 
-                  ? t('pdf_outline_generating') 
-                  : (isBatchGenerating && isStage2 
-                      ? t('pdf_outline_subdividing') 
-                      : t('pdf_outline_title'))}
+                {isGeneratingAgentIndex
+                  ? t('pdf_outline_agent_generating')
+                  : (isBatchGenerating && !batchOutline 
+                      ? t('pdf_outline_generating') 
+                      : (isBatchGenerating && isStage2 
+                          ? t('pdf_outline_subdividing') 
+                          : t('pdf_outline_title')))}
               </span>
               
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {/* 视图切换按钮 */}
-                {batchOutline && batchSubdivisions && stage2Completed && (
+                {batchOutline && (
                   <>
+                    {batchSubdivisions && stage2Completed && (
+                      <>
+                        <button
+                          onClick={() => handleExportToc('pdf')}
+                          disabled={!!exportingTocFormat}
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '10px',
+                            backgroundColor: exportingTocFormat ? '#a0a0a0' : '#c0c0c0',
+                            border: '2px outset #c0c0c0',
+                            cursor: exportingTocFormat ? 'wait' : 'pointer',
+                            fontFamily: 'MS Sans Serif, sans-serif'
+                          }}
+                          title={t('pdf_outline_export_toc')}
+                        >
+                          {exportingTocFormat === 'pdf' ? t('pdf_outline_export_toc_exporting') : '📑'}
+                        </button>
+                        <button
+                          onClick={() => handleExportToc('markdown')}
+                          disabled={!!exportingTocFormat}
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '10px',
+                            backgroundColor: exportingTocFormat ? '#a0a0a0' : '#c0c0c0',
+                            border: '2px outset #c0c0c0',
+                            cursor: exportingTocFormat ? 'wait' : 'pointer',
+                            fontFamily: 'MS Sans Serif, sans-serif'
+                          }}
+                          title={t('pdf_outline_export_toc_md')}
+                        >
+                          {exportingTocFormat === 'markdown' ? t('pdf_outline_export_toc_exporting') : 'MD'}
+                        </button>
+                      </>
+                    )}
                     <button
-                      onClick={() => handleExportToc('pdf')}
-                      disabled={!!exportingTocFormat}
+                      onClick={handleGenerateAgentIndex}
+                      disabled={isGeneratingAgentIndex || isBatchGenerating}
                       style={{
                         padding: '2px 6px',
                         fontSize: '10px',
-                        backgroundColor: exportingTocFormat ? '#a0a0a0' : '#c0c0c0',
-                        border: '2px outset #c0c0c0',
-                        cursor: exportingTocFormat ? 'wait' : 'pointer',
-                        fontFamily: 'MS Sans Serif, sans-serif'
-                      }}
-                      title={t('pdf_outline_export_toc')}
-                    >
-                      {exportingTocFormat === 'pdf' ? t('pdf_outline_export_toc_exporting') : '📑'}
-                    </button>
-                    <button
-                      onClick={() => handleExportToc('markdown')}
-                      disabled={!!exportingTocFormat}
-                      style={{
-                        padding: '2px 6px',
-                        fontSize: '10px',
-                        backgroundColor: exportingTocFormat ? '#a0a0a0' : '#c0c0c0',
-                        border: '2px outset #c0c0c0',
-                        cursor: exportingTocFormat ? 'wait' : 'pointer',
-                        fontFamily: 'MS Sans Serif, sans-serif'
-                      }}
-                      title={t('pdf_outline_export_toc_md')}
-                    >
-                      {exportingTocFormat === 'markdown' ? t('pdf_outline_export_toc_exporting') : 'MD'}
-                    </button>
-                    <button
-                      onClick={() => handleExportToc('agent')}
-                      disabled={!!exportingTocFormat}
-                      style={{
-                        padding: '2px 6px',
-                        fontSize: '10px',
-                        backgroundColor: exportingTocFormat ? '#a0a0a0' : '#000080',
-                        color: exportingTocFormat === 'agent' ? '#ffffff' : '#ffffff',
+                        backgroundColor: isGeneratingAgentIndex ? '#a0a0a0' : '#000080',
+                        color: '#ffffff',
                         border: '2px outset #000080',
-                        cursor: exportingTocFormat ? 'wait' : 'pointer',
+                        cursor: isGeneratingAgentIndex ? 'wait' : 'pointer',
                         fontFamily: 'MS Sans Serif, sans-serif'
                       }}
-                      title={t('pdf_outline_export_toc_agent')}
+                      title={t('pdf_outline_agent_generate')}
                     >
-                      {exportingTocFormat === 'agent' ? t('pdf_outline_export_toc_exporting') : 'Agent'}
+                      {isGeneratingAgentIndex ? '...' : 'Agent'}
                     </button>
+                    {agentIndexData?.completed_sections > 0 && !isGeneratingAgentIndex && (
+                      <button
+                        onClick={() => setShowAgentIndexModal(true)}
+                        style={{
+                          padding: '2px 6px',
+                          fontSize: '10px',
+                          backgroundColor: '#c0c0c0',
+                          border: '2px outset #c0c0c0',
+                          cursor: 'pointer',
+                          fontFamily: 'MS Sans Serif, sans-serif'
+                        }}
+                        title={t('pdf_outline_agent_open')}
+                      >
+                        ↓
+                      </button>
+                    )}
                   </>
                 )}
 
@@ -5518,8 +5678,25 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                   padding: '8px',
                   display: 'flex',
                   justifyContent: 'flex-end',
+                  gap: '8px',
                   borderTop: '1px solid #d0d0d0'
                 }}>
+                  <button
+                    onClick={handleGenerateAgentIndex}
+                    disabled={isGeneratingAgentIndex}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: '11px',
+                      backgroundColor: isGeneratingAgentIndex ? '#a0a0a0' : '#000080',
+                      color: '#ffffff',
+                      border: '2px outset #000080',
+                      cursor: isGeneratingAgentIndex ? 'wait' : 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    {isGeneratingAgentIndex ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_agent_generate')}
+                  </button>
                   <button
                         onClick={async () => {
                           console.log('开始第二阶段：细分分段');
@@ -5675,28 +5852,47 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                     {exportingTocFormat === 'markdown' ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_export_toc_md')}
                   </button>
                   <button
-                    onClick={() => handleExportToc('agent')}
-                    disabled={!!exportingTocFormat}
+                    onClick={handleGenerateAgentIndex}
+                    disabled={isGeneratingAgentIndex || isBatchGenerating}
                     style={{
                       padding: '6px 16px',
                       fontSize: '11px',
-                      backgroundColor: exportingTocFormat ? '#a0a0a0' : '#000080',
+                      backgroundColor: isGeneratingAgentIndex ? '#a0a0a0' : '#000080',
                       color: '#ffffff',
                       border: '2px outset #000080',
                       borderRadius: '0px',
-                      cursor: exportingTocFormat ? 'wait' : 'pointer',
+                      cursor: isGeneratingAgentIndex ? 'wait' : 'pointer',
                       fontFamily: 'MS Sans Serif, sans-serif',
                       fontWeight: 'bold'
                     }}
                     onMouseEnter={(e) => {
-                      if (!exportingTocFormat) e.target.style.backgroundColor = '#000060';
+                      if (!isGeneratingAgentIndex) e.target.style.backgroundColor = '#000060';
                     }}
                     onMouseLeave={(e) => {
-                      if (!exportingTocFormat) e.target.style.backgroundColor = '#000080';
+                      if (!isGeneratingAgentIndex) e.target.style.backgroundColor = '#000080';
                     }}
                   >
-                    {exportingTocFormat === 'agent' ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_export_toc_agent')}
+                    {isGeneratingAgentIndex ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_agent_generate')}
                   </button>
+                  {agentIndexData?.completed_sections > 0 && (
+                    <button
+                      onClick={() => setShowAgentIndexModal(true)}
+                      disabled={isGeneratingAgentIndex}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: '#c0c0c0',
+                        color: '#000000',
+                        border: '2px outset #c0c0c0',
+                        borderRadius: '0px',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {t('pdf_outline_agent_open')}
+                    </button>
+                  )}
                   <button
                     onClick={async () => {
                       console.log('重新开始第二阶段：细分分段');
@@ -6230,6 +6426,62 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                         // setOutlineView('list');
                       }}
                     />
+                  </div>
+                </div>
+              )}
+
+              {showAgentIndexModal && agentIndexData && (
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundColor: 'rgba(0,0,0,0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 2000
+                }}>
+                  <div style={{
+                    width: 'min(420px, 92%)',
+                    backgroundColor: '#c0c0c0',
+                    border: '2px outset #c0c0c0',
+                    padding: '12px',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    fontSize: '11px'
+                  }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                      {t('pdf_outline_agent_modal_title')}
+                    </div>
+                    <div style={{ marginBottom: '12px', lineHeight: 1.5 }}>
+                      {t('pdf_outline_agent_modal_summary')
+                        .replace('{completed}', agentIndexData.completed_sections || 0)
+                        .replace('{total}', agentIndexData.total_sections || 0)}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <button
+                        onClick={handleDownloadAgentIndexJson}
+                        style={{ padding: '6px', cursor: 'pointer' }}
+                      >
+                        {t('pdf_outline_agent_download_json')}
+                      </button>
+                      <button
+                        onClick={handleCopyAgentIndexJson}
+                        style={{ padding: '6px', cursor: 'pointer' }}
+                      >
+                        {t('pdf_outline_agent_copy_json')}
+                      </button>
+                      <button
+                        onClick={handleDownloadAgentIndexMarkdown}
+                        style={{ padding: '6px', cursor: 'pointer' }}
+                      >
+                        {t('pdf_outline_agent_download_md')}
+                      </button>
+                      <button
+                        onClick={() => setShowAgentIndexModal(false)}
+                        style={{ padding: '6px', marginTop: '4px', cursor: 'pointer' }}
+                      >
+                        {t('pdf_outline_agent_close')}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

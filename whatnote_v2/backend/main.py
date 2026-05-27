@@ -3071,6 +3071,329 @@ async def subdivide_single_section(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _agent_index_file(board_id: str, window_id: str) -> Path:
+    return conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-agent-{window_id}-data.json"
+
+
+def _load_human_subdivisions_anchor(board_id: str, window_id: str, section_idx: int) -> str:
+    from services.agent_index_service import build_human_subdivisions_anchor
+
+    human_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
+    if not human_file.exists():
+        return ""
+    try:
+        with open(human_file, "r", encoding="utf-8") as f:
+            human_data = json.load(f)
+        human_sections = human_data.get("subdivisions") or []
+        if section_idx < len(human_sections) and human_sections[section_idx]:
+            return build_human_subdivisions_anchor(human_sections[section_idx])
+    except Exception:
+        pass
+    return ""
+
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/subdivide-agent")
+async def subdivide_agent_index(board_id: str, window_id: str, request: Request):
+    """Agent 索引：按大纲节生成结构化 JSON（复用第二阶段并行流程，独立提示词与存储）"""
+    try:
+        from services.agent_index_service import (
+            build_agent_section_result,
+            build_agent_subdivision_prompt,
+            parse_and_validate_agent_response,
+        )
+
+        info(f"开始 Agent 索引生成 board_id={board_id}, window_id={window_id}")
+
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        if not outline_file.exists():
+            raise HTTPException(status_code=404, detail="未找到大纲数据，请先执行第一阶段生成大纲")
+
+        with open(outline_file, "r", encoding="utf-8") as f:
+            outline_data = json.load(f)
+
+        outline = outline_data.get("outline") or []
+        if not outline:
+            raise HTTPException(status_code=400, detail="大纲数据为空")
+
+        total_sections = len(outline)
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        pdf_filename = target_window.get("title", "unknown")
+
+        async def agent_index_stream():
+            try:
+                import asyncio
+
+                all_sections = [None] * total_sections
+                completed_count = [0]
+                event_queue = asyncio.Queue()
+
+                yield f"data: {json.dumps({'type': 'status', 'message': f'开始生成 Agent 索引（{total_sections} 节）...'}, ensure_ascii=False)}\n\n"
+
+                async def process_single_section(section_idx, section, queue):
+                    section_num = section.get("section_number", section_idx + 1)
+                    section_title = section.get("title", f"分段{section_num}")
+                    page_start = section.get("page_start")
+                    page_end = section.get("page_end")
+
+                    await queue.put(
+                        {
+                            "type": "section_start",
+                            "section": section_num,
+                            "title": section_title,
+                            "pages": f"{page_start}-{page_end}",
+                        }
+                    )
+
+                    section_pages_content = []
+                    for page_num in range(page_start, page_end + 1):
+                        page_content = content_manager.get_pdf_page_contents(board_id, window_id, page_num)
+                        if page_content.get("current"):
+                            section_pages_content.append(
+                                {"page": page_num, "content": page_content["current"]}
+                            )
+
+                    if not section_pages_content:
+                        await queue.put({"type": "warning", "message": f"分段{section_num}无内容，跳过"})
+                        return None
+
+                    section_full_text = "\n\n".join(
+                        [f"=== Page {p['page']} ===\n{p['content']}" for p in section_pages_content]
+                    )
+                    human_anchor = _load_human_subdivisions_anchor(board_id, window_id, section_idx)
+
+                    validation_error = ""
+                    normalized = None
+                    accumulated_content = ""
+
+                    for attempt in range(2):
+                        prompt = build_agent_subdivision_prompt(
+                            pdf_filename,
+                            section_title,
+                            page_start,
+                            page_end,
+                            section_full_text,
+                            human_anchor,
+                            validation_error,
+                        )
+                        messages = [{"role": "user", "content": prompt}]
+                        accumulated_content = ""
+                        async for chunk in llm_service.chat_completion(messages, stream=True):
+                            if chunk:
+                                if chunk.startswith("[Error]"):
+                                    await queue.put(
+                                        {
+                                            "type": "error",
+                                            "section": section_num,
+                                            "error": f"LLM服务错误: {chunk}",
+                                        }
+                                    )
+                                    return None
+                                accumulated_content += chunk
+                                await queue.put(
+                                    {
+                                        "type": "section_content",
+                                        "section": section_num,
+                                        "content": chunk,
+                                    }
+                                )
+
+                        ok, err, normalized = parse_and_validate_agent_response(
+                            accumulated_content, page_start, page_end
+                        )
+                        if ok:
+                            break
+                        validation_error = err
+                        info(f"Agent 索引分段{section_num}校验失败(尝试{attempt + 1}): {err}")
+
+                    if not normalized:
+                        await queue.put(
+                            {"type": "warning", "message": f"分段{section_num} Agent 索引校验失败: {validation_error}"}
+                        )
+                        return None
+
+                    result = build_agent_section_result(section, section_idx, normalized)
+                    all_sections[section_idx] = result
+                    completed_count[0] += 1
+                    await queue.put(
+                        {
+                            "type": "section_done",
+                            "section": section_num,
+                            "completed": completed_count[0],
+                            "total": total_sections,
+                        }
+                    )
+                    return result
+
+                tasks = [
+                    asyncio.create_task(process_single_section(section_idx, section, event_queue))
+                    for section_idx, section in enumerate(outline)
+                ]
+
+                async def wait_for_completion():
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    await event_queue.put({"type": "_all_done"})
+
+                completion_task = asyncio.create_task(wait_for_completion())
+
+                while True:
+                    event = await event_queue.get()
+                    if event["type"] == "_all_done":
+                        break
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+                await completion_task
+
+                failed_sections = []
+                for idx, item in enumerate(all_sections):
+                    if item is None:
+                        failed_sections.append(
+                            {
+                                "section_index": idx,
+                                "section_number": outline[idx].get("section_number", idx + 1),
+                                "section_title": outline[idx].get("title", f"分段{idx + 1}"),
+                            }
+                        )
+
+                valid_count = sum(1 for s in all_sections if s is not None)
+                agent_file = _agent_index_file(board_id, window_id)
+                agent_complete_data = {
+                    "schema_version": 1,
+                    "kind": "agent_index",
+                    "pdf_filename": pdf_filename,
+                    "window_id": window_id,
+                    "board_id": board_id,
+                    "total_sections": total_sections,
+                    "completed_sections": valid_count,
+                    "failed_sections": failed_sections,
+                    "sections": all_sections,
+                    "created_at": datetime.now().isoformat(),
+                }
+
+                with open(agent_file, "w", encoding="utf-8") as f:
+                    json.dump(agent_complete_data, f, ensure_ascii=False, indent=2)
+
+                info(f"Agent 索引已保存: {agent_file}")
+                yield f"data: {json.dumps({'type': 'complete', 'data': agent_complete_data}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'success': True}, ensure_ascii=False)}\n\n"
+
+            except Exception as e:
+                error(f"Agent 索引生成失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            agent_index_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"Agent 索引接口失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Agent 索引生成失败: {str(e)}")
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/agent-index-data")
+async def get_agent_index_data(board_id: str, window_id: str):
+    """获取已保存的 Agent 索引 JSON"""
+    try:
+        agent_file = _agent_index_file(board_id, window_id)
+        if not agent_file.exists():
+            return None
+        with open(agent_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        error(f"加载 Agent 索引失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-agent-index")
+async def export_agent_index_json(board_id: str, window_id: str):
+    """下载 Agent 索引 JSON 文件"""
+    try:
+        from urllib.parse import quote
+
+        agent_file = _agent_index_file(board_id, window_id)
+        if not agent_file.exists():
+            raise HTTPException(status_code=404, detail="Agent 索引不存在，请先生成 Agent 索引")
+
+        with open(agent_file, "r", encoding="utf-8") as f:
+            agent_data = json.load(f)
+
+        if not agent_data.get("completed_sections"):
+            raise HTTPException(status_code=400, detail="Agent 索引为空，请重新生成")
+
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        pdf_title = target_window.get("title", "document.pdf") if target_window else "document.pdf"
+
+        payload = json.dumps(agent_data, ensure_ascii=False, indent=2).encode("utf-8")
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}-agent-index.json"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-agent-index.json"
+
+        return StreamingResponse(
+            iter([payload]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Agent 索引 JSON 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-agent-index-markdown")
+async def export_agent_index_markdown(board_id: str, window_id: str):
+    """下载 Agent 索引的 Markdown 渲染版（可选阅读）"""
+    try:
+        from urllib.parse import quote
+        from services.agent_index_service import render_agent_index_markdown
+
+        agent_file = _agent_index_file(board_id, window_id)
+        if not agent_file.exists():
+            raise HTTPException(status_code=404, detail="Agent 索引不存在，请先生成 Agent 索引")
+
+        with open(agent_file, "r", encoding="utf-8") as f:
+            agent_data = json.load(f)
+
+        markdown_text = render_agent_index_markdown(agent_data)
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        pdf_title = target_window.get("title", "document.pdf") if target_window else "document.pdf"
+
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}-agent-index.md"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-agent-index.md"
+
+        return StreamingResponse(
+            iter([markdown_text.encode("utf-8")]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Agent 索引 Markdown 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/generate-section")
 async def generate_section_annotations(
     board_id: str,
@@ -3740,60 +4063,6 @@ async def export_batch_toc_markdown(board_id: str, window_id: str):
     except Exception as e:
         error(f"导出 Markdown 目录失败: {e}")
         raise HTTPException(status_code=500, detail=f"导出 Markdown 目录失败: {str(e)}")
-
-
-@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-toc-agent")
-async def export_batch_toc_agent(board_id: str, window_id: str):
-    """导出供 Agent 阅读的精简 Markdown 目录（无简介冗余，含页码速览）"""
-    try:
-        from urllib.parse import quote
-        from services.toc_pdf_exporter import build_toc_agent_markdown
-
-        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
-        subdiv_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
-
-        if not outline_file.exists():
-            raise HTTPException(status_code=404, detail="大纲数据不存在，请先生成第一阶段大纲")
-        if not subdiv_file.exists():
-            raise HTTPException(status_code=404, detail="细分数据不存在，请先生成第二阶段细分")
-
-        with open(outline_file, "r", encoding="utf-8") as f:
-            outline_data = json.load(f)
-        with open(subdiv_file, "r", encoding="utf-8") as f:
-            subdivision_data = json.load(f)
-
-        subdivisions = subdivision_data.get("subdivisions") or []
-        valid_count = sum(1 for item in subdivisions if item)
-        if valid_count == 0:
-            raise HTTPException(status_code=400, detail="细分数据为空，请完成第二阶段后再导出")
-
-        windows = content_manager.get_board_windows(board_id)
-        target_window = next((w for w in windows if w.get("id") == window_id), None)
-        if not target_window:
-            raise HTTPException(status_code=404, detail="窗口不存在")
-
-        pdf_title = target_window.get("title", "document.pdf")
-        markdown_text = build_toc_agent_markdown(outline_data, subdivision_data, pdf_title)
-
-        safe_stem = Path(pdf_title).stem or "document"
-        filename = f"{safe_stem}-目录-agent.md"
-        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
-        ascii_filename = f"{ascii_stem}-toc-agent.md"
-        return StreamingResponse(
-            iter([markdown_text.encode("utf-8")]),
-            media_type="text/markdown; charset=utf-8",
-            headers={
-                "Content-Disposition": (
-                    f'attachment; filename="{ascii_filename}"; '
-                    f"filename*=UTF-8''{quote(filename)}"
-                )
-            },
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        error(f"导出 Agent 目录失败: {e}")
-        raise HTTPException(status_code=500, detail=f"导出 Agent 目录失败: {str(e)}")
 
 
 @app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-script-pdf")
