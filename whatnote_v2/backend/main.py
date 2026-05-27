@@ -3168,7 +3168,7 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                     normalized = None
                     accumulated_content = ""
 
-                    for attempt in range(2):
+                    for attempt in range(3):
                         prompt = build_agent_subdivision_prompt(
                             pdf_filename,
                             section_title,
@@ -3259,9 +3259,15 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
 
                 valid_count = sum(1 for s in all_sections if s is not None)
                 agent_file = _agent_index_file(board_id, window_id)
+                sections_ok = [s for s in all_sections if s]
                 agent_complete_data = {
                     "schema_version": 1,
                     "kind": "agent_index",
+                    "_readme": (
+                        "sections: full index per outline section (null = failed). "
+                        "sections_ok: only successful entries for agents. "
+                        "failed_sections: failure metadata (section_index/title only)."
+                    ),
                     "pdf_filename": pdf_filename,
                     "window_id": window_id,
                     "board_id": board_id,
@@ -3269,6 +3275,7 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                     "completed_sections": valid_count,
                     "failed_sections": failed_sections,
                     "sections": all_sections,
+                    "sections_ok": sections_ok,
                     "created_at": datetime.now().isoformat(),
                 }
 
@@ -3323,14 +3330,27 @@ async def export_agent_index_json(board_id: str, window_id: str):
         with open(agent_file, "r", encoding="utf-8") as f:
             agent_data = json.load(f)
 
-        if not agent_data.get("completed_sections"):
+        sections_ok = agent_data.get("sections_ok") or [
+            s for s in (agent_data.get("sections") or []) if s
+        ]
+        if not sections_ok:
             raise HTTPException(status_code=400, detail="Agent 索引为空，请重新生成")
 
         windows = content_manager.get_board_windows(board_id)
         target_window = next((w for w in windows if w.get("id") == window_id), None)
         pdf_title = target_window.get("title", "document.pdf") if target_window else "document.pdf"
 
-        payload = json.dumps(agent_data, ensure_ascii=False, indent=2).encode("utf-8")
+        export_payload = {
+            "schema_version": agent_data.get("schema_version", 1),
+            "kind": "agent_index",
+            "pdf_filename": agent_data.get("pdf_filename", pdf_title),
+            "total_sections": agent_data.get("total_sections"),
+            "completed_sections": len(sections_ok),
+            "failed_sections": agent_data.get("failed_sections") or [],
+            "sections": sections_ok,
+            "created_at": agent_data.get("created_at"),
+        }
+        payload = json.dumps(export_payload, ensure_ascii=False, indent=2).encode("utf-8")
         safe_stem = Path(pdf_title).stem or "document"
         filename = f"{safe_stem}-agent-index.json"
         ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"

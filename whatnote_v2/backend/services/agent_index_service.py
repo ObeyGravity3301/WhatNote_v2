@@ -46,6 +46,7 @@ BANNED_KEYWORDS = {
 }
 
 MAX_ONE_LINER_CHARS = 400
+MAX_ONE_LINER_PROMPT_CHARS = 280
 MAX_SUB_ONE_LINER_CHARS = 220
 MAX_KEYWORDS = 10
 MIN_EXAM_HOOKS = 2
@@ -113,7 +114,7 @@ def build_agent_subdivision_prompt(
 {retry_block}
 **Task** — output ONE JSON object only (no markdown fences, no prose outside JSON):
 
-1. **one_liner**: 1-2 sentences in English. What this section covers + what problem it solves or what conclusion it reaches. Use English syntax but keep original terms/abbreviations (e.g. "ACC synthase (ACS, 1-aminocyclopropane-1-carboxylate synthase)").
+1. **one_liner**: HARD LIMIT {MAX_ONE_LINER_PROMPT_CHARS} characters, at most 2 English sentences. What this section covers + what problem it solves or conclusion. Keep original terms/abbreviations (e.g. "ACC synthase (ACS)").
 
 2. **core_schema**: object with EXACTLY these 6 keys; each value is ONE short phrase (not a paragraph). Use "UNKNOWN" if missing:
    - "Entities/Objects"
@@ -202,6 +203,16 @@ def _normalize_keywords(raw: Any) -> List[str]:
     return cleaned
 
 
+def _truncate_text(text: str, max_chars: int) -> str:
+    text = (text or "").strip()
+    if len(text) <= max_chars:
+        return text
+    cut = text[: max_chars - 3].rstrip()
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut + "..."
+
+
 def _normalize_exam_hooks(raw: Any) -> List[str]:
     if isinstance(raw, str):
         hooks = [h.strip() for h in re.split(r"\n+", raw) if h.strip()]
@@ -211,9 +222,16 @@ def _normalize_exam_hooks(raw: Any) -> List[str]:
         hooks = []
 
     hooks = hooks[:MAX_EXAM_HOOKS]
-    if len(hooks) < MIN_EXAM_HOOKS:
-        return hooks
-    return hooks
+    defaults = [
+        "summarize: State the main claim of this section (→ Output/Result)",
+        "explain: Clarify the core mechanism or argument (→ Process/Method)",
+    ]
+    for default_hook in defaults:
+        if len(hooks) >= MIN_EXAM_HOOKS:
+            break
+        if default_hook not in hooks:
+            hooks.append(default_hook)
+    return hooks[:MAX_EXAM_HOOKS]
 
 
 def _normalize_subdivisions(raw: Any, page_start: int, page_end: int) -> List[Dict[str, Any]]:
@@ -247,29 +265,39 @@ def validate_and_normalize_agent_payload(
     page_start: int,
     page_end: int,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """校验并归一化；超长字段自动截断/补齐，避免因格式细节丢弃整节。"""
     if not isinstance(data, dict):
         return False, "根对象必须是 JSON object", None
+
+    warnings: List[str] = []
 
     one_liner = str(data.get("one_liner", "")).strip()
     if not one_liner:
         return False, "one_liner 不能为空", None
     if len(one_liner) > MAX_ONE_LINER_CHARS:
-        return False, f"one_liner 超过 {MAX_ONE_LINER_CHARS} 字符", None
+        warnings.append(f"one_liner truncated from {len(one_liner)} chars")
+        one_liner = _truncate_text(one_liner, MAX_ONE_LINER_CHARS)
 
     core_schema = _normalize_core_schema(data.get("core_schema"))
     for key in CORE_SCHEMA_KEYS:
         if key not in core_schema:
-            return False, f"core_schema 缺少键 {key}", None
+            core_schema[key] = "UNKNOWN"
+            warnings.append(f"core_schema missing {key}, filled UNKNOWN")
         if len(core_schema[key]) > 200:
-            core_schema[key] = core_schema[key][:200]
+            core_schema[key] = _truncate_text(core_schema[key], 200)
 
     keywords = _normalize_keywords(data.get("keywords"))
     if len(keywords) < 1:
-        return False, "keywords 至少需要 1 个有效术语", None
+        title_fallback = str(data.get("title") or data.get("section_title") or "").strip()
+        if title_fallback:
+            keywords = [title_fallback[:60]]
+        else:
+            keywords = ["UNKNOWN"]
+        warnings.append("keywords empty, filled fallback")
 
     exam_hooks = _normalize_exam_hooks(data.get("exam_hooks"))
     if len(exam_hooks) < MIN_EXAM_HOOKS:
-        return False, f"exam_hooks 需要 {MIN_EXAM_HOOKS}-{MAX_EXAM_HOOKS} 条", None
+        warnings.append("exam_hooks padded to minimum")
 
     subdivisions = _normalize_subdivisions(data.get("subdivisions"), page_start, page_end)
 
@@ -280,6 +308,8 @@ def validate_and_normalize_agent_payload(
         "exam_hooks": exam_hooks,
         "subdivisions": subdivisions,
     }
+    if warnings:
+        normalized["_normalization_warnings"] = warnings
     return True, "", normalized
 
 

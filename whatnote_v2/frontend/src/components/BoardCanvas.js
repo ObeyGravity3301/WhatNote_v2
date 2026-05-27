@@ -1043,8 +1043,19 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
 
   const handleCopyAgentIndexJson = useCallback(async () => {
     if (!agentIndexData) return;
+    const sectionsOk = agentIndexData.sections_ok || (agentIndexData.sections || []).filter(Boolean);
+    const exportPayload = {
+      schema_version: agentIndexData.schema_version || 1,
+      kind: 'agent_index',
+      pdf_filename: agentIndexData.pdf_filename,
+      total_sections: agentIndexData.total_sections,
+      completed_sections: sectionsOk.length,
+      failed_sections: agentIndexData.failed_sections || [],
+      sections: sectionsOk,
+      created_at: agentIndexData.created_at,
+    };
     try {
-      await navigator.clipboard.writeText(JSON.stringify(agentIndexData, null, 2));
+      await navigator.clipboard.writeText(JSON.stringify(exportPayload, null, 2));
       alert(t('pdf_outline_agent_copied'));
     } catch (error) {
       alert(t('pdf_outline_agent_copy_error') + error.message);
