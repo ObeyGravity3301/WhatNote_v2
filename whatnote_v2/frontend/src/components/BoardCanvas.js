@@ -24,6 +24,14 @@ import PersonalizationPanel from './PersonalizationPanel';
 import CalendarPlannerWindow from './CalendarPlannerWindow';
 import PluginManager from '../plugins/PluginManager';
 import { initializePlugins, pluginRegistry } from '../plugins';
+import {
+  ANNOTATION_MARKDOWN_THEME_IDS,
+  ANNOTATION_MARKDOWN_THEMES,
+  DEFAULT_ANNOTATION_MARKDOWN_THEME,
+  createAnnotationMarkdownComponents,
+  getAnnotationMarkdownContainerProps,
+  getAnnotationMarkdownTheme,
+} from '../utils/annotationMarkdownThemes';
 
 // Register core shortcuts
 ShortcutManager.register('window.next', {
@@ -114,7 +122,7 @@ const WIN98_SUNKEN_PANEL_STYLE = {
 };
 
 // 将插件工具栏提取为独立组件，避免在render中定义Hooks
-const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument, narratorHeight, setNarratorHeight, isResizingNarrator, setIsResizingNarrator }) => {
+const PluginToolbar = ({ windowId, boardId, documentTitle, pageControl, pdfDocument, narratorHeight, setNarratorHeight, isResizingNarrator, setIsResizingNarrator }) => {
   const [pluginStateKey, setPluginStateKey] = useState(0);
   
   useEffect(() => {
@@ -154,6 +162,7 @@ const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument, narratorHe
             const ButtonComponent = plugin.renderToolbarButton({
               windowId,
               boardId,
+              documentTitle,
               pageControl,
               pdfDocument,
               narratorHeight,
@@ -178,11 +187,11 @@ const PluginToolbar = ({ windowId, boardId, pageControl, pdfDocument, narratorHe
       console.error('[插件系统] 获取PDF工具栏插件时出错:', error);
       return null;
     }
-  }, [pluginStateKey, windowId, boardId, pageControl.currentPage, pageControl.totalPages]);
+  }, [pluginStateKey, windowId, boardId, documentTitle, pageControl.currentPage, pageControl.totalPages]);
 };
 
 // PDF分页组件
-const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, initialPage, onUpdateWindow, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog, isAutoTranslateMode }) => {
+const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardId, windowId, initialPage, onUpdateWindow, addMessage, openMessageCenter, setConfirmDialog, showConfirmDialog, isAutoTranslateMode }) => {
   const { t } = useLanguage();
   const PAGINATION_TOOLBAR_ITEM_STYLE = {
     padding: '1px 8px',
@@ -313,6 +322,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
   // LLM功能状态
   const [showLLMMenu, setShowLLMMenu] = useState(false); // 显示LLM菜单
   const [showAnnotationSettings, setShowAnnotationSettings] = useState(false); // 显示注释设置面板
+  const [showMarkdownThemePanel, setShowMarkdownThemePanel] = useState(false); // 显示 Markdown 渲染主题面板
   
   // 批量生成状态
   const [showBatchOutlineModal, setShowBatchOutlineModal] = useState(false); // 显示批量生成大纲模态窗口
@@ -333,14 +343,15 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
   const [isStage2, setIsStage2] = useState(false); // 是否是第二阶段
   const [annotationProgress, setAnnotationProgress] = useState({ completed: 0, total: 0, currentPage: null, isGenerating: false }); // 单个分段注释生成进度
   const [stage2Completed, setStage2Completed] = useState(false); // 第二阶段是否已完成
-  const [isExportingToc, setIsExportingToc] = useState(false); // 是否正在导出 PDF 目录
+  const [exportingTocFormat, setExportingTocFormat] = useState(null); // 当前正在导出的目录格式
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
   // 注释设置状态
   const defaultAnnotationSettings = {
     style: 'detailed', // 默认风格: detailed, simple, academic
-    customPrompt: ''
+    customPrompt: '',
+    markdownTheme: DEFAULT_ANNOTATION_MARKDOWN_THEME,
   };
 
   const [annotationSettings, setAnnotationSettings] = useState(defaultAnnotationSettings);
@@ -353,7 +364,14 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
     try {
       const saved = window.localStorage.getItem('annotationSettings');
       if (saved) {
-        setAnnotationSettings(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        setAnnotationSettings({
+          ...defaultAnnotationSettings,
+          ...parsed,
+          markdownTheme: ANNOTATION_MARKDOWN_THEMES[parsed.markdownTheme]
+            ? parsed.markdownTheme
+            : DEFAULT_ANNOTATION_MARKDOWN_THEME,
+        });
       }
     } catch (error) {
       console.warn('[BoardCanvas] 加载 annotationSettings 失败:', error);
@@ -477,15 +495,39 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
     }
   };
   
+  const annotationMarkdownThemeId =
+    ANNOTATION_MARKDOWN_THEMES[annotationSettings.markdownTheme]
+      ? annotationSettings.markdownTheme
+      : DEFAULT_ANNOTATION_MARKDOWN_THEME;
+
+  const annotationMarkdownComponents = useMemo(
+    () => createAnnotationMarkdownComponents(annotationMarkdownThemeId),
+    [annotationMarkdownThemeId]
+  );
+
+  const currentMarkdownTheme = getAnnotationMarkdownTheme(annotationMarkdownThemeId);
+
+  const annotationMarkdownContainerProps = useMemo(
+    () => getAnnotationMarkdownContainerProps(annotationMarkdownThemeId),
+    [annotationMarkdownThemeId]
+  );
+
   // 保存注释设置
   const saveAnnotationSettings = (newSettings) => {
-    setAnnotationSettings(newSettings);
+    const themeId = newSettings.markdownTheme;
+    const safeSettings = {
+      ...newSettings,
+      markdownTheme: ANNOTATION_MARKDOWN_THEMES[themeId]
+        ? themeId
+        : DEFAULT_ANNOTATION_MARKDOWN_THEME,
+    };
+    setAnnotationSettings(safeSettings);
     if (typeof window === 'undefined' || !window.localStorage) {
       return;
     }
 
     try {
-      window.localStorage.setItem('annotationSettings', JSON.stringify(newSettings));
+      window.localStorage.setItem('annotationSettings', JSON.stringify(safeSettings));
     } catch (error) {
       console.warn('[BoardCanvas] 保存 annotationSettings 失败:', error);
     }
@@ -800,13 +842,33 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
       }
   }, [boardId, windowId]);
 
-  const handleExportTocPdf = useCallback(async () => {
-    if (!boardId || !windowId || isExportingToc) return;
+  const handleExportToc = useCallback(async (format) => {
+    if (!boardId || !windowId || exportingTocFormat) return;
 
-    setIsExportingToc(true);
+    const endpoint = format === 'markdown'
+      ? 'export-toc-markdown'
+      : format === 'agent'
+        ? 'export-toc-agent'
+        : 'export-toc-pdf';
+    const suffix = format === 'pdf' ? '.pdf' : '.md';
+    const defaultStem = (() => {
+      const rawTitle = documentTitle || '';
+      if (!rawTitle) return 'document';
+      return rawTitle.replace(/\.[^.]+$/, '') || 'document';
+    })();
+    const fallbackFilename = format === 'agent'
+      ? `${defaultStem}-目录-agent${suffix}`
+      : `${defaultStem}-目录${suffix}`;
+    const errorPrefix = format === 'markdown'
+      ? t('pdf_outline_export_toc_md_error')
+      : format === 'agent'
+        ? t('pdf_outline_export_toc_agent_error')
+        : t('pdf_outline_export_toc_error');
+
+    setExportingTocFormat(format);
     try {
       const response = await fetch(
-        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/export-toc-pdf`
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/${endpoint}`
       );
 
       if (!response.ok) {
@@ -822,14 +884,18 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
 
       const blob = await response.blob();
       const disposition = response.headers.get('Content-Disposition') || '';
-      let filename = '目录.pdf';
+      let filename = fallbackFilename;
+
       const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const quotedMatch = disposition.match(/filename="([^"]+)"/i);
       if (utf8Match?.[1]) {
         try {
           filename = decodeURIComponent(utf8Match[1]);
         } catch (_) {
           filename = utf8Match[1];
         }
+      } else if (quotedMatch?.[1]) {
+        filename = quotedMatch[1];
       }
 
       const url = URL.createObjectURL(blob);
@@ -841,13 +907,13 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
       link.remove();
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('导出 PDF 目录失败:', error);
-      alert(t('pdf_outline_export_toc_error') + (error.message || t('text_unknown_error')));
+      console.error(`导出 ${format} 目录失败:`, error);
+      alert(errorPrefix + (error.message || t('text_unknown_error')));
     } finally {
-      setIsExportingToc(false);
+      setExportingTocFormat(null);
     }
-  }, [boardId, windowId, isExportingToc, t]);
-    
+  }, [boardId, windowId, documentTitle, exportingTocFormat, t]);
+
   useEffect(() => {
     loadOutlineData();
     loadTranslationStatus();
@@ -880,16 +946,29 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
           setShowAnnotationSettings(false);
         }
       }
+      if (showMarkdownThemePanel) {
+        const themePanel = document.querySelector('[data-markdown-theme-panel]');
+        const themeTrigger = document.querySelector('[data-markdown-theme-trigger]');
+        if (
+          themePanel &&
+          !themePanel.contains(event.target) &&
+          themeTrigger &&
+          !themeTrigger.contains(event.target)
+        ) {
+          setShowMarkdownThemePanel(false);
+        }
+      }
     };
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         if (showLLMMenu) setShowLLMMenu(false);
         if (showAnnotationSettings) setShowAnnotationSettings(false);
+        if (showMarkdownThemePanel) setShowMarkdownThemePanel(false);
       }
     };
 
-    if (showLLMMenu || showAnnotationSettings) {
+    if (showLLMMenu || showAnnotationSettings || showMarkdownThemePanel) {
       // 使用setTimeout确保事件监听器在下一个事件循环中添加
       setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
@@ -901,7 +980,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
         document.removeEventListener('keydown', handleKeyDown);
       };
     }
-  }, [showLLMMenu, showAnnotationSettings]);
+  }, [showLLMMenu, showAnnotationSettings, showMarkdownThemePanel]);
 
   // 侧栏和底栏调整大小处理
   useEffect(() => {
@@ -1748,6 +1827,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
           return <PluginToolbar 
             windowId={windowId}
             boardId={boardId}
+            documentTitle={documentTitle}
             pageControl={{
               currentPage,
               totalPages,
@@ -3745,21 +3825,54 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {/* 视图切换按钮 */}
                 {batchOutline && batchSubdivisions && stage2Completed && (
-                  <button
-                    onClick={handleExportTocPdf}
-                    disabled={isExportingToc}
-                    style={{
-                      padding: '2px 6px',
-                      fontSize: '10px',
-                      backgroundColor: isExportingToc ? '#a0a0a0' : '#c0c0c0',
-                      border: '2px outset #c0c0c0',
-                      cursor: isExportingToc ? 'wait' : 'pointer',
-                      fontFamily: 'MS Sans Serif, sans-serif'
-                    }}
-                    title={t('pdf_outline_export_toc')}
-                  >
-                    {isExportingToc ? t('pdf_outline_export_toc_exporting') : '📑'}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => handleExportToc('pdf')}
+                      disabled={!!exportingTocFormat}
+                      style={{
+                        padding: '2px 6px',
+                        fontSize: '10px',
+                        backgroundColor: exportingTocFormat ? '#a0a0a0' : '#c0c0c0',
+                        border: '2px outset #c0c0c0',
+                        cursor: exportingTocFormat ? 'wait' : 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif'
+                      }}
+                      title={t('pdf_outline_export_toc')}
+                    >
+                      {exportingTocFormat === 'pdf' ? t('pdf_outline_export_toc_exporting') : '📑'}
+                    </button>
+                    <button
+                      onClick={() => handleExportToc('markdown')}
+                      disabled={!!exportingTocFormat}
+                      style={{
+                        padding: '2px 6px',
+                        fontSize: '10px',
+                        backgroundColor: exportingTocFormat ? '#a0a0a0' : '#c0c0c0',
+                        border: '2px outset #c0c0c0',
+                        cursor: exportingTocFormat ? 'wait' : 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif'
+                      }}
+                      title={t('pdf_outline_export_toc_md')}
+                    >
+                      {exportingTocFormat === 'markdown' ? t('pdf_outline_export_toc_exporting') : 'MD'}
+                    </button>
+                    <button
+                      onClick={() => handleExportToc('agent')}
+                      disabled={!!exportingTocFormat}
+                      style={{
+                        padding: '2px 6px',
+                        fontSize: '10px',
+                        backgroundColor: exportingTocFormat ? '#a0a0a0' : '#000080',
+                        color: exportingTocFormat === 'agent' ? '#ffffff' : '#ffffff',
+                        border: '2px outset #000080',
+                        cursor: exportingTocFormat ? 'wait' : 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif'
+                      }}
+                      title={t('pdf_outline_export_toc_agent')}
+                    >
+                      {exportingTocFormat === 'agent' ? t('pdf_outline_export_toc_exporting') : 'Agent'}
+                    </button>
+                  </>
                 )}
 
                 {batchOutline && batchSubdivisions && (
@@ -5516,27 +5629,73 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                   gap: '8px'
                 }}>
                   <button
-                    onClick={handleExportTocPdf}
-                    disabled={isExportingToc}
+                    onClick={() => handleExportToc('pdf')}
+                    disabled={!!exportingTocFormat}
                     style={{
                       padding: '6px 16px',
                       fontSize: '11px',
-                      backgroundColor: isExportingToc ? '#a0a0a0' : '#008000',
+                      backgroundColor: exportingTocFormat ? '#a0a0a0' : '#008000',
                       color: '#ffffff',
                       border: '2px outset #008000',
                       borderRadius: '0px',
-                      cursor: isExportingToc ? 'wait' : 'pointer',
+                      cursor: exportingTocFormat ? 'wait' : 'pointer',
                       fontFamily: 'MS Sans Serif, sans-serif',
                       fontWeight: 'bold'
                     }}
                     onMouseEnter={(e) => {
-                      if (!isExportingToc) e.target.style.backgroundColor = '#006400';
+                      if (!exportingTocFormat) e.target.style.backgroundColor = '#006400';
                     }}
                     onMouseLeave={(e) => {
-                      if (!isExportingToc) e.target.style.backgroundColor = '#008000';
+                      if (!exportingTocFormat) e.target.style.backgroundColor = '#008000';
                     }}
                   >
-                    {isExportingToc ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_export_toc')}
+                    {exportingTocFormat === 'pdf' ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_export_toc')}
+                  </button>
+                  <button
+                    onClick={() => handleExportToc('markdown')}
+                    disabled={!!exportingTocFormat}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: '11px',
+                      backgroundColor: exportingTocFormat ? '#a0a0a0' : '#5a5a5a',
+                      color: '#ffffff',
+                      border: '2px outset #5a5a5a',
+                      borderRadius: '0px',
+                      cursor: exportingTocFormat ? 'wait' : 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!exportingTocFormat) e.target.style.backgroundColor = '#404040';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!exportingTocFormat) e.target.style.backgroundColor = '#5a5a5a';
+                    }}
+                  >
+                    {exportingTocFormat === 'markdown' ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_export_toc_md')}
+                  </button>
+                  <button
+                    onClick={() => handleExportToc('agent')}
+                    disabled={!!exportingTocFormat}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: '11px',
+                      backgroundColor: exportingTocFormat ? '#a0a0a0' : '#000080',
+                      color: '#ffffff',
+                      border: '2px outset #000080',
+                      borderRadius: '0px',
+                      cursor: exportingTocFormat ? 'wait' : 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!exportingTocFormat) e.target.style.backgroundColor = '#000060';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!exportingTocFormat) e.target.style.backgroundColor = '#000080';
+                    }}
+                  >
+                    {exportingTocFormat === 'agent' ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_export_toc_agent')}
                   </button>
                   <button
                     onClick={async () => {
@@ -7152,6 +7311,108 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                   )}
                 </div>
                 
+                {/* Markdown 渲染主题 */}
+                <div style={{ position: 'relative' }} data-markdown-theme-trigger>
+                  <button
+                    onClick={() => {
+                      setShowMarkdownThemePanel(!showMarkdownThemePanel);
+                      setShowLLMMenu(false);
+                    }}
+                    style={{
+                      padding: '2px 6px',
+                      fontSize: '11px',
+                      backgroundColor: showMarkdownThemePanel ? '#a0a0a0' : '#c0c0c0',
+                      border: '2px outset #c0c0c0',
+                      borderRadius: '0px',
+                      cursor: 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      height: '20px',
+                      minWidth: '24px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title={t('pdf_anno_md_theme_btn')}
+                  >
+                    🎨
+                  </button>
+                  {showMarkdownThemePanel && (
+                    <div
+                      data-markdown-theme-panel
+                      style={{
+                        position: 'absolute',
+                        top: '24px',
+                        right: 0,
+                        width: '240px',
+                        backgroundColor: '#c0c0c0',
+                        border: '2px outset #c0c0c0',
+                        padding: '8px',
+                        zIndex: 1002,
+                        boxShadow: '2px 2px 4px rgba(0,0,0,0.3)'
+                      }}
+                    >
+                      <div style={{
+                        fontWeight: 'bold',
+                        marginBottom: '6px',
+                        fontSize: '11px',
+                        borderBottom: '1px solid #808080',
+                        paddingBottom: '4px'
+                      }}>
+                        {t('pdf_anno_md_theme_title')}
+                      </div>
+                      {ANNOTATION_MARKDOWN_THEME_IDS.map((themeId) => {
+                        const theme = ANNOTATION_MARKDOWN_THEMES[themeId];
+                        const isActive = annotationMarkdownThemeId === themeId;
+                        return (
+                          <button
+                            key={themeId}
+                            onClick={() => {
+                              saveAnnotationSettings({
+                                ...annotationSettings,
+                                markdownTheme: themeId,
+                              });
+                            }}
+                            style={{
+                              width: '100%',
+                              marginBottom: '4px',
+                              padding: '6px',
+                              textAlign: 'left',
+                              backgroundColor: isActive ? '#000080' : '#ffffff',
+                              color: isActive ? '#ffffff' : '#000000',
+                              border: isActive ? '2px inset #000080' : '1px inset #c0c0c0',
+                              cursor: 'pointer',
+                              fontFamily: 'MS Sans Serif, sans-serif',
+                              fontSize: '11px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                              <span>{t(theme.nameKey)}</span>
+                              {isActive && <span style={{ fontSize: '10px' }}>✓</span>}
+                            </div>
+                            <div style={{ display: 'flex', gap: '3px', marginBottom: '2px' }}>
+                              {theme.preview.map((color, index) => (
+                                <span
+                                  key={`${themeId}-${index}`}
+                                  style={{
+                                    width: '12px',
+                                    height: '12px',
+                                    backgroundColor: color,
+                                    border: '1px solid #808080',
+                                    display: 'inline-block'
+                                  }}
+                                />
+                              ))}
+                            </div>
+                            <div style={{ fontSize: '10px', opacity: isActive ? 0.9 : 0.75 }}>
+                              {t(theme.descKey)}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 {/* 预览/编辑模式切换按钮 */}
                 <button
                   onClick={() => {
@@ -7186,33 +7447,12 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
               overflow: 'auto'
             }}>
               {annotationMode === 'preview' ? (
-                <div style={{
-                  fontSize: '12px',
-                  fontFamily: 'MS Sans Serif, sans-serif',
-                  lineHeight: '1.4',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word'
-                }}>
+                <div {...annotationMarkdownContainerProps}>
                   {annotations[currentPage] ? (
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
                       rehypePlugins={[rehypeKatex]}
-                      components={{
-                        // 自定义样式以匹配Windows 98风格
-                        h1: ({children}) => <h1 style={{fontSize: '14px', fontWeight: 'bold', margin: '8px 0 4px 0'}}>{children}</h1>,
-                        h2: ({children}) => <h2 style={{fontSize: '13px', fontWeight: 'bold', margin: '6px 0 3px 0'}}>{children}</h2>,
-                        h3: ({children}) => <h3 style={{fontSize: '12px', fontWeight: 'bold', margin: '4px 0 2px 0'}}>{children}</h3>,
-                        p: ({children}) => <p style={{margin: '2px 0'}}>{children}</p>,
-                        code: ({children}) => <code style={{backgroundColor: '#f0f0f0', padding: '1px 2px', fontFamily: 'monospace'}}>{children}</code>,
-                        pre: ({children}) => <pre style={{backgroundColor: '#f0f0f0', padding: '4px', margin: '4px 0', overflow: 'auto'}}>{children}</pre>,
-                        blockquote: ({children}) => <blockquote style={{borderLeft: '3px solid #c0c0c0', paddingLeft: '8px', margin: '4px 0', fontStyle: 'italic'}}>{children}</blockquote>,
-                        ul: ({children}) => <ul style={{margin: '4px 0', paddingLeft: '16px'}}>{children}</ul>,
-                        ol: ({children}) => <ol style={{margin: '4px 0', paddingLeft: '16px'}}>{children}</ol>,
-                        li: ({children}) => <li style={{margin: '1px 0'}}>{children}</li>,
-                        table: ({children}) => <table style={{border: '1px solid #c0c0c0', borderCollapse: 'collapse', margin: '4px 0'}}>{children}</table>,
-                        th: ({children}) => <th style={{border: '1px solid #c0c0c0', padding: '2px 4px', backgroundColor: '#e0e0e0'}}>{children}</th>,
-                        td: ({children}) => <td style={{border: '1px solid #c0c0c0', padding: '2px 4px'}}>{children}</td>
-                      }}
+                      components={annotationMarkdownComponents}
                     >
                       {annotations[currentPage]}
                     </ReactMarkdown>
@@ -7348,6 +7588,46 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                     }
                   </div>
                 </div>
+
+                {/* Markdown 渲染主题 */}
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>
+                    {t('pdf_anno_md_theme_title')}:
+                  </label>
+                  <select
+                    value={annotationMarkdownThemeId}
+                    onChange={(e) => {
+                      saveAnnotationSettings({
+                        ...annotationSettings,
+                        markdownTheme: e.target.value,
+                      });
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '2px',
+                      fontSize: '11px',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      border: '1px inset #c0c0c0',
+                      backgroundColor: '#ffffff'
+                    }}
+                  >
+                    {ANNOTATION_MARKDOWN_THEME_IDS.map((themeId) => (
+                      <option key={themeId} value={themeId}>
+                        {t(ANNOTATION_MARKDOWN_THEMES[themeId].nameKey)}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{
+                    fontSize: '10px',
+                    color: '#666',
+                    marginTop: '4px',
+                    padding: '4px',
+                    backgroundColor: '#f0f0f0',
+                    border: '1px solid #d0d0d0'
+                  }}>
+                    {t(currentMarkdownTheme.descKey)}
+                  </div>
+                </div>
                 
                 {/* 预设风格预览 */}
                 {annotationSettings.style !== 'custom' && (
@@ -7413,6 +7693,8 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, onClose, boardId, windowId, in
                   fontSize: '10px'
                 }}>
                   当前使用: {annotationSettings.style === 'custom' ? '自定义提示词' : annotationStyles[annotationSettings.style]?.name}
+                  {' · '}
+                  {t('pdf_anno_md_theme_title')}: {t(currentMarkdownTheme.nameKey)}
                 </div>
               </div>
             )}
@@ -8738,6 +9020,7 @@ const PDFWindowRenderer = React.memo(({ window: windowData, onUpload, onUpdateWi
     return (
       <PDFPaginationViewer 
         pdfUrl={pdfUrl} 
+        documentTitle={windowData.title}
         onClose={handleClosePagination}
         boardId={boardId}
         windowId={windowData.id}

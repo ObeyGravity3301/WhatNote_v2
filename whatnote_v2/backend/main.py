@@ -221,6 +221,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # WebSocket连接管理
@@ -3602,6 +3603,35 @@ async def get_subdivision_data(board_id: str, window_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _resolve_pdf_window_and_pages_dir(board_id: str, window_id: str):
+    windows = content_manager.get_board_windows(board_id)
+    target_window = next((w for w in windows if w.get("id") == window_id), None)
+    if not target_window:
+        raise HTTPException(status_code=404, detail="窗口不存在")
+
+    pdf_file_path = Path(target_window.get("content") or target_window.get("file_path") or "")
+    if not pdf_file_path:
+        raise HTTPException(status_code=404, detail="PDF文件路径无效")
+
+    if not pdf_file_path.is_absolute():
+        board_dir = None
+        for course_dir in content_manager.file_manager.courses_dir.iterdir():
+            if course_dir.is_dir():
+                potential_board_dir = course_dir / board_id
+                if potential_board_dir.exists():
+                    board_dir = potential_board_dir
+                    break
+
+        if board_dir:
+            pdf_file_path = board_dir / pdf_file_path
+
+    if not pdf_file_path.exists():
+        raise HTTPException(status_code=404, detail="PDF文件路径无效")
+
+    pages_dir = pdf_file_path.parent / "pages" / pdf_file_path.stem
+    return target_window, pdf_file_path, pages_dir
+
+
 @app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-toc-pdf")
 async def export_batch_toc_pdf(board_id: str, window_id: str):
     """导出大纲+细分的 PDF 目录"""
@@ -3636,12 +3666,17 @@ async def export_batch_toc_pdf(board_id: str, window_id: str):
         pdf_bytes = build_toc_pdf(outline_data, subdivision_data, pdf_title)
 
         safe_stem = Path(pdf_title).stem or "document"
-        filename = f"{safe_stem}_目录.pdf"
+        filename = f"{safe_stem}-目录.pdf"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-toc.pdf"
         return StreamingResponse(
             iter([pdf_bytes]),
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
             },
         )
     except HTTPException:
@@ -3651,6 +3686,241 @@ async def export_batch_toc_pdf(board_id: str, window_id: str):
     except Exception as e:
         error(f"导出 PDF 目录失败: {e}")
         raise HTTPException(status_code=500, detail=f"导出 PDF 目录失败: {str(e)}")
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-toc-markdown")
+async def export_batch_toc_markdown(board_id: str, window_id: str):
+    """导出大纲+细分的 Markdown 目录"""
+    try:
+        from urllib.parse import quote
+        from services.toc_pdf_exporter import build_toc_markdown
+
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        subdiv_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
+
+        if not outline_file.exists():
+            raise HTTPException(status_code=404, detail="大纲数据不存在，请先生成第一阶段大纲")
+        if not subdiv_file.exists():
+            raise HTTPException(status_code=404, detail="细分数据不存在，请先生成第二阶段细分")
+
+        with open(outline_file, "r", encoding="utf-8") as f:
+            outline_data = json.load(f)
+        with open(subdiv_file, "r", encoding="utf-8") as f:
+            subdivision_data = json.load(f)
+
+        subdivisions = subdivision_data.get("subdivisions") or []
+        valid_count = sum(1 for item in subdivisions if item)
+        if valid_count == 0:
+            raise HTTPException(status_code=400, detail="细分数据为空，请完成第二阶段后再导出")
+
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+
+        pdf_title = target_window.get("title", "document.pdf")
+        markdown_text = build_toc_markdown(outline_data, subdivision_data, pdf_title)
+
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}-目录.md"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-toc.md"
+        return StreamingResponse(
+            iter([markdown_text.encode("utf-8")]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Markdown 目录失败: {e}")
+        raise HTTPException(status_code=500, detail=f"导出 Markdown 目录失败: {str(e)}")
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-toc-agent")
+async def export_batch_toc_agent(board_id: str, window_id: str):
+    """导出供 Agent 阅读的精简 Markdown 目录（无简介冗余，含页码速览）"""
+    try:
+        from urllib.parse import quote
+        from services.toc_pdf_exporter import build_toc_agent_markdown
+
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        subdiv_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
+
+        if not outline_file.exists():
+            raise HTTPException(status_code=404, detail="大纲数据不存在，请先生成第一阶段大纲")
+        if not subdiv_file.exists():
+            raise HTTPException(status_code=404, detail="细分数据不存在，请先生成第二阶段细分")
+
+        with open(outline_file, "r", encoding="utf-8") as f:
+            outline_data = json.load(f)
+        with open(subdiv_file, "r", encoding="utf-8") as f:
+            subdivision_data = json.load(f)
+
+        subdivisions = subdivision_data.get("subdivisions") or []
+        valid_count = sum(1 for item in subdivisions if item)
+        if valid_count == 0:
+            raise HTTPException(status_code=400, detail="细分数据为空，请完成第二阶段后再导出")
+
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+
+        pdf_title = target_window.get("title", "document.pdf")
+        markdown_text = build_toc_agent_markdown(outline_data, subdivision_data, pdf_title)
+
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}-目录-agent.md"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-toc-agent.md"
+        return StreamingResponse(
+            iter([markdown_text.encode("utf-8")]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Agent 目录失败: {e}")
+        raise HTTPException(status_code=500, detail=f"导出 Agent 目录失败: {str(e)}")
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-script-pdf")
+async def export_batch_script_pdf(board_id: str, window_id: str):
+    """导出 narrator 逐页讲稿合集 PDF"""
+    try:
+        from urllib.parse import quote
+        from services.toc_pdf_exporter import build_script_pdf
+
+        target_window, _pdf_file_path, pages_dir = _resolve_pdf_window_and_pages_dir(board_id, window_id)
+        scripts_dir = pages_dir / "scripts"
+        if not scripts_dir.exists():
+            raise HTTPException(status_code=404, detail="讲稿目录不存在，请先生成讲解模式讲稿")
+
+        page_annotations = []
+        for note_file in sorted(scripts_dir.glob("script_*.md")):
+            match = re.search(r"script_(\d+)\.md$", note_file.name)
+            if not match:
+                continue
+            page_annotations.append({
+                "page": int(match.group(1)),
+                "content": note_file.read_text(encoding="utf-8"),
+            })
+
+        if not page_annotations:
+            raise HTTPException(status_code=404, detail="未找到逐页讲稿，请先生成讲解模式讲稿")
+
+        pdf_title = target_window.get("title", "document.pdf")
+        pdf_bytes = build_script_pdf(page_annotations, pdf_title)
+
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}-讲稿.pdf"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-script.pdf"
+        return StreamingResponse(
+            iter([pdf_bytes]),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        error(f"导出 PDF 讲稿失败: {e}")
+        raise HTTPException(status_code=500, detail=f"导出 PDF 讲稿失败: {str(e)}")
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-script-markdown")
+async def export_batch_script_markdown(board_id: str, window_id: str):
+    """导出 narrator 逐页讲稿合集 Markdown"""
+    try:
+        from urllib.parse import quote
+        from services.toc_pdf_exporter import build_script_markdown
+
+        target_window, _pdf_file_path, pages_dir = _resolve_pdf_window_and_pages_dir(board_id, window_id)
+        scripts_dir = pages_dir / "scripts"
+        if not scripts_dir.exists():
+            raise HTTPException(status_code=404, detail="讲稿目录不存在，请先生成讲解模式讲稿")
+
+        page_annotations = []
+        for note_file in sorted(scripts_dir.glob("script_*.md")):
+            match = re.search(r"script_(\d+)\.md$", note_file.name)
+            if not match:
+                continue
+            page_annotations.append({
+                "page": int(match.group(1)),
+                "content": note_file.read_text(encoding="utf-8"),
+            })
+
+        if not page_annotations:
+            raise HTTPException(status_code=404, detail="未找到逐页讲稿，请先生成讲解模式讲稿")
+
+        pdf_title = target_window.get("title", "document.pdf")
+        markdown_text = build_script_markdown(page_annotations, pdf_title)
+
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}-讲稿.md"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-script.md"
+        return StreamingResponse(
+            iter([markdown_text.encode("utf-8")]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Markdown 讲稿失败: {e}")
+        raise HTTPException(status_code=500, detail=f"导出 Markdown 讲稿失败: {str(e)}")
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-script-status")
+async def get_batch_script_export_status(board_id: str, window_id: str):
+    """返回当前 PDF 可导出的讲稿状态"""
+    try:
+        _target_window, _pdf_file_path, pages_dir = _resolve_pdf_window_and_pages_dir(board_id, window_id)
+        scripts_dir = pages_dir / "scripts"
+        if not scripts_dir.exists():
+            return {"available": False, "count": 0, "pages": []}
+
+        pages = []
+        for script_file in sorted(scripts_dir.glob("script_*.md")):
+            match = re.search(r"script_(\d+)\.md$", script_file.name)
+            if match:
+                pages.append(int(match.group(1)))
+
+        return {
+            "available": len(pages) > 0,
+            "count": len(pages),
+            "pages": pages,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取讲稿导出状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取讲稿导出状态失败: {str(e)}")
 
 
 @app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/summary-note")

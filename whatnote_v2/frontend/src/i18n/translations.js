@@ -1997,6 +1997,118 @@ const translations = {
       "ja-JP": "Q&A形式"
     }
   },
+  "pdf_anno_md_theme_btn": {
+    "default": {
+      "zh-CN": "切换 Markdown 渲染主题",
+      "en-US": "Switch Markdown render theme",
+      "ja-JP": "Markdown 表示テーマを切り替え"
+    }
+  },
+  "pdf_anno_md_theme_title": {
+    "default": {
+      "zh-CN": "渲染主题",
+      "en-US": "Render Theme",
+      "ja-JP": "表示テーマ"
+    }
+  },
+  "pdf_anno_md_theme_classic": {
+    "default": {
+      "zh-CN": "经典灰度",
+      "en-US": "Classic Grayscale",
+      "ja-JP": "クラシックグレー"
+    }
+  },
+  "pdf_anno_md_theme_classic_desc": {
+    "default": {
+      "zh-CN": "Win98 风格，黑白灰为主，适合长时间阅读",
+      "en-US": "Win98 style with grayscale tones for long reading sessions",
+      "ja-JP": "Win98 風の白黒グレー、長時間読み向け"
+    }
+  },
+  "pdf_anno_md_theme_sidenote": {
+    "default": {
+      "zh-CN": "清晰旁注",
+      "en-US": "Clear Sidenote",
+      "ja-JP": "クリアサイドノート"
+    }
+  },
+  "pdf_anno_md_theme_sidenote_desc": {
+    "default": {
+      "zh-CN": "轻量旁注文档风格：卡片式标题、温和引用、清晰列表与表格",
+      "en-US": "Light sidenote doc style with card headings, gentle quotes, and clear lists",
+      "ja-JP": "カード見出しと穏やかな引用、読みやすいリスト・表"
+    }
+  },
+  "pdf_anno_md_theme_rainbow": {
+    "default": {
+      "zh-CN": "彩虹分层",
+      "en-US": "Rainbow Layers",
+      "ja-JP": "レインボー"
+    }
+  },
+  "pdf_anno_md_theme_rainbow_desc": {
+    "default": {
+      "zh-CN": "标题紫/蓝/绿，引用黄色底，列表橙色圆点",
+      "en-US": "Purple/blue/green headings, yellow quotes, orange bullets",
+      "ja-JP": "見出し紫/青/緑、引用は黄背景、リストは橙"
+    }
+  },
+  "pdf_anno_md_theme_ocean": {
+    "default": {
+      "zh-CN": "海洋蓝调",
+      "en-US": "Ocean Blues",
+      "ja-JP": "オーシャンブルー"
+    }
+  },
+  "pdf_anno_md_theme_ocean_desc": {
+    "default": {
+      "zh-CN": "蓝色系标题与引用，清爽冷静",
+      "en-US": "Cool blue headings and quote highlights",
+      "ja-JP": "青系の見出しと引用、落ち着いた配色"
+    }
+  },
+  "pdf_anno_md_theme_forest": {
+    "default": {
+      "zh-CN": "森林绿意",
+      "en-US": "Forest Green",
+      "ja-JP": "フォレストグリーン"
+    }
+  },
+  "pdf_anno_md_theme_forest_desc": {
+    "default": {
+      "zh-CN": "绿色系标题，引用浅绿底，自然柔和",
+      "en-US": "Green headings with soft natural quote backgrounds",
+      "ja-JP": "緑系見出しと淡い引用背景"
+    }
+  },
+  "pdf_anno_md_theme_sunset": {
+    "default": {
+      "zh-CN": "日落暖色",
+      "en-US": "Sunset Warm",
+      "ja-JP": "サンセット"
+    }
+  },
+  "pdf_anno_md_theme_sunset_desc": {
+    "default": {
+      "zh-CN": "橙红暖色调，引用暖黄底，醒目活泼",
+      "en-US": "Warm orange-red tones with golden quote highlights",
+      "ja-JP": "橙赤の暖色、引用は暖かい黄色背景"
+    }
+  },
+  "pdf_anno_md_theme_soft": {
+    "default": {
+      "zh-CN": "柔和粉彩",
+      "en-US": "Soft Pastels",
+      "ja-JP": "ソフトパステル"
+    }
+  },
+  "pdf_anno_md_theme_soft_desc": {
+    "default": {
+      "zh-CN": "低饱和粉彩色，标题与列表区分清晰但不刺眼",
+      "en-US": "Low-saturation pastels with clear but gentle contrast",
+      "ja-JP": "低彩度パステル、目に優しいコントラスト"
+    }
+  },
   "pdf_sidebar_anno_title": {
     "default": {
       "zh-CN": "第 {page} 页注释",
@@ -2144,6 +2256,34 @@ const translations = {
       "ja-JP": "PDF目次をエクスポート"
     }
   },
+  "pdf_outline_export_toc_md": {
+    "default": {
+      "zh-CN": "导出 Markdown 目录",
+      "en-US": "Export Markdown TOC",
+      "ja-JP": "Markdown目次をエクスポート"
+    }
+  },
+  "pdf_outline_export_toc_agent": {
+    "default": {
+      "zh-CN": "导出 Agent 目录",
+      "en-US": "Export Agent TOC",
+      "ja-JP": "Agent用目次をエクスポート"
+    }
+  },
+  "pdf_outline_export_script": {
+    "default": {
+      "zh-CN": "导出 PDF 讲稿",
+      "en-US": "Export PDF Script",
+      "ja-JP": "PDF講稿をエクスポート"
+    }
+  },
+  "pdf_outline_export_script_md": {
+    "default": {
+      "zh-CN": "导出 Markdown 讲稿",
+      "en-US": "Export Markdown Script",
+      "ja-JP": "Markdown講稿をエクスポート"
+    }
+  },
   "pdf_outline_export_toc_exporting": {
     "default": {
       "zh-CN": "正在导出...",
@@ -2156,6 +2296,34 @@ const translations = {
       "zh-CN": "导出 PDF 目录失败：",
       "en-US": "Failed to export PDF TOC: ",
       "ja-JP": "PDF目次のエクスポートに失敗："
+    }
+  },
+  "pdf_outline_export_toc_md_error": {
+    "default": {
+      "zh-CN": "导出 Markdown 目录失败：",
+      "en-US": "Failed to export Markdown TOC: ",
+      "ja-JP": "Markdown目次のエクスポートに失敗："
+    }
+  },
+  "pdf_outline_export_toc_agent_error": {
+    "default": {
+      "zh-CN": "导出 Agent 目录失败：",
+      "en-US": "Failed to export Agent TOC: ",
+      "ja-JP": "Agent目次のエクスポートに失敗："
+    }
+  },
+  "pdf_outline_export_script_error": {
+    "default": {
+      "zh-CN": "导出 PDF 讲稿失败：",
+      "en-US": "Failed to export PDF Script: ",
+      "ja-JP": "PDF講稿のエクスポートに失敗："
+    }
+  },
+  "pdf_outline_export_script_md_error": {
+    "default": {
+      "zh-CN": "导出 Markdown 讲稿失败：",
+      "en-US": "Failed to export Markdown Script: ",
+      "ja-JP": "Markdown講稿のエクスポートに失敗："
     }
   },
   "pdf_outline_view_list": {

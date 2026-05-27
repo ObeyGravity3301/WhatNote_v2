@@ -5,7 +5,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 
 const NarratorPluginComponent = (props) => {
   const { t } = useLanguage();
-  const { windowId, boardId, pageControl } = props;
+  const { windowId, boardId, documentTitle, pageControl } = props;
 
   const NARRATOR_TOOLBAR_ITEM_STYLE = {
     padding: '1px 8px',
@@ -90,6 +90,8 @@ const NarratorPluginComponent = (props) => {
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, type: '', message: '' });
   const stopBatchRef = useRef(false);
+  const [scriptExportInfo, setScriptExportInfo] = useState({ available: false, count: 0, pages: [] });
+  const [exportingScriptFormat, setExportingScriptFormat] = useState(null);
 
   // 自动演示模式
   const [isAutoMode, setIsAutoMode] = useState(false);
@@ -485,6 +487,99 @@ const NarratorPluginComponent = (props) => {
         .catch(e => console.warn('Failed to sync ref audio info', e));
     }
   }, [boardId, windowId]);
+
+  const fetchScriptExportInfo = useCallback(async () => {
+    if (!boardId || !windowId) return;
+    try {
+      const res = await fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/export-script-status`);
+      if (res.ok) {
+        const data = await res.json();
+        setScriptExportInfo(data || { available: false, count: 0, pages: [] });
+      }
+    } catch (e) {
+      console.warn('Failed to fetch narrator script export status', e);
+    }
+  }, [boardId, windowId]);
+
+  useEffect(() => {
+    if (showPanel) {
+      fetchScriptExportInfo();
+    }
+  }, [showPanel, fetchScriptExportInfo]);
+
+  const handleExportScript = useCallback(async (format) => {
+    if (!boardId || !windowId || exportingScriptFormat) return;
+
+    const endpoint = format === 'markdown' ? 'export-script-markdown' : 'export-script-pdf';
+    const suffix = format === 'markdown' ? '.md' : '.pdf';
+    const defaultStem = (() => {
+      const rawTitle = documentTitle || '';
+      if (!rawTitle) return 'document';
+      return rawTitle.replace(/\.[^.]+$/, '') || 'document';
+    })();
+    const fallbackFilename = `${defaultStem}-讲稿${suffix}`;
+
+    setExportingScriptFormat(format);
+    try {
+      const response = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/${endpoint}`
+      );
+      if (!response.ok) {
+        let detail = '导出失败';
+        try {
+          const err = await response.json();
+          detail = err.detail || detail;
+        } catch (_) {
+          detail = await response.text() || detail;
+        }
+        throw new Error(detail);
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') || '';
+      let filename = fallbackFilename;
+      const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const quotedMatch = disposition.match(/filename="([^"]+)"/i);
+      if (utf8Match?.[1]) {
+        try {
+          filename = decodeURIComponent(utf8Match[1]);
+        } catch (_) {
+          filename = utf8Match[1];
+        }
+      } else if (quotedMatch?.[1]) {
+        filename = quotedMatch[1];
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(`导出 ${format} 讲稿失败`, e);
+      alert((format === 'markdown' ? t('pdf_outline_export_script_md_error') : t('pdf_outline_export_script_error')) + (e.message || 'Unknown error'));
+    } finally {
+      setExportingScriptFormat(null);
+    }
+  }, [boardId, windowId, documentTitle, exportingScriptFormat, t]);
+
+  const localScriptPages = Object.entries(scripts)
+    .filter(([, content]) => (content || '').trim())
+    .map(([page]) => Number(page));
+  const exportableScriptPages = Array.from(new Set([
+    ...(scriptExportInfo.pages || []),
+    ...localScriptPages,
+    ...(currentScript && currentScript.trim() ? [pageControl?.currentPage] : [])
+  ].filter(Boolean))).sort((a, b) => a - b);
+  const totalNarratorPages = pageControl?.totalPages || 0;
+  const missingScriptPages = totalNarratorPages > 0
+    ? Array.from({ length: totalNarratorPages }, (_, i) => i + 1).filter(page => !exportableScriptPages.includes(page))
+    : [];
+  const hasFullScriptCoverage = totalNarratorPages > 0 && missingScriptPages.length === 0;
+  const canExportScripts = hasFullScriptCoverage && !isBatchProcessing && !isGenerating && !exportingScriptFormat;
 
   // 加载模型列表
   const fetchModels = useCallback(() => {
@@ -1685,6 +1780,24 @@ const NarratorPluginComponent = (props) => {
                             <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
                                 <button onClick={() => startBatch('script-missing')} title={t('narrator_missing_script')} disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}>➕ {t('narrator_fill_short')}</button>
                                 <button onClick={() => startBatch('audio-missing')} title={t('narrator_missing_audio')} disabled={isBatchProcessing} style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}>➕ {t('narrator_fill_short')}</button>
+                            </div>
+                            <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
+                                <button
+                                    onClick={() => handleExportScript('pdf')}
+                                    title={canExportScripts ? `${t('pdf_outline_export_script')} (${exportableScriptPages.length}/${totalNarratorPages}页)` : `需先生成全部页面讲稿 (${exportableScriptPages.length}/${totalNarratorPages}页，缺少${missingScriptPages.length}页)`}
+                                    disabled={!canExportScripts}
+                                    style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}
+                                >
+                                    {exportingScriptFormat === 'pdf' ? '...' : '📤 PDF'}
+                                </button>
+                                <button
+                                    onClick={() => handleExportScript('markdown')}
+                                    title={canExportScripts ? `${t('pdf_outline_export_script_md')} (${exportableScriptPages.length}/${totalNarratorPages}页)` : `需先生成全部页面讲稿 (${exportableScriptPages.length}/${totalNarratorPages}页，缺少${missingScriptPages.length}页)`}
+                                    disabled={!canExportScripts}
+                                    style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}
+                                >
+                                    {exportingScriptFormat === 'markdown' ? '...' : '📝 MD'}
+                                </button>
                             </div>
                             <span style={{fontSize:'10px', color:'#666', marginLeft:'2px'}}>
                                 {isBatchProcessing ? batchProgress.current + '/' + batchProgress.total : ''}
