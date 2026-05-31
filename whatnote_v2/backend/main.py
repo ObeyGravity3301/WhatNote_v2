@@ -3098,11 +3098,32 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
     try:
         from services.agent_index_service import (
             AGENT_COMPLETION_RETRY_ROUNDS,
+            AGENT_INDEX_CONCURRENCY,
             AGENT_SECTION_MAX_ATTEMPTS,
+            AGENT_SECTION_TIMEOUT_SEC,
             generate_agent_section_index,
+            get_validation_profile,
         )
 
-        info(f"开始 Agent 索引生成 board_id={board_id}, window_id={window_id}")
+        AGENT_SSE_HEARTBEAT_SEC = 20
+
+        try:
+            req_body = await request.json()
+        except Exception:
+            req_body = {}
+        if not isinstance(req_body, dict):
+            req_body = {}
+        gen_mode = req_body.get("mode", "full")
+        if gen_mode not in ("full", "retry_failed"):
+            gen_mode = "full"
+        relaxed_validation = bool(req_body.get("relaxed", False))
+        requested_indices = req_body.get("section_indices")
+        validation_profile = get_validation_profile(relaxed_validation)
+
+        info(
+            f"开始 Agent 索引生成 board_id={board_id}, window_id={window_id}, "
+            f"mode={gen_mode}, relaxed={relaxed_validation}"
+        )
 
         outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
         if not outline_file.exists():
@@ -3127,10 +3148,41 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                 import asyncio
 
                 all_sections = [None] * total_sections
-                completed_count = [0]
-                event_queue = asyncio.Queue()
+                if gen_mode == "retry_failed":
+                    agent_file_existing = _agent_index_file(board_id, window_id)
+                    if agent_file_existing.exists():
+                        try:
+                            with open(agent_file_existing, "r", encoding="utf-8") as f:
+                                prev_data = json.load(f)
+                            prev_sections = prev_data.get("sections") or []
+                            if len(prev_sections) == total_sections:
+                                all_sections = list(prev_sections)
+                        except Exception as load_err:
+                            info(f"加载已有 Agent 索引失败，将按全新生成: {load_err}")
 
-                yield f"data: {json.dumps({'type': 'status', 'message': f'开始生成 Agent 索引（{total_sections} 节）...'}, ensure_ascii=False)}\n\n"
+                if requested_indices is not None:
+                    target_indices = [
+                        int(i)
+                        for i in requested_indices
+                        if isinstance(i, (int, float)) and 0 <= int(i) < total_sections
+                    ]
+                elif gen_mode == "retry_failed":
+                    target_indices = [i for i, s in enumerate(all_sections) if s is None]
+                else:
+                    target_indices = list(range(total_sections))
+
+                if not target_indices:
+                    yield f"data: {json.dumps({'type': 'status', 'message': '没有需要生成的章节'}, ensure_ascii=False)}\n\n"
+                elif gen_mode == "retry_failed":
+                    mode_label = "放宽条件" if relaxed_validation else "标准"
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'重试 {len(target_indices)} 个失败章节（{mode_label}校验，并发 {AGENT_INDEX_CONCURRENCY}）...'}, ensure_ascii=False)}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'开始生成 Agent 索引（{total_sections} 节，并发 {AGENT_INDEX_CONCURRENCY}）...'}, ensure_ascii=False)}\n\n"
+
+                completed_count = [sum(1 for s in all_sections if s is not None)]
+                event_queue = asyncio.Queue()
+                section_semaphore = asyncio.Semaphore(AGENT_INDEX_CONCURRENCY)
+                target_set = set(target_indices)
 
                 async def process_single_section(section_idx, section, queue):
                     section_num = section.get("section_number", section_idx + 1)
@@ -3138,36 +3190,35 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                     page_start = section.get("page_start")
                     page_end = section.get("page_end")
 
-                    await queue.put(
-                        {
-                            "type": "section_start",
-                            "section": section_num,
-                            "title": section_title,
-                            "pages": f"{page_start}-{page_end}",
-                        }
-                    )
-
-                    async def on_chunk(sec_num, chunk):
+                    async with section_semaphore:
                         await queue.put(
                             {
-                                "type": "section_content",
-                                "section": sec_num,
-                                "content": chunk,
+                                "type": "section_start",
+                                "section": section_num,
+                                "title": section_title,
+                                "pages": f"{page_start}-{page_end}",
                             }
                         )
 
-                    result, err = await generate_agent_section_index(
-                        section_idx,
-                        section,
-                        pdf_filename,
-                        board_id,
-                        window_id,
-                        content_manager.get_pdf_page_contents,
-                        llm_service.chat_completion,
-                        _load_human_subdivisions_anchor,
-                        max_attempts=AGENT_SECTION_MAX_ATTEMPTS,
-                        on_chunk=on_chunk,
-                    )
+                        try:
+                            result, err = await asyncio.wait_for(
+                                generate_agent_section_index(
+                                    section_idx,
+                                    section,
+                                    pdf_filename,
+                                    board_id,
+                                    window_id,
+                                    content_manager.get_pdf_page_contents,
+                                    llm_service.chat_completion,
+                                    _load_human_subdivisions_anchor,
+                                    max_attempts=AGENT_SECTION_MAX_ATTEMPTS,
+                                    on_chunk=None,
+                                    validation_profile=validation_profile,
+                                ),
+                                timeout=AGENT_SECTION_TIMEOUT_SEC,
+                            )
+                        except asyncio.TimeoutError:
+                            result, err = None, f"单节超时（>{AGENT_SECTION_TIMEOUT_SEC}s）"
 
                     if not result:
                         if err == "分段无页面内容":
@@ -3183,7 +3234,7 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                         return None
 
                     all_sections[section_idx] = result
-                    completed_count[0] += 1
+                    completed_count[0] = sum(1 for s in all_sections if s is not None)
                     await queue.put(
                         {
                             "type": "section_done",
@@ -3194,44 +3245,79 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                     )
                     return result
 
-                tasks = [
-                    asyncio.create_task(process_single_section(section_idx, section, event_queue))
-                    for section_idx, section in enumerate(outline)
-                ]
+                tasks = []
+                if target_indices:
+                    tasks = [
+                        asyncio.create_task(
+                            process_single_section(section_idx, outline[section_idx], event_queue)
+                        )
+                        for section_idx in target_indices
+                    ]
 
                 async def wait_for_completion():
-                    await asyncio.gather(*tasks, return_exceptions=True)
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
                     await event_queue.put({"type": "_all_done"})
 
                 completion_task = asyncio.create_task(wait_for_completion())
 
                 while True:
-                    event = await event_queue.get()
+                    try:
+                        event = await asyncio.wait_for(
+                            event_queue.get(), timeout=AGENT_SSE_HEARTBEAT_SEC
+                        )
+                    except asyncio.TimeoutError:
+                        yield f"data: {json.dumps({'type': 'heartbeat', 'completed': completed_count[0], 'total': total_sections}, ensure_ascii=False)}\n\n"
+                        continue
                     if event["type"] == "_all_done":
                         break
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
                 await completion_task
 
+                async def retry_single_section(section_idx):
+                    section = outline[section_idx]
+                    section_num = section.get("section_number", section_idx + 1)
+                    async with section_semaphore:
+                        try:
+                            result, err = await asyncio.wait_for(
+                                generate_agent_section_index(
+                                    section_idx,
+                                    section,
+                                    pdf_filename,
+                                    board_id,
+                                    window_id,
+                                    content_manager.get_pdf_page_contents,
+                                    llm_service.chat_completion,
+                                    _load_human_subdivisions_anchor,
+                                    max_attempts=AGENT_SECTION_MAX_ATTEMPTS,
+                                    on_chunk=None,
+                                    validation_profile=validation_profile,
+                                ),
+                                timeout=AGENT_SECTION_TIMEOUT_SEC,
+                            )
+                        except asyncio.TimeoutError:
+                            result, err = None, f"单节超时（>{AGENT_SECTION_TIMEOUT_SEC}s）"
+                    return section_idx, section_num, result, err
+
                 for retry_round in range(AGENT_COMPLETION_RETRY_ROUNDS):
-                    pending_indices = [i for i, s in enumerate(all_sections) if s is None]
+                    pending_indices = [
+                        i
+                        for i in target_set
+                        if i < len(all_sections) and all_sections[i] is None
+                    ]
                     if not pending_indices:
                         break
-                    yield f"data: {json.dumps({'type': 'status', 'message': f'补跑失败章节 {len(pending_indices)} 节（第 {retry_round + 1}/{AGENT_COMPLETION_RETRY_ROUNDS} 轮）...'}, ensure_ascii=False)}\n\n"
-                    for section_idx in pending_indices:
-                        section = outline[section_idx]
-                        section_num = section.get("section_number", section_idx + 1)
-                        result, err = await generate_agent_section_index(
-                            section_idx,
-                            section,
-                            pdf_filename,
-                            board_id,
-                            window_id,
-                            content_manager.get_pdf_page_contents,
-                            llm_service.chat_completion,
-                            _load_human_subdivisions_anchor,
-                            max_attempts=AGENT_SECTION_MAX_ATTEMPTS,
-                        )
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'补跑失败章节 {len(pending_indices)} 节（第 {retry_round + 1}/{AGENT_COMPLETION_RETRY_ROUNDS} 轮，并发 {AGENT_INDEX_CONCURRENCY}）...'}, ensure_ascii=False)}\n\n"
+                    retry_results = await asyncio.gather(
+                        *[retry_single_section(i) for i in pending_indices],
+                        return_exceptions=True,
+                    )
+                    for item in retry_results:
+                        if isinstance(item, Exception):
+                            yield f"data: {json.dumps({'type': 'warning', 'message': f'补跑异常: {item}'}, ensure_ascii=False)}\n\n"
+                            continue
+                        section_idx, section_num, result, err = item
                         if result:
                             all_sections[section_idx] = result
                             completed_count[0] = sum(1 for s in all_sections if s is not None)
@@ -3256,6 +3342,15 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                 index_complete = valid_count == total_sections
                 agent_file = _agent_index_file(board_id, window_id)
                 sections_ok = [s for s in all_sections if s]
+                preserved_created_at = datetime.now().isoformat()
+                if gen_mode == "retry_failed" and agent_file.exists():
+                    try:
+                        with open(agent_file, "r", encoding="utf-8") as f:
+                            preserved_created_at = json.load(f).get(
+                                "created_at", preserved_created_at
+                            )
+                    except Exception:
+                        pass
                 agent_complete_data = {
                     "schema_version": 1,
                     "kind": "agent_index",
@@ -3275,7 +3370,10 @@ async def subdivide_agent_index(board_id: str, window_id: str, request: Request)
                     "failed_sections": failed_sections,
                     "sections": all_sections,
                     "sections_ok": sections_ok,
-                    "created_at": datetime.now().isoformat(),
+                    "last_generation_mode": gen_mode,
+                    "last_validation_relaxed": relaxed_validation,
+                    "created_at": preserved_created_at,
+                    "updated_at": datetime.now().isoformat(),
                 }
 
                 with open(agent_file, "w", encoding="utf-8") as f:
@@ -5741,7 +5839,8 @@ async def get_api_config():
         # 不返回敏感的API密钥，只返回是否已配置
         safe_config = {
             "current_provider": config.get("current_provider", "openai"),
-            "providers": {}
+            "providers": {},
+            "task_models": config.get("task_models") or {},
         }
         
         for provider, provider_config in config.get("providers", {}).items():

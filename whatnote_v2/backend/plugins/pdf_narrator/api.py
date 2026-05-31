@@ -14,7 +14,17 @@ from pathlib import Path
 from datetime import datetime
 from logger import info, error
 from config import DATA_DIR
+from constants.qwen_models import DEFAULT_NARRATOR_SCRIPT_MODEL, QWEN_TEXT_MODEL_OPTIONS
 from .schemas import TTSRequest
+
+
+def _narrator_script_model() -> str:
+    if llm_service and getattr(llm_service, "api_config_manager", None):
+        return (
+            llm_service.api_config_manager.get_task_model("narrator_script")
+            or DEFAULT_NARRATOR_SCRIPT_MODEL
+        )
+    return DEFAULT_NARRATOR_SCRIPT_MODEL
 
 def _repair_json(s: str) -> str:
     """尝试修复常见的 LLM 生成的 JSON 错误"""
@@ -387,6 +397,51 @@ async def get_tts_status():
         return {"status": "offline", "error": str(e)}
 
 
+@router.get("/narrator/llm-model")
+async def get_narrator_llm_model():
+    """讲稿生成使用的通义千问模型（与聊天全局模型独立）"""
+    check_enabled()
+    model = _narrator_script_model()
+    return {
+        "model": model,
+        "default": DEFAULT_NARRATOR_SCRIPT_MODEL,
+        "options": QWEN_TEXT_MODEL_OPTIONS,
+        "current_provider": (
+            llm_service.api_config_manager.get_current_provider()
+            if llm_service and getattr(llm_service, "api_config_manager", None)
+            else "qwen"
+        ),
+        "fallback_global_model": (
+            (llm_service.api_config_manager.get_current_config() or {}).get("model")
+            if llm_service and getattr(llm_service, "api_config_manager", None)
+            else None
+        ),
+    }
+
+
+@router.post("/narrator/llm-model")
+async def set_narrator_llm_model(request: Request):
+    """设置讲稿生成专用模型"""
+    check_enabled()
+    data = await request.json()
+    model = (data.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="model 不能为空")
+    allowed = {o["value"] for o in QWEN_TEXT_MODEL_OPTIONS}
+    if model not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的模型: {model}。请在 options 列表中选择。",
+        )
+    if not llm_service or not getattr(llm_service, "api_config_manager", None):
+        raise HTTPException(status_code=500, detail="LLM 服务未初始化")
+    ok = llm_service.api_config_manager.set_task_model("narrator_script", model)
+    if not ok:
+        raise HTTPException(status_code=500, detail="保存失败")
+    info(f"[PdfNarrator] 讲稿模型已设为: {model}")
+    return {"success": True, "model": model}
+
+
 @router.get("/tts/models")
 async def get_tts_models():
     """获取可用的GPT和SoVITS模型列表"""
@@ -569,7 +624,11 @@ async def generate_narrator_script_section(
                 
                 accumulated_content = ""
                 
-                async for chunk in llm_service.chat_completion(messages, stream=True):
+                script_model = _narrator_script_model()
+                info(f"[PdfNarrator] 批量讲稿 LLM 模型: {script_model}")
+                async for chunk in llm_service.chat_completion(
+                    messages, stream=True, override_model=script_model
+                ):
                     if chunk:
                         if chunk.startswith('[Error]'):
                             yield f"data: {json.dumps({'type': 'error', 'error': chunk}, ensure_ascii=False)}\n\n"
@@ -765,7 +824,11 @@ async def generate_narrator_script_single(
         
         async def generate_stream():
             accumulated_content = ""
-            async for chunk in llm_service.chat_completion(messages, stream=True):
+            script_model = _narrator_script_model()
+            info(f"[PdfNarrator] 单页讲稿 LLM 模型: {script_model}")
+            async for chunk in llm_service.chat_completion(
+                messages, stream=True, override_model=script_model
+            ):
                 if chunk:
                     accumulated_content += chunk
                     yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"

@@ -830,6 +830,39 @@
   text-align: center;
 }
 
+/* PDF 注释栏 - 清晰旁注 Markdown 主题 */
+.annotation-md-sidenote ul > li::marker {
+  color: #3B82F6;
+}
+
+.annotation-md-sidenote ul ul > li::marker {
+  color: #94A3B8;
+}
+
+.annotation-md-sidenote ol > li::marker {
+  color: #6366F1;
+  font-weight: 600;
+}
+
+.annotation-md-sidenote table td:first-child,
+.annotation-md-sidenote table th:first-child {
+  font-weight: 600;
+  color: #1E3A5F;
+}
+
+.annotation-md-sidenote a:hover {
+  text-decoration: underline;
+}
+
+.annotation-md-sidenote table th:last-child,
+.annotation-md-sidenote table td:last-child {
+  border-right: none;
+}
+
+.annotation-md-sidenote table tr:last-child td {
+  border-bottom: none;
+}
+
 /* 简化实时编辑器 - 分屏设计 */
 .simple-live-editor {
   height: 100%;

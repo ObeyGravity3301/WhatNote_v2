@@ -2307,9 +2307,51 @@ const translations = {
   },
   "pdf_outline_agent_incomplete_block": {
     "default": {
-      "zh-CN": "此索引不完整，不可用于导出或交给 Agent。请重新点击「生成 Agent 索引」直至全部章节成功。",
-      "en-US": "This index is incomplete and not safe to export. Regenerate until all sections succeed.",
-      "ja-JP": "索引が不完全なためエクスポートできません。再生成してください。"
+      "zh-CN": "此索引不完整，不可用于导出或交给 Agent。可仅重试下方失败章节，或放宽校验后再试。",
+      "en-US": "This index is incomplete and not safe to export. Retry failed sections only, or use relaxed validation.",
+      "ja-JP": "索引が不完全なためエクスポートできません。失敗セクションのみ再試行するか、緩和モードを使ってください。"
+    }
+  },
+  "pdf_outline_agent_retry_failed": {
+    "default": {
+      "zh-CN": "正在重试失败的 Agent 索引章节...",
+      "en-US": "Retrying failed Agent index sections...",
+      "ja-JP": "失敗したAgent索引セクションを再試行中..."
+    }
+  },
+  "pdf_outline_agent_retry_relaxed": {
+    "default": {
+      "zh-CN": "正在以放宽条件重试失败的 Agent 索引章节...",
+      "en-US": "Retrying failed sections with relaxed validation...",
+      "ja-JP": "緩和モードで失敗セクションを再試行中..."
+    }
+  },
+  "pdf_outline_agent_retry_failed_btn": {
+    "default": {
+      "zh-CN": "仅重试失败章节",
+      "en-US": "Retry failed sections only",
+      "ja-JP": "失敗セクションのみ再試行"
+    }
+  },
+  "pdf_outline_agent_retry_relaxed_btn": {
+    "default": {
+      "zh-CN": "放宽条件重试失败章节",
+      "en-US": "Retry failed (relaxed rules)",
+      "ja-JP": "緩和条件で失敗セクションを再試行"
+    }
+  },
+  "pdf_outline_agent_regenerate_all_btn": {
+    "default": {
+      "zh-CN": "全部重新生成",
+      "en-US": "Regenerate all sections",
+      "ja-JP": "全セクションを再生成"
+    }
+  },
+  "pdf_outline_agent_modal_title_incomplete": {
+    "default": {
+      "zh-CN": "Agent 索引未完成",
+      "en-US": "Agent index incomplete",
+      "ja-JP": "Agent索引が未完成"
     }
   },
   "pdf_outline_agent_failed": {
@@ -2579,11 +2621,25 @@ const translations = {
       "ja-JP": "参考音声のテキスト内容を入力してください..."
     }
   },
+  "narrator_llm_model_label": {
+    "default": {
+      "zh-CN": "讲稿生成模型（通义千问）",
+      "en-US": "Script LLM (Qwen)",
+      "ja-JP": "講稿生成モデル（通義千問）"
+    }
+  },
+  "narrator_llm_model_hint": {
+    "default": {
+      "zh-CN": "仅用于讲解模式讲稿，与聊天窗口的全局模型无关。长 PDF 建议 qwen-long 或 qwen3.5-plus。",
+      "en-US": "For narrator scripts only, not the chat model. For long PDFs use qwen-long or qwen3.5-plus.",
+      "ja-JP": "ナレーター講稿専用。長文 PDF は qwen-long 推奨。"
+    }
+  },
   "narrator_model_label": {
     "default": {
-      "zh-CN": "模型 (Model)",
-      "en-US": "Model",
-      "ja-JP": "モデル"
+      "zh-CN": "TTS 模型 (GPT-SoVITS)",
+      "en-US": "TTS Model (GPT-SoVITS)",
+      "ja-JP": "TTS モデル"
     }
   },
   "narrator_output_lang": {

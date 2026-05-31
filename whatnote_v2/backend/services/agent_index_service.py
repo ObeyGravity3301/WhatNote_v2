@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -97,11 +98,16 @@ GENERIC_KEYWORDS = {
     "mineral nutrition",
 }
 
+# 提示词中展示的上限（引导模型写短）
 MAX_ONE_LINER_PROMPT_CHARS = 240
-MAX_ONE_LINER_CHARS = 260
+MAX_ONE_LINER_PROMPT_HARD_CHARS = 260
 MAX_ONE_LINER_SENTENCES = 2
-MAX_CORE_SCHEMA_CHARS = 80
-MAX_CORE_SCHEMA_WORDS = 18
+MAX_CORE_SCHEMA_PROMPT_CHARS = 80
+MAX_CORE_SCHEMA_PROMPT_WORDS = 18
+# 实际校验上限（宽松，减少重试；超长则截断而非拒收整节）
+MAX_ONE_LINER_VALIDATE_CHARS = 420
+MAX_CORE_SCHEMA_VALIDATE_CHARS = 130
+MAX_CORE_SCHEMA_VALIDATE_WORDS = 26
 MAX_SUB_ONE_LINER_CHARS = 180
 MAX_KEYWORDS = 10
 MAX_GENERIC_KEYWORDS = 2
@@ -119,6 +125,69 @@ _ELLIPSIS_RE = re.compile(
 
 AGENT_SECTION_MAX_ATTEMPTS = 4
 AGENT_COMPLETION_RETRY_ROUNDS = 2
+AGENT_INDEX_CONCURRENCY = 4
+AGENT_SECTION_TIMEOUT_SEC = 360
+MAX_SECTION_TEXT_CHARS = 20000
+
+
+@dataclass(frozen=True)
+class AgentValidationProfile:
+    """校验配置：strict 为默认；relaxed 放宽长度/省略号/关键词过滤。"""
+
+    relaxed: bool
+    max_one_liner_sentences: int
+    max_one_liner_validate_chars: int
+    max_core_schema_validate_chars: int
+    max_core_schema_validate_words: int
+    max_sub_one_liner_chars: int
+    check_ellipsis: bool
+    filter_banned_keywords: bool
+    max_generic_keywords: int
+    split_schema_clauses: bool
+
+
+STRICT_VALIDATION_PROFILE = AgentValidationProfile(
+    relaxed=False,
+    max_one_liner_sentences=MAX_ONE_LINER_SENTENCES,
+    max_one_liner_validate_chars=MAX_ONE_LINER_VALIDATE_CHARS,
+    max_core_schema_validate_chars=MAX_CORE_SCHEMA_VALIDATE_CHARS,
+    max_core_schema_validate_words=MAX_CORE_SCHEMA_VALIDATE_WORDS,
+    max_sub_one_liner_chars=MAX_SUB_ONE_LINER_CHARS,
+    check_ellipsis=True,
+    filter_banned_keywords=True,
+    max_generic_keywords=MAX_GENERIC_KEYWORDS,
+    split_schema_clauses=True,
+)
+
+RELAXED_VALIDATION_PROFILE = AgentValidationProfile(
+    relaxed=True,
+    max_one_liner_sentences=5,
+    max_one_liner_validate_chars=650,
+    max_core_schema_validate_chars=220,
+    max_core_schema_validate_words=45,
+    max_sub_one_liner_chars=280,
+    check_ellipsis=False,
+    filter_banned_keywords=False,
+    max_generic_keywords=6,
+    split_schema_clauses=False,
+)
+
+
+def get_validation_profile(relaxed: bool = False) -> AgentValidationProfile:
+    return RELAXED_VALIDATION_PROFILE if relaxed else STRICT_VALIDATION_PROFILE
+
+
+def _truncate_section_text_for_prompt(text: str) -> str:
+    """限制送入 LLM 的正文长度，避免超长 prompt 与单节耗时失控。"""
+    if len(text) <= MAX_SECTION_TEXT_CHARS:
+        return text
+    head = (MAX_SECTION_TEXT_CHARS * 2) // 3
+    tail = MAX_SECTION_TEXT_CHARS - head - 120
+    return (
+        text[:head]
+        + "\n\n[TRUNCATED: middle pages omitted for indexing token limit]\n\n"
+        + text[-tail:]
+    )
 
 
 def _extract_json_object(raw: str) -> str:
@@ -163,6 +232,7 @@ def build_agent_subdivision_prompt(
     section_full_text: str,
     human_anchor: str = "",
     validation_error: str = "",
+    relaxed: bool = False,
 ) -> str:
     anchor_block = f"\n{human_anchor}\n" if human_anchor else ""
     retry_block = (
@@ -170,8 +240,14 @@ def build_agent_subdivision_prompt(
         if validation_error
         else ""
     )
+    relaxed_note = (
+        "\n**Note**: Relaxed validation mode — prioritize complete JSON; minor length/ellipsis issues are auto-fixed.\n"
+        if relaxed
+        else ""
+    )
 
     return f"""You are building a machine-readable index for another AI agent (not for human reading).
+{relaxed_note}
 
 **Document**: {pdf_filename}
 **Section**: {section_title}
@@ -184,13 +260,13 @@ def build_agent_subdivision_prompt(
 
 1. **one_liner** (STRICT — will be rejected if violated):
    - At most {MAX_ONE_LINER_SENTENCES} English sentences
-   - At most {MAX_ONE_LINER_PROMPT_CHARS} characters (hard cap {MAX_ONE_LINER_CHARS})
+   - At most {MAX_ONE_LINER_PROMPT_CHARS} characters (hard cap {MAX_ONE_LINER_PROMPT_HARD_CHARS})
    - State what this section covers + the problem/conclusion in compact form
    - Keep original terms/abbreviations (e.g. "ACC synthase (ACS)")
    - Do NOT write a mini-abstract; stop early rather than exceeding the limit
 
 2. **core_schema**: object with EXACTLY these 6 keys. Each value is a SLOT FILL (not prose):
-   - Max {MAX_CORE_SCHEMA_WORDS} words AND max {MAX_CORE_SCHEMA_CHARS} characters per value
+   - Max {MAX_CORE_SCHEMA_PROMPT_WORDS} words AND max {MAX_CORE_SCHEMA_PROMPT_CHARS} characters per value
    - Use noun phrases, symbols, or arrow relations only (e.g. "NO₃⁻ → NR → NH₄⁺", "NRT1.1, GS1, rhizobia")
    - NO explanatory clauses ("which...", "that...", "because...", lists of 8+ items)
    - NEVER use "...", "…", "etc.", "and so on", "and others" — if too many items, keep 2–4 names only or use UNKNOWN
@@ -238,7 +314,11 @@ def _has_forbidden_ellipsis(text: str) -> bool:
     return bool(_ELLIPSIS_RE.search(text))
 
 
-def _find_ellipsis_in_payload(payload: Dict[str, Any]) -> Optional[str]:
+def _find_ellipsis_in_payload(
+    payload: Dict[str, Any], profile: AgentValidationProfile = STRICT_VALIDATION_PROFILE
+) -> Optional[str]:
+    if not profile.check_ellipsis:
+        return None
     one_liner = str(payload.get("one_liner", ""))
     if _has_forbidden_ellipsis(one_liner):
         return "one_liner 不得包含 ... / etc. / and so on"
@@ -267,34 +347,37 @@ def _find_ellipsis_in_payload(payload: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _compress_schema_value(val: str) -> Tuple[str, Optional[str]]:
+def _compress_schema_value(
+    val: str, profile: AgentValidationProfile = STRICT_VALIDATION_PROFILE
+) -> Tuple[str, Optional[str]]:
     val = re.sub(r"\s+", " ", (val or "").strip())
     if not val:
         return "UNKNOWN", None
-    if _has_forbidden_ellipsis(val):
+    if profile.check_ellipsis and _has_forbidden_ellipsis(val):
         return (
             val,
             "不得使用 .../etc./and so on；只写 2–4 个专名或用 UNKNOWN",
         )
-    parts = _SCHEMA_CLAUSE_SPLIT.split(val, maxsplit=1)
-    val = parts[0].strip() if parts else val
+    if profile.split_schema_clauses:
+        parts = _SCHEMA_CLAUSE_SPLIT.split(val, maxsplit=1)
+        val = parts[0].strip() if parts else val
     words = val.split()
-    if len(words) > MAX_CORE_SCHEMA_WORDS:
-        val = " ".join(words[:MAX_CORE_SCHEMA_WORDS])
-    if len(val) > MAX_CORE_SCHEMA_CHARS:
-        return (
-            val,
-            f"超过 {MAX_CORE_SCHEMA_CHARS} 字符；缩短为更少专名/箭头短语，禁止 ...",
-        )
+    if len(words) > profile.max_core_schema_validate_words:
+        val = " ".join(words[: profile.max_core_schema_validate_words])
+    if len(val) > profile.max_core_schema_validate_chars:
+        cut = val[: profile.max_core_schema_validate_chars]
+        val = cut.rsplit(" ", 1)[0] if " " in cut else cut
     return val or "UNKNOWN", None
 
 
-def _normalize_core_schema(raw: Any) -> Tuple[Dict[str, str], Optional[str]]:
+def _normalize_core_schema(
+    raw: Any, profile: AgentValidationProfile = STRICT_VALIDATION_PROFILE
+) -> Tuple[Dict[str, str], Optional[str]]:
     result: Dict[str, str] = {}
     if isinstance(raw, dict):
         for key in CORE_SCHEMA_KEYS:
             val = str(raw.get(key, raw.get(key.replace("/", " "), "UNKNOWN"))).strip()
-            compressed, err = _compress_schema_value(val)
+            compressed, err = _compress_schema_value(val, profile)
             if err:
                 return result, f"core_schema[{key}]: {err}"
             result[key] = compressed
@@ -307,7 +390,7 @@ def _normalize_core_schema(raw: Any) -> Tuple[Dict[str, str], Optional[str]]:
                     val = raw[i].get("value") or raw[i].get(key) or "UNKNOWN"
                 else:
                     val = str(raw[i])
-                compressed, err = _compress_schema_value(str(val))
+                compressed, err = _compress_schema_value(str(val), profile)
             else:
                 compressed, err = "UNKNOWN", None
             if err:
@@ -341,7 +424,9 @@ def _is_specific_keyword(item: str) -> bool:
     return False
 
 
-def _normalize_keywords(raw: Any) -> List[str]:
+def _normalize_keywords(
+    raw: Any, profile: AgentValidationProfile = STRICT_VALIDATION_PROFILE
+) -> List[str]:
     if isinstance(raw, str):
         items = [k.strip() for k in re.split(r"[,，;；\n]", raw) if k.strip()]
     elif isinstance(raw, list):
@@ -353,13 +438,13 @@ def _normalize_keywords(raw: Any) -> List[str]:
     generic: List[str] = []
     for item in items:
         low = item.lower()
-        if low in BANNED_KEYWORDS:
+        if profile.filter_banned_keywords and low in BANNED_KEYWORDS:
             continue
-        if _has_forbidden_ellipsis(item):
+        if profile.check_ellipsis and _has_forbidden_ellipsis(item):
             continue
         if len(item) > 80:
             item = item[:80].rsplit(" ", 1)[0] if " " in item[:80] else item[:80]
-        if _is_specific_keyword(item):
+        if not profile.filter_banned_keywords or _is_specific_keyword(item):
             if item not in specific:
                 specific.append(item)
         else:
@@ -369,7 +454,7 @@ def _normalize_keywords(raw: Any) -> List[str]:
     cleaned = specific[:MAX_KEYWORDS]
     remaining = MAX_KEYWORDS - len(cleaned)
     if remaining > 0:
-        for g in generic[: min(MAX_GENERIC_KEYWORDS, remaining)]:
+        for g in generic[: min(profile.max_generic_keywords, remaining)]:
             if g not in cleaned:
                 cleaned.append(g)
     return cleaned
@@ -401,7 +486,12 @@ def _normalize_exam_hooks(raw: Any) -> List[str]:
     return hooks[:MAX_EXAM_HOOKS]
 
 
-def _normalize_subdivisions(raw: Any, page_start: int, page_end: int) -> List[Dict[str, Any]]:
+def _normalize_subdivisions(
+    raw: Any,
+    page_start: int,
+    page_end: int,
+    profile: AgentValidationProfile = STRICT_VALIDATION_PROFILE,
+) -> List[Dict[str, Any]]:
     if not isinstance(raw, list):
         return []
     result = []
@@ -413,8 +503,8 @@ def _normalize_subdivisions(raw: Any, page_start: int, page_end: int) -> List[Di
         ps = max(page_start, min(ps, page_end))
         pe = max(ps, min(pe, page_end))
         one_liner = str(sub.get("one_liner", "")).strip()
-        if len(one_liner) > MAX_SUB_ONE_LINER_CHARS:
-            one_liner = one_liner[:MAX_SUB_ONE_LINER_CHARS]
+        if len(one_liner) > profile.max_sub_one_liner_chars:
+            one_liner = one_liner[: profile.max_sub_one_liner_chars]
         result.append(
             {
                 "subdivision_number": sub.get("subdivision_number", i),
@@ -431,6 +521,7 @@ def validate_and_normalize_agent_payload(
     data: Dict[str, Any],
     page_start: int,
     page_end: int,
+    profile: AgentValidationProfile = STRICT_VALIDATION_PROFILE,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """校验并归一化；超长字段自动截断/补齐，避免因格式细节丢弃整节。"""
     if not isinstance(data, dict):
@@ -441,24 +532,33 @@ def validate_and_normalize_agent_payload(
     one_liner = str(data.get("one_liner", "")).strip()
     if not one_liner:
         return False, "one_liner 不能为空", None
-    if _count_sentences(one_liner) > MAX_ONE_LINER_SENTENCES:
-        return (
-            False,
-            f"one_liner 超过 {MAX_ONE_LINER_SENTENCES} 句，请压缩为最多 2 句、≤{MAX_ONE_LINER_PROMPT_CHARS} 字符",
-            None,
+    if _count_sentences(one_liner) > profile.max_one_liner_sentences:
+        if profile.relaxed:
+            warnings.append(
+                f"one_liner 句数偏多（>{profile.max_one_liner_sentences}），已保留"
+            )
+        else:
+            return (
+                False,
+                f"one_liner 超过 {profile.max_one_liner_sentences} 句，请压缩为最多 2 句、≤{MAX_ONE_LINER_PROMPT_CHARS} 字符",
+                None,
+            )
+    if len(one_liner) > profile.max_one_liner_validate_chars:
+        cut = one_liner[: profile.max_one_liner_validate_chars]
+        one_liner = cut.rsplit(" ", 1)[0] if " " in cut else cut
+        warnings.append(
+            f"one_liner 超过校验上限 {profile.max_one_liner_validate_chars}，已截断至 {len(one_liner)} 字符"
         )
-    if len(one_liner) > MAX_ONE_LINER_CHARS:
-        return (
-            False,
-            f"one_liner 长度 {len(one_liner)} 超过上限 {MAX_ONE_LINER_CHARS}，请重写为 ≤{MAX_ONE_LINER_PROMPT_CHARS} 字符、最多 2 句",
-            None,
+    elif len(one_liner) > MAX_ONE_LINER_PROMPT_HARD_CHARS:
+        warnings.append(
+            f"one_liner 超过提示上限 {MAX_ONE_LINER_PROMPT_HARD_CHARS}（校验仍通过）"
         )
 
-    ellipsis_err = _find_ellipsis_in_payload(data)
+    ellipsis_err = _find_ellipsis_in_payload(data, profile)
     if ellipsis_err:
         return False, ellipsis_err, None
 
-    core_schema, schema_err = _normalize_core_schema(data.get("core_schema"))
+    core_schema, schema_err = _normalize_core_schema(data.get("core_schema"), profile)
     if schema_err:
         return False, schema_err, None
     for key in CORE_SCHEMA_KEYS:
@@ -466,7 +566,7 @@ def validate_and_normalize_agent_payload(
             core_schema[key] = "UNKNOWN"
             warnings.append(f"core_schema missing {key}, filled UNKNOWN")
 
-    keywords = _normalize_keywords(data.get("keywords"))
+    keywords = _normalize_keywords(data.get("keywords"), profile)
     if len(keywords) < 1:
         title_fallback = str(data.get("title") or data.get("section_title") or "").strip()
         if title_fallback:
@@ -479,7 +579,9 @@ def validate_and_normalize_agent_payload(
     if len(exam_hooks) < MIN_EXAM_HOOKS:
         warnings.append("exam_hooks padded to minimum")
 
-    subdivisions = _normalize_subdivisions(data.get("subdivisions"), page_start, page_end)
+    subdivisions = _normalize_subdivisions(
+        data.get("subdivisions"), page_start, page_end, profile
+    )
 
     normalized = {
         "one_liner": one_liner,
@@ -488,7 +590,9 @@ def validate_and_normalize_agent_payload(
         "exam_hooks": exam_hooks,
         "subdivisions": subdivisions,
     }
-    ellipsis_err = _find_ellipsis_in_payload(normalized)
+    if profile.relaxed:
+        normalized["_validation_mode"] = "relaxed"
+    ellipsis_err = _find_ellipsis_in_payload(normalized, profile)
     if ellipsis_err:
         return False, ellipsis_err, None
     if warnings:
@@ -522,6 +626,7 @@ def parse_and_validate_agent_response(
     accumulated_content: str,
     page_start: int,
     page_end: int,
+    profile: AgentValidationProfile = STRICT_VALIDATION_PROFILE,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     try:
         content = _extract_json_object(accumulated_content)
@@ -529,7 +634,9 @@ def parse_and_validate_agent_response(
             payload = json.loads(content)
         except json.JSONDecodeError:
             payload = json.loads(_repair_json(content))
-        return validate_and_normalize_agent_payload(payload, page_start, page_end)
+        return validate_and_normalize_agent_payload(
+            payload, page_start, page_end, profile
+        )
     except json.JSONDecodeError as exc:
         return False, f"JSON 解析失败: {exc}", None
     except Exception as exc:
@@ -547,6 +654,7 @@ async def generate_agent_section_index(
     get_human_anchor,
     max_attempts: int = AGENT_SECTION_MAX_ATTEMPTS,
     on_chunk=None,
+    validation_profile: AgentValidationProfile = STRICT_VALIDATION_PROFILE,
 ) -> Tuple[Optional[Dict[str, Any]], str]:
     """生成单节 Agent 索引。返回 (result, error_message)。"""
     section_num = section.get("section_number", section_idx + 1)
@@ -563,8 +671,10 @@ async def generate_agent_section_index(
     if not section_pages_content:
         return None, "分段无页面内容"
 
-    section_full_text = "\n\n".join(
-        [f"=== Page {p['page']} ===\n{p['content']}" for p in section_pages_content]
+    section_full_text = _truncate_section_text_for_prompt(
+        "\n\n".join(
+            [f"=== Page {p['page']} ===\n{p['content']}" for p in section_pages_content]
+        )
     )
     human_anchor = get_human_anchor(board_id, window_id, section_idx) or ""
 
@@ -581,6 +691,7 @@ async def generate_agent_section_index(
             section_full_text,
             human_anchor,
             validation_error,
+            relaxed=validation_profile.relaxed,
         )
         messages = [{"role": "user", "content": prompt}]
         accumulated_content = ""
@@ -596,7 +707,7 @@ async def generate_agent_section_index(
                     await maybe
 
         ok, err, normalized = parse_and_validate_agent_response(
-            accumulated_content, page_start, page_end
+            accumulated_content, page_start, page_end, validation_profile
         )
         if ok:
             break

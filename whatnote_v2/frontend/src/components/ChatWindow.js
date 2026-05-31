@@ -1408,11 +1408,16 @@ function ChatWindow({
         { value: 'gemini-pro-vision', label: 'Gemini Pro Vision (多模态)' }
       ],
       'qwen': [
-        { value: 'qwen3-vl-plus', label: '通义千问3-VL-Plus (多模态推荐)' },
-        { value: 'qwen3-vl-flash', label: '通义千问3-VL-Flash (多模态快速)' },
-        { value: 'qwen-plus', label: '通义千问-Plus (纯文本)' },
-        { value: 'qwen-turbo', label: '通义千问-Turbo (纯文本-快速)' },
-        { value: 'qwen-long', label: '通义千问-Long (长文本)' }
+        { value: 'qwen3.7-max', label: 'Qwen3.7-Max' },
+        { value: 'qwen3.6-plus', label: 'Qwen3.6-Plus' },
+        { value: 'qwen3.5-plus', label: 'Qwen3.5-Plus' },
+        { value: 'qwen3.5-flash', label: 'Qwen3.5-Flash' },
+        { value: 'qwen3-vl-plus', label: 'Qwen3-VL-Plus (多模态)' },
+        { value: 'qwen3-vl-flash', label: 'Qwen3-VL-Flash (多模态)' },
+        { value: 'qwen-plus', label: 'Qwen-Plus' },
+        { value: 'qwen-flash', label: 'Qwen-Flash' },
+        { value: 'qwen-turbo', label: 'Qwen-Turbo' },
+        { value: 'qwen-long', label: 'Qwen-Long (长文本)' }
       ]
     };
     return options[provider] || [];

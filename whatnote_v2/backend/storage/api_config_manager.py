@@ -1,8 +1,10 @@
 import json
 import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
+
+from constants.qwen_models import DEFAULT_NARRATOR_SCRIPT_MODEL
 
 class APIConfigManager:
     """全局API配置管理器"""
@@ -41,17 +43,29 @@ class APIConfigManager:
                     }
                 },
                 "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat()
+                "updated_at": datetime.now().isoformat(),
+                "task_models": {
+                    "narrator_script": DEFAULT_NARRATOR_SCRIPT_MODEL,
+                },
             }
             
             with open(self.config_file, "w", encoding="utf-8") as f:
                 json.dump(default_config, f, ensure_ascii=False, indent=2)
     
+    def _ensure_task_models(self, config: Dict) -> Dict:
+        if "task_models" not in config or not isinstance(config.get("task_models"), dict):
+            config["task_models"] = {}
+        task_models = config["task_models"]
+        if not task_models.get("narrator_script"):
+            task_models["narrator_script"] = DEFAULT_NARRATOR_SCRIPT_MODEL
+        return config
+
     def get_config(self) -> Dict:
         """获取完整配置"""
         try:
             with open(self.config_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+                config = json.load(f)
+                return self._ensure_task_models(config)
         except Exception as e:
             print(f"读取API配置失败: {e}")
             return self._get_default_config()
@@ -65,7 +79,10 @@ class APIConfigManager:
                 "anthropic": {"apiKey": "", "model": "claude-3-5-sonnet-20241022", "baseUrl": "https://api.anthropic.com"},
                 "gemini": {"apiKey": "", "model": "gemini-1.5-pro", "baseUrl": "https://generativelanguage.googleapis.com/v1"},
                 "qwen": {"apiKey": "", "model": "qwen-plus", "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"}
-            }
+            },
+            "task_models": {
+                "narrator_script": DEFAULT_NARRATOR_SCRIPT_MODEL,
+            },
         }
     
     def update_config(self, provider: str, config: Dict) -> bool:
@@ -155,3 +172,29 @@ class APIConfigManager:
                 configured.append(provider)
         
         return configured
+
+    def get_task_model(self, task: str, fallback_to_current: bool = True) -> Optional[str]:
+        """获取任务专用模型名；未配置时可回退到当前服务商的 model。"""
+        config = self.get_config()
+        task_models = config.get("task_models") or {}
+        model = (task_models.get(task) or "").strip()
+        if model:
+            return model
+        if fallback_to_current:
+            current = self.get_current_config() or {}
+            return (current.get("model") or "").strip() or None
+        return None
+
+    def set_task_model(self, task: str, model: str) -> bool:
+        try:
+            full_config = self.get_config()
+            if "task_models" not in full_config:
+                full_config["task_models"] = {}
+            full_config["task_models"][task] = (model or "").strip()
+            full_config["updated_at"] = datetime.now().isoformat()
+            with open(self.config_file, "w", encoding="utf-8") as f:
+                json.dump(full_config, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"设置任务模型失败: {e}")
+            return False

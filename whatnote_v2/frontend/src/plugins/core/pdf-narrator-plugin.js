@@ -84,6 +84,8 @@ const NarratorPluginComponent = (props) => {
   const [refFilename, setRefFilename] = useState('');
   const [audioTimestamp, setAudioTimestamp] = useState(Date.now());
   const [targetLang, setTargetLang] = useState('zh');
+  const [narratorLlmModel, setNarratorLlmModel] = useState('qwen-long');
+  const [narratorLlmOptions, setNarratorLlmOptions] = useState([]);
   const SUBTITLE_LEAD_SECONDS = 0.2;
   
   // 批量处理状态
@@ -485,6 +487,14 @@ const NarratorPluginComponent = (props) => {
             }
         })
         .catch(e => console.warn('Failed to sync ref audio info', e));
+
+      fetch('http://localhost:8081/api/narrator/llm-model')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.model) setNarratorLlmModel(data.model);
+          if (Array.isArray(data?.options)) setNarratorLlmOptions(data.options);
+        })
+        .catch((e) => console.warn('Failed to load narrator LLM model', e));
     }
   }, [boardId, windowId]);
 
@@ -1318,6 +1328,22 @@ const NarratorPluginComponent = (props) => {
 
   const handleSaveSettings = async () => {
       saveSettingsToLocal();
+
+      if (narratorLlmModel) {
+        try {
+          const res = await fetch('http://localhost:8081/api/narrator/llm-model', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: narratorLlmModel }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            console.error('Failed to save narrator LLM model', err.detail || res.statusText);
+          }
+        } catch (e) {
+          console.error('Failed to save narrator LLM model', e);
+        }
+      }
       
       // 保存 TTS 配置到后端
       try {
@@ -1490,6 +1516,28 @@ const NarratorPluginComponent = (props) => {
                        <button onClick={() => setViewMode('player')}>{t('narrator_back')}</button>
                    </div>
                    
+                   <div style={{ border: '1px dotted #888', padding: '4px', marginBottom: '8px', backgroundColor: '#fff' }}>
+                     <div style={{ fontWeight: 'bold', fontSize: '11px', color: '#000080', marginBottom: '4px' }}>
+                       {t('narrator_llm_model_label')}
+                     </div>
+                     <select
+                       value={narratorLlmModel}
+                       onChange={(e) => setNarratorLlmModel(e.target.value)}
+                       style={{ width: '100%', fontSize: '11px' }}
+                     >
+                       {(narratorLlmOptions.length ? narratorLlmOptions : [
+                         { value: 'qwen-long', label: 'qwen-long' },
+                         { value: 'qwen-plus', label: 'qwen-plus' },
+                         { value: 'qwen3.5-plus', label: 'qwen3.5-plus' },
+                       ]).map((opt) => (
+                         <option key={opt.value} value={opt.value}>{opt.label}</option>
+                       ))}
+                     </select>
+                     <div style={{ fontSize: '10px', color: '#666', marginTop: '4px', lineHeight: 1.4 }}>
+                       {t('narrator_llm_model_hint')}
+                     </div>
+                   </div>
+
                    <div style={{fontWeight: 'bold', color: '#444', marginBottom:'2px'}}>{t('narrator_prompt_label')}</div>
                        <textarea 
                            value={customPrompt}

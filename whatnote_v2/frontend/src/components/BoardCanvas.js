@@ -961,17 +961,33 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
     URL.revokeObjectURL(url);
   }, [boardId, windowId]);
 
-  const handleGenerateAgentIndex = useCallback(async () => {
+  const runAgentIndexGeneration = useCallback(async ({ mode = 'full', relaxed = false } = {}) => {
     if (!boardId || !windowId || !batchOutline || isGeneratingAgentIndex) return;
 
+    const total = batchOutline.outline?.length || 0;
+    const existingCompleted = agentIndexData?.completed_sections || 0;
+
     setIsGeneratingAgentIndex(true);
-    setAgentIndexProgress({ completed: 0, total: batchOutline.outline?.length || 0 });
-    setBatchOutlineStatus(t('pdf_outline_agent_generating'));
+    setAgentIndexProgress({
+      completed: mode === 'retry_failed' ? existingCompleted : 0,
+      total,
+    });
+    setShowAgentIndexModal(false);
+    if (mode === 'retry_failed') {
+      const label = relaxed ? t('pdf_outline_agent_retry_relaxed') : t('pdf_outline_agent_retry_failed');
+      setBatchOutlineStatus(label);
+    } else {
+      setBatchOutlineStatus(t('pdf_outline_agent_generating'));
+    }
 
     try {
       const response = await fetch(
         `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/subdivide-agent`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode, relaxed }),
+        }
       );
       if (!response.ok) {
         throw new Error('Agent 索引生成请求失败');
@@ -994,6 +1010,11 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
 
           if (data.type === 'status') {
             setBatchOutlineStatus(data.message);
+          } else if (data.type === 'heartbeat') {
+            setAgentIndexProgress({ completed: data.completed, total: data.total });
+            setBatchOutlineStatus(
+              t('pdf_outline_agent_progress').replace('{completed}', data.completed).replace('{total}', data.total)
+            );
           } else if (data.type === 'section_done') {
             setAgentIndexProgress({ completed: data.completed, total: data.total });
             setBatchOutlineStatus(
@@ -1037,7 +1058,22 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
     } finally {
       setIsGeneratingAgentIndex(false);
     }
-  }, [boardId, windowId, batchOutline, isGeneratingAgentIndex, t]);
+  }, [boardId, windowId, batchOutline, isGeneratingAgentIndex, agentIndexData, t]);
+
+  const handleGenerateAgentIndex = useCallback(
+    () => runAgentIndexGeneration({ mode: 'full', relaxed: false }),
+    [runAgentIndexGeneration]
+  );
+
+  const handleRetryFailedAgentIndex = useCallback(
+    () => runAgentIndexGeneration({ mode: 'retry_failed', relaxed: false }),
+    [runAgentIndexGeneration]
+  );
+
+  const handleRetryFailedAgentIndexRelaxed = useCallback(
+    () => runAgentIndexGeneration({ mode: 'retry_failed', relaxed: true }),
+    [runAgentIndexGeneration]
+  );
 
   const isAgentIndexComplete = useCallback((data) => {
     if (!data) return false;
@@ -6494,7 +6530,9 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                     fontSize: '11px'
                   }}>
                     <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-                      {t('pdf_outline_agent_modal_title')}
+                      {isAgentIndexComplete(agentIndexData)
+                        ? t('pdf_outline_agent_modal_title')
+                        : t('pdf_outline_agent_modal_title_incomplete')}
                     </div>
                     <div style={{ marginBottom: '12px', lineHeight: 1.5 }}>
                       {t('pdf_outline_agent_modal_summary')
@@ -6520,6 +6558,46 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                             ))}
                           </ul>
                         )}
+                      </div>
+                    )}
+                    {!isAgentIndexComplete(agentIndexData) && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+                        <button
+                          type="button"
+                          onClick={handleRetryFailedAgentIndex}
+                          disabled={isGeneratingAgentIndex || !(agentIndexData.failed_sections || []).length}
+                          style={{
+                            padding: '6px',
+                            cursor: isGeneratingAgentIndex ? 'wait' : 'pointer',
+                            opacity: isGeneratingAgentIndex ? 0.6 : 1,
+                          }}
+                        >
+                          {t('pdf_outline_agent_retry_failed_btn')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRetryFailedAgentIndexRelaxed}
+                          disabled={isGeneratingAgentIndex || !(agentIndexData.failed_sections || []).length}
+                          style={{
+                            padding: '6px',
+                            cursor: isGeneratingAgentIndex ? 'wait' : 'pointer',
+                            opacity: isGeneratingAgentIndex ? 0.6 : 1,
+                          }}
+                        >
+                          {t('pdf_outline_agent_retry_relaxed_btn')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleGenerateAgentIndex}
+                          disabled={isGeneratingAgentIndex}
+                          style={{
+                            padding: '6px',
+                            cursor: isGeneratingAgentIndex ? 'wait' : 'pointer',
+                            opacity: isGeneratingAgentIndex ? 0.6 : 1,
+                          }}
+                        >
+                          {t('pdf_outline_agent_regenerate_all_btn')}
+                        </button>
                       </div>
                     )}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
