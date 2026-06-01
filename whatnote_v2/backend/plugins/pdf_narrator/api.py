@@ -1147,6 +1147,184 @@ def _resolve_step_section(board_id: str, window_id: str, section_idx: int, body_
     return sec
 
 
+# NOTE: 路由顺序很重要。FastAPI 按声明顺序匹配，所以静态段（/batch）和无尾段
+# （GET /step-audio 列表）必须先于带变量的 /step-audio/{section_idx:int}，否则
+# 像 POST /step-audio/batch 这种请求会被错误地匹配为 section_idx="batch"，int
+# 转换失败导致 422 Unprocessable Content。
+#
+# 当前顺序：
+#   POST   /step-audio/batch    (静态)
+#   GET    /step-audio          (无尾段)
+#   POST   /step-audio/{idx}    (变量)
+#   GET    /step-audio/{num}    (变量)
+#   DELETE /step-audio/{num}    (变量)
+#   GET    /step-subtitles/{num} (前缀不同，无冲突)
+
+
+@router.post("/boards/{board_id}/windows/{window_id}/narrator/step-audio/batch")
+async def batch_generate_step_audio(board_id: str, window_id: str, request: Request):
+    """SSE 流式批量合成 step audio。
+
+    Body（可选）:
+        {
+            "mode": "all" | "missing" | "indices",
+            "indices": [0,2,5],           # 0-based，仅当 mode=indices
+            "add_silence": true,
+            "concurrency": 1               # GPT-SoVITS 通常不能并发，默认串行
+        }
+    """
+    check_enabled()
+    try:
+        raw = await request.body()
+        body = json.loads(raw) if raw else {}
+    except Exception:
+        body = {}
+    mode = (body or {}).get("mode", "all")
+    requested_indices = (body or {}).get("indices") or []
+    add_silence = bool((body or {}).get("add_silence", True))
+    # 串行：GPT-SoVITS 单进程实例不能并发推理，默认 1。
+    concurrency = max(1, min(4, int((body or {}).get("concurrency", 1) or 1)))
+
+    data = _load_step_script_data(board_id, window_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="未找到 step_script 数据，请先生成 Step Script")
+    sections = data.get("sections") or []
+    if not sections:
+        raise HTTPException(status_code=400, detail="step_script 没有任何 section")
+
+    # 计算 target indices
+    existing_nums = set(content_manager.list_step_audio_sections(board_id, window_id))
+    target_indices: List[int] = []
+    if mode == "indices":
+        target_indices = [i for i in requested_indices if 0 <= i < len(sections)]
+    elif mode == "missing":
+        for i, sec in enumerate(sections):
+            if not sec:
+                continue
+            section_num = int((sec or {}).get("section_number") or (i + 1))
+            if section_num not in existing_nums:
+                target_indices.append(i)
+    else:
+        target_indices = list(range(len(sections)))
+
+    if not target_indices:
+        async def empty_stream():
+            yield f"data: {json.dumps({'type': 'complete', 'message': '没有需要合成的章节', 'ok': 0, 'total': 0, 'failed': []})}\n\n"
+        return StreamingResponse(empty_stream(), media_type="text/event-stream")
+
+    import asyncio as _asyncio
+
+    async def stream():
+        yield f"data: {json.dumps({'type': 'start', 'total': len(target_indices), 'mode': mode, 'concurrency': concurrency})}\n\n"
+
+        sem = _asyncio.Semaphore(concurrency)
+        done_count = 0
+        results: Dict[int, Dict] = {}
+
+        out_queue: _asyncio.Queue = _asyncio.Queue()
+
+        async def worker(idx: int):
+            async with sem:
+                sec = sections[idx] or {}
+                section_num = int(sec.get("section_number") or (idx + 1))
+                title = sec.get("section_title") or f"Section {section_num}"
+                try:
+                    await out_queue.put({"type": "section_start", "section_num": section_num, "title": title, "idx": idx})
+                    if not sec.get("blocks"):
+                        raise RuntimeError("section 没有 blocks")
+                    result = await synthesize_step_section(
+                        section=sec,
+                        tts_service=tts_service,
+                        temp_dir=DATA_DIR / "temp" / "audio",
+                        add_silence_after_pause_cue=add_silence,
+                    )
+                    saved_path = content_manager.save_step_audio(
+                        board_id, window_id, section_num,
+                        result["audio_bytes"], extension=result["extension"],
+                    )
+                    if not saved_path:
+                        raise RuntimeError("保存音频失败")
+                    content_manager.save_step_subtitles(board_id, window_id, section_num, result["subtitles"])
+                    await out_queue.put({
+                        "type": "section_done",
+                        "section_num": section_num,
+                        "title": title,
+                        "idx": idx,
+                        "duration_seconds": result["duration_seconds"],
+                        "sentence_count": result["sentence_count"],
+                        "silence_count": result["silence_count"],
+                        "warnings": result.get("warnings") or [],
+                    })
+                    results[idx] = {"ok": True, "section_num": section_num}
+                except Exception as e:
+                    error(f"[step_audio:batch] §{section_num} 失败: {e}")
+                    await out_queue.put({
+                        "type": "section_failed",
+                        "section_num": section_num,
+                        "title": title,
+                        "idx": idx,
+                        "error": str(e),
+                    })
+                    results[idx] = {"ok": False, "section_num": section_num, "error": str(e)}
+
+        workers = [_asyncio.create_task(worker(idx)) for idx in target_indices]
+        gathered = _asyncio.gather(*workers)
+
+        async def heartbeat_loop():
+            while not gathered.done():
+                await _asyncio.sleep(15)
+                if gathered.done():
+                    break
+                await out_queue.put({"type": "heartbeat", "done": done_count, "total": len(target_indices)})
+
+        hb = _asyncio.create_task(heartbeat_loop())
+
+        try:
+            while True:
+                try:
+                    msg = await _asyncio.wait_for(out_queue.get(), timeout=2.0)
+                except _asyncio.TimeoutError:
+                    if gathered.done() and out_queue.empty():
+                        break
+                    continue
+                if msg.get("type") in ("section_done", "section_failed"):
+                    done_count += 1
+                    msg["done"] = done_count
+                    msg["total"] = len(target_indices)
+                yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
+
+                if gathered.done() and out_queue.empty():
+                    break
+        finally:
+            hb.cancel()
+            try:
+                await hb
+            except Exception:
+                pass
+            try:
+                await gathered
+            except Exception:
+                pass
+
+        ok = sum(1 for r in results.values() if r.get("ok"))
+        failed = [r for r in results.values() if not r.get("ok")]
+        yield f"data: {json.dumps({'type': 'complete', 'ok': ok, 'failed': failed, 'total': len(target_indices)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@router.get("/boards/{board_id}/windows/{window_id}/narrator/step-audio")
+async def list_step_section_audio(board_id: str, window_id: str):
+    """列出已经合成 step audio 的章节号。"""
+    check_enabled()
+    try:
+        nums = content_manager.list_step_audio_sections(board_id, window_id)
+        return {"sections": nums}
+    except Exception as e:
+        error(f"列出 step 音频失败: {e}")
+        return {"sections": []}
+
+
 @router.post("/boards/{board_id}/windows/{window_id}/narrator/step-audio/{section_idx}")
 async def generate_step_section_audio(board_id: str, window_id: str, section_idx: int, request: Request):
     """合成一节 step_script 的完整音频 + 带 step_id 的字幕轨。
@@ -1248,167 +1426,3 @@ async def get_step_section_subtitles(board_id: str, window_id: str, section_num:
     except Exception as e:
         error(f"获取 step 字幕失败: {e}")
         return {"subtitles": []}
-
-
-@router.get("/boards/{board_id}/windows/{window_id}/narrator/step-audio")
-async def list_step_section_audio(board_id: str, window_id: str):
-    """列出已经合成 step audio 的章节号。"""
-    check_enabled()
-    try:
-        nums = content_manager.list_step_audio_sections(board_id, window_id)
-        return {"sections": nums}
-    except Exception as e:
-        error(f"列出 step 音频失败: {e}")
-        return {"sections": []}
-
-
-@router.post("/boards/{board_id}/windows/{window_id}/narrator/step-audio/batch")
-async def batch_generate_step_audio(board_id: str, window_id: str, request: Request):
-    """SSE 流式批量合成 step audio。
-
-    Body（可选）:
-        {
-            "mode": "all" | "missing" | "indices",
-            "indices": [0,2,5],           # 0-based，仅当 mode=indices
-            "add_silence": true,
-            "concurrency": 1               # GPT-SoVITS 通常不能并发，默认串行
-        }
-    """
-    check_enabled()
-    try:
-        body = await request.json() if await request.body() else {}
-    except Exception:
-        body = {}
-    mode = (body or {}).get("mode", "all")
-    requested_indices = (body or {}).get("indices") or []
-    add_silence = bool((body or {}).get("add_silence", True))
-    # 串行：GPT-SoVITS 单进程实例不能并发推理，默认 1。
-    concurrency = max(1, min(4, int((body or {}).get("concurrency", 1) or 1)))
-
-    data = _load_step_script_data(board_id, window_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="未找到 step_script 数据，请先生成 Step Script")
-    sections = data.get("sections") or []
-    if not sections:
-        raise HTTPException(status_code=400, detail="step_script 没有任何 section")
-
-    # 计算 target indices
-    existing_nums = set(content_manager.list_step_audio_sections(board_id, window_id))
-    target_indices: List[int] = []
-    if mode == "indices":
-        target_indices = [i for i in requested_indices if 0 <= i < len(sections)]
-    elif mode == "missing":
-        for i, sec in enumerate(sections):
-            if not sec:
-                continue
-            section_num = int((sec or {}).get("section_number") or (i + 1))
-            if section_num not in existing_nums:
-                target_indices.append(i)
-    else:
-        target_indices = list(range(len(sections)))
-
-    if not target_indices:
-        async def empty_stream():
-            yield f"data: {json.dumps({'type': 'complete', 'message': '没有需要合成的章节'})}\n\n"
-        return StreamingResponse(empty_stream(), media_type="text/event-stream")
-
-    import asyncio as _asyncio
-
-    async def stream():
-        yield f"data: {json.dumps({'type': 'start', 'total': len(target_indices), 'mode': mode, 'concurrency': concurrency})}\n\n"
-
-        sem = _asyncio.Semaphore(concurrency)
-        done_count = 0
-        results: Dict[int, Dict] = {}
-
-        out_queue: _asyncio.Queue = _asyncio.Queue()
-
-        async def worker(idx: int):
-            async with sem:
-                sec = sections[idx] or {}
-                section_num = int(sec.get("section_number") or (idx + 1))
-                title = sec.get("section_title") or f"Section {section_num}"
-                try:
-                    await out_queue.put({"type": "section_start", "section_num": section_num, "title": title, "idx": idx})
-                    if not sec.get("blocks"):
-                        raise RuntimeError("section 没有 blocks")
-                    result = await synthesize_step_section(
-                        section=sec,
-                        tts_service=tts_service,
-                        temp_dir=DATA_DIR / "temp" / "audio",
-                        add_silence_after_pause_cue=add_silence,
-                    )
-                    saved_path = content_manager.save_step_audio(
-                        board_id, window_id, section_num,
-                        result["audio_bytes"], extension=result["extension"],
-                    )
-                    if not saved_path:
-                        raise RuntimeError("保存音频失败")
-                    content_manager.save_step_subtitles(board_id, window_id, section_num, result["subtitles"])
-                    await out_queue.put({
-                        "type": "section_done",
-                        "section_num": section_num,
-                        "title": title,
-                        "idx": idx,
-                        "duration_seconds": result["duration_seconds"],
-                        "sentence_count": result["sentence_count"],
-                        "silence_count": result["silence_count"],
-                        "warnings": result.get("warnings") or [],
-                    })
-                    results[idx] = {"ok": True, "section_num": section_num}
-                except Exception as e:
-                    error(f"[step_audio:batch] §{section_num} 失败: {e}")
-                    await out_queue.put({
-                        "type": "section_failed",
-                        "section_num": section_num,
-                        "title": title,
-                        "idx": idx,
-                        "error": str(e),
-                    })
-                    results[idx] = {"ok": False, "section_num": section_num, "error": str(e)}
-
-        # 启动所有 worker
-        workers = [_asyncio.create_task(worker(idx)) for idx in target_indices]
-        gathered = _asyncio.gather(*workers)
-
-        async def heartbeat_loop():
-            while not gathered.done():
-                await _asyncio.sleep(15)
-                if gathered.done():
-                    break
-                await out_queue.put({"type": "heartbeat", "done": done_count, "total": len(target_indices)})
-
-        hb = _asyncio.create_task(heartbeat_loop())
-
-        try:
-            while True:
-                try:
-                    msg = await _asyncio.wait_for(out_queue.get(), timeout=2.0)
-                except _asyncio.TimeoutError:
-                    if gathered.done() and out_queue.empty():
-                        break
-                    continue
-                if msg.get("type") in ("section_done", "section_failed"):
-                    done_count += 1
-                    msg["done"] = done_count
-                    msg["total"] = len(target_indices)
-                yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
-
-                if gathered.done() and out_queue.empty():
-                    break
-        finally:
-            hb.cancel()
-            try:
-                await hb
-            except Exception:
-                pass
-            try:
-                await gathered
-            except Exception:
-                pass
-
-        ok = sum(1 for r in results.values() if r.get("ok"))
-        failed = [r for r in results.values() if not r.get("ok")]
-        yield f"data: {json.dumps({'type': 'complete', 'ok': ok, 'failed': failed, 'total': len(target_indices)}, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(stream(), media_type="text/event-stream")
