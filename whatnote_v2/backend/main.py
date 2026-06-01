@@ -271,7 +271,7 @@ except Exception as e:
 
 try:
     from plugins import pdf_narrator
-    pdf_narrator_router = pdf_narrator.init_plugin(llm_service, content_manager, DATA_DIR, GPT_SOVITS_URL, tts_service)
+    pdf_narrator_router = pdf_narrator.init_plugin(llm_service, content_manager, DATA_DIR, GPT_SOVITS_URL, tts_service, conversation_manager=conversation_manager)
     app.include_router(pdf_narrator_router, prefix="/api", tags=["PdfNarrator"])
     info("[Success] [Plugin] PdfNarrator loaded successfully.")
 except ImportError:

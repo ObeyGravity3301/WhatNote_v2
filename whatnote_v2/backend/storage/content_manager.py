@@ -3381,3 +3381,109 @@ class ContentManager:
         except Exception as e:
             print(f"删除语音失败: {e}")
             return False
+
+    # ----- Step Script audio (per-section, step_id-aware) ------------------
+    #
+    # step_audio_{section_num:03d}.{ext}    -- 合成出的整节音频
+    # step_audio_{section_num:03d}.json     -- 含 step_id/kind/anchor_page 的字幕轨
+    # 与 audio_{page:03d}.* (page-based narrator) 共存，互不覆盖。
+    #
+    def _step_audio_dir(self, board_id: str, window_id: str) -> Optional[Path]:
+        try:
+            windows = self.get_board_windows(board_id)
+            target_window = next((w for w in windows if w.get('id') == window_id), None)
+            if not target_window:
+                return None
+            title = target_window.get('title', 'unknown')
+            if title.endswith('.pdf'):
+                title = title[:-4]
+            pdf_name = self._sanitize_filename(title)
+            pdf_pages_dir = self._get_pdf_pages_dir(board_id, pdf_name)
+            if not pdf_pages_dir:
+                return None
+            audio_dir = pdf_pages_dir / "audio"
+            audio_dir.mkdir(parents=True, exist_ok=True)
+            return audio_dir
+        except Exception as e:
+            print(f"获取 step audio 目录失败: {e}")
+            return None
+
+    def get_step_audio_path(self, board_id: str, window_id: str, section_num: int) -> Optional[str]:
+        audio_dir = self._step_audio_dir(board_id, window_id)
+        if not audio_dir:
+            return None
+        for p in audio_dir.glob(f"step_audio_{section_num:03d}.*"):
+            if p.suffix.lower() != ".json":
+                return str(p)
+        return None
+
+    def save_step_audio(self, board_id: str, window_id: str, section_num: int, audio_bytes: bytes, extension: str = "wav") -> Optional[str]:
+        audio_dir = self._step_audio_dir(board_id, window_id)
+        if not audio_dir:
+            return None
+        for p in audio_dir.glob(f"step_audio_{section_num:03d}.*"):
+            if p.suffix.lower() != ".json":
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+        path = audio_dir / f"step_audio_{section_num:03d}.{extension}"
+        with open(path, "wb") as f:
+            f.write(audio_bytes)
+        return str(path)
+
+    def get_step_subtitles(self, board_id: str, window_id: str, section_num: int) -> Optional[list]:
+        audio_dir = self._step_audio_dir(board_id, window_id)
+        if not audio_dir:
+            return None
+        sub_path = audio_dir / f"step_audio_{section_num:03d}.json"
+        if not sub_path.exists():
+            return None
+        try:
+            with open(sub_path, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"读取 step 字幕失败: {e}")
+            return None
+
+    def save_step_subtitles(self, board_id: str, window_id: str, section_num: int, subtitles: list) -> bool:
+        audio_dir = self._step_audio_dir(board_id, window_id)
+        if not audio_dir:
+            return False
+        sub_path = audio_dir / f"step_audio_{section_num:03d}.json"
+        try:
+            with open(sub_path, "w") as f:
+                json.dump(subtitles, f, ensure_ascii=False)
+            return True
+        except Exception as e:
+            print(f"保存 step 字幕失败: {e}")
+            return False
+
+    def delete_step_audio(self, board_id: str, window_id: str, section_num: int) -> bool:
+        audio_dir = self._step_audio_dir(board_id, window_id)
+        if not audio_dir:
+            return False
+        deleted = False
+        for p in audio_dir.glob(f"step_audio_{section_num:03d}.*"):
+            try:
+                p.unlink()
+                deleted = True
+            except Exception:
+                pass
+        return deleted
+
+    def list_step_audio_sections(self, board_id: str, window_id: str) -> list:
+        """返回已有 step audio 的章节号列表（升序）。"""
+        audio_dir = self._step_audio_dir(board_id, window_id)
+        if not audio_dir:
+            return []
+        nums = set()
+        for p in audio_dir.glob("step_audio_*.*"):
+            if p.suffix.lower() == ".json":
+                continue
+            try:
+                stem = p.stem  # step_audio_001
+                nums.add(int(stem.split("_")[-1]))
+            except Exception:
+                pass
+        return sorted(nums)
