@@ -2613,6 +2613,163 @@ const translations = {
       "ja-JP": "スキーマ修復失敗："
     }
   },
+  "pdf_outline_step_script_generate": {
+    "default": {
+      "zh-CN": "按 step 生成讲稿",
+      "en-US": "Generate step-script",
+      "ja-JP": "stepで講稿生成"
+    }
+  },
+  "pdf_outline_step_script_generate_hint": {
+    "default": {
+      "zh-CN": "基于教学计划的 step 生成口播讲稿，与 lesson_plan / 学案共用 step_id 坐标。需先生成教学计划。",
+      "en-US": "Generate spoken script per lesson_plan step. step_id is the shared coordinate with lesson_plan / worksheet. Lesson Plan must exist first.",
+      "ja-JP": "lesson_planのstepごとに口播講稿を生成。step_idで連動。先にlesson_planが必要。"
+    }
+  },
+  "pdf_outline_step_script_open": {
+    "default": {
+      "zh-CN": "查看 step 讲稿",
+      "en-US": "Open step-script",
+      "ja-JP": "step講稿を表示"
+    }
+  },
+  "pdf_outline_step_script_generating": {
+    "default": {
+      "zh-CN": "正在生成 step 讲稿…",
+      "en-US": "Generating step-script…",
+      "ja-JP": "step講稿を生成中…"
+    }
+  },
+  "pdf_outline_step_script_retrying": {
+    "default": {
+      "zh-CN": "正在重试失败章节的 step 讲稿…",
+      "en-US": "Retrying failed step-script sections…",
+      "ja-JP": "失敗章節のstep講稿を再試行中…"
+    }
+  },
+  "pdf_outline_step_script_progress": {
+    "default": {
+      "zh-CN": "step 讲稿进度：{completed}/{total}",
+      "en-US": "Step-script progress: {completed}/{total}",
+      "ja-JP": "step講稿進捗：{completed}/{total}"
+    }
+  },
+  "pdf_outline_step_script_complete": {
+    "default": {
+      "zh-CN": "step 讲稿全部生成完成",
+      "en-US": "Step-script generation complete",
+      "ja-JP": "step講稿の生成が完了"
+    }
+  },
+  "pdf_outline_step_script_incomplete_status": {
+    "default": {
+      "zh-CN": "step 讲稿部分完成：{completed}/{total}（失败：{titles}）",
+      "en-US": "Step-script partial: {completed}/{total} (failed: {titles})",
+      "ja-JP": "step講稿一部完了：{completed}/{total}（失敗：{titles}）"
+    }
+  },
+  "pdf_outline_step_script_incomplete_block": {
+    "default": {
+      "zh-CN": "部分章节未完成 step 讲稿，可单独重试或全部补跑。",
+      "en-US": "Some sections did not complete; retry individually or all at once.",
+      "ja-JP": "一部章節未完成。個別または一括で再試行できます。"
+    }
+  },
+  "pdf_outline_step_script_retry_one_btn": {
+    "default": { "zh-CN": "重试此节", "en-US": "Retry", "ja-JP": "この節を再試行" }
+  },
+  "pdf_outline_step_script_retry_all_failed_btn": {
+    "default": { "zh-CN": "重试全部失败", "en-US": "Retry all failed", "ja-JP": "全失敗を再試行" }
+  },
+  "pdf_outline_step_script_section_failed": {
+    "default": {
+      "zh-CN": "此节未生成。",
+      "en-US": "This section was not generated.",
+      "ja-JP": "この節は生成されていません。"
+    }
+  },
+  "pdf_outline_step_script_modal_title": {
+    "default": {
+      "zh-CN": "step 讲稿预览",
+      "en-US": "Step-script preview",
+      "ja-JP": "step講稿プレビュー"
+    }
+  },
+  "pdf_outline_step_script_modal_title_incomplete": {
+    "default": {
+      "zh-CN": "step 讲稿预览（未完整）",
+      "en-US": "Step-script preview (incomplete)",
+      "ja-JP": "step講稿プレビュー（未完）"
+    }
+  },
+  "pdf_outline_step_script_modal_summary": {
+    "default": {
+      "zh-CN": "共 {total} 节，已生成 {completed} 节。",
+      "en-US": "{completed}/{total} sections generated.",
+      "ja-JP": "全{total}節中、{completed}節生成。"
+    }
+  },
+  "pdf_outline_step_script_download_json": {
+    "default": { "zh-CN": "下载 JSON", "en-US": "Download JSON", "ja-JP": "JSONをダウンロード" }
+  },
+  "pdf_outline_step_script_download_md": {
+    "default": {
+      "zh-CN": "下载 Markdown（人工 review）",
+      "en-US": "Download Markdown (review)",
+      "ja-JP": "Markdownをダウンロード（レビュー）"
+    }
+  },
+  "pdf_outline_step_script_close": {
+    "default": { "zh-CN": "关闭", "en-US": "Close", "ja-JP": "閉じる" }
+  },
+  "pdf_outline_step_script_error": {
+    "default": {
+      "zh-CN": "step 讲稿生成失败：",
+      "en-US": "Step-script failed: ",
+      "ja-JP": "step講稿生成失敗："
+    }
+  },
+  "pdf_outline_step_script_failed": {
+    "default": {
+      "zh-CN": "step 讲稿生成失败：{error}",
+      "en-US": "Step-script failed: {error}",
+      "ja-JP": "step講稿生成失敗：{error}"
+    }
+  },
+  "pdf_outline_step_script_download_error": {
+    "default": { "zh-CN": "下载失败：", "en-US": "Download failed: ", "ja-JP": "ダウンロード失敗：" }
+  },
+  "pdf_outline_step_script_md_error": {
+    "default": { "zh-CN": "Markdown 下载失败：", "en-US": "Markdown download failed: ", "ja-JP": "Markdownダウンロード失敗：" }
+  },
+  "pdf_outline_step_script_normalize_btn": {
+    "default": { "zh-CN": "修复 schema", "en-US": "Fix schema", "ja-JP": "スキーマ修復" }
+  },
+  "pdf_outline_step_script_normalize_confirm": {
+    "default": {
+      "zh-CN": "对当前 step 讲稿重跑本地 normalize（按 lesson_plan 重新对齐 step_id / 排序 blocks），不会调用 LLM，也不会改写 script 文本。确认继续？",
+      "en-US": "Re-run local normalize on the current step-script (re-align step_id against lesson_plan, reorder blocks). No LLM call; script text stays unchanged. Continue?",
+      "ja-JP": "現在のstep講稿にローカルnormalizeを再実行（step_idを再整列、blocks順序を再構成）。LLMは呼ばず、script本文は変えません。続行しますか？"
+    }
+  },
+  "pdf_outline_step_script_normalize_result": {
+    "default": {
+      "zh-CN": "step 讲稿 schema 修复完成：已规范化 {fixed} 节，跳过 {skipped} 节。",
+      "en-US": "Step-script schema normalize done: {fixed} fixed, {skipped} skipped.",
+      "ja-JP": "step講稿スキーマ修復完了：{fixed} 節を規範化、{skipped} 節をスキップ。"
+    }
+  },
+  "pdf_outline_step_script_normalize_error": {
+    "default": { "zh-CN": "schema 修复失败：", "en-US": "Schema normalize failed: ", "ja-JP": "スキーマ修復失敗：" }
+  },
+  "pdf_outline_step_script_need_lesson_plan": {
+    "default": {
+      "zh-CN": "请先生成「教学计划（lesson_plan）」，再生成 step 讲稿。",
+      "en-US": "Please generate the lesson plan first, then generate step-script.",
+      "ja-JP": "先にlesson_planを生成してから、step講稿を生成してください。"
+    }
+  },
   "pdf_outline_export_script": {
     "default": {
       "zh-CN": "导出 PDF 讲稿",

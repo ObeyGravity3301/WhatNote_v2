@@ -353,6 +353,11 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
   const [lessonPlanProgress, setLessonPlanProgress] = useState({ completed: 0, total: 0 });
   const [showLessonPlanModal, setShowLessonPlanModal] = useState(false);
   const [lessonPlanExpandedSection, setLessonPlanExpandedSection] = useState(0);
+  const [stepScriptData, setStepScriptData] = useState(null); // 按 step 的口播讲稿
+  const [isGeneratingStepScript, setIsGeneratingStepScript] = useState(false);
+  const [stepScriptProgress, setStepScriptProgress] = useState({ completed: 0, total: 0 });
+  const [showStepScriptModal, setShowStepScriptModal] = useState(false);
+  const [stepScriptExpandedSection, setStepScriptExpandedSection] = useState(0);
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
@@ -847,6 +852,19 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
         } catch (e) { /* ignore */ }
 
         try {
+          const ssRes = await fetch(
+            `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/step-script-data`
+          );
+          if (ssRes.ok) {
+            const ssData = await ssRes.json();
+            if (ssData) {
+              setStepScriptData(ssData);
+              console.log('加载已有 Step Script:', ssData);
+            }
+          }
+        } catch (e) { /* ignore */ }
+
+        try {
           const agentRes = await fetch(
             `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/agent-index-data`
           );
@@ -1331,6 +1349,187 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
       alert(t('pdf_outline_lesson_plan_normalize_error') + error.message);
     }
   }, [lessonPlanData, boardId, windowId, t]);
+
+  // ============== Step Script ==============
+
+  const isStepScriptComplete = useCallback((data) => {
+    if (!data) return false;
+    return data.step_script_complete !== false
+      && (data.completed_sections || 0) >= (data.expected_sections || data.total_sections || 0);
+  }, []);
+
+  const runStepScriptGeneration = useCallback(async ({ mode = 'full', sectionIndices } = {}) => {
+    if (!boardId || !windowId || isGeneratingStepScript) return;
+    if (!lessonPlanData) {
+      alert(t('pdf_outline_step_script_need_lesson_plan'));
+      return;
+    }
+
+    const total = lessonPlanData.total_sections || 0;
+    const existingCompleted = stepScriptData?.completed_sections || 0;
+
+    setIsGeneratingStepScript(true);
+    setStepScriptProgress({
+      completed: mode === 'retry_failed' ? existingCompleted : 0,
+      total,
+    });
+    setShowStepScriptModal(false);
+    setBatchOutlineStatus(
+      mode === 'retry_failed'
+        ? t('pdf_outline_step_script_retrying')
+        : t('pdf_outline_step_script_generating')
+    );
+
+    try {
+      const body = { mode };
+      if (Array.isArray(sectionIndices)) body.section_indices = sectionIndices;
+      const response = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/step-script`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }
+      );
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || 'Step Script 生成请求失败');
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = JSON.parse(line.slice(6));
+
+          if (data.type === 'status') {
+            setBatchOutlineStatus(data.message);
+          } else if (data.type === 'heartbeat') {
+            setStepScriptProgress({ completed: data.completed, total: data.total });
+            setBatchOutlineStatus(
+              t('pdf_outline_step_script_progress')
+                .replace('{completed}', data.completed)
+                .replace('{total}', data.total)
+            );
+          } else if (data.type === 'section_done') {
+            setStepScriptProgress({ completed: data.completed, total: data.total });
+            setBatchOutlineStatus(
+              t('pdf_outline_step_script_progress')
+                .replace('{completed}', data.completed)
+                .replace('{total}', data.total)
+            );
+          } else if (data.type === 'complete') {
+            const payload = data.data;
+            setStepScriptData(payload);
+            setStepScriptProgress({
+              completed: payload?.completed_sections || 0,
+              total: payload?.expected_sections || payload?.total_sections || 0,
+            });
+            if (isStepScriptComplete(payload)) {
+              setBatchOutlineStatus(t('pdf_outline_step_script_complete'));
+            } else {
+              const failedTitles = (payload?.failed_sections || [])
+                .map((f) => f.section_title)
+                .slice(0, 4)
+                .join('、');
+              setBatchOutlineStatus(
+                t('pdf_outline_step_script_incomplete_status')
+                  .replace('{completed}', payload?.completed_sections || 0)
+                  .replace('{total}', payload?.expected_sections || payload?.total_sections || 0)
+                  .replace('{titles}', failedTitles || '—')
+              );
+            }
+            setShowStepScriptModal(true);
+          } else if (data.type === 'warning') {
+            setBatchOutlineStatus((prev) => `${prev}\n警告: ${data.message}`);
+          } else if (data.type === 'error') {
+            throw new Error(data.error || data.message || '未知错误');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Step Script 生成失败:', error);
+      alert(t('pdf_outline_step_script_error') + (error.message || t('text_unknown_error')));
+      setBatchOutlineStatus(
+        t('pdf_outline_step_script_failed').replace('{error}', error.message || '')
+      );
+    } finally {
+      setIsGeneratingStepScript(false);
+    }
+  }, [boardId, windowId, isGeneratingStepScript, lessonPlanData, stepScriptData, isStepScriptComplete, t]);
+
+  const handleGenerateStepScript = useCallback(
+    () => runStepScriptGeneration({ mode: 'full' }),
+    [runStepScriptGeneration]
+  );
+  const handleRetryFailedStepScript = useCallback(
+    () => runStepScriptGeneration({ mode: 'retry_failed' }),
+    [runStepScriptGeneration]
+  );
+  const handleRetrySingleStepScriptSection = useCallback(
+    (idx) => runStepScriptGeneration({ mode: 'retry_failed', sectionIndices: [idx] }),
+    [runStepScriptGeneration]
+  );
+
+  const handleDownloadStepScriptJson = useCallback(async () => {
+    if (!stepScriptData) return;
+    const defaultStem = (documentTitle || 'document').replace(/\.[^.]+$/, '') || 'document';
+    try {
+      await downloadBlobResponse('export-step-script', `${defaultStem}-step-script.json`);
+    } catch (error) {
+      alert(t('pdf_outline_step_script_download_error') + error.message);
+    }
+  }, [stepScriptData, documentTitle, downloadBlobResponse, t]);
+
+  const handleDownloadStepScriptMarkdown = useCallback(async () => {
+    if (!stepScriptData) return;
+    const defaultStem = (documentTitle || 'document').replace(/\.[^.]+$/, '') || 'document';
+    try {
+      await downloadBlobResponse('export-step-script-markdown', `${defaultStem}-step-script.md`);
+    } catch (error) {
+      alert(t('pdf_outline_step_script_md_error') + error.message);
+    }
+  }, [stepScriptData, documentTitle, downloadBlobResponse, t]);
+
+  const handleNormalizeStepScript = useCallback(async () => {
+    if (!stepScriptData) return;
+    if (!window.confirm(t('pdf_outline_step_script_normalize_confirm'))) return;
+    try {
+      const resp = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/step-script/normalize`,
+        { method: 'POST' }
+      );
+      if (!resp.ok) {
+        const detail = await resp.text();
+        throw new Error(detail || `HTTP ${resp.status}`);
+      }
+      const result = await resp.json();
+
+      const reloadResp = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/step-script-data`
+      );
+      if (reloadResp.ok) {
+        const fresh = await reloadResp.json();
+        if (fresh) setStepScriptData(fresh);
+      }
+
+      alert(
+        t('pdf_outline_step_script_normalize_result')
+          .replace('{fixed}', result.fixed ?? 0)
+          .replace('{skipped}', result.skipped ?? 0)
+      );
+    } catch (error) {
+      alert(t('pdf_outline_step_script_normalize_error') + error.message);
+    }
+  }, [stepScriptData, boardId, windowId, t]);
 
   useEffect(() => {
     loadOutlineData();
@@ -5720,15 +5919,26 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
               {/* 第一阶段：大纲展示 */}
               {batchOutline && batchOutline.outline && (
                 <div>
-                  {/* Lesson Plan / Agent Index 生成中：实时进度浮条 */}
-                  {(isGeneratingLessonPlan || isGeneratingAgentIndex) && (
+                  {/* Lesson Plan / Agent Index / Step Script 生成中：实时进度浮条 */}
+                  {(isGeneratingLessonPlan || isGeneratingAgentIndex || isGeneratingStepScript) && (
                     (() => {
-                      const isLP = isGeneratingLessonPlan;
-                      const progress = isLP ? lessonPlanProgress : agentIndexProgress;
+                      let progress, barColor, label;
+                      if (isGeneratingLessonPlan) {
+                        progress = lessonPlanProgress;
+                        barColor = '#7b1fa2';
+                        label = t('pdf_outline_lesson_plan_generating');
+                      } else if (isGeneratingStepScript) {
+                        progress = stepScriptProgress;
+                        barColor = '#1565c0';
+                        label = t('pdf_outline_step_script_generating');
+                      } else {
+                        progress = agentIndexProgress;
+                        barColor = '#000080';
+                        label = t('pdf_outline_agent_generating') || 'Agent Index 生成中…';
+                      }
                       const total = progress?.total || 0;
                       const completed = progress?.completed || 0;
                       const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
-                      const barColor = isLP ? '#7b1fa2' : '#000080';
                       return (
                         <div
                           style={{
@@ -5741,9 +5951,7 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                            <strong style={{ color: barColor }}>
-                              {isLP ? t('pdf_outline_lesson_plan_generating') : t('pdf_outline_agent_generating') || 'Agent Index 生成中…'}
-                            </strong>
+                            <strong style={{ color: barColor }}>{label}</strong>
                             <span style={{ color: '#555' }}>
                               {completed} / {total} {total > 0 && `(${pct}%)`}
                             </span>
@@ -6095,6 +6303,43 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                       {t('pdf_outline_lesson_plan_normalize_btn')}
                     </button>
                   )}
+                  {lessonPlanData?.completed_sections > 0 && (
+                    <button
+                      onClick={handleGenerateStepScript}
+                      disabled={isGeneratingStepScript || isGeneratingLessonPlan}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: isGeneratingStepScript ? '#a0a0a0' : '#1565c0',
+                        color: '#ffffff',
+                        border: '2px outset #1565c0',
+                        cursor: isGeneratingStepScript ? 'wait' : 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                      title={t('pdf_outline_step_script_generate_hint')}
+                    >
+                      {isGeneratingStepScript ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_step_script_generate')}
+                    </button>
+                  )}
+                  {stepScriptData?.completed_sections > 0 && (
+                    <button
+                      onClick={() => setShowStepScriptModal(true)}
+                      disabled={isGeneratingStepScript}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: '#c0c0c0',
+                        color: '#000000',
+                        border: '2px outset #c0c0c0',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {t('pdf_outline_step_script_open')}
+                    </button>
+                  )}
                   <button
                         onClick={async () => {
                           console.log('开始第二阶段：细分分段');
@@ -6353,6 +6598,45 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                       title={t('pdf_outline_lesson_plan_normalize_confirm')}
                     >
                       {t('pdf_outline_lesson_plan_normalize_btn')}
+                    </button>
+                  )}
+                  {lessonPlanData?.completed_sections > 0 && (
+                    <button
+                      onClick={handleGenerateStepScript}
+                      disabled={isGeneratingStepScript || isGeneratingLessonPlan}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: isGeneratingStepScript ? '#a0a0a0' : '#1565c0',
+                        color: '#ffffff',
+                        border: '2px outset #1565c0',
+                        borderRadius: '0px',
+                        cursor: isGeneratingStepScript ? 'wait' : 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                      title={t('pdf_outline_step_script_generate_hint')}
+                    >
+                      {isGeneratingStepScript ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_step_script_generate')}
+                    </button>
+                  )}
+                  {stepScriptData?.completed_sections > 0 && (
+                    <button
+                      onClick={() => setShowStepScriptModal(true)}
+                      disabled={isGeneratingStepScript}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: '#c0c0c0',
+                        color: '#000000',
+                        border: '2px outset #c0c0c0',
+                        borderRadius: '0px',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {t('pdf_outline_step_script_open')}
                     </button>
                   )}
                   <button
@@ -7242,6 +7526,227 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                         style={{ padding: '6px 10px', cursor: 'pointer' }}
                       >
                         {t('pdf_outline_lesson_plan_close')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ========== Step Script Modal ========== */}
+              {showStepScriptModal && stepScriptData && (
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundColor: 'rgba(0,0,0,0.45)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 2000
+                }}>
+                  <div style={{
+                    width: 'min(760px, 95%)',
+                    maxHeight: '90%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: '#c0c0c0',
+                    border: '2px outset #c0c0c0',
+                    padding: '12px',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    fontSize: '11px'
+                  }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                      {isStepScriptComplete(stepScriptData)
+                        ? t('pdf_outline_step_script_modal_title')
+                        : t('pdf_outline_step_script_modal_title_incomplete')}
+                    </div>
+                    <div style={{ marginBottom: '4px', lineHeight: 1.5 }}>
+                      {t('pdf_outline_step_script_modal_summary')
+                        .replace('{completed}', stepScriptData.completed_sections || 0)
+                        .replace('{total}', stepScriptData.expected_sections || stepScriptData.total_sections || 0)}
+                    </div>
+                    <div style={{ marginBottom: '8px', color: '#555', fontSize: '10px' }}>
+                      ⏱ {stepScriptData.elapsed_seconds ?? '?'}s
+                      &nbsp;|&nbsp; 并发 {stepScriptData.concurrency ?? '?'}
+                      &nbsp;|&nbsp; 模型 {stepScriptData.llm_model ?? '?'}
+                    </div>
+
+                    {!isStepScriptComplete(stepScriptData) && (
+                      <div style={{
+                        marginBottom: '8px',
+                        padding: '6px 8px',
+                        backgroundColor: '#ffe4e4',
+                        border: '2px inset #c0c0c0',
+                        color: '#800000',
+                        lineHeight: 1.5
+                      }}>
+                        {t('pdf_outline_step_script_incomplete_block')}
+                        {(stepScriptData.failed_sections || []).length > 0 && (
+                          <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+                            {(stepScriptData.failed_sections || []).map((f) => (
+                              <li key={f.section_index}>
+                                {f.section_number}. {f.section_title}
+                                {' '}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRetrySingleStepScriptSection(f.section_index)}
+                                  disabled={isGeneratingStepScript}
+                                  style={{
+                                    marginLeft: '6px',
+                                    fontSize: '10px',
+                                    padding: '0 6px',
+                                    cursor: isGeneratingStepScript ? 'wait' : 'pointer',
+                                  }}
+                                >
+                                  {t('pdf_outline_step_script_retry_one_btn')}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleRetryFailedStepScript}
+                          disabled={isGeneratingStepScript || !(stepScriptData.failed_sections || []).length}
+                          style={{
+                            marginTop: '6px',
+                            padding: '4px 8px',
+                            cursor: isGeneratingStepScript ? 'wait' : 'pointer',
+                          }}
+                        >
+                          {t('pdf_outline_step_script_retry_all_failed_btn')}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 节选择 */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
+                      {(stepScriptData.sections || []).map((sec, idx) => {
+                        if (!sec) return (
+                          <button key={idx} disabled style={{ padding: '2px 6px', fontSize: '10px', backgroundColor: '#ffd0d0', opacity: 0.6 }}>
+                            {idx + 1}✕
+                          </button>
+                        );
+                        const isActive = idx === stepScriptExpandedSection;
+                        return (
+                          <button
+                            key={sec.section_index}
+                            type="button"
+                            onClick={() => setStepScriptExpandedSection(idx)}
+                            style={{
+                              padding: '2px 6px',
+                              fontSize: '10px',
+                              backgroundColor: isActive ? '#1565c0' : '#ece9d8',
+                              color: isActive ? '#ffffff' : '#000000',
+                              border: isActive ? '2px inset #1565c0' : '1px outset #ece9d8',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {sec.section_number}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* 节详情：blocks 列表 */}
+                    <div style={{ flex: 1, overflow: 'auto', border: '2px inset #c0c0c0', padding: '8px', backgroundColor: '#ffffff' }}>
+                      {(() => {
+                        const sec = (stepScriptData.sections || [])[stepScriptExpandedSection];
+                        if (!sec) {
+                          return (
+                            <div style={{ color: '#800000' }}>
+                              {t('pdf_outline_step_script_section_failed')}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div>
+                            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                              {sec.section_number}. {sec.section_title}
+                              {' '}
+                              <span style={{ color: '#666', fontWeight: 'normal' }}>
+                                (p.{sec.page_start}-{sec.page_end})
+                              </span>
+                            </div>
+                            {sec.objective && (
+                              <div style={{ marginBottom: '4px', fontSize: '10px', color: '#444' }}>
+                                <span style={{ color: '#1565c0', fontWeight: 'bold' }}>Objective: </span>
+                                {sec.objective}
+                              </div>
+                            )}
+                            <div style={{ borderTop: '1px dashed #999', marginTop: '6px', paddingTop: '6px' }}>
+                              {(sec.blocks || []).map((b, bi) => {
+                                let bg = '#f5f5f5';
+                                let badge = b.step_id || '—';
+                                let kindLabel = b.kind;
+                                if (b.kind === 'intro_cue') { bg = '#e3f2fd'; kindLabel = '▶ Intro'; badge = ''; }
+                                else if (b.kind === 'outro_cue') { bg = '#e3f2fd'; kindLabel = '◀ Outro'; badge = ''; }
+                                else if (b.kind === 'pause_cue') { bg = '#fff3e0'; kindLabel = `⏸ Pause (${b.pause_seconds}s)`; }
+                                return (
+                                  <div
+                                    key={`${b.kind}-${b.step_id}-${bi}`}
+                                    style={{
+                                      marginBottom: '6px',
+                                      padding: '6px',
+                                      border: '1px dotted #888',
+                                      backgroundColor: bg,
+                                    }}
+                                  >
+                                    <div style={{ fontWeight: 'bold', marginBottom: '2px', fontSize: '10px' }}>
+                                      <span style={{ color: '#1565c0' }}>{kindLabel}</span>
+                                      {badge && <span style={{ marginLeft: '6px', color: '#000080' }}>{badge}</span>}
+                                      <span style={{ marginLeft: '6px', color: '#666', fontWeight: 'normal' }}>
+                                        p.{b.anchor_page} · {(b.sentences || []).length} 句 · {(b.script || '').length} 字
+                                      </span>
+                                    </div>
+                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{b.script}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {(sec._warnings || []).length > 0 && (
+                              <div style={{ marginTop: '8px', padding: '4px 6px', backgroundColor: '#fffbe6', border: '1px solid #f0d97a', fontSize: '10px', color: '#7a5b00' }}>
+                                <b>规范化警告：</b>
+                                <ul style={{ margin: '2px 0 2px 18px', padding: 0 }}>
+                                  {sec._warnings.slice(0, 6).map((w, i) => (<li key={i}>{w}</li>))}
+                                  {sec._warnings.length > 6 && <li>... +{sec._warnings.length - 6} more</li>}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={handleDownloadStepScriptJson}
+                        style={{ padding: '6px 10px', cursor: 'pointer' }}
+                      >
+                        {t('pdf_outline_step_script_download_json')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadStepScriptMarkdown}
+                        style={{ padding: '6px 10px', cursor: 'pointer' }}
+                      >
+                        {t('pdf_outline_step_script_download_md')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleNormalizeStepScript}
+                        style={{ padding: '6px 10px', cursor: 'pointer' }}
+                        title={t('pdf_outline_step_script_normalize_confirm')}
+                      >
+                        {t('pdf_outline_step_script_normalize_btn')}
+                      </button>
+                      <div style={{ flex: 1 }} />
+                      <button
+                        type="button"
+                        onClick={() => setShowStepScriptModal(false)}
+                        style={{ padding: '6px 10px', cursor: 'pointer' }}
+                      >
+                        {t('pdf_outline_step_script_close')}
                       </button>
                     </div>
                   </div>

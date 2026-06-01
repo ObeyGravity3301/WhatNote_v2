@@ -4136,6 +4136,577 @@ async def export_lesson_plan_markdown(board_id: str, window_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================
+# Step Script：以 lesson_plan 的 step 为单位的口播讲稿
+# ============================================================
+
+
+def _step_script_file(board_id: str, window_id: str) -> Path:
+    return conversation_manager.get_board_conversations_dir(board_id) / f"step-script-{window_id}-data.json"
+
+
+def _load_lesson_plan_for_step_script(board_id: str, window_id: str) -> Optional[Dict[str, Any]]:
+    lp_file = _lesson_plan_file(board_id, window_id)
+    if not lp_file.exists():
+        return None
+    try:
+        with open(lp_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as load_err:
+        info(f"加载 lesson_plan 失败: {load_err}")
+        return None
+
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/step-script")
+async def generate_step_script_batch(board_id: str, window_id: str, request: Request):
+    """Step Script：按 lesson_plan 的 step 生成口播讲稿。
+
+    请求体：{ "mode": "full" | "retry_failed", "section_indices": [int, ...] (可选) }
+    """
+    try:
+        from services.step_script_service import (
+            STEP_SCRIPT_COMPLETION_RETRY_ROUNDS,
+            STEP_SCRIPT_CONCURRENCY,
+            STEP_SCRIPT_MAX_ATTEMPTS,
+            STEP_SCRIPT_SECTION_TIMEOUT_SEC,
+            generate_step_script_section,
+        )
+
+        SSE_HEARTBEAT_SEC = 20
+
+        try:
+            req_body = await request.json()
+        except Exception:
+            req_body = {}
+        if not isinstance(req_body, dict):
+            req_body = {}
+        gen_mode = req_body.get("mode", "full")
+        if gen_mode not in ("full", "retry_failed"):
+            gen_mode = "full"
+        requested_indices = req_body.get("section_indices")
+
+        info(
+            f"开始 Step Script 生成 board_id={board_id}, window_id={window_id}, mode={gen_mode}"
+        )
+
+        lp_data = _load_lesson_plan_for_step_script(board_id, window_id)
+        if not lp_data:
+            raise HTTPException(
+                status_code=404,
+                detail="未找到教学计划（lesson_plan），请先生成教学计划",
+            )
+
+        lesson_plan_sections: List[Optional[Dict[str, Any]]] = lp_data.get("sections") or []
+        if not lesson_plan_sections:
+            raise HTTPException(status_code=400, detail="教学计划为空")
+
+        total_sections = len(lesson_plan_sections)
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        pdf_filename = target_window.get("title", "unknown")
+
+        # task-specific 模型；与 PDF Narrator 共用 narrator_script 模型设置
+        step_model = None
+        if getattr(llm_service, "api_config_manager", None):
+            try:
+                step_model = llm_service.api_config_manager.get_task_model("narrator_script") or None
+            except Exception:
+                step_model = None
+        info(f"[StepScript] 使用 LLM 模型: {step_model or '默认 chat 模型'}")
+
+        def _get_previous_landing(prev_idx: int) -> str:
+            if prev_idx < 0 or prev_idx >= len(lesson_plan_sections):
+                return ""
+            prev = lesson_plan_sections[prev_idx]
+            if not prev:
+                return ""
+            steps = prev.get("steps") or []
+            if not steps:
+                return ""
+            return (steps[-1].get("landing_sentence") or "").strip()
+
+        def _get_next_objective(idx: int) -> str:
+            if idx + 1 >= len(lesson_plan_sections):
+                return ""
+            nxt = lesson_plan_sections[idx + 1]
+            if not nxt:
+                return ""
+            return (nxt.get("objective") or "").strip()
+
+        async def step_script_stream():
+            try:
+                import asyncio
+                import time as _time
+
+                wall_started_at = datetime.now().isoformat()
+                perf_start = _time.monotonic()
+
+                all_sections: List[Optional[Dict[str, Any]]] = [None] * total_sections
+                if gen_mode == "retry_failed":
+                    existing = _step_script_file(board_id, window_id)
+                    if existing.exists():
+                        try:
+                            with open(existing, "r", encoding="utf-8") as f:
+                                prev_data = json.load(f)
+                            prev_sections = prev_data.get("sections") or []
+                            if len(prev_sections) == total_sections:
+                                all_sections = list(prev_sections)
+                        except Exception as load_err:
+                            info(f"加载已有 step_script 失败，按全新生成: {load_err}")
+
+                if requested_indices is not None:
+                    target_indices = [
+                        int(i)
+                        for i in requested_indices
+                        if isinstance(i, (int, float)) and 0 <= int(i) < total_sections
+                    ]
+                elif gen_mode == "retry_failed":
+                    target_indices = [i for i, s in enumerate(all_sections) if s is None]
+                else:
+                    target_indices = list(range(total_sections))
+
+                # 过滤掉 lesson_plan 里本身是 null 的章节（无 steps 可生成）
+                target_indices = [
+                    i for i in target_indices
+                    if lesson_plan_sections[i] and (lesson_plan_sections[i].get("steps") or [])
+                ]
+
+                if not target_indices:
+                    yield f"data: {json.dumps({'type': 'status', 'message': '没有可生成的章节（lesson_plan 为空或全为失败节）'}, ensure_ascii=False)}\n\n"
+                elif gen_mode == "retry_failed":
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'重试 {len(target_indices)} 个失败章节（并发 {STEP_SCRIPT_CONCURRENCY}）...'}, ensure_ascii=False)}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'开始生成 Step Script（{len(target_indices)} 节，并发 {STEP_SCRIPT_CONCURRENCY}）...'}, ensure_ascii=False)}\n\n"
+
+                completed_count = [sum(1 for s in all_sections if s is not None)]
+                event_queue: asyncio.Queue = asyncio.Queue()
+                section_semaphore = asyncio.Semaphore(STEP_SCRIPT_CONCURRENCY)
+                target_set = set(target_indices)
+
+                async def process_section(section_idx: int):
+                    lp_section = lesson_plan_sections[section_idx]
+                    section_num = lp_section.get("section_number", section_idx + 1)
+                    section_title = lp_section.get("section_title", f"分段{section_num}")
+                    page_start = lp_section.get("page_start")
+                    page_end = lp_section.get("page_end")
+
+                    info(f"[SS] 排队中: §{section_num} {section_title} (p.{page_start}-{page_end})")
+                    async with section_semaphore:
+                        info(f"[SS] 开始生成: §{section_num} {section_title}")
+                        await event_queue.put({
+                            "type": "section_start",
+                            "section": section_num,
+                            "title": section_title,
+                            "pages": f"{page_start}-{page_end}",
+                        })
+                        previous_landing = _get_previous_landing(section_idx - 1)
+                        next_objective = _get_next_objective(section_idx)
+                        try:
+                            result, err = await asyncio.wait_for(
+                                generate_step_script_section(
+                                    section_idx,
+                                    lp_section,
+                                    pdf_filename,
+                                    board_id,
+                                    window_id,
+                                    content_manager.get_pdf_page_contents,
+                                    llm_service.chat_completion,
+                                    previous_landing=previous_landing,
+                                    next_objective_hint=next_objective,
+                                    max_attempts=STEP_SCRIPT_MAX_ATTEMPTS,
+                                    on_chunk=None,
+                                    override_model=step_model,
+                                ),
+                                timeout=STEP_SCRIPT_SECTION_TIMEOUT_SEC,
+                            )
+                        except asyncio.TimeoutError:
+                            result, err = None, f"单节超时（>{STEP_SCRIPT_SECTION_TIMEOUT_SEC}s）"
+
+                    if not result:
+                        await event_queue.put({
+                            "type": "warning",
+                            "message": f"分段{section_num} Step Script 失败: {err}",
+                        })
+                        info(f"[SS] 失败 §{section_num}: {err}")
+                        return None
+
+                    all_sections[section_idx] = result
+                    completed_count[0] = sum(1 for s in all_sections if s is not None)
+                    info(f"[SS] 完成 §{section_num} ({completed_count[0]}/{total_sections})")
+                    await event_queue.put({
+                        "type": "section_done",
+                        "section": section_num,
+                        "completed": completed_count[0],
+                        "total": total_sections,
+                    })
+                    return result
+
+                tasks = [asyncio.create_task(process_section(i)) for i in target_indices]
+
+                async def wait_all():
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+                    await event_queue.put({"type": "_all_done"})
+
+                completion_task = asyncio.create_task(wait_all())
+
+                while True:
+                    try:
+                        event = await asyncio.wait_for(event_queue.get(), timeout=SSE_HEARTBEAT_SEC)
+                    except asyncio.TimeoutError:
+                        yield f"data: {json.dumps({'type': 'heartbeat', 'completed': completed_count[0], 'total': total_sections}, ensure_ascii=False)}\n\n"
+                        continue
+                    if event["type"] == "_all_done":
+                        break
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                await completion_task
+
+                # 补跑（边跑边 yield + 心跳，同 lesson_plan 那套）
+                async def retry_single(section_idx: int):
+                    lp_section = lesson_plan_sections[section_idx]
+                    section_num = lp_section.get("section_number", section_idx + 1)
+                    async with section_semaphore:
+                        previous_landing = _get_previous_landing(section_idx - 1)
+                        next_objective = _get_next_objective(section_idx)
+                        try:
+                            result, err = await asyncio.wait_for(
+                                generate_step_script_section(
+                                    section_idx,
+                                    lp_section,
+                                    pdf_filename,
+                                    board_id,
+                                    window_id,
+                                    content_manager.get_pdf_page_contents,
+                                    llm_service.chat_completion,
+                                    previous_landing=previous_landing,
+                                    next_objective_hint=next_objective,
+                                    max_attempts=STEP_SCRIPT_MAX_ATTEMPTS,
+                                    on_chunk=None,
+                                    override_model=step_model,
+                                ),
+                                timeout=STEP_SCRIPT_SECTION_TIMEOUT_SEC,
+                            )
+                        except asyncio.TimeoutError:
+                            result, err = None, f"单节超时（>{STEP_SCRIPT_SECTION_TIMEOUT_SEC}s）"
+                    return section_idx, section_num, result, err
+
+                for retry_round in range(STEP_SCRIPT_COMPLETION_RETRY_ROUNDS):
+                    pending = [i for i in target_set if i < len(all_sections) and all_sections[i] is None]
+                    if not pending:
+                        break
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'补跑失败章节 {len(pending)} 节（第 {retry_round + 1}/{STEP_SCRIPT_COMPLETION_RETRY_ROUNDS} 轮）...'}, ensure_ascii=False)}\n\n"
+
+                    rq: asyncio.Queue = asyncio.Queue()
+
+                    async def _retry_and_publish(idx_):
+                        try:
+                            sidx, snum, res, err = await retry_single(idx_)
+                        except Exception as exc:
+                            await rq.put({"kind": "exception", "error": str(exc)})
+                            return
+                        await rq.put({"kind": "result", "section_idx": sidx, "section_num": snum, "result": res, "err": err})
+
+                    rtasks = [asyncio.create_task(_retry_and_publish(i)) for i in pending]
+
+                    async def _rsignal():
+                        await asyncio.gather(*rtasks, return_exceptions=True)
+                        await rq.put({"kind": "_all_done"})
+
+                    rcompletion = asyncio.create_task(_rsignal())
+                    processed = 0
+                    total_in_round = len(pending)
+                    while True:
+                        try:
+                            evt = await asyncio.wait_for(rq.get(), timeout=SSE_HEARTBEAT_SEC)
+                        except asyncio.TimeoutError:
+                            yield f"data: {json.dumps({'type': 'heartbeat', 'completed': completed_count[0], 'total': total_sections, 'phase': f'retry-round-{retry_round + 1}', 'retry_progress': f'{processed}/{total_in_round}'}, ensure_ascii=False)}\n\n"
+                            continue
+                        if evt["kind"] == "_all_done":
+                            break
+                        processed += 1
+                        if evt["kind"] == "exception":
+                            exc_msg = evt.get("error", "unknown")
+                            yield f"data: {json.dumps({'type': 'warning', 'message': f'补跑异常: {exc_msg}'}, ensure_ascii=False)}\n\n"
+                            continue
+                        sidx = evt["section_idx"]
+                        snum = evt["section_num"]
+                        res = evt["result"]
+                        err = evt["err"]
+                        if res:
+                            all_sections[sidx] = res
+                            completed_count[0] = sum(1 for s in all_sections if s is not None)
+                            yield f"data: {json.dumps({'type': 'section_done', 'section': snum, 'completed': completed_count[0], 'total': total_sections}, ensure_ascii=False)}\n\n"
+                            info(f"[SS] 补跑成功: §{snum}")
+                        else:
+                            yield f"data: {json.dumps({'type': 'warning', 'message': f'补跑分段{snum}仍失败: {err}'}, ensure_ascii=False)}\n\n"
+                            info(f"[SS] 补跑失败: §{snum}: {err}")
+                    await rcompletion
+
+                failed_sections = []
+                for idx, item in enumerate(all_sections):
+                    lp_section = lesson_plan_sections[idx]
+                    if item is None and lp_section and (lp_section.get("steps") or []):
+                        failed_sections.append({
+                            "section_index": idx,
+                            "section_number": lp_section.get("section_number", idx + 1),
+                            "section_title": lp_section.get("section_title", f"分段{idx + 1}"),
+                        })
+                valid_count = sum(1 for s in all_sections if s is not None)
+                expected_count = sum(
+                    1 for s in lesson_plan_sections
+                    if s and (s.get("steps") or [])
+                )
+                complete = valid_count >= expected_count
+                sections_ok = [s for s in all_sections if s]
+
+                preserved_created_at = wall_started_at
+                ss_file = _step_script_file(board_id, window_id)
+                if gen_mode == "retry_failed" and ss_file.exists():
+                    try:
+                        with open(ss_file, "r", encoding="utf-8") as f:
+                            preserved_created_at = json.load(f).get("created_at", preserved_created_at)
+                    except Exception:
+                        pass
+
+                elapsed_sec = _time.monotonic() - perf_start
+                finished_at = datetime.now().isoformat()
+                step_script_data = {
+                    "schema_version": 1,
+                    "kind": "step_script",
+                    "_readme": (
+                        "sections: per-section blocks (intro_cue + main per step + optional pause_cue + outro_cue). "
+                        "block.step_id is the shared coordinate with lesson_plan / worksheet."
+                    ),
+                    "pdf_filename": pdf_filename,
+                    "window_id": window_id,
+                    "board_id": board_id,
+                    "lesson_plan_source": "lesson-plan-data",
+                    "total_sections": total_sections,
+                    "expected_sections": expected_count,
+                    "completed_sections": valid_count,
+                    "step_script_complete": complete,
+                    "status": "complete" if complete else "incomplete",
+                    "failed_sections": failed_sections,
+                    "sections": all_sections,
+                    "sections_ok": sections_ok,
+                    "last_generation_mode": gen_mode,
+                    "concurrency": STEP_SCRIPT_CONCURRENCY,
+                    "llm_model": step_model or "default",
+                    "started_at": wall_started_at,
+                    "finished_at": finished_at,
+                    "elapsed_seconds": round(elapsed_sec, 1),
+                    "created_at": preserved_created_at,
+                    "updated_at": finished_at,
+                }
+
+                ss_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(ss_file, "w", encoding="utf-8") as f:
+                    json.dump(step_script_data, f, ensure_ascii=False, indent=2)
+
+                info(
+                    f"[SS] 本次任务耗时 {elapsed_sec:.1f}s "
+                    f"({valid_count}/{expected_count}, 并发 {STEP_SCRIPT_CONCURRENCY})"
+                )
+                yield f"data: {json.dumps({'type': 'complete', 'data': step_script_data}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'success': True}, ensure_ascii=False)}\n\n"
+
+            except Exception as e:
+                error(f"Step Script 生成失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            step_script_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"Step Script 接口失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Step Script 生成失败: {str(e)}")
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/step-script-data")
+async def get_step_script_data(board_id: str, window_id: str):
+    """获取已保存的 Step Script JSON"""
+    try:
+        ss_file = _step_script_file(board_id, window_id)
+        if not ss_file.exists():
+            return None
+        with open(ss_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        error(f"加载 Step Script 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/step-script/normalize")
+async def normalize_step_script(board_id: str, window_id: str):
+    """对已存盘的 Step Script 数据重跑 normalize（不调 LLM）。
+
+    需要同一个 window 下的 lesson_plan 作为期望 steps 来源。
+    """
+    try:
+        from services.step_script_service import (
+            normalize_existing_section as ss_normalize,
+            build_section_result as ss_build_section_result,
+        )
+
+        ss_file = _step_script_file(board_id, window_id)
+        if not ss_file.exists():
+            raise HTTPException(status_code=404, detail="Step Script 不存在，请先生成")
+
+        with open(ss_file, "r", encoding="utf-8") as f:
+            ss_data = json.load(f)
+
+        lp_data = _load_lesson_plan_for_step_script(board_id, window_id)
+        if not lp_data:
+            raise HTTPException(status_code=404, detail="未找到对应的 lesson_plan，无法做规范化")
+        lp_sections = lp_data.get("sections") or []
+
+        sections = ss_data.get("sections") or []
+        fixed_count = 0
+        skipped_count = 0
+        per_section_report: List[Dict[str, Any]] = []
+
+        for idx, sec in enumerate(sections):
+            if not isinstance(sec, dict):
+                skipped_count += 1
+                per_section_report.append({"section_index": idx, "skipped": True, "reason": "missing"})
+                continue
+            lp_section = lp_sections[idx] if idx < len(lp_sections) else None
+            if not lp_section:
+                skipped_count += 1
+                per_section_report.append({"section_index": idx, "skipped": True, "reason": "no lesson_plan source"})
+                continue
+            ok, err, normalized = ss_normalize(sec, lp_section)
+            if not ok or normalized is None:
+                skipped_count += 1
+                per_section_report.append({"section_index": idx, "skipped": True, "reason": err or "normalize failed"})
+                continue
+            warnings = normalized.pop("_warnings", []) if isinstance(normalized, dict) else []
+            new_section = ss_build_section_result(lp_section, idx, normalized)
+            # 保留原有 objective/hook，不依赖 lesson_plan 重写时丢失
+            new_section["objective"] = sec.get("objective", lp_section.get("objective", ""))
+            new_section["hook"] = sec.get("hook", lp_section.get("hook", ""))
+            sections[idx] = new_section
+            fixed_count += 1
+            per_section_report.append({
+                "section_index": idx,
+                "section_number": new_section.get("section_number"),
+                "section_title": new_section.get("section_title"),
+                "warnings": warnings,
+                "warning_count": len(warnings),
+            })
+
+        ss_data["sections"] = sections
+        ss_data["updated_at"] = datetime.now().isoformat()
+        ss_data.setdefault("normalize_log", []).append({
+            "ts": ss_data["updated_at"],
+            "fixed": fixed_count,
+            "skipped": skipped_count,
+        })
+
+        ss_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(ss_file, "w", encoding="utf-8") as f:
+            json.dump(ss_data, f, ensure_ascii=False, indent=2)
+
+        return {
+            "ok": True,
+            "fixed": fixed_count,
+            "skipped": skipped_count,
+            "total": len(sections),
+            "report": per_section_report,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"Normalize Step Script 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-step-script")
+async def export_step_script_json(board_id: str, window_id: str):
+    """下载 Step Script JSON"""
+    try:
+        from urllib.parse import quote
+
+        ss_file = _step_script_file(board_id, window_id)
+        if not ss_file.exists():
+            raise HTTPException(status_code=404, detail="Step Script 不存在")
+
+        with open(ss_file, "r", encoding="utf-8") as f:
+            ss_data = json.load(f)
+
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        pdf_title = target_window.get("title", "document.pdf") if target_window else "document.pdf"
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}-step-script.json"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-step-script.json"
+
+        payload = json.dumps(ss_data, ensure_ascii=False, indent=2).encode("utf-8")
+        return StreamingResponse(
+            iter([payload]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Step Script JSON 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-step-script-markdown")
+async def export_step_script_markdown(board_id: str, window_id: str):
+    """下载 Step Script Markdown（人工 review）"""
+    try:
+        from urllib.parse import quote
+        from services.step_script_service import render_step_script_markdown
+
+        ss_file = _step_script_file(board_id, window_id)
+        if not ss_file.exists():
+            raise HTTPException(status_code=404, detail="Step Script 不存在")
+
+        with open(ss_file, "r", encoding="utf-8") as f:
+            ss_data = json.load(f)
+
+        md_text = render_step_script_markdown(ss_data)
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        pdf_title = target_window.get("title", "document.pdf") if target_window else "document.pdf"
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}-step-script.md"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-step-script.md"
+
+        return StreamingResponse(
+            iter([md_text.encode("utf-8")]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Step Script Markdown 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/generate-section")
 async def generate_section_annotations(
     board_id: str,
