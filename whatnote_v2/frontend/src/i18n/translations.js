@@ -2438,6 +2438,181 @@ const translations = {
       "ja-JP": "コピー失敗："
     }
   },
+  "pdf_outline_lesson_plan_generate": {
+    "default": {
+      "zh-CN": "生成教学计划",
+      "en-US": "Generate Lesson Plan",
+      "ja-JP": "授業計画を生成"
+    }
+  },
+  "pdf_outline_lesson_plan_open": {
+    "default": {
+      "zh-CN": "查看教学计划",
+      "en-US": "Open Lesson Plan",
+      "ja-JP": "授業計画を開く"
+    }
+  },
+  "pdf_outline_lesson_plan_generating": {
+    "default": {
+      "zh-CN": "正在生成教学计划（lesson_plan）...",
+      "en-US": "Generating lesson plan...",
+      "ja-JP": "授業計画を生成中..."
+    }
+  },
+  "pdf_outline_lesson_plan_retrying": {
+    "default": {
+      "zh-CN": "正在重试失败的教学计划章节...",
+      "en-US": "Retrying failed lesson plan sections...",
+      "ja-JP": "失敗した授業計画セクションを再試行中..."
+    }
+  },
+  "pdf_outline_lesson_plan_progress": {
+    "default": {
+      "zh-CN": "教学计划进度：{completed}/{total}",
+      "en-US": "Lesson Plan: {completed}/{total}",
+      "ja-JP": "授業計画：{completed}/{total}"
+    }
+  },
+  "pdf_outline_lesson_plan_complete": {
+    "default": {
+      "zh-CN": "教学计划生成完成",
+      "en-US": "Lesson plan ready",
+      "ja-JP": "授業計画の生成が完了"
+    }
+  },
+  "pdf_outline_lesson_plan_incomplete_status": {
+    "default": {
+      "zh-CN": "教学计划不完整（{completed}/{total}），缺失：{titles}",
+      "en-US": "Lesson plan incomplete ({completed}/{total}). Missing: {titles}",
+      "ja-JP": "授業計画が不完全（{completed}/{total}）。不足：{titles}"
+    }
+  },
+  "pdf_outline_lesson_plan_incomplete_block": {
+    "default": {
+      "zh-CN": "此教学计划不完整，部分章节生成失败。可单独重试失败章节，或重新生成全部。",
+      "en-US": "This lesson plan is incomplete. Retry failed sections individually or regenerate all.",
+      "ja-JP": "授業計画が不完全です。失敗セクションを個別に再試行するか、全体を再生成してください。"
+    }
+  },
+  "pdf_outline_lesson_plan_retry_one_btn": {
+    "default": {
+      "zh-CN": "重试本节",
+      "en-US": "Retry",
+      "ja-JP": "再試行"
+    }
+  },
+  "pdf_outline_lesson_plan_retry_all_failed_btn": {
+    "default": {
+      "zh-CN": "一键重试所有失败章节",
+      "en-US": "Retry all failed sections",
+      "ja-JP": "失敗セクションを一括再試行"
+    }
+  },
+  "pdf_outline_lesson_plan_section_failed": {
+    "default": {
+      "zh-CN": "该章节未成功生成。请重试。",
+      "en-US": "This section was not generated. Please retry.",
+      "ja-JP": "このセクションは生成されていません。再試行してください。"
+    }
+  },
+  "pdf_outline_lesson_plan_modal_title": {
+    "default": {
+      "zh-CN": "教学计划（Lesson Plan）",
+      "en-US": "Lesson Plan",
+      "ja-JP": "授業計画"
+    }
+  },
+  "pdf_outline_lesson_plan_modal_title_incomplete": {
+    "default": {
+      "zh-CN": "教学计划（未完成）",
+      "en-US": "Lesson Plan (incomplete)",
+      "ja-JP": "授業計画（未完成）"
+    }
+  },
+  "pdf_outline_lesson_plan_modal_summary": {
+    "default": {
+      "zh-CN": "已完成 {completed}/{total} 节的教学计划。点击节号查看 steps、key question、learning action、reasoning 与 landing。",
+      "en-US": "Lesson plan ready for {completed}/{total} sections. Click a section number to view steps and details.",
+      "ja-JP": "{completed}/{total} セクションの授業計画が完成。セクション番号をクリックして詳細を表示。"
+    }
+  },
+  "pdf_outline_lesson_plan_download_json": {
+    "default": {
+      "zh-CN": "下载 JSON",
+      "en-US": "Download JSON",
+      "ja-JP": "JSONをダウンロード"
+    }
+  },
+  "pdf_outline_lesson_plan_download_md": {
+    "default": {
+      "zh-CN": "下载 Markdown（人工 review 版）",
+      "en-US": "Download Markdown (for review)",
+      "ja-JP": "Markdownをダウンロード（レビュー用）"
+    }
+  },
+  "pdf_outline_lesson_plan_close": {
+    "default": {
+      "zh-CN": "关闭",
+      "en-US": "Close",
+      "ja-JP": "閉じる"
+    }
+  },
+  "pdf_outline_lesson_plan_error": {
+    "default": {
+      "zh-CN": "教学计划生成失败：",
+      "en-US": "Failed to generate lesson plan: ",
+      "ja-JP": "授業計画の生成に失敗："
+    }
+  },
+  "pdf_outline_lesson_plan_failed": {
+    "default": {
+      "zh-CN": "教学计划生成失败：{error}",
+      "en-US": "Lesson plan failed: {error}",
+      "ja-JP": "授業計画の生成に失敗：{error}"
+    }
+  },
+  "pdf_outline_lesson_plan_download_error": {
+    "default": {
+      "zh-CN": "下载失败：",
+      "en-US": "Download failed: ",
+      "ja-JP": "ダウンロード失敗："
+    }
+  },
+  "pdf_outline_lesson_plan_md_error": {
+    "default": {
+      "zh-CN": "Markdown 下载失败：",
+      "en-US": "Markdown download failed: ",
+      "ja-JP": "Markdownダウンロード失敗："
+    }
+  },
+  "pdf_outline_lesson_plan_normalize_btn": {
+    "default": {
+      "zh-CN": "修复 schema",
+      "en-US": "Fix schema",
+      "ja-JP": "スキーマ修復"
+    }
+  },
+  "pdf_outline_lesson_plan_normalize_confirm": {
+    "default": {
+      "zh-CN": "将对当前教学计划重跑本地 normalize（强制重写 step_id 等），不会调用 LLM，也不会改动 objective/hook/steps 内容。确认继续？",
+      "en-US": "Re-run local normalize on the current lesson plan (rewrite step_id etc.). No LLM call; objective/hook/steps content stays unchanged. Continue?",
+      "ja-JP": "現在の授業計画にローカルnormalizeを再実行します（step_idなどを強制書き直し）。LLMは呼ばず、objective/hook/stepsの内容は変えません。続行しますか？"
+    }
+  },
+  "pdf_outline_lesson_plan_normalize_result": {
+    "default": {
+      "zh-CN": "schema 修复完成：已规范化 {fixed} 节，跳过 {skipped} 节，恢复标题 {title_recovered} 节。",
+      "en-US": "Schema normalize done: {fixed} fixed, {skipped} skipped, {title_recovered} titles recovered.",
+      "ja-JP": "スキーマ修復完了：{fixed} 節を規範化、{skipped} 節をスキップ、{title_recovered} 節のタイトルを復元。"
+    }
+  },
+  "pdf_outline_lesson_plan_normalize_error": {
+    "default": {
+      "zh-CN": "schema 修复失败：",
+      "en-US": "Schema normalize failed: ",
+      "ja-JP": "スキーマ修復失敗："
+    }
+  },
   "pdf_outline_export_script": {
     "default": {
       "zh-CN": "导出 PDF 讲稿",

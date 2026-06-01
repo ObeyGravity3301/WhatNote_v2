@@ -32,7 +32,7 @@ import aiohttp
 import uuid
 import platform
 import subprocess
-from typing import List, Dict, Optional
+from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 # 配置 GPT-SoVITS 默认地址
@@ -3518,6 +3518,621 @@ async def export_agent_index_markdown(board_id: str, window_id: str):
         raise
     except Exception as e:
         error(f"导出 Agent 索引 Markdown 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# Lesson Plan：教学计划层（讲稿 + 学案的共同中枢）
+# ============================================================
+
+def _lesson_plan_file(board_id: str, window_id: str) -> Path:
+    return conversation_manager.get_board_conversations_dir(board_id) / f"lesson-plan-{window_id}-data.json"
+
+
+def _load_lesson_plan_subdivision_anchor(board_id: str, window_id: str, section_idx: int) -> str:
+    """从 subdivisions-*-data.json 取出本节的 section_summary + 子分段标题，作为 prompt 锚点。"""
+    from services.lesson_plan_service import build_subdivision_anchor
+
+    human_file = conversation_manager.get_board_conversations_dir(board_id) / f"subdivisions-{window_id}-data.json"
+    if not human_file.exists():
+        return ""
+    try:
+        with open(human_file, "r", encoding="utf-8") as f:
+            human_data = json.load(f)
+        human_sections = human_data.get("subdivisions") or []
+        if section_idx < len(human_sections) and human_sections[section_idx]:
+            return build_subdivision_anchor(human_sections[section_idx])
+    except Exception:
+        pass
+    return ""
+
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/lesson-plan")
+async def generate_lesson_plan_batch(board_id: str, window_id: str, request: Request):
+    """Lesson Plan：按大纲节生成教学计划（与 Agent Index 同形态的并发管线）。
+
+    请求体：
+      { "mode": "full" | "retry_failed", "section_indices": [int, ...] (可选) }
+    """
+    try:
+        from services.lesson_plan_service import (
+            LESSON_PLAN_COMPLETION_RETRY_ROUNDS,
+            LESSON_PLAN_CONCURRENCY,
+            LESSON_PLAN_MAX_ATTEMPTS,
+            LESSON_PLAN_SECTION_TIMEOUT_SEC,
+            generate_lesson_plan_section,
+        )
+
+        SSE_HEARTBEAT_SEC = 20
+
+        try:
+            req_body = await request.json()
+        except Exception:
+            req_body = {}
+        if not isinstance(req_body, dict):
+            req_body = {}
+        gen_mode = req_body.get("mode", "full")
+        if gen_mode not in ("full", "retry_failed"):
+            gen_mode = "full"
+        requested_indices = req_body.get("section_indices")
+
+        info(
+            f"开始 Lesson Plan 生成 board_id={board_id}, window_id={window_id}, mode={gen_mode}"
+        )
+
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        if not outline_file.exists():
+            raise HTTPException(status_code=404, detail="未找到大纲数据，请先执行第一阶段生成大纲")
+
+        with open(outline_file, "r", encoding="utf-8") as f:
+            outline_data = json.load(f)
+
+        outline = outline_data.get("outline") or []
+        if not outline:
+            raise HTTPException(status_code=400, detail="大纲数据为空")
+
+        total_sections = len(outline)
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        if not target_window:
+            raise HTTPException(status_code=404, detail="窗口不存在")
+        pdf_filename = target_window.get("title", "unknown")
+
+        # 读取上一节 landing_sentence 用于承接：从已存的 lesson_plan 里取
+        def _get_previous_landing(prev_idx: int, all_sections: List[Optional[Dict[str, Any]]]) -> str:
+            if prev_idx < 0 or prev_idx >= len(all_sections):
+                return ""
+            prev = all_sections[prev_idx]
+            if not prev:
+                return ""
+            steps = prev.get("steps") or []
+            if not steps:
+                return ""
+            return (steps[-1].get("landing_sentence") or "").strip()
+
+        async def lesson_plan_stream():
+            try:
+                import asyncio
+                import time as _time
+
+                wall_started_at = datetime.now().isoformat()
+                perf_start = _time.monotonic()
+                all_sections: List[Optional[Dict[str, Any]]] = [None] * total_sections
+                if gen_mode == "retry_failed":
+                    existing = _lesson_plan_file(board_id, window_id)
+                    if existing.exists():
+                        try:
+                            with open(existing, "r", encoding="utf-8") as f:
+                                prev_data = json.load(f)
+                            prev_sections = prev_data.get("sections") or []
+                            if len(prev_sections) == total_sections:
+                                all_sections = list(prev_sections)
+                        except Exception as load_err:
+                            info(f"加载已有 lesson_plan 失败，按全新生成: {load_err}")
+
+                if requested_indices is not None:
+                    target_indices = [
+                        int(i)
+                        for i in requested_indices
+                        if isinstance(i, (int, float)) and 0 <= int(i) < total_sections
+                    ]
+                elif gen_mode == "retry_failed":
+                    target_indices = [i for i, s in enumerate(all_sections) if s is None]
+                else:
+                    target_indices = list(range(total_sections))
+
+                if not target_indices:
+                    yield f"data: {json.dumps({'type': 'status', 'message': '没有需要生成的章节'}, ensure_ascii=False)}\n\n"
+                elif gen_mode == "retry_failed":
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'重试 {len(target_indices)} 个失败章节（并发 {LESSON_PLAN_CONCURRENCY}）...'}, ensure_ascii=False)}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'开始生成 Lesson Plan（{total_sections} 节，并发 {LESSON_PLAN_CONCURRENCY}）...'}, ensure_ascii=False)}\n\n"
+
+                completed_count = [sum(1 for s in all_sections if s is not None)]
+                event_queue: asyncio.Queue = asyncio.Queue()
+                section_semaphore = asyncio.Semaphore(LESSON_PLAN_CONCURRENCY)
+                target_set = set(target_indices)
+
+                async def process_section(section_idx: int, section: Dict[str, Any]):
+                    section_num = section.get("section_number", section_idx + 1)
+                    section_title = section.get("title", f"分段{section_num}")
+                    page_start = section.get("page_start")
+                    page_end = section.get("page_end")
+
+                    info(f"[LP] 排队中: §{section_num} {section_title} (p.{page_start}-{page_end})")
+                    async with section_semaphore:
+                        info(f"[LP] 开始生成: §{section_num} {section_title} (p.{page_start}-{page_end})")
+                        await event_queue.put({
+                            "type": "section_start",
+                            "section": section_num,
+                            "title": section_title,
+                            "pages": f"{page_start}-{page_end}",
+                        })
+
+                        previous_landing = _get_previous_landing(section_idx - 1, all_sections)
+                        # 下一节大纲描述作为衔接提示
+                        next_objective_hint = ""
+                        if section_idx + 1 < len(outline):
+                            nxt = outline[section_idx + 1] or {}
+                            next_objective_hint = (
+                                nxt.get("description") or nxt.get("title") or ""
+                            )
+
+                        try:
+                            result, err = await asyncio.wait_for(
+                                generate_lesson_plan_section(
+                                    section_idx,
+                                    section,
+                                    pdf_filename,
+                                    board_id,
+                                    window_id,
+                                    content_manager.get_pdf_page_contents,
+                                    llm_service.chat_completion,
+                                    _load_lesson_plan_subdivision_anchor,
+                                    previous_landing=previous_landing,
+                                    next_objective_hint=next_objective_hint,
+                                    max_attempts=LESSON_PLAN_MAX_ATTEMPTS,
+                                    on_chunk=None,
+                                ),
+                                timeout=LESSON_PLAN_SECTION_TIMEOUT_SEC,
+                            )
+                        except asyncio.TimeoutError:
+                            result, err = None, f"单节超时（>{LESSON_PLAN_SECTION_TIMEOUT_SEC}s）"
+
+                    if not result:
+                        if err == "分段无页面内容":
+                            await event_queue.put({"type": "warning", "message": f"分段{section_num}无内容，跳过"})
+                            info(f"[LP] 跳过 §{section_num}：无内容")
+                        else:
+                            await event_queue.put({
+                                "type": "warning",
+                                "message": f"分段{section_num} Lesson Plan 失败: {err}",
+                            })
+                            info(f"[LP] 失败 §{section_num}: {err}")
+                        return None
+
+                    all_sections[section_idx] = result
+                    completed_count[0] = sum(1 for s in all_sections if s is not None)
+                    info(f"[LP] 完成 §{section_num} ({completed_count[0]}/{total_sections})")
+                    await event_queue.put({
+                        "type": "section_done",
+                        "section": section_num,
+                        "completed": completed_count[0],
+                        "total": total_sections,
+                    })
+                    return result
+
+                tasks = [
+                    asyncio.create_task(process_section(idx, outline[idx]))
+                    for idx in target_indices
+                ]
+
+                async def wait_for_completion():
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+                    await event_queue.put({"type": "_all_done"})
+
+                completion_task = asyncio.create_task(wait_for_completion())
+
+                while True:
+                    try:
+                        event = await asyncio.wait_for(
+                            event_queue.get(), timeout=SSE_HEARTBEAT_SEC
+                        )
+                    except asyncio.TimeoutError:
+                        yield f"data: {json.dumps({'type': 'heartbeat', 'completed': completed_count[0], 'total': total_sections}, ensure_ascii=False)}\n\n"
+                        continue
+                    if event["type"] == "_all_done":
+                        break
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+                await completion_task
+
+                async def retry_single(section_idx: int):
+                    section = outline[section_idx]
+                    section_num = section.get("section_number", section_idx + 1)
+                    async with section_semaphore:
+                        previous_landing = _get_previous_landing(section_idx - 1, all_sections)
+                        next_objective_hint = ""
+                        if section_idx + 1 < len(outline):
+                            nxt = outline[section_idx + 1] or {}
+                            next_objective_hint = (
+                                nxt.get("description") or nxt.get("title") or ""
+                            )
+                        try:
+                            result, err = await asyncio.wait_for(
+                                generate_lesson_plan_section(
+                                    section_idx,
+                                    section,
+                                    pdf_filename,
+                                    board_id,
+                                    window_id,
+                                    content_manager.get_pdf_page_contents,
+                                    llm_service.chat_completion,
+                                    _load_lesson_plan_subdivision_anchor,
+                                    previous_landing=previous_landing,
+                                    next_objective_hint=next_objective_hint,
+                                    max_attempts=LESSON_PLAN_MAX_ATTEMPTS,
+                                    on_chunk=None,
+                                ),
+                                timeout=LESSON_PLAN_SECTION_TIMEOUT_SEC,
+                            )
+                        except asyncio.TimeoutError:
+                            result, err = None, f"单节超时（>{LESSON_PLAN_SECTION_TIMEOUT_SEC}s）"
+                    return section_idx, section_num, result, err
+
+                for retry_round in range(LESSON_PLAN_COMPLETION_RETRY_ROUNDS):
+                    pending_indices = [
+                        i for i in target_set
+                        if i < len(all_sections) and all_sections[i] is None
+                    ]
+                    if not pending_indices:
+                        break
+                    yield f"data: {json.dumps({'type': 'status', 'message': f'补跑失败章节 {len(pending_indices)} 节（第 {retry_round + 1}/{LESSON_PLAN_COMPLETION_RETRY_ROUNDS} 轮）...'}, ensure_ascii=False)}\n\n"
+
+                    # 边跑边 yield，避免几分钟静默看上去像卡死
+                    retry_event_queue: asyncio.Queue = asyncio.Queue()
+
+                    async def _retry_and_publish(idx_):
+                        try:
+                            section_idx, section_num, result, err = await retry_single(idx_)
+                        except Exception as exc:
+                            await retry_event_queue.put({
+                                "kind": "exception",
+                                "section_idx": idx_,
+                                "error": str(exc),
+                            })
+                            return
+                        await retry_event_queue.put({
+                            "kind": "result",
+                            "section_idx": section_idx,
+                            "section_num": section_num,
+                            "result": result,
+                            "err": err,
+                        })
+
+                    retry_tasks = [
+                        asyncio.create_task(_retry_and_publish(i))
+                        for i in pending_indices
+                    ]
+
+                    async def _retry_completion_signal():
+                        await asyncio.gather(*retry_tasks, return_exceptions=True)
+                        await retry_event_queue.put({"kind": "_all_done"})
+
+                    retry_completion_task = asyncio.create_task(_retry_completion_signal())
+                    processed = 0
+                    total_in_round = len(pending_indices)
+                    while True:
+                        try:
+                            evt = await asyncio.wait_for(
+                                retry_event_queue.get(), timeout=SSE_HEARTBEAT_SEC
+                            )
+                        except asyncio.TimeoutError:
+                            yield f"data: {json.dumps({'type': 'heartbeat', 'completed': completed_count[0], 'total': total_sections, 'phase': f'retry-round-{retry_round + 1}', 'retry_progress': f'{processed}/{total_in_round}'}, ensure_ascii=False)}\n\n"
+                            continue
+                        if evt["kind"] == "_all_done":
+                            break
+                        processed += 1
+                        if evt["kind"] == "exception":
+                            exc_msg = evt.get("error", "unknown")
+                            yield f"data: {json.dumps({'type': 'warning', 'message': f'补跑异常: {exc_msg}'}, ensure_ascii=False)}\n\n"
+                            continue
+                        section_idx = evt["section_idx"]
+                        section_num = evt["section_num"]
+                        result = evt["result"]
+                        err = evt["err"]
+                        if result:
+                            all_sections[section_idx] = result
+                            completed_count[0] = sum(1 for s in all_sections if s is not None)
+                            yield f"data: {json.dumps({'type': 'section_done', 'section': section_num, 'completed': completed_count[0], 'total': total_sections}, ensure_ascii=False)}\n\n"
+                            info(f"Lesson Plan 补跑成功: 分段{section_num}")
+                        else:
+                            yield f"data: {json.dumps({'type': 'warning', 'message': f'补跑分段{section_num}仍失败: {err}'}, ensure_ascii=False)}\n\n"
+                            info(f"Lesson Plan 补跑失败: 分段{section_num}: {err}")
+                    await retry_completion_task
+
+                failed_sections = []
+                for idx, item in enumerate(all_sections):
+                    if item is None:
+                        failed_sections.append({
+                            "section_index": idx,
+                            "section_number": outline[idx].get("section_number", idx + 1),
+                            "section_title": outline[idx].get("title", f"分段{idx + 1}"),
+                        })
+                valid_count = sum(1 for s in all_sections if s is not None)
+                complete = valid_count == total_sections
+                sections_ok = [s for s in all_sections if s]
+
+                preserved_created_at = wall_started_at
+                lp_file = _lesson_plan_file(board_id, window_id)
+                if gen_mode == "retry_failed" and lp_file.exists():
+                    try:
+                        with open(lp_file, "r", encoding="utf-8") as f:
+                            preserved_created_at = json.load(f).get(
+                                "created_at", preserved_created_at
+                            )
+                    except Exception:
+                        pass
+
+                elapsed_sec = _time.monotonic() - perf_start
+                finished_at = datetime.now().isoformat()
+                lesson_plan_data = {
+                    "schema_version": 1,
+                    "kind": "lesson_plan",
+                    "_readme": (
+                        "sections: full lesson plan per outline section (null = failed). "
+                        "sections_ok: only successful entries. "
+                        "step_id is the shared coordinate with worksheet/script."
+                    ),
+                    "pdf_filename": pdf_filename,
+                    "window_id": window_id,
+                    "board_id": board_id,
+                    "total_sections": total_sections,
+                    "completed_sections": valid_count,
+                    "lesson_plan_complete": complete,
+                    "status": "complete" if complete else "incomplete",
+                    "failed_sections": failed_sections,
+                    "sections": all_sections,
+                    "sections_ok": sections_ok,
+                    "last_generation_mode": gen_mode,
+                    "concurrency": LESSON_PLAN_CONCURRENCY,
+                    "started_at": wall_started_at,
+                    "finished_at": finished_at,
+                    "elapsed_seconds": round(elapsed_sec, 1),
+                    "created_at": preserved_created_at,
+                    "updated_at": finished_at,
+                }
+                info(
+                    f"[LP] 本次任务耗时 {elapsed_sec:.1f}s "
+                    f"({valid_count}/{total_sections}, 并发 {LESSON_PLAN_CONCURRENCY})"
+                )
+
+                with open(lp_file, "w", encoding="utf-8") as f:
+                    json.dump(lesson_plan_data, f, ensure_ascii=False, indent=2)
+
+                info(f"Lesson Plan 已保存: {lp_file}")
+                yield f"data: {json.dumps({'type': 'complete', 'data': lesson_plan_data}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'success': True}, ensure_ascii=False)}\n\n"
+
+            except Exception as e:
+                error(f"Lesson Plan 生成失败: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(
+            lesson_plan_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"Lesson Plan 接口失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Lesson Plan 生成失败: {str(e)}")
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/lesson-plan-data")
+async def get_lesson_plan_data(board_id: str, window_id: str):
+    """获取已保存的 Lesson Plan JSON"""
+    try:
+        lp_file = _lesson_plan_file(board_id, window_id)
+        if not lp_file.exists():
+            return None
+        with open(lp_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        error(f"加载 Lesson Plan 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/boards/{board_id}/windows/{window_id}/annotations/batch/lesson-plan/normalize")
+async def normalize_lesson_plan(board_id: str, window_id: str):
+    """对已存盘的 Lesson Plan 数据重跑 normalize（不再调用 LLM）。
+
+    用于修复历史数据里的 step_id 异形、anchor_page 冗余等可纯本地修复的字段。
+    """
+    try:
+        from services.lesson_plan_service import (
+            normalize_existing_section,
+            build_section_result,
+        )
+
+        lp_file = _lesson_plan_file(board_id, window_id)
+        if not lp_file.exists():
+            raise HTTPException(status_code=404, detail="Lesson Plan 不存在，请先生成")
+
+        with open(lp_file, "r", encoding="utf-8") as f:
+            lp_data = json.load(f)
+
+        # 加载原始 outline，用于回补可能被坏数据污染的 section_title
+        outline_file = conversation_manager.get_board_conversations_dir(board_id) / f"outline-{window_id}-data.json"
+        outline_titles_by_idx: Dict[int, str] = {}
+        if outline_file.exists():
+            try:
+                with open(outline_file, "r", encoding="utf-8") as f:
+                    outline_data = json.load(f)
+                for i, out_sec in enumerate(outline_data.get("outline") or []):
+                    if isinstance(out_sec, dict) and out_sec.get("title"):
+                        outline_titles_by_idx[i] = out_sec["title"]
+            except Exception as load_err:
+                info(f"normalize 时加载 outline 失败（标题恢复将跳过）：{load_err}")
+
+        sections = lp_data.get("sections") or []
+        fixed_count = 0
+        skipped_count = 0
+        title_recovered_count = 0
+        per_section_report: List[Dict[str, Any]] = []
+
+        for idx, sec in enumerate(sections):
+            if not isinstance(sec, dict) or sec.get("status") == "failed":
+                skipped_count += 1
+                per_section_report.append({
+                    "section_index": idx,
+                    "skipped": True,
+                    "reason": "missing or failed section",
+                })
+                continue
+
+            # 标题恢复：如果当前 section_title 是兜底格式 "Section N" 或为空，
+            # 但 outline 里有真名，则回补到 sec 后再 normalize
+            cur_title = (sec.get("section_title") or "").strip()
+            real_title = outline_titles_by_idx.get(idx)
+            looks_like_fallback = (
+                not cur_title
+                or cur_title == f"Section {sec.get('section_number', idx + 1)}"
+                or cur_title == f"分段{sec.get('section_number', idx + 1)}"
+            )
+            if real_title and looks_like_fallback:
+                sec["section_title"] = real_title
+                title_recovered_count += 1
+
+            ok, err, normalized = normalize_existing_section(sec)
+            if not ok or normalized is None:
+                skipped_count += 1
+                per_section_report.append({
+                    "section_index": idx,
+                    "skipped": True,
+                    "reason": err or "normalize failed",
+                })
+                continue
+            warnings = normalized.pop("_warnings", []) if isinstance(normalized, dict) else []
+            new_section = build_section_result(sec, idx, normalized)
+            new_section["status"] = sec.get("status", "completed")
+            sections[idx] = new_section
+            fixed_count += 1
+            per_section_report.append({
+                "section_index": idx,
+                "section_number": sec.get("section_number"),
+                "section_title": new_section.get("section_title"),
+                "warnings": warnings,
+                "warning_count": len(warnings),
+            })
+
+        lp_data["sections"] = sections
+        lp_data["updated_at"] = datetime.now().isoformat()
+        lp_data.setdefault("normalize_log", []).append({
+            "ts": lp_data["updated_at"],
+            "fixed": fixed_count,
+            "skipped": skipped_count,
+            "title_recovered": title_recovered_count,
+        })
+
+        lp_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(lp_file, "w", encoding="utf-8") as f:
+            json.dump(lp_data, f, ensure_ascii=False, indent=2)
+
+        return {
+            "ok": True,
+            "fixed": fixed_count,
+            "skipped": skipped_count,
+            "title_recovered": title_recovered_count,
+            "total": len(sections),
+            "report": per_section_report,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"Normalize Lesson Plan 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-lesson-plan")
+async def export_lesson_plan_json(board_id: str, window_id: str):
+    """下载 Lesson Plan JSON 文件（不完整时也允许导出，供调试）"""
+    try:
+        from urllib.parse import quote
+
+        lp_file = _lesson_plan_file(board_id, window_id)
+        if not lp_file.exists():
+            raise HTTPException(status_code=404, detail="Lesson Plan 不存在，请先生成")
+
+        with open(lp_file, "r", encoding="utf-8") as f:
+            lp_data = json.load(f)
+
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        pdf_title = target_window.get("title", "document.pdf") if target_window else "document.pdf"
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}-lesson-plan.json"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-lesson-plan.json"
+
+        payload = json.dumps(lp_data, ensure_ascii=False, indent=2).encode("utf-8")
+        return StreamingResponse(
+            iter([payload]),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Lesson Plan JSON 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-lesson-plan-markdown")
+async def export_lesson_plan_markdown(board_id: str, window_id: str):
+    """下载 Lesson Plan 的 Markdown 可读版（人工 review 用，不是面向学生的学案）"""
+    try:
+        from urllib.parse import quote
+        from services.lesson_plan_service import render_lesson_plan_markdown
+
+        lp_file = _lesson_plan_file(board_id, window_id)
+        if not lp_file.exists():
+            raise HTTPException(status_code=404, detail="Lesson Plan 不存在，请先生成")
+
+        with open(lp_file, "r", encoding="utf-8") as f:
+            lp_data = json.load(f)
+
+        md_text = render_lesson_plan_markdown(lp_data)
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        pdf_title = target_window.get("title", "document.pdf") if target_window else "document.pdf"
+        safe_stem = Path(pdf_title).stem or "document"
+        filename = f"{safe_stem}-lesson-plan.md"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}-lesson-plan.md"
+
+        return StreamingResponse(
+            iter([md_text.encode("utf-8")]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Lesson Plan Markdown 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

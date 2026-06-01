@@ -348,6 +348,11 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
   const [isGeneratingAgentIndex, setIsGeneratingAgentIndex] = useState(false);
   const [agentIndexProgress, setAgentIndexProgress] = useState({ completed: 0, total: 0 });
   const [showAgentIndexModal, setShowAgentIndexModal] = useState(false);
+  const [lessonPlanData, setLessonPlanData] = useState(null); // 教学计划（讲稿+学案中枢）
+  const [isGeneratingLessonPlan, setIsGeneratingLessonPlan] = useState(false);
+  const [lessonPlanProgress, setLessonPlanProgress] = useState({ completed: 0, total: 0 });
+  const [showLessonPlanModal, setShowLessonPlanModal] = useState(false);
+  const [lessonPlanExpandedSection, setLessonPlanExpandedSection] = useState(0);
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
@@ -829,6 +834,19 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
         } catch(e) { /* ignore 404 */ }
 
         try {
+          const lpRes = await fetch(
+            `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/lesson-plan-data`
+          );
+          if (lpRes.ok) {
+            const lpData = await lpRes.json();
+            if (lpData) {
+              setLessonPlanData(lpData);
+              console.log('加载已有 Lesson Plan:', lpData);
+            }
+          }
+        } catch (e) { /* ignore */ }
+
+        try {
           const agentRes = await fetch(
             `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/agent-index-data`
           );
@@ -1131,6 +1149,188 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
       alert(t('pdf_outline_agent_copy_error') + error.message);
     }
   }, [agentIndexData, isAgentIndexComplete, t]);
+
+  // ============== Lesson Plan ==============
+
+  const runLessonPlanGeneration = useCallback(async ({ mode = 'full', sectionIndices } = {}) => {
+    if (!boardId || !windowId || !batchOutline || isGeneratingLessonPlan) return;
+
+    const total = batchOutline.outline?.length || 0;
+    const existingCompleted = lessonPlanData?.completed_sections || 0;
+
+    setIsGeneratingLessonPlan(true);
+    setLessonPlanProgress({
+      completed: mode === 'retry_failed' ? existingCompleted : 0,
+      total,
+    });
+    setShowLessonPlanModal(false);
+    setBatchOutlineStatus(
+      mode === 'retry_failed'
+        ? t('pdf_outline_lesson_plan_retrying')
+        : t('pdf_outline_lesson_plan_generating')
+    );
+
+    try {
+      const body = { mode };
+      if (Array.isArray(sectionIndices)) body.section_indices = sectionIndices;
+      const response = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/lesson-plan`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }
+      );
+      if (!response.ok) {
+        throw new Error('Lesson Plan 生成请求失败');
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = JSON.parse(line.slice(6));
+
+          if (data.type === 'status') {
+            setBatchOutlineStatus(data.message);
+          } else if (data.type === 'heartbeat') {
+            setLessonPlanProgress({ completed: data.completed, total: data.total });
+            setBatchOutlineStatus(
+              t('pdf_outline_lesson_plan_progress')
+                .replace('{completed}', data.completed)
+                .replace('{total}', data.total)
+            );
+          } else if (data.type === 'section_done') {
+            setLessonPlanProgress({ completed: data.completed, total: data.total });
+            setBatchOutlineStatus(
+              t('pdf_outline_lesson_plan_progress')
+                .replace('{completed}', data.completed)
+                .replace('{total}', data.total)
+            );
+          } else if (data.type === 'complete') {
+            const payload = data.data;
+            setLessonPlanData(payload);
+            setLessonPlanProgress({
+              completed: payload?.completed_sections || 0,
+              total: payload?.total_sections || 0,
+            });
+            const isComplete = payload?.lesson_plan_complete !== false
+              && (payload?.completed_sections || 0) >= (payload?.total_sections || 0);
+            if (isComplete) {
+              setBatchOutlineStatus(t('pdf_outline_lesson_plan_complete'));
+            } else {
+              const failedTitles = (payload?.failed_sections || [])
+                .map((f) => f.section_title)
+                .slice(0, 4)
+                .join('、');
+              setBatchOutlineStatus(
+                t('pdf_outline_lesson_plan_incomplete_status')
+                  .replace('{completed}', payload?.completed_sections || 0)
+                  .replace('{total}', payload?.total_sections || 0)
+                  .replace('{titles}', failedTitles || '—')
+              );
+            }
+            setShowLessonPlanModal(true);
+          } else if (data.type === 'warning') {
+            setBatchOutlineStatus((prev) => `${prev}\n警告: ${data.message}`);
+          } else if (data.type === 'error') {
+            throw new Error(data.error || data.message || '未知错误');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Lesson Plan 生成失败:', error);
+      alert(t('pdf_outline_lesson_plan_error') + (error.message || t('text_unknown_error')));
+      setBatchOutlineStatus(
+        t('pdf_outline_lesson_plan_failed').replace('{error}', error.message || '')
+      );
+    } finally {
+      setIsGeneratingLessonPlan(false);
+    }
+  }, [boardId, windowId, batchOutline, isGeneratingLessonPlan, lessonPlanData, t]);
+
+  const handleGenerateLessonPlan = useCallback(
+    () => runLessonPlanGeneration({ mode: 'full' }),
+    [runLessonPlanGeneration]
+  );
+
+  const handleRetryFailedLessonPlan = useCallback(
+    () => runLessonPlanGeneration({ mode: 'retry_failed' }),
+    [runLessonPlanGeneration]
+  );
+
+  const handleRetrySingleLessonPlanSection = useCallback(
+    (sectionIdx) => runLessonPlanGeneration({ mode: 'retry_failed', sectionIndices: [sectionIdx] }),
+    [runLessonPlanGeneration]
+  );
+
+  const isLessonPlanComplete = useCallback((data) => {
+    if (!data) return false;
+    return data.lesson_plan_complete !== false
+      && (data.completed_sections || 0) >= (data.total_sections || 0);
+  }, []);
+
+  const handleDownloadLessonPlanJson = useCallback(async () => {
+    if (!lessonPlanData) return;
+    const defaultStem = (documentTitle || 'document').replace(/\.[^.]+$/, '') || 'document';
+    try {
+      await downloadBlobResponse('export-lesson-plan', `${defaultStem}-lesson-plan.json`);
+    } catch (error) {
+      alert(t('pdf_outline_lesson_plan_download_error') + error.message);
+    }
+  }, [lessonPlanData, documentTitle, downloadBlobResponse, t]);
+
+  const handleDownloadLessonPlanMarkdown = useCallback(async () => {
+    if (!lessonPlanData) return;
+    const defaultStem = (documentTitle || 'document').replace(/\.[^.]+$/, '') || 'document';
+    try {
+      await downloadBlobResponse('export-lesson-plan-markdown', `${defaultStem}-lesson-plan.md`);
+    } catch (error) {
+      alert(t('pdf_outline_lesson_plan_md_error') + error.message);
+    }
+  }, [lessonPlanData, documentTitle, downloadBlobResponse, t]);
+
+  const handleNormalizeLessonPlan = useCallback(async () => {
+    if (!lessonPlanData) return;
+    if (!window.confirm(t('pdf_outline_lesson_plan_normalize_confirm'))) return;
+    try {
+      const resp = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/lesson-plan/normalize`,
+        { method: 'POST' }
+      );
+      if (!resp.ok) {
+        const detail = await resp.text();
+        throw new Error(detail || `HTTP ${resp.status}`);
+      }
+      const result = await resp.json();
+
+      // 刷新前端缓存
+      const reloadResp = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/lesson-plan-data`
+      );
+      if (reloadResp.ok) {
+        const fresh = await reloadResp.json();
+        if (fresh) setLessonPlanData(fresh);
+      }
+
+      alert(
+        t('pdf_outline_lesson_plan_normalize_result')
+          .replace('{fixed}', result.fixed ?? 0)
+          .replace('{skipped}', result.skipped ?? 0)
+          .replace('{title_recovered}', result.title_recovered ?? 0)
+      );
+    } catch (error) {
+      alert(t('pdf_outline_lesson_plan_normalize_error') + error.message);
+    }
+  }, [lessonPlanData, boardId, windowId, t]);
 
   useEffect(() => {
     loadOutlineData();
@@ -5520,6 +5720,70 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
               {/* 第一阶段：大纲展示 */}
               {batchOutline && batchOutline.outline && (
                 <div>
+                  {/* Lesson Plan / Agent Index 生成中：实时进度浮条 */}
+                  {(isGeneratingLessonPlan || isGeneratingAgentIndex) && (
+                    (() => {
+                      const isLP = isGeneratingLessonPlan;
+                      const progress = isLP ? lessonPlanProgress : agentIndexProgress;
+                      const total = progress?.total || 0;
+                      const completed = progress?.completed || 0;
+                      const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+                      const barColor = isLP ? '#7b1fa2' : '#000080';
+                      return (
+                        <div
+                          style={{
+                            padding: '8px 10px',
+                            marginBottom: '10px',
+                            backgroundColor: '#f5f5f5',
+                            border: '2px inset #c0c0c0',
+                            fontSize: '11px',
+                            fontFamily: 'MS Sans Serif, sans-serif',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <strong style={{ color: barColor }}>
+                              {isLP ? t('pdf_outline_lesson_plan_generating') : t('pdf_outline_agent_generating') || 'Agent Index 生成中…'}
+                            </strong>
+                            <span style={{ color: '#555' }}>
+                              {completed} / {total} {total > 0 && `(${pct}%)`}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              width: '100%',
+                              height: '10px',
+                              backgroundColor: '#d0d0d0',
+                              border: '1px inset #c0c0c0',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${pct}%`,
+                                height: '100%',
+                                backgroundColor: barColor,
+                                transition: 'width 0.3s ease',
+                              }}
+                            />
+                          </div>
+                          {batchOutlineStatus && (
+                            <div
+                              style={{
+                                marginTop: '6px',
+                                fontSize: '10px',
+                                color: '#555',
+                                whiteSpace: 'pre-wrap',
+                                maxHeight: '54px',
+                                overflowY: 'auto',
+                              }}
+                            >
+                              {batchOutlineStatus}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
+                  )}
                   {/* 细分失败提示 */}
                   {batchSubdivisions && batchSubdivisions.failed_sections && batchSubdivisions.failed_sections.length > 0 && (
                     <div style={{
@@ -5779,6 +6043,59 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                     {isGeneratingAgentIndex ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_agent_generate')}
                   </button>
                   <button
+                    onClick={handleGenerateLessonPlan}
+                    disabled={isGeneratingLessonPlan}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: '11px',
+                      backgroundColor: isGeneratingLessonPlan ? '#a0a0a0' : '#7b1fa2',
+                      color: '#ffffff',
+                      border: '2px outset #7b1fa2',
+                      cursor: isGeneratingLessonPlan ? 'wait' : 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    {isGeneratingLessonPlan ? t('pdf_outline_export_toc_exporting') : t('pdf_outline_lesson_plan_generate')}
+                  </button>
+                  {lessonPlanData?.completed_sections > 0 && (
+                    <button
+                      onClick={() => setShowLessonPlanModal(true)}
+                      disabled={isGeneratingLessonPlan}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: '#c0c0c0',
+                        color: '#000000',
+                        border: '2px outset #c0c0c0',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {t('pdf_outline_lesson_plan_open')}
+                    </button>
+                  )}
+                  {lessonPlanData?.completed_sections > 0 && (
+                    <button
+                      onClick={handleNormalizeLessonPlan}
+                      disabled={isGeneratingLessonPlan}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: '#e0e0e0',
+                        color: '#000000',
+                        border: '2px outset #e0e0e0',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                      title={t('pdf_outline_lesson_plan_normalize_confirm')}
+                    >
+                      {t('pdf_outline_lesson_plan_normalize_btn')}
+                    </button>
+                  )}
+                  <button
                         onClick={async () => {
                           console.log('开始第二阶段：细分分段');
                           setIsBatchGenerating(true);
@@ -5972,6 +6289,70 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                       }}
                     >
                       {t('pdf_outline_agent_open')}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleGenerateLessonPlan}
+                    disabled={isGeneratingLessonPlan || isBatchGenerating}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: '11px',
+                      backgroundColor: isGeneratingLessonPlan ? '#a0a0a0' : '#7b1fa2',
+                      color: '#ffffff',
+                      border: '2px outset #7b1fa2',
+                      borderRadius: '0px',
+                      cursor: isGeneratingLessonPlan ? 'wait' : 'pointer',
+                      fontFamily: 'MS Sans Serif, sans-serif',
+                      fontWeight: 'bold'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isGeneratingLessonPlan) e.target.style.backgroundColor = '#5e1480';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isGeneratingLessonPlan) e.target.style.backgroundColor = '#7b1fa2';
+                    }}
+                  >
+                    {isGeneratingLessonPlan
+                      ? t('pdf_outline_export_toc_exporting')
+                      : t('pdf_outline_lesson_plan_generate')}
+                  </button>
+                  {lessonPlanData?.completed_sections > 0 && (
+                    <button
+                      onClick={() => setShowLessonPlanModal(true)}
+                      disabled={isGeneratingLessonPlan}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: '#c0c0c0',
+                        color: '#000000',
+                        border: '2px outset #c0c0c0',
+                        borderRadius: '0px',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {t('pdf_outline_lesson_plan_open')}
+                    </button>
+                  )}
+                  {lessonPlanData?.completed_sections > 0 && (
+                    <button
+                      onClick={handleNormalizeLessonPlan}
+                      disabled={isGeneratingLessonPlan}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: '#e0e0e0',
+                        color: '#000000',
+                        border: '2px outset #e0e0e0',
+                        borderRadius: '0px',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                      title={t('pdf_outline_lesson_plan_normalize_confirm')}
+                    >
+                      {t('pdf_outline_lesson_plan_normalize_btn')}
                     </button>
                   )}
                   <button
@@ -6639,6 +7020,228 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                         style={{ padding: '6px', marginTop: '4px', cursor: 'pointer' }}
                       >
                         {t('pdf_outline_agent_close')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {showLessonPlanModal && lessonPlanData && (
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundColor: 'rgba(0,0,0,0.45)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 2000
+                }}>
+                  <div style={{
+                    width: 'min(720px, 94%)',
+                    maxHeight: '88%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: '#c0c0c0',
+                    border: '2px outset #c0c0c0',
+                    padding: '12px',
+                    fontFamily: 'MS Sans Serif, sans-serif',
+                    fontSize: '11px'
+                  }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                      {isLessonPlanComplete(lessonPlanData)
+                        ? t('pdf_outline_lesson_plan_modal_title')
+                        : t('pdf_outline_lesson_plan_modal_title_incomplete')}
+                    </div>
+                    <div style={{ marginBottom: '8px', lineHeight: 1.5 }}>
+                      {t('pdf_outline_lesson_plan_modal_summary')
+                        .replace('{completed}', lessonPlanData.completed_sections || 0)
+                        .replace('{total}', lessonPlanData.total_sections || 0)}
+                    </div>
+                    {!isLessonPlanComplete(lessonPlanData) && (
+                      <div style={{
+                        marginBottom: '8px',
+                        padding: '6px 8px',
+                        backgroundColor: '#ffe4e4',
+                        border: '2px inset #c0c0c0',
+                        color: '#800000',
+                        lineHeight: 1.5
+                      }}>
+                        {t('pdf_outline_lesson_plan_incomplete_block')}
+                        {(lessonPlanData.failed_sections || []).length > 0 && (
+                          <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+                            {(lessonPlanData.failed_sections || []).map((f) => (
+                              <li key={f.section_index}>
+                                {f.section_number}. {f.section_title}
+                                {' '}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRetrySingleLessonPlanSection(f.section_index)}
+                                  disabled={isGeneratingLessonPlan}
+                                  style={{
+                                    marginLeft: '6px',
+                                    fontSize: '10px',
+                                    padding: '0 6px',
+                                    cursor: isGeneratingLessonPlan ? 'wait' : 'pointer',
+                                  }}
+                                >
+                                  {t('pdf_outline_lesson_plan_retry_one_btn')}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleRetryFailedLessonPlan}
+                          disabled={isGeneratingLessonPlan || !(lessonPlanData.failed_sections || []).length}
+                          style={{
+                            marginTop: '6px',
+                            padding: '4px 8px',
+                            cursor: isGeneratingLessonPlan ? 'wait' : 'pointer',
+                          }}
+                        >
+                          {t('pdf_outline_lesson_plan_retry_all_failed_btn')}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 节选择 */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
+                      {(lessonPlanData.sections || []).map((sec, idx) => {
+                        if (!sec) return (
+                          <button key={idx} disabled style={{ padding: '2px 6px', fontSize: '10px', backgroundColor: '#ffd0d0', opacity: 0.6 }}>
+                            {idx + 1}✕
+                          </button>
+                        );
+                        const isActive = idx === lessonPlanExpandedSection;
+                        return (
+                          <button
+                            key={sec.section_index}
+                            type="button"
+                            onClick={() => setLessonPlanExpandedSection(idx)}
+                            style={{
+                              padding: '2px 6px',
+                              fontSize: '10px',
+                              backgroundColor: isActive ? '#000080' : '#ece9d8',
+                              color: isActive ? '#ffffff' : '#000000',
+                              border: isActive ? '2px inset #000080' : '1px outset #ece9d8',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {sec.section_number}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* 节详情 */}
+                    <div style={{ flex: 1, overflow: 'auto', border: '2px inset #c0c0c0', padding: '8px', backgroundColor: '#ffffff' }}>
+                      {(() => {
+                        const sec = (lessonPlanData.sections || [])[lessonPlanExpandedSection];
+                        if (!sec) {
+                          return (
+                            <div style={{ color: '#800000' }}>
+                              {t('pdf_outline_lesson_plan_section_failed')}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div>
+                            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                              {sec.section_number}. {sec.section_title}
+                              {' '}
+                              <span style={{ color: '#666', fontWeight: 'normal' }}>
+                                (p.{sec.page_start}-{sec.page_end})
+                              </span>
+                            </div>
+                            <div style={{ marginBottom: '4px' }}>
+                              <span style={{ color: '#000080', fontWeight: 'bold' }}>Objective: </span>
+                              {sec.objective}
+                            </div>
+                            {sec.hook && (
+                              <div style={{ marginBottom: '4px' }}>
+                                <span style={{ color: '#000080', fontWeight: 'bold' }}>Hook: </span>
+                                {sec.hook}
+                              </div>
+                            )}
+                            <div style={{ borderTop: '1px dashed #999', marginTop: '6px', paddingTop: '6px' }}>
+                              {(sec.steps || []).map((step) => (
+                                <div
+                                  key={step.step_id}
+                                  style={{
+                                    marginBottom: '8px',
+                                    padding: '6px',
+                                    border: '1px dotted #888',
+                                    backgroundColor: step.cognitive_action === 'intro' || step.cognitive_action === 'recap' || step.cognitive_action === 'summary' || step.cognitive_action === 'example'
+                                      ? '#fff8dc'
+                                      : '#f5f5f5',
+                                  }}
+                                >
+                                  <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
+                                    <span style={{ color: '#000080' }}>{step.step_id}</span>
+                                    {' '}
+                                    {step.step_title}
+                                    {' '}
+                                    <span style={{ fontSize: '9px', color: '#666', fontWeight: 'normal' }}>
+                                      [{step.cognitive_action}][w{step.weight}][exam{step.exam_likelihood}][p.{step.anchor_page}][⏸{step.pause_seconds}s]
+                                    </span>
+                                  </div>
+                                  <div><b>Q:</b> {step.key_question}</div>
+                                  <div><b>Action:</b> {step.learning_action}</div>
+                                  {(step.reasoning_chain || []).length > 0 && (
+                                    <div>
+                                      <b>Reasoning:</b>
+                                      <ol style={{ margin: '2px 0 2px 18px', padding: 0 }}>
+                                        {step.reasoning_chain.map((r, i) => (
+                                          <li key={i}>{r}</li>
+                                        ))}
+                                      </ol>
+                                    </div>
+                                  )}
+                                  <div><b>Landing:</b> {step.landing_sentence}</div>
+                                  {step.common_mistake && (
+                                    <div style={{ color: '#a00', marginTop: '2px' }}>⚠ {step.common_mistake}</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            {(sec.assessment || []).length > 0 && (
+                              <div style={{ marginTop: '8px' }}>
+                                <div style={{ fontWeight: 'bold' }}>Assessment:</div>
+                                <ul style={{ margin: '2px 0 2px 18px', padding: 0 }}>
+                                  {(sec.assessment || []).map((a, i) => (
+                                    <li key={i}>{a}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={handleDownloadLessonPlanJson}
+                        style={{ padding: '6px 10px', cursor: 'pointer' }}
+                      >
+                        {t('pdf_outline_lesson_plan_download_json')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadLessonPlanMarkdown}
+                        style={{ padding: '6px 10px', cursor: 'pointer' }}
+                      >
+                        {t('pdf_outline_lesson_plan_download_md')}
+                      </button>
+                      <div style={{ flex: 1 }} />
+                      <button
+                        type="button"
+                        onClick={() => setShowLessonPlanModal(false)}
+                        style={{ padding: '6px 10px', cursor: 'pointer' }}
+                      >
+                        {t('pdf_outline_lesson_plan_close')}
                       </button>
                     </div>
                   </div>
