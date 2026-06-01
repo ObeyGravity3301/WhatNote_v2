@@ -87,6 +87,18 @@ const NarratorPluginComponent = (props) => {
   const [narratorLlmModel, setNarratorLlmModel] = useState('qwen-long');
   const [narratorLlmOptions, setNarratorLlmOptions] = useState([]);
   const SUBTITLE_LEAD_SECONDS = 0.2;
+
+  // ===== Step Script 模式 =====
+  // playerMode: 'page' = 按页讲解（原有功能不变）；'step' = 按 lesson_plan.step 讲解
+  const [playerMode, setPlayerMode] = useState('page');
+  const [stepScriptData, setStepScriptData] = useState(null);            // { sections, llm_model, ... }
+  const [stepCurrentSectionIdx, setStepCurrentSectionIdx] = useState(0); // 0-based
+  const [stepAudioUrls, setStepAudioUrls] = useState({});                // { [section_num]: blob_url }
+  const [stepSynthesizedNums, setStepSynthesizedNums] = useState([]);    // 后端已合成的 section_num 列表
+  const [stepIsSynthesizing, setStepIsSynthesizing] = useState(false);
+  const [stepSynthProgress, setStepSynthProgress] = useState({ done: 0, total: 0, current: '', message: '' });
+  const [stepCurrentSub, setStepCurrentSub] = useState(null);            // 当前播放命中的完整 subtitle object（带 step_id/kind/anchor_page）
+  const [stepBatchAbortRef] = useState(() => ({ current: null }));
   
   // 批量处理状态
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
@@ -631,6 +643,8 @@ const NarratorPluginComponent = (props) => {
   // 加载当前页数据 (优先从后端获取讲稿)
   useEffect(() => {
     if (showPanel && pageControl) {
+      // step 模式下完全不走 page-based 加载逻辑，避免覆盖 stepAudio 的 audioUrl/subtitles
+      if (playerMode !== 'page') return;
       const page = pageControl.currentPage;
       
       // 1. 获取讲稿
@@ -679,8 +693,9 @@ const NarratorPluginComponent = (props) => {
     }
   }, [pageControl?.currentPage, showPanel, boardId, windowId]);
 
-  // Sync audioUrl with current page's audio
+  // Sync audioUrl with current page's audio (仅 page 模式)
   useEffect(() => {
+      if (playerMode !== 'page') return;
       if (pageControl) {
           const page = pageControl.currentPage;
       const url = audioUrls[page];
@@ -688,7 +703,7 @@ const NarratorPluginComponent = (props) => {
       setAudioUrl(url || null);
           }
       }
-  }, [audioUrls, pageControl?.currentPage, audioUrl]);
+  }, [audioUrls, pageControl?.currentPage, audioUrl, playerMode]);
 
   // Audio Playback Control Effect
   useEffect(() => {
@@ -751,6 +766,226 @@ const NarratorPluginComponent = (props) => {
       const intervalId = window.setInterval(syncSubtitle, 50);
       return () => window.clearInterval(intervalId);
   }, [audioUrl, subtitles, SUBTITLE_LEAD_SECONDS]);
+
+  // ====================================================================
+  // Step Script 模式 ：加载 / 切换 / 单节合成 / 批量合成 / anchor_page 翻页
+  // ====================================================================
+
+  // 1. 当面板打开 + 模式切到 step 时，按需加载 step-script-data 和已合成列表
+  useEffect(() => {
+    if (!showPanel || playerMode !== 'step') return;
+    let cancelled = false;
+
+    // step_script JSON
+    fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/step-script-data`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (cancelled) return;
+        if (data && Array.isArray(data.sections)) {
+          setStepScriptData(data);
+        } else {
+          setStepScriptData(null);
+        }
+      })
+      .catch(() => { if (!cancelled) setStepScriptData(null); });
+
+    // 已合成的 section_num 列表
+    fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/step-audio`)
+      .then(r => (r.ok ? r.json() : { sections: [] }))
+      .then(d => { if (!cancelled) setStepSynthesizedNums(d.sections || []); })
+      .catch(() => { if (!cancelled) setStepSynthesizedNums([]); });
+
+    return () => { cancelled = true; };
+  }, [showPanel, playerMode, boardId, windowId]);
+
+  // 2. step 模式下，切换 section 时加载该节音频 + 字幕（替换共用的 audioUrl/subtitles）
+  useEffect(() => {
+    if (playerMode !== 'step' || !stepScriptData) return;
+    const sec = (stepScriptData.sections || [])[stepCurrentSectionIdx];
+    if (!sec) {
+      setAudioUrl(null);
+      setSubtitles([]);
+      setStepCurrentSub(null);
+      return;
+    }
+    const sectionNum = sec.section_number || (stepCurrentSectionIdx + 1);
+
+    // 字幕
+    fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/step-subtitles/${sectionNum}`)
+      .then(r => r.json())
+      .then(d => setSubtitles(Array.isArray(d.subtitles) ? d.subtitles : []))
+      .catch(() => setSubtitles([]));
+
+    // 音频（如已合成）
+    const cachedUrl = stepAudioUrls[sectionNum];
+    if (cachedUrl) {
+      setAudioUrl(cachedUrl);
+    } else if ((stepSynthesizedNums || []).includes(sectionNum)) {
+      fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/step-audio/${sectionNum}`)
+        .then(async (r) => {
+          if (!r.ok) return;
+          const blob = await r.blob();
+          const url = URL.createObjectURL(blob);
+          setStepAudioUrls(prev => ({ ...prev, [sectionNum]: url }));
+          setAudioUrl(url);
+        })
+        .catch(() => {});
+    } else {
+      setAudioUrl(null);
+    }
+    setStepCurrentSub(null);
+  }, [playerMode, stepScriptData, stepCurrentSectionIdx, stepSynthesizedNums, boardId, windowId]);
+
+  // 3. step 模式：根据 currentTime 推出当前完整 sub（带 step_id/kind/anchor_page）
+  useEffect(() => {
+    if (playerMode !== 'step') return;
+    const audio = audioRef.current;
+    if (!audio || !audioUrl || !subtitles || subtitles.length === 0) return;
+    const tick = () => {
+      const t = Math.max(0, (audio.currentTime || 0) + SUBTITLE_LEAD_SECONDS);
+      const sub = subtitles.find(s => t >= s.start && t <= s.end);
+      setStepCurrentSub(sub || null);
+    };
+    tick();
+    const id = window.setInterval(tick, 80);
+    return () => window.clearInterval(id);
+  }, [playerMode, audioUrl, subtitles]);
+
+  // 4. step 模式：anchor_page 变化时自动翻页（防抖：仅当确实不同时）
+  useEffect(() => {
+    if (playerMode !== 'step' || !stepCurrentSub) return;
+    const targetPage = stepCurrentSub.anchor_page;
+    if (typeof targetPage !== 'number') return;
+    if (!pageControl || !pageControl.currentPage) return;
+    if (targetPage === pageControl.currentPage) return;
+    if (typeof pageControl.goToPage === 'function') {
+      pageControl.goToPage(targetPage);
+    }
+  }, [playerMode, stepCurrentSub, pageControl]);
+
+  // -------- handlers --------
+
+  const stepCurrentSection = (stepScriptData && (stepScriptData.sections || [])[stepCurrentSectionIdx]) || null;
+  const stepCurrentSectionNum = stepCurrentSection
+    ? (stepCurrentSection.section_number || (stepCurrentSectionIdx + 1))
+    : null;
+  const stepCurrentHasAudio = stepCurrentSectionNum != null
+    && (stepAudioUrls[stepCurrentSectionNum] || stepSynthesizedNums.includes(stepCurrentSectionNum));
+
+  const handleStepSynthOne = async () => {
+    if (!stepCurrentSection) return;
+    if (stepIsSynthesizing) return;
+    setStepIsSynthesizing(true);
+    setStepSynthProgress({ done: 0, total: 1, current: stepCurrentSection.section_title || `Section ${stepCurrentSectionIdx + 1}`, message: t('step_synth_running') || '正在合成本节…' });
+    try {
+      const res = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/step-audio/${stepCurrentSectionIdx}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ add_silence: true }) }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      const sectionNum = data.section_number;
+      setStepSynthesizedNums(prev => (prev.includes(sectionNum) ? prev : [...prev, sectionNum].sort((a,b)=>a-b)));
+      // 刷新音频/字幕
+      setStepAudioUrls(prev => { const cp = { ...prev }; delete cp[sectionNum]; return cp; });
+      fetch(`http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/step-audio/${sectionNum}`)
+        .then(async r => { if (r.ok) { const b = await r.blob(); const url = URL.createObjectURL(b); setStepAudioUrls(prev => ({ ...prev, [sectionNum]: url })); setAudioUrl(url); } });
+      setSubtitles(data.subtitles || []);
+      setStepSynthProgress({ done: 1, total: 1, current: '', message: t('step_synth_done_one') || '本节合成完成' });
+    } catch (e) {
+      console.error('Step synth failed', e);
+      alert((t('step_synth_failed') || 'Step 合成失败：') + e.message);
+    } finally {
+      setStepIsSynthesizing(false);
+      setTimeout(() => setStepSynthProgress({ done: 0, total: 0, current: '', message: '' }), 2500);
+    }
+  };
+
+  const handleStepSynthBatch = async (mode = 'missing') => {
+    if (!stepScriptData) return;
+    if (stepIsSynthesizing) return;
+    setStepIsSynthesizing(true);
+    const totalSections = (stepScriptData.sections || []).length;
+    setStepSynthProgress({ done: 0, total: totalSections, current: '', message: t('step_synth_batch_starting') || '批量合成启动中…' });
+
+    let controller = new AbortController();
+    stepBatchAbortRef.current = controller;
+    try {
+      const res = await fetch(
+        `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/narrator/step-audio/batch`,
+        {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode, add_silence: true, concurrency: 1 }),
+          signal: controller.signal,
+        }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nlIdx;
+        while ((nlIdx = buffer.indexOf('\n\n')) !== -1) {
+          const block = buffer.slice(0, nlIdx).trim();
+          buffer = buffer.slice(nlIdx + 2);
+          if (!block.startsWith('data: ')) continue;
+          try {
+            const evt = JSON.parse(block.slice(6));
+            if (evt.type === 'start') {
+              setStepSynthProgress(p => ({ ...p, done: 0, total: evt.total, message: t('step_synth_batch_running') || `批量合成中（${evt.total} 节）` }));
+            } else if (evt.type === 'section_start') {
+              setStepSynthProgress(p => ({ ...p, current: evt.title || `§${evt.section_num}`, message: (t('step_synth_section_running') || '正在合成')+`：${evt.title || evt.section_num}` }));
+            } else if (evt.type === 'section_done') {
+              setStepSynthesizedNums(prev => (prev.includes(evt.section_num) ? prev : [...prev, evt.section_num].sort((a,b)=>a-b)));
+              setStepSynthProgress(p => ({ ...p, done: evt.done, total: evt.total, message: (t('step_synth_section_done') || '已完成')+`：${evt.title || evt.section_num}` }));
+            } else if (evt.type === 'section_failed') {
+              setStepSynthProgress(p => ({ ...p, done: evt.done, total: evt.total, message: (t('step_synth_section_failed') || '失败')+`：${evt.title || evt.section_num}（${evt.error||'unknown'}）` }));
+            } else if (evt.type === 'complete') {
+              setStepSynthProgress(p => ({ ...p, done: evt.total, total: evt.total, message: (t('step_synth_batch_complete') || '批量合成完成')+`：${evt.ok}/${evt.total}` }));
+            } else if (evt.type === 'heartbeat') {
+              setStepSynthProgress(p => ({ ...p, done: evt.done, total: evt.total }));
+            }
+          } catch (e) { console.warn('parse SSE failed', e); }
+        }
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        setStepSynthProgress(p => ({ ...p, message: t('step_synth_batch_aborted') || '已停止' }));
+      } else {
+        console.error('Step batch synth failed', e);
+        alert((t('step_synth_failed') || 'Step 合成失败：') + e.message);
+      }
+    } finally {
+      setStepIsSynthesizing(false);
+      stepBatchAbortRef.current = null;
+      // 重新刷新当前节的音频
+      if (stepCurrentSectionNum != null) {
+        setStepAudioUrls(prev => { const cp = { ...prev }; delete cp[stepCurrentSectionNum]; return cp; });
+      }
+      setTimeout(() => setStepSynthProgress({ done: 0, total: 0, current: '', message: '' }), 3500);
+    }
+  };
+
+  const handleStepAbortBatch = () => {
+    if (stepBatchAbortRef.current) {
+      try { stepBatchAbortRef.current.abort(); } catch (e) {}
+    }
+  };
+
+  const handleStepSwitchSection = (delta) => {
+    if (!stepScriptData) return;
+    const total = (stepScriptData.sections || []).length;
+    if (!total) return;
+    const next = Math.max(0, Math.min(total - 1, stepCurrentSectionIdx + delta));
+    if (next !== stepCurrentSectionIdx) {
+      setStepCurrentSectionIdx(next);
+      setIsAutoMode(false);
+      setIsPlaying(false);
+    }
+  };
 
   // 自动保存讲稿
   useEffect(() => {
@@ -1737,14 +1972,74 @@ const NarratorPluginComponent = (props) => {
             {/* --- VIEW: PLAYER --- */}
             {viewMode === 'player' && (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    
+
+                    {/* 0. Player Mode Switcher: 按页 / 按 step */}
+                    <div style={{
+                        height: '22px',
+                        background: '#dcdcd0',
+                        borderBottom: '1px solid #999',
+                        display: 'flex', alignItems: 'center', padding: '0 6px',
+                        fontSize: '11px', gap: '4px',
+                    }}>
+                        <span style={{color:'#444'}}>{t('narrator_mode') || '模式'}：</span>
+                        <button
+                            onClick={() => { setPlayerMode('page'); setIsAutoMode(false); setIsPlaying(false); setStepCurrentSub(null); }}
+                            style={{
+                                fontSize:'10px', padding:'0 8px', height:'18px',
+                                cursor:'pointer',
+                                background: playerMode === 'page' ? '#000080' : '#fff',
+                                color: playerMode === 'page' ? '#fff' : '#000',
+                                border: '1px outset #fff',
+                                fontWeight: playerMode === 'page' ? 'bold' : 'normal',
+                            }}
+                            title={t('narrator_mode_page_title') || '按 PDF 页讲解（原有功能）'}
+                        >{t('narrator_mode_page') || '按页讲解'}</button>
+                        <button
+                            onClick={() => { setPlayerMode('step'); setIsAutoMode(false); setIsPlaying(false); }}
+                            style={{
+                                fontSize:'10px', padding:'0 8px', height:'18px',
+                                cursor:'pointer',
+                                background: playerMode === 'step' ? '#1a4d99' : '#fff',
+                                color: playerMode === 'step' ? '#fff' : '#000',
+                                border: '1px outset #fff',
+                                fontWeight: playerMode === 'step' ? 'bold' : 'normal',
+                            }}
+                            title={t('narrator_mode_step_title') || '按 lesson_plan.step 讲解（依赖 step_script）'}
+                        >{t('narrator_mode_step') || '按 step 讲解'}</button>
+
+                        {/* step 模式下：当前节信息 + section 切换 */}
+                        {playerMode === 'step' && stepScriptData && (
+                            <div style={{display:'flex', alignItems:'center', gap:'4px', marginLeft:'10px'}}>
+                                <button onClick={() => handleStepSwitchSection(-1)} disabled={stepCurrentSectionIdx <= 0} style={{fontSize:'10px', padding:'0 4px', height:'18px', cursor:'pointer'}}>◀</button>
+                                <span style={{fontSize:'10px', color:'#000', minWidth:'24px', textAlign:'center'}}>
+                                    §{stepCurrentSectionIdx + 1}/{(stepScriptData.sections || []).length}
+                                </span>
+                                <button onClick={() => handleStepSwitchSection(1)} disabled={stepCurrentSectionIdx >= ((stepScriptData.sections || []).length - 1)} style={{fontSize:'10px', padding:'0 4px', height:'18px', cursor:'pointer'}}>▶</button>
+                                <span style={{fontSize:'10px', color:'#000080', marginLeft:'4px', maxWidth:'320px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                                    {stepCurrentSection ? (stepCurrentSection.section_title || `Section ${stepCurrentSectionIdx + 1}`) : '—'}
+                                </span>
+                                {stepCurrentSectionNum != null && stepSynthesizedNums.includes(stepCurrentSectionNum) && (
+                                    <span style={{fontSize:'9px', color:'#008000', marginLeft:'4px'}} title={t('step_audio_ready') || '本节音频已合成'}>● 已合成</span>
+                                )}
+                            </div>
+                        )}
+                        {playerMode === 'step' && !stepScriptData && (
+                            <span style={{fontSize:'10px', color:'#a00', marginLeft:'10px'}}>
+                                {t('step_no_data') || '尚未生成 step_script（在大纲面板先按 step 生成讲稿）'}
+                            </span>
+                        )}
+                    </div>
+
                     {/* 1. Subtitle Bar */}
                     {showSubtitles ? (
                         <div style={{ 
-                            flex: 1, // Takes remaining space
-                            backgroundColor: 'rgba(0,0,0,0.85)',
-                            color: '#fff',
-                            display: 'flex', 
+                            flex: 1,
+                            backgroundColor: (playerMode === 'step' && stepCurrentSub && stepCurrentSub.kind === 'silence')
+                                ? 'rgba(255, 220, 80, 0.92)'
+                                : 'rgba(0,0,0,0.85)',
+                            color: (playerMode === 'step' && stepCurrentSub && stepCurrentSub.kind === 'silence') ? '#000' : '#fff',
+                            display: 'flex',
+                            flexDirection: 'column',
                             alignItems: 'center',
                             justifyContent: 'center',
                             padding: '0 30px',
@@ -1753,14 +2048,55 @@ const NarratorPluginComponent = (props) => {
                             fontSize: '15px',
                             fontWeight: 'bold',
                             lineHeight: '1.4',
-                            overflowY: 'auto'
+                            overflowY: 'auto',
+                            transition: 'background-color 0.15s ease',
                         }}>
-                            {currentSubtitle || (audioUrl ? (isPlaying ? "..." : t('narrator_click_to_play')) : t('narrator_no_audio'))}
+                            {/* step 模式：字幕上方一行 step_id / kind 徽章 + anchor_page */}
+                            {playerMode === 'step' && stepCurrentSub && (
+                                <div style={{
+                                    fontSize:'10px', fontWeight:'normal', marginBottom:'6px',
+                                    color: stepCurrentSub.kind === 'silence' ? '#444' : '#bcd',
+                                    display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap', justifyContent:'center',
+                                }}>
+                                    {stepCurrentSub.step_id && (
+                                        <span style={{
+                                            background: stepCurrentSub.kind === 'silence' ? '#fff' : '#1a4d99',
+                                            color: stepCurrentSub.kind === 'silence' ? '#000' : '#fff',
+                                            padding:'1px 6px', borderRadius:'2px', fontFamily:'monospace',
+                                        }}>{stepCurrentSub.step_id}</span>
+                                    )}
+                                    <span style={{
+                                        padding:'1px 6px', borderRadius:'2px',
+                                        background:
+                                            stepCurrentSub.kind === 'intro_cue' ? '#5b8ec9'
+                                            : stepCurrentSub.kind === 'outro_cue' ? '#3aa55a'
+                                            : stepCurrentSub.kind === 'pause_cue' ? '#cc8a00'
+                                            : stepCurrentSub.kind === 'silence' ? '#bb6e00'
+                                            : '#444',
+                                        color:'#fff',
+                                    }}>{stepCurrentSub.kind}</span>
+                                    {typeof stepCurrentSub.anchor_page === 'number' && (
+                                        <span style={{color: stepCurrentSub.kind === 'silence' ? '#000' : '#fff'}}>p.{stepCurrentSub.anchor_page}</span>
+                                    )}
+                                    {stepCurrentSub.kind === 'silence' && stepCurrentSub.pause_seconds && (
+                                        <span style={{fontWeight:'bold'}}>⏸ {Math.max(0, Math.ceil(stepCurrentSub.end - audioProgress))}s</span>
+                                    )}
+                                </div>
+                            )}
+                            <div style={{ fontSize: (playerMode === 'step' && stepCurrentSub && stepCurrentSub.kind === 'silence') ? '13px' : '15px' }}>
+                                {currentSubtitle || (audioUrl ? (isPlaying ? "..." : t('narrator_click_to_play')) : (
+                                    playerMode === 'step'
+                                        ? (stepCurrentSection ? (t('step_no_audio_for_section') || '本节尚未合成音频') : (t('step_no_data') || '尚未生成 step_script'))
+                                        : t('narrator_no_audio')
+                                ))}
+                            </div>
                             <button
                                 onClick={() => setShowSubtitles(false)}
                                 style={{
                                     position: 'absolute', right: '4px', top: '4px', 
-                                    background:'transparent', border:'none', color:'#888', cursor:'pointer', fontSize:'10px'
+                                    background:'transparent', border:'none',
+                                    color: (playerMode === 'step' && stepCurrentSub && stepCurrentSub.kind === 'silence') ? '#666' : '#888',
+                                    cursor:'pointer', fontSize:'10px'
                                 }}
                                 title={t('narrator_hide_subtitles')}
                             >✕</button>
@@ -1815,7 +2151,8 @@ const NarratorPluginComponent = (props) => {
                         justifyContent: 'space-between',
                         padding: '0 6px'
                   }}>
-                        {/* Left: Generators */}
+                        {/* Left: Generators (page 模式) / Step 合成区 (step 模式) */}
+                        {playerMode === 'page' ? (
                         <div style={{display: 'flex', gap: '4px', alignItems:'center'}}>
                             <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
                                 <button onClick={generateScript} title={t('narrator_gen_script')} disabled={isGenerating} style={{fontSize:'10px', padding:'0 4px', whiteSpace: 'nowrap'}}>📝 {t('narrator_script_short')}</button>
@@ -1851,12 +2188,54 @@ const NarratorPluginComponent = (props) => {
                                 {isBatchProcessing ? batchProgress.current + '/' + batchProgress.total : ''}
                             </span>
                   </div>
+                        ) : (
+                        <div style={{display:'flex', gap:'4px', alignItems:'center'}}>
+                            <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
+                                <button
+                                    onClick={handleStepSynthOne}
+                                    disabled={stepIsSynthesizing || !stepCurrentSection}
+                                    title={t('step_btn_synth_one_title') || '合成当前节 (按 step_id 串接所有 block 句子)'}
+                                    style={{fontSize:'10px', padding:'0 4px', whiteSpace:'nowrap'}}
+                                >🎙 {t('step_btn_synth_one') || '本节合成'}</button>
+                                <button
+                                    onClick={() => handleStepSynthBatch('missing')}
+                                    disabled={stepIsSynthesizing || !stepScriptData}
+                                    title={t('step_btn_synth_missing_title') || '只合成尚未生成的节'}
+                                    style={{fontSize:'10px', padding:'0 4px', whiteSpace:'nowrap'}}
+                                >➕ {t('step_btn_synth_missing') || '补缺章节'}</button>
+                            </div>
+                            <div style={{display:'flex', flexDirection:'column', gap:'1px'}}>
+                                <button
+                                    onClick={() => handleStepSynthBatch('all')}
+                                    disabled={stepIsSynthesizing || !stepScriptData}
+                                    title={t('step_btn_synth_all_title') || '强制重新合成全书所有节'}
+                                    style={{fontSize:'10px', padding:'0 4px', whiteSpace:'nowrap'}}
+                                >💿 {t('step_btn_synth_all') || '全书合成'}</button>
+                                <button
+                                    onClick={handleStepAbortBatch}
+                                    disabled={!stepIsSynthesizing || !stepBatchAbortRef.current}
+                                    title={t('step_btn_abort_title') || '停止当前合成（已完成的章节会保留）'}
+                                    style={{fontSize:'10px', padding:'0 4px', whiteSpace:'nowrap', color: stepIsSynthesizing ? '#a00' : '#888'}}
+                                >⏹ {t('step_btn_abort') || '停止'}</button>
+                            </div>
+                            <span style={{fontSize:'10px', color:'#444', marginLeft:'4px', maxWidth:'260px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                                {stepSynthProgress.total > 0
+                                    ? `${stepSynthProgress.done}/${stepSynthProgress.total}${stepSynthProgress.message ? ' · ' + stepSynthProgress.message : ''}`
+                                    : (stepCurrentSectionNum != null && stepCurrentHasAudio ? (t('step_audio_ready') || '本节音频已合成') : '')
+                                }
+                            </span>
+                        </div>
+                        )}
     
                         {/* Center: Playback (The STAR) */}
                         <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
                     <button
-                      onClick={() => { setIsAutoMode(false); pageControl.goToPreviousPage(); }}
-                                title={t('narrator_prev_page')}
+                      onClick={() => {
+                          setIsAutoMode(false);
+                          if (playerMode === 'step') handleStepSwitchSection(-1);
+                          else pageControl.goToPreviousPage();
+                      }}
+                                title={playerMode === 'step' ? (t('step_prev_section') || '上一节') : t('narrator_prev_page')}
                                 style={{fontSize:'18px', background:'transparent', border:'none', cursor:'pointer', color:'#000'}}
                             >⏮</button>
                     <button
@@ -1875,10 +2254,15 @@ const NarratorPluginComponent = (props) => {
                       {isPlaying ? '⏸' : '▶'}
                     </button>
                     <button
-                      onClick={() => { setIsAutoMode(false); pageControl.goToNextPage(); }}
-                                title={t('narrator_next_page')}
+                      onClick={() => {
+                          setIsAutoMode(false);
+                          if (playerMode === 'step') handleStepSwitchSection(1);
+                          else pageControl.goToNextPage();
+                      }}
+                                title={playerMode === 'step' ? (t('step_next_section') || '下一节') : t('narrator_next_page')}
                                 style={{fontSize:'18px', background:'transparent', border:'none', cursor:'pointer', color:'#000'}}
                             >⏭</button>
+                            {playerMode === 'page' && (
                             <button 
                                 onClick={togglePlaybackMode} 
                                 title={`${t('narrator_mode_label')} ${getPlaybackModeIcon()}`} 
@@ -1886,6 +2270,7 @@ const NarratorPluginComponent = (props) => {
                     >
                                 {getPlaybackModeIcon().split(' ')[0]}
                     </button>
+                            )}
                   </div>
 
                         {/* Right: Tools */}
@@ -1908,6 +2293,18 @@ const NarratorPluginComponent = (props) => {
                     setAudioDuration(d);
                 }}
                 onEnded={() => {
+                    // step 模式：播完一节后自动跳到下一节（如果有），否则停下
+                    if (playerMode === 'step') {
+                        const total = stepScriptData ? (stepScriptData.sections || []).length : 0;
+                        if (stepCurrentSectionIdx + 1 < total) {
+                            setIsPlaying(false);
+                            setStepCurrentSectionIdx(stepCurrentSectionIdx + 1);
+                        } else {
+                            setIsPlaying(false);
+                            setIsAutoMode(false);
+                        }
+                        return;
+                    }
                     // setIsPlaying(false); // Don't stop immediately, logic below decides
                     
                     if (playbackMode === 'page_loop') {

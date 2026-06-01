@@ -3149,6 +3149,122 @@ const translations = {
       "ja-JP": "モード:"
     }
   },
+  "narrator_mode": {
+    "default": { "zh-CN": "模式", "en-US": "Mode", "ja-JP": "モード" }
+  },
+  "narrator_mode_page": {
+    "default": { "zh-CN": "按页讲解", "en-US": "By Page", "ja-JP": "ページ単位" }
+  },
+  "narrator_mode_step": {
+    "default": { "zh-CN": "按 step 讲解", "en-US": "By Step", "ja-JP": "ステップ単位" }
+  },
+  "narrator_mode_page_title": {
+    "default": {
+      "zh-CN": "按 PDF 页讲解（原有功能）",
+      "en-US": "Narrate per PDF page (legacy)",
+      "ja-JP": "PDFページ単位（従来）"
+    }
+  },
+  "narrator_mode_step_title": {
+    "default": {
+      "zh-CN": "按 lesson_plan.step 讲解，依赖 step_script，可自动翻页",
+      "en-US": "Narrate by lesson_plan.step (requires step_script, auto turns page)",
+      "ja-JP": "lesson_plan.step 単位（step_script 必須、自動ページ送り）"
+    }
+  },
+  "step_no_data": {
+    "default": {
+      "zh-CN": "尚未生成 step_script（先在大纲面板按 step 生成讲稿）",
+      "en-US": "step_script not generated yet (use \"Generate step script\" in outline first)",
+      "ja-JP": "step_script 未生成（まず大綱パネルで生成してください）"
+    }
+  },
+  "step_no_audio_for_section": {
+    "default": {
+      "zh-CN": "本节尚未合成音频，点击下方「本节合成」",
+      "en-US": "No audio for this section yet — click \"Synth current\"",
+      "ja-JP": "本節の音声未合成 — 「本節合成」をクリック"
+    }
+  },
+  "step_audio_ready": {
+    "default": { "zh-CN": "本节音频已合成", "en-US": "Section audio ready", "ja-JP": "音声合成済み" }
+  },
+  "step_btn_synth_one": {
+    "default": { "zh-CN": "本节合成", "en-US": "Synth current", "ja-JP": "本節合成" }
+  },
+  "step_btn_synth_one_title": {
+    "default": {
+      "zh-CN": "合成当前节 (按 step_id 串接所有 block 句子，pause_cue 后自动加静默)",
+      "en-US": "Synthesize the current section (sentence-level along step_id, silence after pause_cue)",
+      "ja-JP": "現在の節を合成（step_id 単位、pause_cue 後に無音挿入）"
+    }
+  },
+  "step_btn_synth_missing": {
+    "default": { "zh-CN": "补缺章节", "en-US": "Synth missing", "ja-JP": "未合成のみ" }
+  },
+  "step_btn_synth_missing_title": {
+    "default": {
+      "zh-CN": "只合成尚未生成的节，已合成的不动",
+      "en-US": "Synthesize only sections that don't have audio yet",
+      "ja-JP": "未合成の節のみ合成"
+    }
+  },
+  "step_btn_synth_all": {
+    "default": { "zh-CN": "全书合成", "en-US": "Synth all", "ja-JP": "全節合成" }
+  },
+  "step_btn_synth_all_title": {
+    "default": {
+      "zh-CN": "强制重新合成全书所有节（会覆盖已有音频）",
+      "en-US": "Force re-synth all sections (overwrites existing audio)",
+      "ja-JP": "全節を強制再合成（既存音声を上書き）"
+    }
+  },
+  "step_btn_abort": {
+    "default": { "zh-CN": "停止", "en-US": "Abort", "ja-JP": "停止" }
+  },
+  "step_btn_abort_title": {
+    "default": {
+      "zh-CN": "停止当前合成（已完成的节会保留）",
+      "en-US": "Stop current synthesis (completed sections are kept)",
+      "ja-JP": "合成を停止（完了した節は保持）"
+    }
+  },
+  "step_prev_section": {
+    "default": { "zh-CN": "上一节", "en-US": "Prev section", "ja-JP": "前の節" }
+  },
+  "step_next_section": {
+    "default": { "zh-CN": "下一节", "en-US": "Next section", "ja-JP": "次の節" }
+  },
+  "step_synth_running": {
+    "default": { "zh-CN": "正在合成本节…", "en-US": "Synthesizing…", "ja-JP": "合成中…" }
+  },
+  "step_synth_done_one": {
+    "default": { "zh-CN": "本节合成完成", "en-US": "Section synthesized", "ja-JP": "本節合成完了" }
+  },
+  "step_synth_failed": {
+    "default": { "zh-CN": "Step 合成失败：", "en-US": "Step synth failed: ", "ja-JP": "ステップ合成失敗：" }
+  },
+  "step_synth_batch_starting": {
+    "default": { "zh-CN": "批量合成启动中…", "en-US": "Batch synth starting…", "ja-JP": "一括合成開始中…" }
+  },
+  "step_synth_batch_running": {
+    "default": { "zh-CN": "批量合成中", "en-US": "Batch synthesizing", "ja-JP": "一括合成中" }
+  },
+  "step_synth_section_running": {
+    "default": { "zh-CN": "正在合成", "en-US": "Synthesizing", "ja-JP": "合成中" }
+  },
+  "step_synth_section_done": {
+    "default": { "zh-CN": "已完成", "en-US": "Done", "ja-JP": "完了" }
+  },
+  "step_synth_section_failed": {
+    "default": { "zh-CN": "失败", "en-US": "Failed", "ja-JP": "失敗" }
+  },
+  "step_synth_batch_complete": {
+    "default": { "zh-CN": "批量合成完成", "en-US": "Batch synth complete", "ja-JP": "一括合成完了" }
+  },
+  "step_synth_batch_aborted": {
+    "default": { "zh-CN": "已停止", "en-US": "Aborted", "ja-JP": "停止" }
+  },
   "narrator_mode_page_once": {
     "default": {
       "zh-CN": "➡️ 单页",
