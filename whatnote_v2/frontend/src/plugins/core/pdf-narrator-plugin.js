@@ -863,6 +863,30 @@ const NarratorPluginComponent = (props) => {
     }
   }, [playerMode, stepCurrentSub, pageControl]);
 
+  // 5. step 模式：step_id 变化时 dispatch 全局 event，给 WorksheetModal 联动用
+  //    （解耦：narrator 不知道 worksheet modal 的存在，反之亦然）
+  const lastDispatchedStepIdRef = useRef(null);
+  useEffect(() => {
+    if (playerMode !== 'step' || !stepCurrentSub) return;
+    const sid = stepCurrentSub.step_id;
+    if (!sid) return;
+    if (lastDispatchedStepIdRef.current === sid) return;
+    lastDispatchedStepIdRef.current = sid;
+    try {
+      window.dispatchEvent(new CustomEvent('whatnote:step-change', {
+        detail: {
+          board_id: boardId,
+          window_id: windowId,
+          step_id: sid,
+          kind: stepCurrentSub.kind,
+          anchor_page: stepCurrentSub.anchor_page,
+        }
+      }));
+    } catch (e) {
+      console.warn('dispatch step-change failed', e);
+    }
+  }, [playerMode, stepCurrentSub, boardId, windowId]);
+
   // -------- handlers --------
 
   const stepCurrentSection = (stepScriptData && (stepScriptData.sections || [])[stepCurrentSectionIdx]) || null;

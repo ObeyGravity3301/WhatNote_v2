@@ -4137,6 +4137,75 @@ async def export_lesson_plan_markdown(board_id: str, window_id: str):
 
 
 # ============================================================
+# Worksheet：从 lesson_plan **派生**而来的学生用学案
+# 零 LLM 调用：渲染层；详见 services/worksheet_service.py
+# ============================================================
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/worksheet-data")
+async def get_worksheet_data(board_id: str, window_id: str):
+    """返回 worksheet 的结构化数据（前端 modal 直接渲染）。
+
+    不落盘——每次都从 lesson_plan 实时派生，保证修改 lesson_plan 后
+    无需 invalidate worksheet 缓存。
+    """
+    try:
+        from services.worksheet_service import render_worksheet_structured
+
+        lp_file = _lesson_plan_file(board_id, window_id)
+        if not lp_file.exists():
+            raise HTTPException(status_code=404, detail="Lesson Plan 不存在，请先生成 lesson_plan")
+        with open(lp_file, "r", encoding="utf-8") as f:
+            lp_data = json.load(f)
+        return render_worksheet_structured(lp_data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"获取 Worksheet 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-worksheet-markdown")
+async def export_worksheet_markdown(board_id: str, window_id: str, show_answers: bool = False):
+    """下载 worksheet 的 Markdown，可选是否直接展开答案区。"""
+    try:
+        from urllib.parse import quote
+        from services.worksheet_service import render_worksheet_markdown
+
+        lp_file = _lesson_plan_file(board_id, window_id)
+        if not lp_file.exists():
+            raise HTTPException(status_code=404, detail="Lesson Plan 不存在，请先生成 lesson_plan")
+        with open(lp_file, "r", encoding="utf-8") as f:
+            lp_data = json.load(f)
+
+        md_text = render_worksheet_markdown(lp_data, show_answers=show_answers)
+        windows = content_manager.get_board_windows(board_id)
+        target_window = next((w for w in windows if w.get("id") == window_id), None)
+        pdf_title = target_window.get("title", "document.pdf") if target_window else "document.pdf"
+        safe_stem = Path(pdf_title).stem or "document"
+        suffix = "-worksheet-with-answers.md" if show_answers else "-worksheet.md"
+        filename = f"{safe_stem}{suffix}"
+        ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_stem).strip("._-") or "document"
+        ascii_filename = f"{ascii_stem}{suffix}"
+
+        return StreamingResponse(
+            iter([md_text.encode("utf-8")]),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; '
+                    f"filename*=UTF-8''{quote(filename)}"
+                )
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Worksheet Markdown 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
 # Step Script：以 lesson_plan 的 step 为单位的口播讲稿
 # ============================================================
 

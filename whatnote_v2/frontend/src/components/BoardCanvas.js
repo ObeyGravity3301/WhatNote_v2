@@ -22,6 +22,7 @@ import ChatWindow from './ChatWindow';
 import RadialMindMap from './RadialMindMap';
 import PersonalizationPanel from './PersonalizationPanel';
 import CalendarPlannerWindow from './CalendarPlannerWindow';
+import WorksheetModal from './WorksheetModal';
 import PluginManager from '../plugins/PluginManager';
 import { initializePlugins, pluginRegistry } from '../plugins';
 import {
@@ -358,6 +359,8 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
   const [stepScriptProgress, setStepScriptProgress] = useState({ completed: 0, total: 0 });
   const [showStepScriptModal, setShowStepScriptModal] = useState(false);
   const [stepScriptExpandedSection, setStepScriptExpandedSection] = useState(0);
+  // Worksheet (学案，从 lesson_plan 派生，无 LLM)
+  const [showWorksheetModal, setShowWorksheetModal] = useState(false);
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
@@ -6286,6 +6289,25 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                   )}
                   {lessonPlanData?.completed_sections > 0 && (
                     <button
+                      onClick={() => setShowWorksheetModal(true)}
+                      disabled={isGeneratingLessonPlan}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: '#c9a23c',
+                        color: '#ffffff',
+                        border: '2px outset #c9a23c',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                      title={t('pdf_outline_worksheet_open_hint') || '打开学生用学案（从 lesson_plan 派生，可联动 step 高亮）'}
+                    >
+                      📚 {t('pdf_outline_worksheet_open') || '学案'}
+                    </button>
+                  )}
+                  {lessonPlanData?.completed_sections > 0 && (
+                    <button
                       onClick={handleNormalizeLessonPlan}
                       disabled={isGeneratingLessonPlan}
                       style={{
@@ -6578,6 +6600,26 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                       }}
                     >
                       {t('pdf_outline_lesson_plan_open')}
+                    </button>
+                  )}
+                  {lessonPlanData?.completed_sections > 0 && (
+                    <button
+                      onClick={() => setShowWorksheetModal(true)}
+                      disabled={isGeneratingLessonPlan}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '11px',
+                        backgroundColor: '#c9a23c',
+                        color: '#ffffff',
+                        border: '2px outset #c9a23c',
+                        borderRadius: '0px',
+                        cursor: 'pointer',
+                        fontFamily: 'MS Sans Serif, sans-serif',
+                        fontWeight: 'bold'
+                      }}
+                      title={t('pdf_outline_worksheet_open_hint') || '打开学生用学案（从 lesson_plan 派生，可联动 step 高亮）'}
+                    >
+                      📚 {t('pdf_outline_worksheet_open') || '学案'}
                     </button>
                   )}
                   {lessonPlanData?.completed_sections > 0 && (
@@ -7309,6 +7351,14 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                   </div>
                 </div>
               )}
+
+              <WorksheetModal
+                isOpen={showWorksheetModal}
+                onClose={() => setShowWorksheetModal(false)}
+                boardId={boardId}
+                windowId={windowId}
+                documentTitle={documentTitle}
+              />
 
               {showLessonPlanModal && lessonPlanData && (
                 <div style={{

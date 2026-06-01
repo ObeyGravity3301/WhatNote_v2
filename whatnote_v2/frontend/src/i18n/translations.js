@@ -3265,6 +3265,85 @@ const translations = {
   "step_synth_batch_aborted": {
     "default": { "zh-CN": "已停止", "en-US": "Aborted", "ja-JP": "停止" }
   },
+  // ===== Worksheet =====
+  "pdf_outline_worksheet_open": {
+    "default": { "zh-CN": "学案", "en-US": "Worksheet", "ja-JP": "学案" }
+  },
+  "pdf_outline_worksheet_open_hint": {
+    "default": {
+      "zh-CN": "打开学生用学案（从 lesson_plan 派生，可联动 step 高亮）",
+      "en-US": "Open the student worksheet (derived from lesson_plan, syncs with step playback)",
+      "ja-JP": "学生用学案を開く（lesson_plan から派生、ステップ再生と連動）"
+    }
+  },
+  "worksheet_modal_title": {
+    "default": { "zh-CN": "学案", "en-US": "Worksheet", "ja-JP": "学案" }
+  },
+  "worksheet_stats_template": {
+    "default": {
+      "zh-CN": "{s} 节 · {n} step · {p} 处停顿",
+      "en-US": "{s} sections · {n} steps · {p} pauses",
+      "ja-JP": "{s} 節 · {n} ステップ · {p} 停止点"
+    }
+  },
+  "worksheet_show_all_answers": {
+    "default": { "zh-CN": "显示所有答案", "en-US": "Show all answers", "ja-JP": "全ての解答を表示" }
+  },
+  "worksheet_export_md": {
+    "default": { "zh-CN": "导出 MD", "en-US": "Export MD", "ja-JP": "MDエクスポート" }
+  },
+  "worksheet_export_md_with_answers": {
+    "default": { "zh-CN": "导出 MD (含答案)", "en-US": "Export MD (with answers)", "ja-JP": "MD（解答付き）" }
+  },
+  "worksheet_loading": {
+    "default": { "zh-CN": "加载中…", "en-US": "Loading…", "ja-JP": "読み込み中…" }
+  },
+  "worksheet_load_failed": {
+    "default": { "zh-CN": "加载学案失败：", "en-US": "Failed to load worksheet: ", "ja-JP": "学案の読み込み失敗：" }
+  },
+  "worksheet_load_hint": {
+    "default": {
+      "zh-CN": "需要先生成 lesson_plan，学案是从 lesson_plan 直接派生的。",
+      "en-US": "Generate lesson_plan first — worksheet is derived from it.",
+      "ja-JP": "先に lesson_plan を生成してください（学案は lesson_plan から派生）"
+    }
+  },
+  "worksheet_download_failed": {
+    "default": { "zh-CN": "下载失败：", "en-US": "Download failed: ", "ja-JP": "ダウンロード失敗：" }
+  },
+  "worksheet_objective": {
+    "default": { "zh-CN": "学习目标", "en-US": "Objective", "ja-JP": "学習目標" }
+  },
+  "worksheet_hook": {
+    "default": { "zh-CN": "课前一问", "en-US": "Hook", "ja-JP": "課前の問い" }
+  },
+  "worksheet_assessment_title": {
+    "default": { "zh-CN": "章末自检", "en-US": "Section quiz", "ja-JP": "章末自己診断" }
+  },
+  "worksheet_write_seconds_template": {
+    "default": { "zh-CN": "写 {s} 秒", "en-US": "Write {s}s", "ja-JP": "{s} 秒書く" }
+  },
+  "worksheet_learning_action_label": {
+    "default": { "zh-CN": "你要做", "en-US": "Do this", "ja-JP": "やること" }
+  },
+  "worksheet_show_answer": {
+    "default": { "zh-CN": "▶ 显示答案", "en-US": "▶ Show answer", "ja-JP": "▶ 解答を表示" }
+  },
+  "worksheet_hide_answer": {
+    "default": { "zh-CN": "▼ 隐藏答案", "en-US": "▼ Hide answer", "ja-JP": "▼ 解答を隠す" }
+  },
+  "worksheet_answer_landing": {
+    "default": { "zh-CN": "关键结论", "en-US": "Key conclusion", "ja-JP": "結論" }
+  },
+  "worksheet_answer_chain": {
+    "default": { "zh-CN": "推理", "en-US": "Reasoning", "ja-JP": "推論" }
+  },
+  "worksheet_answer_mistake": {
+    "default": { "zh-CN": "常见错误", "en-US": "Common mistake", "ja-JP": "よくある間違い" }
+  },
+  "worksheet_answer_exam_likelihood": {
+    "default": { "zh-CN": "考查可能性", "en-US": "Exam likelihood", "ja-JP": "出題可能性" }
+  },
   "narrator_mode_page_once": {
     "default": {
       "zh-CN": "➡️ 单页",
