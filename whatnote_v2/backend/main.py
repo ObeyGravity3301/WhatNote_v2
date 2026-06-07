@@ -4165,6 +4165,30 @@ async def get_worksheet_data(board_id: str, window_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-worksheet-html")
+async def export_worksheet_html_endpoint(board_id: str, window_id: str, show_answers: bool = False):
+    """返回可打印的 HTML（浏览器直接 Ctrl+P 打印为 A4 PDF）。"""
+    try:
+        from services.worksheet_service import render_worksheet_html
+
+        lp_file = _lesson_plan_file(board_id, window_id)
+        if not lp_file.exists():
+            raise HTTPException(status_code=404, detail="Lesson Plan 不存在，请先生成 lesson_plan")
+        with open(lp_file, "r", encoding="utf-8") as f:
+            lp_data = json.load(f)
+
+        html_text = render_worksheet_html(lp_data, show_answers=show_answers)
+        return StreamingResponse(
+            iter([html_text.encode("utf-8")]),
+            media_type="text/html; charset=utf-8",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error(f"导出 Worksheet HTML 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/boards/{board_id}/windows/{window_id}/annotations/batch/export-worksheet-markdown")
 async def export_worksheet_markdown(board_id: str, window_id: str, show_answers: bool = False):
     """下载 worksheet 的 Markdown，可选是否直接展开答案区。"""
@@ -4253,9 +4277,15 @@ async def generate_step_script_batch(board_id: str, window_id: str, request: Req
         if gen_mode not in ("full", "retry_failed"):
             gen_mode = "full"
         requested_indices = req_body.get("section_indices")
+        # 可选：用户的写作偏好，会拼到 prompt 末尾的"用户追加偏好"区块；schema 与硬性规则不受影响
+        extra_user_instruction = ""
+        raw_extra = req_body.get("extra_user_instruction")
+        if isinstance(raw_extra, str):
+            extra_user_instruction = raw_extra.strip()[:800]
 
         info(
             f"开始 Step Script 生成 board_id={board_id}, window_id={window_id}, mode={gen_mode}"
+            + (f", extra_instruction_len={len(extra_user_instruction)}" if extra_user_instruction else "")
         )
 
         lp_data = _load_lesson_plan_for_step_script(board_id, window_id)
@@ -4387,6 +4417,7 @@ async def generate_step_script_batch(board_id: str, window_id: str, request: Req
                                     max_attempts=STEP_SCRIPT_MAX_ATTEMPTS,
                                     on_chunk=None,
                                     override_model=step_model,
+                                    extra_user_instruction=extra_user_instruction,
                                 ),
                                 timeout=STEP_SCRIPT_SECTION_TIMEOUT_SEC,
                             )
@@ -4454,6 +4485,7 @@ async def generate_step_script_batch(board_id: str, window_id: str, request: Req
                                     max_attempts=STEP_SCRIPT_MAX_ATTEMPTS,
                                     on_chunk=None,
                                     override_model=step_model,
+                                    extra_user_instruction=extra_user_instruction,
                                 ),
                                 timeout=STEP_SCRIPT_SECTION_TIMEOUT_SEC,
                             )

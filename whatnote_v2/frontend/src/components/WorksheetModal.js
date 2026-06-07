@@ -189,6 +189,16 @@ const WorksheetModal = ({ isOpen, onClose, boardId, windowId, documentTitle }) =
           <button onClick={() => handleDownloadMd(true)} style={btnStyle()}>
             📥 {t('worksheet_export_md_with_answers') || '导出 MD (含答案)'}
           </button>
+          <button
+            onClick={() => {
+              const url = `http://localhost:8081/api/boards/${boardId}/windows/${windowId}/annotations/batch/export-worksheet-html?show_answers=${showAllAnswers ? 'true' : 'false'}`;
+              window.open(url, '_blank', 'noopener');
+            }}
+            style={btnStyle()}
+            title={t('worksheet_print_hint') || '打开打印友好的 HTML 版本，浏览器 Ctrl+P 即可保存为 A4 PDF'}
+          >
+            🖨 {t('worksheet_print') || '打印版 HTML'}
+          </button>
           <button onClick={onClose} style={{ ...btnStyle(), fontWeight: 'bold', color: '#a00' }}>
             ✕
           </button>

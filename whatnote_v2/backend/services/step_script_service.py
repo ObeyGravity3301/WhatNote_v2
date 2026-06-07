@@ -205,6 +205,7 @@ def build_step_script_prompt(
     previous_landing: str = "",
     next_objective_hint: str = "",
     validation_error: str = "",
+    extra_user_instruction: str = "",
 ) -> str:
     steps_block = _format_steps_for_prompt(steps)
     assessment_block = ""
@@ -227,6 +228,14 @@ def build_step_script_prompt(
         if validation_error
         else ""
     )
+    extra_instruction_block = ""
+    if extra_user_instruction and extra_user_instruction.strip():
+        # 用户提供的额外要求；schema 与硬性规则不可改写
+        trimmed = extra_user_instruction.strip()[:800]
+        extra_instruction_block = (
+            "\n**用户追加的写作偏好（在不违反硬性规则与输出 schema 的前提下尽量满足）**：\n"
+            f"{trimmed}\n"
+        )
 
     return f"""你是一位经验丰富、节奏感强的老师。请把下面这节课的「教学计划（lesson_plan）」改写成**面向耳朵**的逐 step 口播讲稿，输出**单个 JSON 对象**。
 
@@ -272,7 +281,7 @@ def build_step_script_prompt(
 10. 第一人称口语：「我们看…」「这里有一个细节…」「想一想…」；**禁止**「第一点、第二点」「接下来 PPT 显示…」「请看下一页」这类。
 11. 不要使用省略号 `...`、`etc.`、`and so on`；字符串内不要换行（用空格替代）；数字字段必须是真正数字。
 12. **不要包裹 markdown 代码块**；只输出顶层 JSON。
-
+{extra_instruction_block}
 ------
 
 下面就开始：
@@ -488,6 +497,7 @@ async def generate_step_script_section(
     max_attempts: int = STEP_SCRIPT_MAX_ATTEMPTS,
     on_chunk=None,
     override_model: Optional[str] = None,
+    extra_user_instruction: str = "",
 ) -> Tuple[Optional[Dict[str, Any]], str]:
     section_num = section.get("section_number", section_idx + 1)
     section_title = section.get("section_title", f"Section {section_num}")
@@ -528,6 +538,7 @@ async def generate_step_script_section(
             previous_landing=previous_landing,
             next_objective_hint=next_objective_hint,
             validation_error=validation_error,
+            extra_user_instruction=extra_user_instruction,
         )
         messages = [{"role": "user", "content": prompt}]
         accumulated = ""

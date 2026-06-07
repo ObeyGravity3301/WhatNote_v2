@@ -23,6 +23,7 @@ import RadialMindMap from './RadialMindMap';
 import PersonalizationPanel from './PersonalizationPanel';
 import CalendarPlannerWindow from './CalendarPlannerWindow';
 import WorksheetModal from './WorksheetModal';
+import PipelineModal from './PipelineModal';
 import PluginManager from '../plugins/PluginManager';
 import { initializePlugins, pluginRegistry } from '../plugins';
 import {
@@ -361,6 +362,8 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
   const [stepScriptExpandedSection, setStepScriptExpandedSection] = useState(0);
   // Worksheet (学案，从 lesson_plan 派生，无 LLM)
   const [showWorksheetModal, setShowWorksheetModal] = useState(false);
+  // 一键流水线
+  const [showPipelineModal, setShowPipelineModal] = useState(false);
   const [stage3Progress, setStage3Progress] = useState({ completedAnnotations: 0, totalAnnotations: 0, actualPages: 0, overlappingPages: 0, isGenerating: false }); // 阶段3进度
   const [stage4Progress, setStage4Progress] = useState({ completed: 0, total: 0, isGenerating: false }); // 阶段4融合进度
   
@@ -2323,6 +2326,28 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
           title={showPageExtractPanel ? t('pdf_hide_extract') : t('pdf_show_extract')}
         >
           {t('pdf_extract')}
+        </button>
+
+        {/* 一键生成（流水线）按钮 — 永远可见，不依赖任何已生成的产物 */}
+        <button
+          onClick={async () => {
+            // 打开 modal 前确保 pagesInfo 是新鲜的（视觉提取范围依赖它）
+            try { await loadPagesInfo(); } catch (e) { /* 即使失败也允许打开 */ }
+            setShowPipelineModal(true);
+          }}
+          style={{
+            ...PAGINATION_TOOLBAR_ITEM_STYLE,
+            color: '#1b6b35',
+            fontWeight: 'bold',
+            marginRight: '8px',
+          }}
+          onMouseEnter={handlePaginationMouseEnter}
+          onMouseLeave={handlePaginationMouseLeave}
+          onMouseDown={handlePaginationMouseDown}
+          onMouseUp={handlePaginationMouseUp}
+          title={t('pipeline_open_hint') || '一键按顺序运行多个生成阶段（视觉提取 → Lesson Plan → Step Script → Step Audio）'}
+        >
+          🚀 {t('pipeline_open') || '一键生成'}
         </button>
 
         {/* 页面翻译按钮组 */}
@@ -7358,6 +7383,19 @@ const PDFPaginationViewer = React.memo(({ pdfUrl, documentTitle, onClose, boardI
                 boardId={boardId}
                 windowId={windowId}
                 documentTitle={documentTitle}
+              />
+
+              <PipelineModal
+                isOpen={showPipelineModal}
+                onClose={() => setShowPipelineModal(false)}
+                boardId={boardId}
+                windowId={windowId}
+                pagesInfo={pagesInfo}
+                source={{
+                  board_id: boardId,
+                  window_id: windowId,
+                  window_title: documentTitle,
+                }}
               />
 
               {showLessonPlanModal && lessonPlanData && (
@@ -12685,6 +12723,27 @@ const BoardCanvas = React.memo(({
       window.dispatchEvent(event);
     }
   }, []);
+
+  // 监听 GlobalTaskTray 派发的任务终态摘要，将其留档到 MessageCenter
+  useEffect(() => {
+    const handler = (evt) => {
+      const d = evt && evt.detail;
+      if (!d) return;
+      const statusEmoji = ({ done: '✓', failed: '✗', aborted: '■' })[d.status] || 'ℹ';
+      const typeMap = { done: 'success', failed: 'error', aborted: 'warning' };
+      const type = typeMap[d.status] || 'info';
+      const title = `${statusEmoji} ${d.title || '任务'}`;
+      const details = [
+        d.step_label ? `步骤：${d.step_label}` : null,
+        d.overall && d.overall.total ? `整体进度：${d.overall.current}/${d.overall.total}` : null,
+        d.error ? `错误：${d.error}` : null,
+      ].filter(Boolean).join('\n');
+      // 透传源窗口 id（如果有）
+      addMessage(title, details, type, (d.source && d.source.window_id) || null);
+    };
+    window.addEventListener('whatnote:task-summary', handler);
+    return () => window.removeEventListener('whatnote:task-summary', handler);
+  }, [addMessage]);
 
   const reminderTrackerRef = useRef(new Map());
 

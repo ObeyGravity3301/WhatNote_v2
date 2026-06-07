@@ -9,6 +9,7 @@ import BoardCanvas from './components/BoardCanvas';
 import Console from './components/Console';
 // import Header from './components/Header'; // 移除顶部标题栏
 import Sidebar from './components/Sidebar';
+import GlobalTaskTray from './components/GlobalTaskTray';
 
 function App() {
   const [globalSettings, setGlobalSettings] = useState(null);
@@ -1272,6 +1273,7 @@ function AppContent() {
 
   return (
     <div className="app">
+      <GlobalTaskTray />
       <div className="main-content">
                 {/* 侧边栏已移植到开始菜单，暂时隐藏 */}
         {/* <Sidebar 

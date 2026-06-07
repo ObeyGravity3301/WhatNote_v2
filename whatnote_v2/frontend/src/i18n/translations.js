@@ -3344,6 +3344,126 @@ const translations = {
   "worksheet_answer_exam_likelihood": {
     "default": { "zh-CN": "考查可能性", "en-US": "Exam likelihood", "ja-JP": "出題可能性" }
   },
+  "worksheet_print": {
+    "default": { "zh-CN": "打印版 HTML", "en-US": "Printable HTML", "ja-JP": "印刷用 HTML" }
+  },
+  "worksheet_print_hint": {
+    "default": {
+      "zh-CN": "打开打印友好的 HTML 版本，浏览器 Ctrl+P 即可保存为 A4 PDF",
+      "en-US": "Open the print-friendly HTML; use Ctrl+P to save as A4 PDF",
+      "ja-JP": "印刷用 HTML を開く。Ctrl+P で A4 PDF として保存できる"
+    }
+  },
+  // ===== Pipeline =====
+  "pipeline_open": {
+    "default": { "zh-CN": "一键生成", "en-US": "One-click pipeline", "ja-JP": "ワンクリック生成" }
+  },
+  "pipeline_open_hint": {
+    "default": {
+      "zh-CN": "一键按顺序运行多个生成阶段（视觉提取 → Lesson Plan → Step Script → Step Audio）",
+      "en-US": "Run multiple stages in order (visual extract → lesson plan → step script → step audio)",
+      "ja-JP": "視覚抽出 → Lesson Plan → Step Script → Step Audio を順番に実行"
+    }
+  },
+  "pipeline_modal_title": {
+    "default": { "zh-CN": "一键生成", "en-US": "One-click pipeline", "ja-JP": "ワンクリック生成" }
+  },
+  "pipeline_target": {
+    "default": { "zh-CN": "目标完成度", "en-US": "Target", "ja-JP": "目標" }
+  },
+  "pipeline_target_visual_only": {
+    "default": { "zh-CN": "仅视觉提取", "en-US": "Visual extract only", "ja-JP": "視覚抽出のみ" }
+  },
+  "pipeline_target_lesson_plan": {
+    "default": { "zh-CN": "到 Lesson Plan", "en-US": "Through Lesson Plan", "ja-JP": "Lesson Plan まで" }
+  },
+  "pipeline_target_step_script": {
+    "default": { "zh-CN": "到 Step Script", "en-US": "Through Step Script", "ja-JP": "Step Script まで" }
+  },
+  "pipeline_target_step_audio": {
+    "default": { "zh-CN": "到 Step Audio（最完整）", "en-US": "Through Step Audio (full)", "ja-JP": "Step Audio まで（フル）" }
+  },
+  "pipeline_steps": {
+    "default": { "zh-CN": "执行步骤", "en-US": "Steps", "ja-JP": "実行ステップ" }
+  },
+  "pipeline_steps_hint": {
+    "default": {
+      "zh-CN": "（已根据目标自动勾选，可自行调整）",
+      "en-US": "(auto-selected by target; adjustable)",
+      "ja-JP": "（目標に応じて自動選択、調整可）"
+    }
+  },
+  "pipeline_step_visual_extract": {
+    "default": { "zh-CN": "视觉提取页面（VLM）", "en-US": "Visual extract pages (VLM)", "ja-JP": "ページ視覚抽出（VLM）" }
+  },
+  "pipeline_step_outline": {
+    "default": { "zh-CN": "生成大纲（Stage 1）", "en-US": "Outline (Stage 1)", "ja-JP": "大綱（Stage 1）" }
+  },
+  "pipeline_step_subdivide": {
+    "default": { "zh-CN": "细分分段（Stage 2）", "en-US": "Subdivide (Stage 2)", "ja-JP": "細分化（Stage 2）" }
+  },
+  "pipeline_step_lesson_plan": {
+    "default": { "zh-CN": "生成 Lesson Plan", "en-US": "Generate Lesson Plan", "ja-JP": "Lesson Plan 生成" }
+  },
+  "pipeline_step_lesson_plan_normalize": {
+    "default": { "zh-CN": "Normalize Lesson Plan", "en-US": "Normalize Lesson Plan", "ja-JP": "Lesson Plan 正規化" }
+  },
+  "pipeline_step_step_script": {
+    "default": { "zh-CN": "生成 Step Script", "en-US": "Generate Step Script", "ja-JP": "Step Script 生成" }
+  },
+  "pipeline_step_step_audio": {
+    "default": { "zh-CN": "合成 Step Audio (TTS)", "en-US": "Synthesize Step Audio (TTS)", "ja-JP": "Step Audio 合成 (TTS)" }
+  },
+  "pipeline_visual_scope": {
+    "default": { "zh-CN": "视觉提取范围", "en-US": "Visual extract scope", "ja-JP": "視覚抽出範囲" }
+  },
+  "pipeline_visual_unextracted": {
+    "default": { "zh-CN": "仅未提取页", "en-US": "Unextracted only", "ja-JP": "未抽出のみ" }
+  },
+  "pipeline_visual_all": {
+    "default": { "zh-CN": "全部页", "en-US": "All pages", "ja-JP": "全ページ" }
+  },
+  "pipeline_visual_none": {
+    "default": { "zh-CN": "不提取（已全部提取过）", "en-US": "Skip (already extracted)", "ja-JP": "抽出しない（すでに完了）" }
+  },
+  "pipeline_visual_will_skip": {
+    "default": {
+      "zh-CN": "当前选项下没有需要提取的页面，视觉提取将被跳过。",
+      "en-US": "No pages need extraction; visual extract will be skipped.",
+      "ja-JP": "抽出対象がないため、視覚抽出はスキップされます。"
+    }
+  },
+  "pipeline_extra_instruction_step_script": {
+    "default": {
+      "zh-CN": "Step Script 额外指令（可选）",
+      "en-US": "Step Script extra instruction (optional)",
+      "ja-JP": "Step Script 追加指示（任意）"
+    }
+  },
+  "pipeline_extra_instruction_hint": {
+    "default": {
+      "zh-CN": "会追加在讲稿生成 prompt 末尾，但不会修改输出 schema",
+      "en-US": "Appended to script-generation prompt; output schema is locked",
+      "ja-JP": "プロンプト末尾に追加。schema は固定"
+    }
+  },
+  "pipeline_extra_instruction_placeholder": {
+    "default": {
+      "zh-CN": "比如：请在每段讲稿末尾追加一句鼓励语；或者：避免使用太多专业术语…",
+      "en-US": "e.g. add an encouragement at the end of each section; avoid heavy jargon…",
+      "ja-JP": "例：各段末に励まし一文を追加；専門用語を控える など"
+    }
+  },
+  "pipeline_hint": {
+    "default": {
+      "zh-CN": "开始后该面板会关闭，进度显示在屏幕右上角的任务托盘里。任务结束会自动写入消息中心。",
+      "en-US": "After starting, this panel closes; progress shows in the top-right task tray. The summary is added to Message Center on completion.",
+      "ja-JP": "開始後パネルは閉じます。進捗は右上のタスクトレイで表示、完了時にメッセージセンターに記録されます。"
+    }
+  },
+  "pipeline_start": {
+    "default": { "zh-CN": "开始", "en-US": "Start", "ja-JP": "開始" }
+  },
   "narrator_mode_page_once": {
     "default": {
       "zh-CN": "➡️ 单页",

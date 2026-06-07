@@ -268,6 +268,262 @@ def render_worksheet_markdown(lesson_plan_data: Dict[str, Any], show_answers: bo
     return "".join(out)
 
 
+# ============== HTML 打印渲染 ==============
+#
+# 用浏览器 Ctrl+P 即可打印。@page 设了 A4 + 17mm margin；
+# step 卡片整体 avoid page-break；答案区可全局隐藏（用 details/open 控制）。
+
+
+def _html_escape(s: Any) -> str:
+    if s is None:
+        return ""
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
+
+
+def _html_blank_lines(n: int) -> str:
+    line = '<div class="ws-blank-line"></div>'
+    return line * max(1, n)
+
+
+def render_worksheet_html(lesson_plan_data: Dict[str, Any], show_answers: bool = False) -> str:
+    """生成打印友好的 HTML（单文件，可在浏览器里 Ctrl+P 打印 A4）。"""
+    ws = render_worksheet_structured(lesson_plan_data)
+    title = ws.get("title") or "学案"
+    stats = ws.get("stats") or {}
+
+    out: List[str] = []
+    out.append("<!DOCTYPE html>")
+    out.append('<html lang="zh-CN"><head>')
+    out.append('<meta charset="utf-8">')
+    out.append(f"<title>{_html_escape(title)} - Worksheet</title>")
+    out.append('<style>')
+    out.append("""
+@page { size: A4; margin: 17mm 15mm 15mm 15mm; }
+* { box-sizing: border-box; }
+body {
+  font-family: 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 12pt;
+  color: #000;
+  background: #fff;
+  margin: 0;
+  padding: 12mm 8mm;
+  line-height: 1.55;
+}
+.ws-print-toolbar {
+  position: sticky; top: 0;
+  background: #1d3a6e; color: #fff;
+  padding: 8px 12px;
+  display: flex; gap: 8px; align-items: center;
+  z-index: 50;
+  margin: -12mm -8mm 12mm -8mm;
+  font-size: 11pt;
+}
+.ws-print-toolbar button { background: #c0c0c0; color: #000; border: 2px outset #c0c0c0; padding: 4px 10px; cursor: pointer; font-size: 10pt; }
+.ws-print-toolbar .spacer { flex: 1; }
+.ws-print-toolbar label { color: #fff; user-select: none; }
+
+@media print {
+  .ws-print-toolbar { display: none !important; }
+  body { padding: 0; }
+}
+
+h1.ws-title { margin: 0 0 4mm; font-size: 18pt; }
+.ws-meta { color: #555; font-size: 10pt; margin-bottom: 4mm; }
+
+section.ws-section { margin-top: 8mm; page-break-inside: auto; }
+section.ws-section h2 { color: #1d3a6e; border-bottom: 2px solid #1d3a6e; padding: 0 0 1mm 0; margin: 0 0 3mm; font-size: 14pt; page-break-after: avoid; }
+section.ws-section h2 .ws-page-range { font-size: 9pt; color: #666; font-weight: normal; margin-left: 8px; }
+
+.ws-objective, .ws-hook {
+  padding: 2mm 3mm;
+  margin-bottom: 2mm;
+  font-size: 10.5pt;
+  border-left: 3px solid #c9a23c;
+  background: #fff7d6;
+  page-break-inside: avoid;
+}
+.ws-hook { background: #e6f0fa; border-left-color: #4a78c0; }
+
+.ws-step {
+  margin-top: 5mm;
+  padding: 3mm 4mm;
+  border: 1px solid #aaa;
+  border-left: 4px solid #444;
+  page-break-inside: avoid;
+}
+.ws-step.cog-recall   { border-left-color: #1565c0; }
+.ws-step.cog-compute  { border-left-color: #7b1fa2; }
+.ws-step.cog-decide   { border-left-color: #bf6e16; }
+.ws-step.cog-connect  { border-left-color: #0e7c8c; }
+.ws-step.cog-critique { border-left-color: #a02020; }
+.ws-step.cog-intro    { border-left-color: #5b8ec9; }
+.ws-step.cog-recap    { border-left-color: #7a8aa0; }
+.ws-step.cog-summary  { border-left-color: #3aa55a; }
+.ws-step.cog-example  { border-left-color: #cc8a00; }
+
+.ws-step-head { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 10pt; margin-bottom: 2mm; }
+.ws-tag { background: #444; color: #fff; padding: 1px 5px; font-family: 'Courier New', monospace; font-size: 9pt; }
+.ws-tag.cog-recall   { background: #1565c0; }
+.ws-tag.cog-compute  { background: #7b1fa2; }
+.ws-tag.cog-decide   { background: #bf6e16; }
+.ws-tag.cog-connect  { background: #0e7c8c; }
+.ws-tag.cog-critique { background: #a02020; }
+.ws-tag.cog-intro    { background: #5b8ec9; }
+.ws-tag.cog-recap    { background: #7a8aa0; }
+.ws-tag.cog-summary  { background: #3aa55a; }
+.ws-tag.cog-example  { background: #cc8a00; }
+.ws-cog-label { color: #555; }
+.ws-stars { color: #a07c1d; font-size: 10pt; }
+.ws-anchor { color: #666; font-size: 9pt; }
+.ws-pause-tag { background: #cc8a00; color: #fff; padding: 1px 5px; font-size: 9pt; }
+
+.ws-step-title { color: #555; font-style: italic; margin-bottom: 1mm; font-size: 10.5pt; }
+.ws-key-question { font-weight: bold; font-size: 11.5pt; margin: 2mm 0 1mm; }
+.ws-learning-action { color: #555; font-size: 10pt; margin-bottom: 2mm; }
+
+.ws-blank-lines { margin: 2mm 0; }
+.ws-blank-line { border-bottom: 1px solid #c0b890; height: 7mm; }
+
+.ws-answer {
+  margin-top: 2mm;
+  padding: 2mm 3mm;
+  background: #f5fff7;
+  border: 1px solid #c0d8c5;
+  border-left: 3px solid #3aa55a;
+  font-size: 10.5pt;
+}
+.ws-answer .label { font-weight: bold; }
+.ws-answer ol { margin: 1mm 0 1mm 5mm; padding: 0; }
+.ws-answer .mistake { color: #a02020; }
+.ws-answer .exam { color: #666; font-style: italic; }
+
+.ws-assessment {
+  margin-top: 5mm;
+  padding: 3mm 4mm;
+  background: #e8f4ea;
+  border: 1px solid #3aa55a;
+  border-left: 4px solid #3aa55a;
+  page-break-inside: avoid;
+}
+.ws-assessment h3 { color: #1b6b35; margin: 0 0 2mm; font-size: 12pt; }
+.ws-assessment ol { padding-left: 6mm; margin: 0; }
+.ws-assessment li { margin-bottom: 3mm; }
+
+/* 全局答案隐藏开关 */
+body.hide-answers .ws-answer { display: none; }
+""")
+    out.append('</style>')
+    out.append('</head><body class="' + ('' if show_answers else 'hide-answers') + '">')
+
+    # 顶部工具栏（仅屏幕）
+    out.append('<div class="ws-print-toolbar">')
+    out.append('<strong>📚 ' + _html_escape(title) + '</strong>')
+    out.append('<span class="spacer"></span>')
+    out.append('<label><input type="checkbox" id="ws-show-answers"'
+               + (' checked' if show_answers else '')
+               + ' onchange="document.body.classList.toggle(\'hide-answers\', !this.checked)"> 显示答案</label>')
+    out.append('<button onclick="window.print()">🖨 打印 / 保存为 PDF</button>')
+    out.append('</div>')
+
+    out.append(f'<h1 class="ws-title">{_html_escape(title)}</h1>')
+    out.append(f'<div class="ws-meta">共 {stats.get("section_count", 0)} 节 · '
+               f'{stats.get("step_count", 0)} step · '
+               f'{stats.get("pause_count", 0)} 处停顿 · '
+               f'总留白 {stats.get("total_blank_lines", 0)} 行</div>')
+
+    for sec in ws["sections"]:
+        out.append('<section class="ws-section">')
+        out.append('<h2>§' + _html_escape(sec.get("section_number")) + '. '
+                   + _html_escape(sec.get("section_title")))
+        page_start = sec.get("page_start")
+        page_end = sec.get("page_end")
+        if page_start is not None or page_end is not None:
+            out.append(f'<span class="ws-page-range">p.{page_start}–{page_end}</span>')
+        out.append('</h2>')
+
+        if sec.get("objective"):
+            out.append('<div class="ws-objective"><strong>📚 学习目标：</strong>'
+                       + _html_escape(sec["objective"]) + '</div>')
+        if sec.get("hook"):
+            out.append('<div class="ws-hook"><strong>🪝 课前一问：</strong>'
+                       + _html_escape(sec["hook"]) + '</div>')
+
+        for step in sec.get("steps", []):
+            cog = step.get("cognitive_action") or "recall"
+            meta = step.get("cognitive_meta") or {}
+            stars = ("★" * max(1, min(3, int(step.get("weight", 2))))).ljust(3, "☆")
+            out.append(f'<div class="ws-step cog-{_html_escape(cog)}">')
+
+            # 头部
+            out.append('<div class="ws-step-head">')
+            out.append(f'<span class="ws-tag cog-{_html_escape(cog)}">{_html_escape(step.get("step_id"))}</span>')
+            out.append(f'<span class="ws-cog-label">{_html_escape(meta.get("emoji", ""))} {_html_escape(meta.get("label_zh", cog))}</span>')
+            out.append(f'<span class="ws-stars">重要度 {stars}</span>')
+            if step.get("anchor_page") is not None:
+                out.append(f'<span class="ws-anchor">p.{_html_escape(step["anchor_page"])}</span>')
+            if step.get("is_pause"):
+                out.append(f'<span class="ws-pause-tag">⏸ 写 {int(step.get("pause_seconds", 0))} 秒</span>')
+            out.append('</div>')
+
+            if step.get("step_title"):
+                out.append(f'<div class="ws-step-title">{_html_escape(step["step_title"])}</div>')
+            if step.get("key_question"):
+                out.append(f'<div class="ws-key-question">❓ {_html_escape(step["key_question"])}</div>')
+            if step.get("learning_action"):
+                out.append(f'<div class="ws-learning-action">🖊 你要做：{_html_escape(step["learning_action"])}</div>')
+
+            # 留白
+            out.append('<div class="ws-blank-lines">' + _html_blank_lines(int(step.get("blank_lines", 3))) + '</div>')
+
+            # 答案区
+            ans = step.get("answer") or {}
+            has_answer = bool(
+                ans.get("landing_sentence")
+                or ans.get("reasoning_chain")
+                or ans.get("common_mistake")
+            )
+            if has_answer:
+                out.append('<div class="ws-answer">')
+                if ans.get("landing_sentence"):
+                    out.append(f'<div>📝 <span class="label">关键结论</span>：{_html_escape(ans["landing_sentence"])}</div>')
+                chain = ans.get("reasoning_chain") or []
+                if chain:
+                    out.append('<div>🧩 <span class="label">推理</span>：<ol>')
+                    for c in chain:
+                        out.append(f'<li>{_html_escape(c)}</li>')
+                    out.append('</ol></div>')
+                if ans.get("common_mistake"):
+                    out.append(f'<div class="mistake">⚠️ <span class="label">常见错误</span>：{_html_escape(ans["common_mistake"])}</div>')
+                if ans.get("exam_likelihood") is not None:
+                    try:
+                        n = int(ans["exam_likelihood"])
+                        out.append(f'<div class="exam">🎯 考查可能性：{n}/5</div>')
+                    except Exception:
+                        pass
+                out.append('</div>')
+            out.append('</div>')  # /.ws-step
+
+        if sec.get("assessment"):
+            out.append('<div class="ws-assessment">')
+            out.append('<h3>✅ 章末自检</h3><ol>')
+            for q in sec["assessment"]:
+                out.append('<li>' + _html_escape(q)
+                           + '<div class="ws-blank-lines">' + _html_blank_lines(2) + '</div></li>')
+            out.append('</ol></div>')
+
+        out.append('</section>')
+
+    out.append('</body></html>')
+    return "".join(out)
+
+
 def _emit_answer_block(out: List[str], ans: Dict[str, Any]) -> None:
     if ans.get("landing_sentence"):
         out.append(f"\n📝 **关键结论**：{ans['landing_sentence']}\n")
